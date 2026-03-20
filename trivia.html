@@ -551,10 +551,14 @@ function renderCurrentSlide() {
   const round = currentRound();
   const type = slideType();
 
-  // Background
+  // Background — use different images for intro vs question slides
   const bg = document.getElementById('pres-bg');
-  if(round.bgImage) {
-    bg.style.backgroundImage = `url('${round.bgImage}')`;
+  const bgUrl = (type === S_INTRO)
+    ? (round.bgIntro || round.bgImage || '')
+    : (round.bgQuestion || round.bgImage || '');
+
+  if(bgUrl) {
+    bg.style.backgroundImage = `url('${bgUrl}')`;
     bg.classList.remove('no-img');
   } else {
     bg.style.backgroundImage = '';
@@ -717,6 +721,7 @@ function renderEnd(container, round) {
         ? `<button class="end-btn end-btn-primary" onclick="goNextRound()">Start Round ${state.roundIndex+2} →</button>`
         : ''}
     </div>
+    ${!isLastRound ? `<div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem;animation:pulse 2s ease-in-out infinite">Press → to continue</div>` : ''}
   `;
   container.appendChild(el);
 }
@@ -761,7 +766,6 @@ document.addEventListener('keydown', e => {
       state.slideIndex = 1; renderCurrentSlide();
     } else if(type === S_QUESTION) {
       if(!state.answerVisible) {
-        // → without answer = reveal first
         state.answerVisible = true; renderCurrentSlide();
       } else {
         state.answerVisible = false;
@@ -769,9 +773,12 @@ document.addEventListener('keydown', e => {
         if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
       }
     } else if(type === S_ANSWERKEY) {
-      // from answer key → end slide
       const n = currentRound().questions.length;
       state.slideIndex = n + 2; renderCurrentSlide();
+    } else if(type === S_END) {
+      if(state.roundIndex < state.rounds.length - 1) {
+        goNextRound();
+      }
     }
     return;
   }
