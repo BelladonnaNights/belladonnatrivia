@@ -357,11 +357,27 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="field-hint">Must match the tab name exactly as it appears in your Sheet</div>
       </div>
       <div class="field">
-        <div class="field-label">Background Image URL</div>
-        <input class="field-input" id="f-bg" placeholder="https://… or Google Drive share link" oninput="previewBanner()"/>
-        <div class="field-hint">Export your Canva/Slides background as PNG and paste the link here</div>
+        <div class="field-label">Admin Banner Image URL</div>
+        <input class="field-input" id="f-bg" placeholder="https://… or Google Drive share link" oninput="previewBanner('f-bg','banner-preview-wrap')"/>
+        <div class="field-hint">Wide card image shown in the admin category library</div>
         <div id="banner-preview-wrap" style="margin-top:8px">
           <div class="banner-preview-placeholder"><span>Banner preview will appear here</span></div>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-label">Intro Slide Background URL</div>
+        <input class="field-input" id="f-bg-intro" placeholder="https://… or Google Drive share link" oninput="previewBanner('f-bg-intro','intro-preview-wrap')"/>
+        <div class="field-hint">Fullscreen background shown on the round intro slide</div>
+        <div id="intro-preview-wrap" style="margin-top:8px">
+          <div class="banner-preview-placeholder"><span>Intro slide preview will appear here</span></div>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-label">Question Slide Background URL</div>
+        <input class="field-input" id="f-bg-question" placeholder="https://… or Google Drive share link" oninput="previewBanner('f-bg-question','question-preview-wrap')"/>
+        <div class="field-hint">Fullscreen background shown behind every question in this round</div>
+        <div id="question-preview-wrap" style="margin-top:8px">
+          <div class="banner-preview-placeholder"><span>Question slide preview will appear here</span></div>
         </div>
       </div>
       <div class="field">
@@ -579,14 +595,18 @@ function openModal(id) {
   document.getElementById('modal-title').textContent = id ? 'EDIT CATEGORY' : 'NEW CATEGORY';
   document.getElementById('modal-delete-btn').style.display = id ? 'block' : 'none';
 
-  document.getElementById('f-name').value  = cat?.name    || '';
-  document.getElementById('f-genre').value = cat?.genre   || '';
-  document.getElementById('f-sheet').value = cat?.sheetUrl|| '';
-  document.getElementById('f-tab').value   = cat?.tabName || '';
-  document.getElementById('f-bg').value    = cat?.bgImage || '';
-  document.getElementById('f-notes').value = cat?.notes   || '';
+  document.getElementById('f-name').value    = cat?.name     || '';
+  document.getElementById('f-genre').value   = cat?.genre    || '';
+  document.getElementById('f-sheet').value   = cat?.sheetUrl || '';
+  document.getElementById('f-tab').value     = cat?.tabName  || '';
+  document.getElementById('f-bg').value      = cat?.bgImage  || '';
+  document.getElementById('f-bg-intro').value    = cat?.bgIntro    || '';
+  document.getElementById('f-bg-question').value = cat?.bgQuestion || '';
+  document.getElementById('f-notes').value   = cat?.notes    || '';
 
-  previewBanner();
+  previewBanner('f-bg','banner-preview-wrap');
+  previewBanner('f-bg-intro','intro-preview-wrap');
+  previewBanner('f-bg-question','question-preview-wrap');
   document.getElementById('modal-overlay').classList.add('show');
   document.getElementById('f-name').focus();
 }
@@ -596,31 +616,33 @@ function closeModal() {
   editingId = null;
 }
 
-function previewBanner() {
-  const url = document.getElementById('f-bg').value.trim();
-  const wrap = document.getElementById('banner-preview-wrap');
+function previewBanner(fieldId, wrapId) {
+  const url = document.getElementById(fieldId).value.trim();
+  const wrap = document.getElementById(wrapId);
   if(url) {
     const src = driveViewUrl(url);
     wrap.innerHTML = `<img class="banner-preview" src="${src}" onerror="this.outerHTML='<div class=banner-preview-placeholder><span>Could not load image</span></div>'">`;
   } else {
-    wrap.innerHTML = `<div class="banner-preview-placeholder"><span>Banner preview will appear here</span></div>`;
+    wrap.innerHTML = `<div class="banner-preview-placeholder"><span>Preview will appear here</span></div>`;
   }
 }
 
 async function saveCategory() {
-  const name     = document.getElementById('f-name').value.trim();
-  const genre    = document.getElementById('f-genre').value.trim();
-  const sheetUrl = document.getElementById('f-sheet').value.trim();
-  const tabName  = document.getElementById('f-tab').value.trim();
-  const bgImage  = document.getElementById('f-bg').value.trim();
-  const notes    = document.getElementById('f-notes').value.trim();
+  const name       = document.getElementById('f-name').value.trim();
+  const genre      = document.getElementById('f-genre').value.trim();
+  const sheetUrl   = document.getElementById('f-sheet').value.trim();
+  const tabName    = document.getElementById('f-tab').value.trim();
+  const bgImage    = document.getElementById('f-bg').value.trim();
+  const bgIntro    = document.getElementById('f-bg-intro').value.trim();
+  const bgQuestion = document.getElementById('f-bg-question').value.trim();
+  const notes      = document.getElementById('f-notes').value.trim();
 
   if(!name) return toast('Category name is required.', true);
   if(!sheetUrl) return toast('Sheet URL is required.', true);
   if(!tabName) return toast('Tab name is required.', true);
 
   setSyncStatus('syncing');
-  const data = {name, genre, sheetUrl, tabName, bgImage, notes, updatedAt: Date.now()};
+  const data = {name, genre, sheetUrl, tabName, bgImage, bgIntro, bgQuestion, notes, updatedAt: Date.now()};
 
   try {
     if(editingId) {
@@ -676,6 +698,8 @@ function launchTrivia() {
     params.set(`r${i}_url`, cat.sheetUrl);
     params.set(`r${i}_tab`, cat.tabName);
     params.set(`r${i}_bg`, cat.bgImage||'');
+    params.set(`r${i}_bgIntro`, cat.bgIntro||cat.bgImage||'');
+    params.set(`r${i}_bgQuestion`, cat.bgQuestion||cat.bgImage||'');
     params.set(`r${i}_name`, cat.name||'');
     params.set(`r${i}_qcount`, qCount);
   });
