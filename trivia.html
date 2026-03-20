@@ -348,29 +348,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="setup-title">TRIVIA<br><span>NIGHT</span></div>
   <div class="setup-sub">Configure tonight's lineup, then go fullscreen.</div>
 
-  <div class="setup-card">
-    <div class="setup-field">
-      <div class="setup-field-label">Google API Key</div>
-      <input class="setup-input" id="cfg-api-key" type="text" placeholder="AIza..." autocomplete="off"/>
-    </div>
-    <div class="setup-row">
-      <div class="setup-field">
-        <div class="setup-field-label">Questions per Round</div>
-        <input class="setup-input" id="cfg-q-count" type="number" value="20" min="1" max="50"/>
-      </div>
-    </div>
-  </div>
-
-  <div class="setup-card">
-    <div class="setup-field-label">Tonight's Rounds — Sheet URL &amp; Tab Name</div>
-    <div class="round-slots" id="round-slots">
-      <!-- injected by JS -->
-    </div>
-    <button class="add-round-btn" onclick="addRoundSlot()">+ Add Round</button>
-  </div>
-
-  <button class="setup-launch-btn" onclick="launchTrivia()">Launch Trivia →</button>
-  <div class="setup-hint">Press <strong>Space</strong> to reveal answers · <strong>→</strong> next · <strong>←</strong> back · <strong>A</strong> answer key · <strong>Esc</strong> exit</div>
+  <div class="setup-hint" style="margin-bottom:2rem">This page is normally launched automatically from the Admin panel.<br>Press <strong>Space</strong> to reveal answers · <strong>→</strong> next · <strong>←</strong> back · <strong>A</strong> answer key · <strong>Esc</strong> exit</div>
 </div>
 
 <!-- ══════════════════════════════════════════
@@ -415,10 +393,10 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 const DIFF_EASY=1,DIFF_MEDIUM=2,DIFF_HARD=3;
 const MC_LABELS=['A','B','C','D'];
 
+const API_KEY = 'AIzaSyACMjXQCXjVo75hbMXtag_JctR4SoX70So';
+
 let state = {
-  apiKey: '',
-  questionCount: 20,
-  rounds: [],         // [{sheetUrl, tabName, bgImage, title, questions:[]}]
+  rounds: [],         // [{sheetUrl, tabName, bgImage, title, questionCount, questions:[]}]
   roundIndex: 0,
   slideIndex: 0,      // 0=intro, 1..n=questions, n+1=answerKey, n+2=end
   answerVisible: false,
@@ -429,105 +407,11 @@ let state = {
 const S_INTRO='intro', S_QUESTION='question', S_ANSWERKEY='answerkey', S_END='end';
 
 // ═══════════════════════════════════════════════════════
-//  SETUP UI
-// ═══════════════════════════════════════════════════════
-const DEFAULT_ROUNDS = [
-  {sheetUrl:'', tabName:'', bgImage:'', title:'Round 1'},
-  {sheetUrl:'', tabName:'', bgImage:'', title:'Round 2'},
-  {sheetUrl:'', tabName:'', bgImage:'', title:'Round 3'},
-];
-
-function buildSetupUI() {
-  // Restore saved config
-  try {
-    const saved = JSON.parse(localStorage.getItem('trivia_cfg')||'{}');
-    if(saved.apiKey) document.getElementById('cfg-api-key').value = saved.apiKey;
-    if(saved.questionCount) document.getElementById('cfg-q-count').value = saved.questionCount;
-    if(saved.rounds) DEFAULT_ROUNDS.splice(0, DEFAULT_ROUNDS.length, ...saved.rounds);
-  } catch(e){}
-
-  const container = document.getElementById('round-slots');
-  container.innerHTML = '';
-  DEFAULT_ROUNDS.forEach((_,i) => addRoundSlot(i));
-}
-
-let roundSlotCount = 0;
-function addRoundSlot(presetIndex) {
-  const idx = roundSlotCount++;
-  const preset = (presetIndex !== undefined && DEFAULT_ROUNDS[presetIndex]) ? DEFAULT_ROUNDS[presetIndex] : {sheetUrl:'',tabName:'',bgImage:'',title:`Round ${idx+1}`};
-  const container = document.getElementById('round-slots');
-  const div = document.createElement('div');
-  div.className = 'round-slot';
-  div.dataset.idx = idx;
-  div.innerHTML = `
-    <div class="round-slot-label">Round ${idx+1}</div>
-    <input placeholder="Sheet URL" value="${preset.sheetUrl||''}" data-field="sheetUrl" style="flex:2"/>
-    <input placeholder="Tab name" value="${preset.tabName||''}" data-field="tabName" style="flex:1;min-width:100px"/>
-    <input placeholder="Background image URL (optional)" value="${preset.bgImage||''}" data-field="bgImage" style="flex:1.5"/>
-    <button class="round-slot-remove" onclick="this.closest('.round-slot').remove()">×</button>
-  `;
-  container.appendChild(div);
-}
-
-// ═══════════════════════════════════════════════════════
-//  LAUNCH
+//  LAUNCH (manual fallback — normally launched from admin)
 // ═══════════════════════════════════════════════════════
 async function launchTrivia() {
-  const apiKey = document.getElementById('cfg-api-key').value.trim();
-  const questionCount = parseInt(document.getElementById('cfg-q-count').value) || 20;
-
-  const slots = [...document.querySelectorAll('.round-slot')];
-  const rounds = slots.map((slot,i) => ({
-    sheetUrl: slot.querySelector('[data-field=sheetUrl]').value.trim(),
-    tabName:  slot.querySelector('[data-field=tabName]').value.trim(),
-    bgImage:  slot.querySelector('[data-field=bgImage]').value.trim(),
-    title:    `Round ${i+1}`,
-  })).filter(r => r.sheetUrl && r.tabName);
-
-  if(!apiKey) return toast('Please enter your Google API key.');
-  if(!rounds.length) return toast('Add at least one round with a Sheet URL and tab name.');
-
-  // Save config
-  try { localStorage.setItem('trivia_cfg', JSON.stringify({apiKey, questionCount, rounds})); } catch(e){}
-
-  state.apiKey = apiKey;
-  state.questionCount = questionCount;
-  state.rounds = rounds.map(r => ({...r, questions:[]}));
-
-  showLoading('Loading questions…');
-
-  // Load all rounds
-  let failed = [];
-  for(let i=0; i<state.rounds.length; i++) {
-    setLoadingLabel(`Loading Round ${i+1}: ${state.rounds[i].tabName}…`);
-    try {
-      const qs = await loadSheetQuestions(state.rounds[i].sheetUrl, state.rounds[i].tabName, apiKey, questionCount);
-      state.rounds[i].questions = qs;
-    } catch(e) {
-      failed.push(`Round ${i+1} (${state.rounds[i].tabName}): ${e.message}`);
-      state.rounds[i].questions = [];
-    }
-  }
-
-  hideLoading();
-
-  if(failed.length) {
-    toast('⚠ Some rounds failed to load. Check console.');
-    console.error('Failed rounds:', failed);
-  }
-
-  // Filter out rounds with no questions
-  state.rounds = state.rounds.filter(r => r.questions.length > 0);
-  if(!state.rounds.length) {
-    toast('No questions loaded. Check your Sheet URLs, tab names, and API key.');
-    return;
-  }
-
-  state.roundIndex = 0;
-  state.slideIndex = 0;
-
-  document.getElementById('setup-screen').style.display = 'none';
-  document.getElementById('pres-screen').classList.add('show');
+  // no-op — trivia.html is always launched via URL params from admin
+}
   document.getElementById('hud').classList.add('show');
 
   renderCurrentSlide();
@@ -537,13 +421,13 @@ async function launchTrivia() {
 // ═══════════════════════════════════════════════════════
 //  SHEET LOADING — ported from GAS script
 // ═══════════════════════════════════════════════════════
-async function loadSheetQuestions(sheetUrl, tabName, apiKey, count) {
+async function loadSheetQuestions(sheetUrl, tabName, count) {
   const sheetId = extractSheetId(sheetUrl);
   if(!sheetId) throw new Error('Could not extract Sheet ID from URL.');
 
   // Fetch A:I (cols 1–9)
   const range = encodeURIComponent(`${tabName}!A2:I`);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${apiKey}`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${API_KEY}`;
 
   const res = await fetch(url);
   if(!res.ok) {
@@ -987,22 +871,18 @@ function toast(msg) {
 // ═══════════════════════════════════════════════════════
 function checkUrlParams() {
   const p = new URLSearchParams(window.location.search);
-  if(!p.get('apiKey')) return false;
+  if(!p.get('rounds')) return false;
 
-  const apiKey = p.get('apiKey');
-  const qCount = parseInt(p.get('qCount'))||20;
   const roundCount = parseInt(p.get('rounds'))||1;
   const rounds = [];
   for(let i=0;i<roundCount;i++) {
     const url = p.get(`r${i}_url`);
     const tab = p.get(`r${i}_tab`);
-    if(url && tab) rounds.push({sheetUrl:url, tabName:tab, bgImage:p.get(`r${i}_bg`)||'', title:p.get(`r${i}_name`)||`Round ${i+1}`});
+    const qCount = parseInt(p.get(`r${i}_qcount`))||20;
+    if(url && tab) rounds.push({sheetUrl:url, tabName:tab, bgImage:p.get(`r${i}_bg`)||'', title:p.get(`r${i}_name`)||`Round ${i+1}`, questionCount:qCount});
   }
   if(!rounds.length) return false;
 
-  // Auto-launch
-  state.apiKey = apiKey;
-  state.questionCount = qCount;
   state.rounds = rounds.map(r=>({...r, questions:[]}));
 
   document.getElementById('setup-screen').style.display = 'none';
@@ -1012,7 +892,7 @@ function checkUrlParams() {
     for(let i=0;i<state.rounds.length;i++) {
       setLoadingLabel(`Loading Round ${i+1}: ${state.rounds[i].tabName}…`);
       try {
-        state.rounds[i].questions = await loadSheetQuestions(state.rounds[i].sheetUrl, state.rounds[i].tabName, apiKey, qCount);
+        state.rounds[i].questions = await loadSheetQuestions(state.rounds[i].sheetUrl, state.rounds[i].tabName, state.rounds[i].questionCount);
       } catch(e) {
         console.error('Round load failed:', e);
       }
@@ -1033,10 +913,7 @@ function checkUrlParams() {
   return true;
 }
 
-buildSetupUI();
-if(!checkUrlParams()) {
-  // normal manual setup flow
-}
+checkUrlParams();
 </script>
 </body>
 </html>
