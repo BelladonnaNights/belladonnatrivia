@@ -499,6 +499,7 @@ function setSyncStatus(status) {
 // ═══════════════════════════════════════════════
 let categories = [];       // full library from Firebase
 let lineup = [null, null, null, null, null]; // tonight's 5 slots
+let lineupAnswers = [true, true, true, true, true]; // show answers per slot (default on)
 let activeGenre = 'all';
 let editingId = null;
 let dragCardId = null;
@@ -518,11 +519,8 @@ db.ref('categories').on('value', snap => {
   toast('Could not connect to Firebase. Check your database rules.', true);
 });
 
-db.ref('lineup').on('value', snap => {
-  const data = snap.val();
-  if(data) lineup = [data[0]||null, data[1]||null, data[2]||null, data[3]||null, data[4]||null];
-  renderLineup();
-});
+// Lineup is local only — resets on refresh, each host manages their own
+renderLineup();
 
 // ═══════════════════════════════════════════════
 //  RENDER LIBRARY
@@ -597,6 +595,7 @@ function renderLineup() {
       const thumb = cat.bgImage
         ? `<img class="round-slot-card-thumb" src="${cat.bgImage}" style="width:48px;height:12px;object-fit:cover;border-radius:3px;flex-shrink:0" onerror="this.style.display='none'">`
         : '';
+      const checked = lineupAnswers[i] !== false ? 'checked' : '';
       slot.innerHTML = `
         <div class="round-slot-label">Round ${i+1}</div>
         <div class="round-slot-card">
@@ -606,7 +605,12 @@ function renderLineup() {
             <div class="round-slot-card-tab">${cat.tabName}</div>
           </div>
           <button class="round-slot-remove" onclick="removeFromSlot(${i})">×</button>
-        </div>`;
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer;user-select:none">
+          <input type="checkbox" ${checked} onchange="lineupAnswers[${i}]=this.checked"
+            style="accent-color:var(--gold);width:13px;height:13px;cursor:pointer"/>
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Show answers after each question</span>
+        </label>`;
     } else {
       slot.innerHTML = `
         <div class="round-slot-label">Round ${i+1}</div>
@@ -622,7 +626,8 @@ function removeFromSlot(i) {
 }
 
 function saveLineup() {
-  db.ref('lineup').set({0:lineup[0]||null,1:lineup[1]||null,2:lineup[2]||null,3:lineup[3]||null,4:lineup[4]||null});
+  // Lineup is intentionally local only — not synced to Firebase
+  // Each host builds their own lineup independently
 }
 
 // ═══════════════════════════════════════════════
@@ -762,13 +767,14 @@ async function deleteCategory() {
 // ═══════════════════════════════════════════════
 function launchTrivia() {
   const qCount = document.getElementById('lineup-q-count').value || '20';
-  const activeRounds = lineup.filter(Boolean).map(id => categories.find(c=>c.id===id)).filter(Boolean);
+  const activeRounds = lineup.map((id,i) => id ? {cat: categories.find(c=>c.id===id), slotIndex: i} : null)
+    .filter(r => r && r.cat);
 
   if(!activeRounds.length) return toast('Add at least one category to the lineup.', true);
 
   const params = new URLSearchParams();
   params.set('rounds', activeRounds.length);
-  activeRounds.forEach((cat, i) => {
+  activeRounds.forEach(({cat, slotIndex}, i) => {
     params.set(`r${i}_url`, cat.sheetUrl);
     params.set(`r${i}_tab`, cat.tabName);
     params.set(`r${i}_bg`, cat.bgImage||'');
@@ -776,6 +782,7 @@ function launchTrivia() {
     params.set(`r${i}_bgQuestion`, cat.bgQuestion||cat.bgImage||'');
     params.set(`r${i}_name`, cat.name||'');
     params.set(`r${i}_qcount`, qCount);
+    params.set(`r${i}_showAnswers`, lineupAnswers[slotIndex] !== false ? '1' : '0');
   });
 
   window.open(`trivia.html?${params.toString()}`, '_blank');
