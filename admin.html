@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Trivia Admin — Belladonna</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080808;--surface:#111111;--surface2:#181818;--surface3:#222222;
+  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.13);--border3:rgba(255,255,255,.22);
+  --text:#f0ede8;--text2:#b0a898;--text3:#5a5248;
+  --gold:#c9a84c;--gold2:#e8c96a;--gold3:#f5df90;
+  --gold-shine:linear-gradient(135deg,#c9a84c 0%,#f5df90 45%,#c9a84c 70%,#e2b84a 100%);
+  --gold-dim:rgba(201,168,76,.10);--gold-glow:rgba(201,168,76,.28);--gold-glow2:rgba(201,168,76,.5);
+  --red:#e74c3c;--red-dim:rgba(231,76,60,.12);
+  --green:#2ecc71;--green-dim:rgba(46,204,113,.12);
+  --radius:8px;--radius-lg:14px;
+  --display:'Bebas Neue',sans-serif;
+  --cinzel:'Cinzel',serif;
+  --serif:'EB Garamond',serif;
+  --font:'DM Sans',sans-serif;
+}
+html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var(--text)}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-thumb{background:rgba(201,168,76,.2);border-radius:3px}
+
+/* ── NAV ── */
+.nav{
+  position:sticky;top:0;z-index:200;
+  background:rgba(8,8,8,.95);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  padding:0 2rem;height:64px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.nav-left{display:flex;align-items:center;gap:14px}
+.nav-title{font-family:var(--display);font-size:24px;letter-spacing:.06em;line-height:1}
+.nav-title span{background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.nav-subtitle{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-left:4px;padding-left:14px;border-left:1px solid var(--border2)}
+.nav-right{display:flex;align-items:center;gap:10px}
+.nav-btn{
+  font-family:var(--cinzel);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  border-radius:var(--radius);padding:8px 16px;cursor:pointer;transition:all .2s;border:none;
+}
+.nav-btn-ghost{background:transparent;color:var(--gold);border:1px solid var(--gold-glow)}
+.nav-btn-ghost:hover{background:var(--gold-dim)}
+.nav-btn-primary{background:var(--gold-shine);color:#000;font-weight:600}
+.nav-btn-primary:hover{opacity:.88}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0;transition:background .3s}
+.sync-dot.synced{background:var(--green)}
+.sync-dot.syncing{background:var(--gold);animation:pulse .8s ease-in-out infinite}
+.sync-dot.error{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+.sync-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
+
+/* ── LAYOUT ── */
+.layout{display:grid;grid-template-columns:1fr 340px;gap:0;min-height:calc(100vh - 64px)}
+
+/* ── LEFT: CATEGORY LIBRARY ── */
+.library{padding:2rem;border-right:1px solid var(--border)}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem}
+.section-title{font-family:var(--display);font-size:32px;letter-spacing:.05em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.section-sub{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-top:2px}
+.add-btn{
+  font-family:var(--cinzel);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);
+  padding:9px 18px;cursor:pointer;transition:opacity .2s;font-weight:600;white-space:nowrap;
+}
+.add-btn:hover{opacity:.85}
+
+/* Filter pills */
+.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.25rem}
+.pill{
+  background:transparent;border:1px solid var(--border2);border-radius:99px;
+  padding:5px 14px;font-size:10px;font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--text3);cursor:pointer;transition:all .2s;
+}
+.pill:hover{border-color:var(--gold-glow);color:var(--gold2)}
+.pill.active{background:var(--gold-dim);border-color:var(--gold-glow2);color:var(--gold2)}
+
+/* Category grid */
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.cat-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  overflow:hidden;cursor:grab;transition:border-color .2s,transform .2s,box-shadow .2s;
+  position:relative;user-select:none;
+}
+.cat-card:hover{border-color:var(--gold-glow);transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.cat-card.dragging{opacity:.45;transform:scale(.97);cursor:grabbing}
+.cat-card.drag-over{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-glow)}
+
+.cat-banner{
+  width:100%;aspect-ratio:16/4;object-fit:cover;display:block;
+  background:var(--surface2);
+}
+.cat-banner-placeholder{
+  width:100%;aspect-ratio:16/4;
+  background:linear-gradient(135deg,var(--surface2),var(--surface3));
+  display:flex;align-items:center;justify-content:center;
+  border-bottom:1px solid var(--border);
+}
+.cat-banner-placeholder span{font-family:var(--display);font-size:18px;letter-spacing:.12em;color:var(--text3)}
+.cat-body{padding:11px 14px 13px}
+.cat-title{font-family:var(--cinzel);font-size:13px;font-weight:600;letter-spacing:.07em;color:var(--text);margin-bottom:5px}
+.cat-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.cat-genre{
+  font-size:9px;background:var(--gold-dim);border-radius:99px;
+  padding:2px 9px;border:1px solid var(--gold-glow);
+  font-family:var(--cinzel);letter-spacing:.06em;text-transform:uppercase;color:var(--gold2);
+}
+.cat-tab{font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic}
+.cat-actions{
+  position:absolute;top:8px;right:8px;display:flex;gap:5px;
+  opacity:0;transition:opacity .15s;
+}
+.cat-card:hover .cat-actions{opacity:1}
+.cat-action-btn{
+  width:26px;height:26px;border-radius:50%;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:12px;
+  transition:all .15s;backdrop-filter:blur(8px);
+}
+.cat-action-edit{background:rgba(10,10,10,.8);color:var(--gold)}
+.cat-action-edit:hover{background:var(--gold);color:#000}
+.cat-action-del{background:rgba(10,10,10,.8);color:var(--text3)}
+.cat-action-del:hover{background:var(--red);color:#fff}
+.drag-hint{
+  position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+  font-family:var(--cinzel);font-size:8px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text3);background:rgba(8,8,8,.7);border-radius:99px;padding:2px 8px;
+  opacity:0;transition:opacity .15s;white-space:nowrap;
+}
+.cat-card:hover .drag-hint{opacity:1}
+
+.empty-library{
+  grid-column:1/-1;text-align:center;padding:4rem 1rem;
+}
+.empty-icon{font-size:32px;margin-bottom:12px;color:var(--text3)}
+.empty-text{font-family:var(--serif);font-style:italic;color:var(--text3);font-size:15px}
+
+/* ── RIGHT: TONIGHT'S LINEUP ── */
+.lineup{padding:2rem;display:flex;flex-direction:column;gap:0;background:var(--surface)}
+.lineup-header{margin-bottom:1.5rem}
+.lineup-title{font-family:var(--display);font-size:28px;letter-spacing:.05em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.lineup-sub{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-top:3px}
+
+.round-slots{display:flex;flex-direction:column;gap:10px;margin-bottom:1.5rem}
+.round-slot{
+  border:1.5px dashed rgba(201,168,76,.2);border-radius:var(--radius-lg);
+  padding:14px;min-height:90px;transition:all .25s;
+  display:flex;flex-direction:column;
+}
+.round-slot.drag-target{border-color:var(--gold);background:var(--gold-dim)}
+.round-slot.has-card{border-style:solid;border-color:var(--border2)}
+.round-slot-label{
+  font-family:var(--cinzel);font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:8px;
+}
+.round-slot-empty{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);
+}
+.round-slot-card{
+  background:var(--surface2);border-radius:var(--radius);
+  padding:10px 12px;display:flex;align-items:center;gap:10px;
+  border:1px solid var(--border2);
+}
+.round-slot-card-thumb{
+  width:48px;height:12px;border-radius:3px;object-fit:cover;flex-shrink:0;
+  background:var(--surface3);
+}
+.round-slot-card-info{flex:1;min-width:0}
+.round-slot-card-name{font-family:var(--cinzel);font-size:11px;letter-spacing:.06em;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.round-slot-card-tab{font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.round-slot-remove{background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:2px;transition:color .15s;flex-shrink:0}
+.round-slot-remove:hover{color:var(--red)}
+
+.lineup-divider{height:1px;background:var(--border);margin:1.25rem 0}
+
+/* API Key in lineup */
+.lineup-field-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.lineup-input{
+  width:100%;background:rgba(255,255,255,.04);border:.5px solid var(--border2);
+  border-radius:var(--radius);padding:9px 12px;font-size:13px;font-family:var(--font);
+  color:var(--text);transition:border-color .2s;margin-bottom:10px;
+}
+.lineup-input:focus{outline:none;border-color:var(--gold-glow2)}
+.lineup-input::placeholder{color:var(--text3)}
+.lineup-row{display:flex;gap:8px;margin-bottom:10px}
+.lineup-row .lineup-input{margin-bottom:0}
+
+.launch-btn{
+  width:100%;padding:14px;font-family:var(--cinzel);font-size:12px;font-weight:700;
+  letter-spacing:.16em;text-transform:uppercase;
+  background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);
+  cursor:pointer;transition:opacity .2s,transform .15s;margin-top:auto;
+}
+.launch-btn:hover{opacity:.88;transform:translateY(-1px)}
+.launch-btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+
+/* ── MODAL ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+.overlay.show{display:flex}
+.modal{
+  background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);
+  width:min(580px,95vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;
+}
+.modal-header{padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-family:var(--display);font-size:24px;letter-spacing:.06em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.modal-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;transition:color .15s;padding:2px 6px}
+.modal-close:hover{color:var(--text)}
+.modal-body{padding:1.5rem;overflow-y:auto;display:flex;flex-direction:column;gap:1rem}
+.modal-footer{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+
+.field{display:flex;flex-direction:column;gap:5px}
+.field-label{font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
+.field-input{
+  background:rgba(255,255,255,.04);border:.5px solid var(--border2);border-radius:var(--radius);
+  padding:10px 13px;font-size:14px;font-family:var(--font);color:var(--text);transition:border-color .2s;
+}
+.field-input:focus{outline:none;border-color:var(--gold-glow2)}
+.field-input::placeholder{color:var(--text3)}
+.field-row{display:flex;gap:10px}
+.field-row .field{flex:1}
+.field-hint{font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic}
+
+.btn{font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;border-radius:var(--radius);padding:9px 18px;cursor:pointer;transition:all .15s}
+.btn-primary{background:var(--gold-shine);color:#000;border:none;font-weight:600}
+.btn-primary:hover{opacity:.85}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border2)}
+.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+.btn-danger{background:transparent;color:var(--red);border:1px solid rgba(231,76,60,.3)}
+.btn-danger:hover{background:var(--red-dim)}
+
+/* Preview banner in modal */
+.banner-preview{width:100%;aspect-ratio:16/4;border-radius:var(--radius);object-fit:cover;background:var(--surface2);border:1px solid var(--border);display:block}
+.banner-preview-placeholder{width:100%;aspect-ratio:16/4;border-radius:var(--radius);background:var(--surface2);border:1px dashed var(--border2);display:flex;align-items:center;justify-content:center}
+.banner-preview-placeholder span{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)}
+
+/* Toast */
+#toast{
+  position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(10px);
+  background:rgba(201,168,76,.15);border:1px solid var(--gold-glow);
+  border-radius:99px;padding:8px 20px;
+  font-family:var(--cinzel);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);
+  opacity:0;transition:all .3s;z-index:999;pointer-events:none;white-space:nowrap;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.error{background:rgba(231,76,60,.15);border-color:rgba(231,76,60,.4);color:var(--red)}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-left">
+    <div class="nav-title">BELLADONNA <span>TRIVIA</span></div>
+    <div class="nav-subtitle">Category Manager</div>
+  </div>
+  <div class="nav-right">
+    <div class="sync-dot" id="sync-dot"></div>
+    <div class="sync-label" id="sync-label">connecting…</div>
+  </div>
+</nav>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- LEFT: LIBRARY -->
+  <div class="library">
+    <div class="section-header">
+      <div>
+        <div class="section-title">CATEGORY LIBRARY</div>
+        <div class="section-sub">Drag any category into a round slot →</div>
+      </div>
+      <button class="add-btn" onclick="openModal()">+ New Category</button>
+    </div>
+
+    <div class="filter-bar" id="filter-bar">
+      <div class="pill active" data-genre="all" onclick="filterGenre('all',this)">All</div>
+    </div>
+
+    <div class="cat-grid" id="cat-grid">
+      <div class="empty-library">
+        <div class="empty-icon">✦</div>
+        <div class="empty-text">No categories yet — add your first one</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: LINEUP -->
+  <div class="lineup">
+    <div class="lineup-header">
+      <div class="lineup-title">TONIGHT'S LINEUP</div>
+      <div class="lineup-sub">Drop categories into rounds below</div>
+    </div>
+
+    <div class="round-slots" id="round-slots">
+      <div class="round-slot" id="slot-0" data-slot="0" ondragover="onSlotDragOver(event,0)" ondrop="onSlotDrop(event,0)" ondragleave="onSlotDragLeave(0)">
+        <div class="round-slot-label">Round 1</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+      <div class="round-slot" id="slot-1" data-slot="1" ondragover="onSlotDragOver(event,1)" ondrop="onSlotDrop(event,1)" ondragleave="onSlotDragLeave(1)">
+        <div class="round-slot-label">Round 2</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+      <div class="round-slot" id="slot-2" data-slot="2" ondragover="onSlotDragOver(event,2)" ondrop="onSlotDrop(event,2)" ondragleave="onSlotDragLeave(2)">
+        <div class="round-slot-label">Round 3</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+    </div>
+
+    <div class="lineup-divider"></div>
+
+    <div class="lineup-field-label">Google API Key</div>
+    <input class="lineup-input" id="lineup-api-key" type="text" placeholder="AIza…" autocomplete="off"/>
+
+    <div class="lineup-field-label">Questions per Round</div>
+    <input class="lineup-input" id="lineup-q-count" type="number" value="20" min="1" max="50" style="margin-bottom:1.25rem"/>
+
+    <button class="launch-btn" id="launch-btn" onclick="launchTrivia()">Launch Trivia Night →</button>
+  </div>
+</div>
+
+<!-- ADD/EDIT MODAL -->
+<div class="overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">NEW CATEGORY</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <div class="field-label">Category Name</div>
+        <input class="field-input" id="f-name" placeholder="e.g. General Knowledge"/>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <div class="field-label">Genre / Tag</div>
+          <input class="field-input" id="f-genre" placeholder="e.g. Pop Culture"/>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-label">Google Sheet URL</div>
+        <input class="field-input" id="f-sheet" placeholder="https://docs.google.com/spreadsheets/d/…"/>
+      </div>
+      <div class="field">
+        <div class="field-label">Tab Name</div>
+        <input class="field-input" id="f-tab" placeholder="Exact tab name (case sensitive)"/>
+        <div class="field-hint">Must match the tab name exactly as it appears in your Sheet</div>
+      </div>
+      <div class="field">
+        <div class="field-label">Background Image URL</div>
+        <input class="field-input" id="f-bg" placeholder="https://… or Google Drive share link" oninput="previewBanner()"/>
+        <div class="field-hint">Export your Canva/Slides background as PNG and paste the link here</div>
+        <div id="banner-preview-wrap" style="margin-top:8px">
+          <div class="banner-preview-placeholder"><span>Banner preview will appear here</span></div>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-label">Notes (optional)</div>
+        <input class="field-input" id="f-notes" placeholder="Any notes about this category…"/>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="modal-delete-btn" style="display:none;margin-right:auto" onclick="deleteCategory()">Delete</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCategory()">Save Category</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  FIREBASE
+// ═══════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",
+  authDomain: "belladonnatrivia.firebaseapp.com",
+  databaseURL: "https://belladonnatrivia-default-rtdb.firebaseio.com",
+  projectId: "belladonnatrivia",
+  storageBucket: "belladonnatrivia.firebasestorage.app",
+  messagingSenderId: "658670195433",
+  appId: "1:658670195433:web:f66cbc32344f4d4d63d678"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// Sync status
+function setSyncStatus(status) {
+  const dot = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-label');
+  dot.className = 'sync-dot ' + status;
+  label.textContent = status === 'synced' ? 'synced' : status === 'syncing' ? 'saving…' : status === 'error' ? 'error' : 'connecting…';
+}
+
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+let categories = [];       // full library from Firebase
+let lineup = [null, null, null]; // tonight's 3 slots
+let activeGenre = 'all';
+let editingId = null;
+let dragCardId = null;
+
+// ═══════════════════════════════════════════════
+//  FIREBASE LISTENERS
+// ═══════════════════════════════════════════════
+db.ref('categories').on('value', snap => {
+  const data = snap.val() || {};
+  categories = Object.entries(data).map(([id, v]) => ({id, ...v}));
+  renderLibrary();
+  renderFilterBar();
+  setSyncStatus('synced');
+}, err => {
+  console.error(err);
+  setSyncStatus('error');
+  toast('Could not connect to Firebase. Check your database rules.', true);
+});
+
+db.ref('lineup').on('value', snap => {
+  const data = snap.val();
+  if(data) lineup = [data[0]||null, data[1]||null, data[2]||null];
+  renderLineup();
+});
+
+// ═══════════════════════════════════════════════
+//  RENDER LIBRARY
+// ═══════════════════════════════════════════════
+function renderLibrary() {
+  const grid = document.getElementById('cat-grid');
+  const filtered = activeGenre === 'all' ? categories
+    : categories.filter(c => c.genre === activeGenre);
+
+  if(!filtered.length) {
+    grid.innerHTML = `<div class="empty-library">
+      <div class="empty-icon">✦</div>
+      <div class="empty-text">${categories.length ? 'No categories match this filter' : 'No categories yet — add your first one'}</div>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(cat => {
+    const bannerHtml = cat.bgImage
+      ? `<img class="cat-banner" src="${cat.bgImage}" onerror="this.outerHTML='<div class=cat-banner-placeholder><span>${cat.name}</span></div>'">`
+      : `<div class="cat-banner-placeholder"><span>${cat.name||'UNTITLED'}</span></div>`;
+    return `
+      <div class="cat-card" draggable="true" data-id="${cat.id}"
+        ondragstart="onCardDragStart(event,'${cat.id}')"
+        ondragend="onCardDragEnd(event)">
+        ${bannerHtml}
+        <div class="cat-body">
+          <div class="cat-title">${cat.name||'Untitled'}</div>
+          <div class="cat-meta">
+            ${cat.genre ? `<span class="cat-genre">${cat.genre}</span>` : ''}
+            <span class="cat-tab">${cat.tabName||''}</span>
+          </div>
+          ${cat.notes ? `<div style="font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;margin-top:4px">${cat.notes}</div>` : ''}
+        </div>
+        <div class="cat-actions">
+          <button class="cat-action-btn cat-action-edit" onclick="event.stopPropagation();openModal('${cat.id}')">✎</button>
+          <button class="cat-action-btn cat-action-del" onclick="event.stopPropagation();confirmDelete('${cat.id}')">×</button>
+        </div>
+        <div class="drag-hint">drag to round →</div>
+      </div>`;
+  }).join('');
+}
+
+function renderFilterBar() {
+  const genres = [...new Set(categories.map(c=>c.genre).filter(Boolean))];
+  const bar = document.getElementById('filter-bar');
+  bar.innerHTML = `<div class="pill ${activeGenre==='all'?'active':''}" data-genre="all" onclick="filterGenre('all',this)">All</div>`
+    + genres.map(g => `<div class="pill ${activeGenre===g?'active':''}" data-genre="${g}" onclick="filterGenre('${g}',this)">${g}</div>`).join('');
+}
+
+function filterGenre(genre, el) {
+  activeGenre = genre;
+  document.querySelectorAll('.filter-bar .pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  renderLibrary();
+}
+
+// ═══════════════════════════════════════════════
+//  RENDER LINEUP
+// ═══════════════════════════════════════════════
+function renderLineup() {
+  for(let i=0;i<3;i++) {
+    const slot = document.getElementById(`slot-${i}`);
+    const cat = lineup[i] ? categories.find(c=>c.id===lineup[i]) : null;
+    slot.className = 'round-slot' + (cat ? ' has-card' : '');
+    // re-attach drag events
+    slot.ondragover = (e) => onSlotDragOver(e,i);
+    slot.ondrop = (e) => onSlotDrop(e,i);
+    slot.ondragleave = () => onSlotDragLeave(i);
+
+    if(cat) {
+      const thumb = cat.bgImage
+        ? `<img class="round-slot-card-thumb" src="${cat.bgImage}" style="width:48px;height:12px;object-fit:cover;border-radius:3px;flex-shrink:0" onerror="this.style.display='none'">`
+        : '';
+      slot.innerHTML = `
+        <div class="round-slot-label">Round ${i+1}</div>
+        <div class="round-slot-card">
+          ${thumb}
+          <div class="round-slot-card-info">
+            <div class="round-slot-card-name">${cat.name}</div>
+            <div class="round-slot-card-tab">${cat.tabName}</div>
+          </div>
+          <button class="round-slot-remove" onclick="removeFromSlot(${i})">×</button>
+        </div>`;
+    } else {
+      slot.innerHTML = `
+        <div class="round-slot-label">Round ${i+1}</div>
+        <div class="round-slot-empty">Drop a category here</div>`;
+    }
+  }
+}
+
+function removeFromSlot(i) {
+  lineup[i] = null;
+  saveLineup();
+  renderLineup();
+}
+
+function saveLineup() {
+  db.ref('lineup').set({0:lineup[0]||null,1:lineup[1]||null,2:lineup[2]||null});
+}
+
+// ═══════════════════════════════════════════════
+//  DRAG & DROP
+// ═══════════════════════════════════════════════
+function onCardDragStart(e, id) {
+  dragCardId = id;
+  e.dataTransfer.effectAllowed = 'copy';
+  setTimeout(()=>e.target.classList.add('dragging'),0);
+}
+
+function onCardDragEnd(e) {
+  e.target.classList.remove('dragging');
+  dragCardId = null;
+}
+
+function onSlotDragOver(e, i) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  document.getElementById(`slot-${i}`).classList.add('drag-target');
+}
+
+function onSlotDragLeave(i) {
+  document.getElementById(`slot-${i}`).classList.remove('drag-target');
+}
+
+function onSlotDrop(e, i) {
+  e.preventDefault();
+  document.getElementById(`slot-${i}`).classList.remove('drag-target');
+  if(!dragCardId) return;
+  lineup[i] = dragCardId;
+  saveLineup();
+  renderLineup();
+  toast(`Added to Round ${i+1}`);
+}
+
+// ═══════════════════════════════════════════════
+//  MODAL — ADD / EDIT
+// ═══════════════════════════════════════════════
+function openModal(id) {
+  editingId = id || null;
+  const cat = id ? categories.find(c=>c.id===id) : null;
+
+  document.getElementById('modal-title').textContent = id ? 'EDIT CATEGORY' : 'NEW CATEGORY';
+  document.getElementById('modal-delete-btn').style.display = id ? 'block' : 'none';
+
+  document.getElementById('f-name').value  = cat?.name    || '';
+  document.getElementById('f-genre').value = cat?.genre   || '';
+  document.getElementById('f-sheet').value = cat?.sheetUrl|| '';
+  document.getElementById('f-tab').value   = cat?.tabName || '';
+  document.getElementById('f-bg').value    = cat?.bgImage || '';
+  document.getElementById('f-notes').value = cat?.notes   || '';
+
+  previewBanner();
+  document.getElementById('modal-overlay').classList.add('show');
+  document.getElementById('f-name').focus();
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('show');
+  editingId = null;
+}
+
+function previewBanner() {
+  const url = document.getElementById('f-bg').value.trim();
+  const wrap = document.getElementById('banner-preview-wrap');
+  if(url) {
+    const src = driveViewUrl(url);
+    wrap.innerHTML = `<img class="banner-preview" src="${src}" onerror="this.outerHTML='<div class=banner-preview-placeholder><span>Could not load image</span></div>'">`;
+  } else {
+    wrap.innerHTML = `<div class="banner-preview-placeholder"><span>Banner preview will appear here</span></div>`;
+  }
+}
+
+async function saveCategory() {
+  const name     = document.getElementById('f-name').value.trim();
+  const genre    = document.getElementById('f-genre').value.trim();
+  const sheetUrl = document.getElementById('f-sheet').value.trim();
+  const tabName  = document.getElementById('f-tab').value.trim();
+  const bgImage  = document.getElementById('f-bg').value.trim();
+  const notes    = document.getElementById('f-notes').value.trim();
+
+  if(!name) return toast('Category name is required.', true);
+  if(!sheetUrl) return toast('Sheet URL is required.', true);
+  if(!tabName) return toast('Tab name is required.', true);
+
+  setSyncStatus('syncing');
+  const data = {name, genre, sheetUrl, tabName, bgImage, notes, updatedAt: Date.now()};
+
+  try {
+    if(editingId) {
+      await db.ref(`categories/${editingId}`).update(data);
+      toast('Category updated!');
+    } else {
+      await db.ref('categories').push({...data, createdAt: Date.now()});
+      toast('Category added!');
+    }
+    setSyncStatus('synced');
+    closeModal();
+  } catch(e) {
+    setSyncStatus('error');
+    toast('Save failed: ' + e.message, true);
+  }
+}
+
+function confirmDelete(id) {
+  editingId = id;
+  openModal(id);
+}
+
+async function deleteCategory() {
+  if(!editingId) return;
+  if(!confirm('Delete this category? This cannot be undone.')) return;
+  setSyncStatus('syncing');
+  try {
+    await db.ref(`categories/${editingId}`).remove();
+    // Also remove from lineup if present
+    lineup = lineup.map(id => id === editingId ? null : id);
+    saveLineup();
+    setSyncStatus('synced');
+    toast('Category deleted.');
+    closeModal();
+  } catch(e) {
+    setSyncStatus('error');
+    toast('Delete failed: ' + e.message, true);
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  LAUNCH TRIVIA
+// ═══════════════════════════════════════════════
+function launchTrivia() {
+  const apiKey = document.getElementById('lineup-api-key').value.trim();
+  const qCount = document.getElementById('lineup-q-count').value || '20';
+  const activeRounds = lineup.filter(Boolean).map(id => categories.find(c=>c.id===id)).filter(Boolean);
+
+  if(!apiKey) return toast('Enter your Google API key first.', true);
+  if(!activeRounds.length) return toast('Add at least one category to the lineup.', true);
+
+  // Build the trivia.html URL params
+  const params = new URLSearchParams();
+  params.set('apiKey', apiKey);
+  params.set('qCount', qCount);
+  activeRounds.forEach((cat, i) => {
+    params.set(`r${i}_url`, cat.sheetUrl);
+    params.set(`r${i}_tab`, cat.tabName);
+    params.set(`r${i}_bg`, cat.bgImage||'');
+    params.set(`r${i}_name`, cat.name||'');
+  });
+  params.set('rounds', activeRounds.length);
+
+  // Open trivia.html with params
+  window.open(`trivia.html?${params.toString()}`, '_blank');
+}
+
+// ═══════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════
+function driveViewUrl(url) {
+  if(!url) return url;
+  const fm = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if(fm) return `https://drive.google.com/uc?export=view&id=${fm[1]}`;
+  return url;
+}
+
+function toast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 2800);
+}
+
+// Restore saved API key
+try {
+  const saved = JSON.parse(localStorage.getItem('trivia_cfg')||'{}');
+  if(saved.apiKey) document.getElementById('lineup-api-key').value = saved.apiKey;
+  if(saved.questionCount) document.getElementById('lineup-q-count').value = saved.questionCount;
+} catch(e){}
+
+// Save API key on change
+document.getElementById('lineup-api-key').addEventListener('input', function() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('trivia_cfg')||'{}');
+    cfg.apiKey = this.value;
+    localStorage.setItem('trivia_cfg', JSON.stringify(cfg));
+  } catch(e){}
+});
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') closeModal();
+});
+</script>
+</body>
+</html>
