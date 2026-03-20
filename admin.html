@@ -262,6 +262,12 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   <div class="nav-right">
     <div class="sync-dot" id="sync-dot"></div>
     <div class="sync-label" id="sync-label">connecting…</div>
+    <button class="nav-btn nav-btn-ghost" onclick="openAdminLogin()" id="admin-gear-btn" title="Admin">
+      ⚙ Admin
+    </button>
+    <button class="nav-btn nav-btn-ghost" onclick="exitAdminMode()" id="admin-exit-btn" style="display:none;color:var(--red);border-color:rgba(231,76,60,.3)">
+      Exit Admin
+    </button>
   </div>
 </nav>
 
@@ -275,7 +281,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="section-title">CATEGORY LIBRARY</div>
         <div class="section-sub">Drag any category into a round slot →</div>
       </div>
-      <button class="add-btn" onclick="openModal()">+ New Category</button>
+      <button class="add-btn" onclick="openModal()" id="add-cat-btn" style="display:none">+ New Category</button>
     </div>
 
     <div class="filter-bar" id="filter-bar">
@@ -326,6 +332,25 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <input class="lineup-input" id="lineup-q-count" type="number" value="20" min="1" max="50" style="margin-bottom:1.25rem"/>
 
     <button class="launch-btn" id="launch-btn" onclick="launchTrivia()">Launch Trivia Night →</button>
+  </div>
+</div>
+
+<!-- PASSWORD MODAL -->
+<div class="overlay" id="pw-modal-overlay">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-header">
+      <div class="modal-title">⚙ ADMIN</div>
+      <button class="modal-close" onclick="closeAdminLogin()">×</button>
+    </div>
+    <div class="modal-body" style="gap:.75rem">
+      <div style="font-family:var(--serif);font-style:italic;font-size:14px;color:var(--text3)">Enter your admin password to edit categories.</div>
+      <input id="pw-input" type="password" class="field-input" placeholder="Password" style="letter-spacing:.2em;text-align:center" onkeydown="if(event.key==='Enter')checkPassword()"/>
+      <div id="pw-error" style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--red);opacity:0;transition:opacity .2s;text-align:center">Incorrect password</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeAdminLogin()">Cancel</button>
+      <button class="btn btn-primary" onclick="checkPassword()">Enter</button>
+    </div>
   </div>
 </div>
 
@@ -396,6 +421,55 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 <div id="toast"></div>
 
 <script>
+// ═══════════════════════════════════════════════
+//  PASSWORD & ADMIN MODE
+// ═══════════════════════════════════════════════
+const ADMIN_PASSWORD = '1111';
+let adminMode = false;
+
+function openAdminLogin() {
+  document.getElementById('pw-modal-overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('pw-input').focus(), 100);
+}
+
+function closeAdminLogin() {
+  document.getElementById('pw-modal-overlay').classList.remove('show');
+  document.getElementById('pw-input').value = '';
+  document.getElementById('pw-error').style.opacity = '0';
+}
+
+function checkPassword() {
+  const val = document.getElementById('pw-input').value;
+  if(val === ADMIN_PASSWORD) {
+    closeAdminLogin();
+    enterAdminMode();
+  } else {
+    const err = document.getElementById('pw-error');
+    err.style.opacity = '1';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-input').focus();
+    setTimeout(()=>err.style.opacity='0', 2000);
+  }
+}
+
+function enterAdminMode() {
+  adminMode = true;
+  document.getElementById('add-cat-btn').style.display = 'block';
+  document.getElementById('admin-gear-btn').style.display = 'none';
+  document.getElementById('admin-exit-btn').style.display = 'block';
+  renderLibrary(); // re-render to show edit/delete buttons
+  toast('Admin mode on — you can now edit categories.');
+}
+
+function exitAdminMode() {
+  adminMode = false;
+  document.getElementById('add-cat-btn').style.display = 'none';
+  document.getElementById('admin-gear-btn').style.display = 'block';
+  document.getElementById('admin-exit-btn').style.display = 'none';
+  renderLibrary(); // re-render to hide edit/delete buttons
+  toast('Admin mode off.');
+}
+
 // ═══════════════════════════════════════════════
 //  FIREBASE
 // ═══════════════════════════════════════════════
@@ -484,8 +558,8 @@ function renderLibrary() {
           ${cat.notes ? `<div style="font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;margin-top:4px">${cat.notes}</div>` : ''}
         </div>
         <div class="cat-actions">
-          <button class="cat-action-btn cat-action-edit" onclick="event.stopPropagation();openModal('${cat.id}')">✎</button>
-          <button class="cat-action-btn cat-action-del" onclick="event.stopPropagation();confirmDelete('${cat.id}')">×</button>
+          ${adminMode ? `<button class="cat-action-btn cat-action-edit" onclick="event.stopPropagation();openModal('${cat.id}')">✎</button>
+          <button class="cat-action-btn cat-action-del" onclick="event.stopPropagation();confirmDelete('${cat.id}')">×</button>` : ''}
         </div>
         <div class="drag-hint">drag to round →</div>
       </div>`;
