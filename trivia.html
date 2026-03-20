@@ -412,11 +412,6 @@ const S_INTRO='intro', S_QUESTION='question', S_ANSWERKEY='answerkey', S_END='en
 async function launchTrivia() {
   // no-op — trivia.html is always launched via URL params from admin
 }
-  document.getElementById('hud').classList.add('show');
-
-  renderCurrentSlide();
-  document.documentElement.requestFullscreen?.().catch(()=>{});
-}
 
 // ═══════════════════════════════════════════════════════
 //  SHEET LOADING — ported from GAS script
