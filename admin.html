@@ -265,6 +265,9 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <button class="nav-btn nav-btn-ghost" onclick="openAdminLogin()" id="admin-gear-btn" title="Admin">
       ⚙ Admin
     </button>
+    <button class="nav-btn nav-btn-ghost" onclick="openChangePassword()" id="admin-pw-btn" style="display:none;font-size:9px">
+      Change Password
+    </button>
     <button class="nav-btn nav-btn-ghost" onclick="exitAdminMode()" id="admin-exit-btn" style="display:none;color:var(--red);border-color:rgba(231,76,60,.3)">
       Exit Admin
     </button>
@@ -282,6 +285,12 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="section-sub">Drag any category into a round slot →</div>
       </div>
       <button class="add-btn" onclick="openModal()" id="add-cat-btn" style="display:none">+ New Category</button>
+    </div>
+
+    <div style="position:relative;margin-bottom:10px">
+      <input id="search-input" class="field-input" placeholder="Search categories…" oninput="renderLibrary()"
+        style="width:100%;padding-left:34px;font-size:13px"/>
+      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;pointer-events:none">⌕</span>
     </div>
 
     <div class="filter-bar" id="filter-bar">
@@ -354,6 +363,35 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   </div>
 </div>
 
+<!-- CHANGE PASSWORD MODAL -->
+<div class="overlay" id="change-pw-overlay" onclick="if(event.target===this)closeChangePassword()">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-header">
+      <div class="modal-title">CHANGE PASSWORD</div>
+      <button class="modal-close" onclick="closeChangePassword()">×</button>
+    </div>
+    <div class="modal-body" style="gap:.75rem">
+      <div class="field">
+        <div class="field-label">Current Password</div>
+        <input id="cpw-current" type="password" class="field-input" placeholder="Current password" style="letter-spacing:.1em"/>
+      </div>
+      <div class="field">
+        <div class="field-label">New Password</div>
+        <input id="cpw-new" type="password" class="field-input" placeholder="New password" style="letter-spacing:.1em"/>
+      </div>
+      <div class="field">
+        <div class="field-label">Confirm New Password</div>
+        <input id="cpw-confirm" type="password" class="field-input" placeholder="Confirm new password" style="letter-spacing:.1em" onkeydown="if(event.key==='Enter')saveNewPassword()"/>
+      </div>
+      <div id="cpw-error" style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--red);opacity:0;transition:opacity .2s">Passwords don't match</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeChangePassword()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewPassword()">Save Password</button>
+    </div>
+  </div>
+</div>
+
 <!-- ADD/EDIT MODAL -->
 <div class="overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
   <div class="modal">
@@ -366,11 +404,10 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="field-label">Category Name</div>
         <input class="field-input" id="f-name" placeholder="e.g. General Knowledge"/>
       </div>
-      <div class="field-row">
-        <div class="field">
-          <div class="field-label">Genre / Tag</div>
-          <input class="field-input" id="f-genre" placeholder="e.g. Pop Culture"/>
-        </div>
+      <div class="field">
+        <div class="field-label">Tags (comma separated)</div>
+        <input class="field-input" id="f-genre" placeholder="e.g. Pop Culture, Music, 90s"/>
+        <div class="field-hint">Add multiple tags separated by commas</div>
       </div>
       <div class="field">
         <div class="field-label">Google Sheet URL</div>
@@ -424,23 +461,22 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 // ═══════════════════════════════════════════════
 //  PASSWORD & ADMIN MODE
 // ═══════════════════════════════════════════════
-const ADMIN_PASSWORD = '1111';
+const DEFAULT_PASSWORD = '1111';
+let adminPassword = localStorage.getItem('trivia_admin_pw') || DEFAULT_PASSWORD;
 let adminMode = false;
 
 function openAdminLogin() {
   document.getElementById('pw-modal-overlay').classList.add('show');
   setTimeout(()=>document.getElementById('pw-input').focus(), 100);
 }
-
 function closeAdminLogin() {
   document.getElementById('pw-modal-overlay').classList.remove('show');
   document.getElementById('pw-input').value = '';
   document.getElementById('pw-error').style.opacity = '0';
 }
-
 function checkPassword() {
   const val = document.getElementById('pw-input').value;
-  if(val === ADMIN_PASSWORD) {
+  if(val === adminPassword) {
     closeAdminLogin();
     enterAdminMode();
   } else {
@@ -451,23 +487,64 @@ function checkPassword() {
     setTimeout(()=>err.style.opacity='0', 2000);
   }
 }
-
 function enterAdminMode() {
   adminMode = true;
   document.getElementById('add-cat-btn').style.display = 'block';
   document.getElementById('admin-gear-btn').style.display = 'none';
+  document.getElementById('admin-pw-btn').style.display = 'block';
   document.getElementById('admin-exit-btn').style.display = 'block';
-  renderLibrary(); // re-render to show edit/delete buttons
+  renderLibrary();
   toast('Admin mode on — you can now edit categories.');
 }
-
 function exitAdminMode() {
   adminMode = false;
   document.getElementById('add-cat-btn').style.display = 'none';
   document.getElementById('admin-gear-btn').style.display = 'block';
+  document.getElementById('admin-pw-btn').style.display = 'none';
   document.getElementById('admin-exit-btn').style.display = 'none';
-  renderLibrary(); // re-render to hide edit/delete buttons
+  renderLibrary();
   toast('Admin mode off.');
+}
+
+function openChangePassword() {
+  document.getElementById('change-pw-overlay').classList.add('show');
+  document.getElementById('cpw-current').value = '';
+  document.getElementById('cpw-new').value = '';
+  document.getElementById('cpw-confirm').value = '';
+  document.getElementById('cpw-error').style.opacity = '0';
+  setTimeout(()=>document.getElementById('cpw-current').focus(), 100);
+}
+function closeChangePassword() {
+  document.getElementById('change-pw-overlay').classList.remove('show');
+}
+function saveNewPassword() {
+  const current  = document.getElementById('cpw-current').value;
+  const newPw    = document.getElementById('cpw-new').value;
+  const confirm  = document.getElementById('cpw-confirm').value;
+  const errEl    = document.getElementById('cpw-error');
+
+  if(current !== adminPassword) {
+    errEl.textContent = 'Current password is incorrect.';
+    errEl.style.opacity = '1';
+    setTimeout(()=>errEl.style.opacity='0', 2500);
+    return;
+  }
+  if(!newPw) {
+    errEl.textContent = 'New password cannot be empty.';
+    errEl.style.opacity = '1';
+    setTimeout(()=>errEl.style.opacity='0', 2500);
+    return;
+  }
+  if(newPw !== confirm) {
+    errEl.textContent = "Passwords don't match.";
+    errEl.style.opacity = '1';
+    setTimeout(()=>errEl.style.opacity='0', 2500);
+    return;
+  }
+  adminPassword = newPw;
+  localStorage.setItem('trivia_admin_pw', newPw);
+  closeChangePassword();
+  toast('Password updated!');
 }
 
 // ═══════════════════════════════════════════════
@@ -527,21 +604,42 @@ renderLineup();
 // ═══════════════════════════════════════════════
 function renderLibrary() {
   const grid = document.getElementById('cat-grid');
-  const filtered = activeGenre === 'all' ? categories
-    : categories.filter(c => c.genre === activeGenre);
+  const searchVal = (document.getElementById('search-input')?.value||'').toLowerCase().trim();
+
+  let filtered = categories;
+
+  // Filter by tag
+  if(activeGenre !== 'all') {
+    filtered = filtered.filter(c => {
+      const tags = parseTags(c.genre);
+      return tags.includes(activeGenre);
+    });
+  }
+
+  // Filter by search
+  if(searchVal) {
+    filtered = filtered.filter(c =>
+      (c.name||'').toLowerCase().includes(searchVal) ||
+      (c.genre||'').toLowerCase().includes(searchVal) ||
+      (c.tabName||'').toLowerCase().includes(searchVal) ||
+      (c.notes||'').toLowerCase().includes(searchVal)
+    );
+  }
 
   if(!filtered.length) {
     grid.innerHTML = `<div class="empty-library">
       <div class="empty-icon">✦</div>
-      <div class="empty-text">${categories.length ? 'No categories match this filter' : 'No categories yet — add your first one'}</div>
+      <div class="empty-text">${categories.length ? 'No categories match' : 'No categories yet — add your first one'}</div>
     </div>`;
     return;
   }
 
   grid.innerHTML = filtered.map(cat => {
+    const tags = parseTags(cat.genre);
     const bannerHtml = cat.bgImage
       ? `<img class="cat-banner" src="${cat.bgImage}" onerror="this.outerHTML='<div class=cat-banner-placeholder><span>${cat.name}</span></div>'">`
       : `<div class="cat-banner-placeholder"><span>${cat.name||'UNTITLED'}</span></div>`;
+    const tagPills = tags.map(t=>`<span class="cat-genre">${t}</span>`).join('');
     return `
       <div class="cat-card" draggable="true" data-id="${cat.id}"
         ondragstart="onCardDragStart(event,'${cat.id}')"
@@ -550,7 +648,7 @@ function renderLibrary() {
         <div class="cat-body">
           <div class="cat-title">${cat.name||'Untitled'}</div>
           <div class="cat-meta">
-            ${cat.genre ? `<span class="cat-genre">${cat.genre}</span>` : ''}
+            ${tagPills}
             <span class="cat-tab">${cat.tabName||''}</span>
           </div>
           ${cat.notes ? `<div style="font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;margin-top:4px">${cat.notes}</div>` : ''}
@@ -564,11 +662,16 @@ function renderLibrary() {
   }).join('');
 }
 
+function parseTags(genreStr) {
+  if(!genreStr) return [];
+  return genreStr.split(',').map(t=>t.trim()).filter(Boolean);
+}
+
 function renderFilterBar() {
-  const genres = [...new Set(categories.map(c=>c.genre).filter(Boolean))];
+  const allTags = [...new Set(categories.flatMap(c => parseTags(c.genre)))].sort();
   const bar = document.getElementById('filter-bar');
   bar.innerHTML = `<div class="pill ${activeGenre==='all'?'active':''}" data-genre="all" onclick="filterGenre('all',this)">All</div>`
-    + genres.map(g => `<div class="pill ${activeGenre===g?'active':''}" data-genre="${g}" onclick="filterGenre('${g}',this)">${g}</div>`).join('');
+    + allTags.map(t => `<div class="pill ${activeGenre===t?'active':''}" data-genre="${t}" onclick="filterGenre('${t}',this)">${t}</div>`).join('');
 }
 
 function filterGenre(genre, el) {
@@ -675,7 +778,7 @@ function openModal(id) {
   document.getElementById('modal-delete-btn').style.display = id ? 'block' : 'none';
 
   document.getElementById('f-name').value    = cat?.name     || '';
-  document.getElementById('f-genre').value   = cat?.genre    || '';
+  document.getElementById('f-genre').value   = cat?.genre   || '';
   document.getElementById('f-sheet').value   = cat?.sheetUrl || '';
   document.getElementById('f-tab').value     = cat?.tabName  || '';
   document.getElementById('f-bg').value      = cat?.bgImage  || '';
@@ -708,7 +811,7 @@ function previewBanner(fieldId, wrapId) {
 
 async function saveCategory() {
   const name       = document.getElementById('f-name').value.trim();
-  const genre      = document.getElementById('f-genre').value.trim();
+  const genre      = document.getElementById('f-genre').value.trim(); // comma separated tags
   const sheetUrl   = document.getElementById('f-sheet').value.trim();
   const tabName    = document.getElementById('f-tab').value.trim();
   const bgImage    = document.getElementById('f-bg').value.trim();
