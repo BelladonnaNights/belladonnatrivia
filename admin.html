@@ -310,14 +310,19 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="round-slot-label">Round 3</div>
         <div class="round-slot-empty">Drop a category here</div>
       </div>
+      <div class="round-slot" id="slot-3" data-slot="3" ondragover="onSlotDragOver(event,3)" ondrop="onSlotDrop(event,3)" ondragleave="onSlotDragLeave(3)">
+        <div class="round-slot-label">Round 4</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+      <div class="round-slot" id="slot-4" data-slot="4" ondragover="onSlotDragOver(event,4)" ondrop="onSlotDrop(event,4)" ondragleave="onSlotDragLeave(4)">
+        <div class="round-slot-label">Round 5</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
     </div>
 
     <div class="lineup-divider"></div>
 
-    <div class="lineup-field-label">Google API Key</div>
-    <input class="lineup-input" id="lineup-api-key" type="text" placeholder="AIza…" autocomplete="off"/>
-
-    <div class="lineup-field-label">Questions per Round</div>
+    <div class="lineup-field-label">Questions per Round (default: 20)</div>
     <input class="lineup-input" id="lineup-q-count" type="number" value="20" min="1" max="50" style="margin-bottom:1.25rem"/>
 
     <button class="launch-btn" id="launch-btn" onclick="launchTrivia()">Launch Trivia Night →</button>
@@ -403,7 +408,7 @@ function setSyncStatus(status) {
 //  STATE
 // ═══════════════════════════════════════════════
 let categories = [];       // full library from Firebase
-let lineup = [null, null, null]; // tonight's 3 slots
+let lineup = [null, null, null, null, null]; // tonight's 5 slots
 let activeGenre = 'all';
 let editingId = null;
 let dragCardId = null;
@@ -425,7 +430,7 @@ db.ref('categories').on('value', snap => {
 
 db.ref('lineup').on('value', snap => {
   const data = snap.val();
-  if(data) lineup = [data[0]||null, data[1]||null, data[2]||null];
+  if(data) lineup = [data[0]||null, data[1]||null, data[2]||null, data[3]||null, data[4]||null];
   renderLineup();
 });
 
@@ -489,7 +494,7 @@ function filterGenre(genre, el) {
 //  RENDER LINEUP
 // ═══════════════════════════════════════════════
 function renderLineup() {
-  for(let i=0;i<3;i++) {
+  for(let i=0;i<5;i++) {
     const slot = document.getElementById(`slot-${i}`);
     const cat = lineup[i] ? categories.find(c=>c.id===lineup[i]) : null;
     slot.className = 'round-slot' + (cat ? ' has-card' : '');
@@ -527,7 +532,7 @@ function removeFromSlot(i) {
 }
 
 function saveLineup() {
-  db.ref('lineup').set({0:lineup[0]||null,1:lineup[1]||null,2:lineup[2]||null});
+  db.ref('lineup').set({0:lineup[0]||null,1:lineup[1]||null,2:lineup[2]||null,3:lineup[3]||null,4:lineup[4]||null});
 }
 
 // ═══════════════════════════════════════════════
@@ -660,26 +665,21 @@ async function deleteCategory() {
 //  LAUNCH TRIVIA
 // ═══════════════════════════════════════════════
 function launchTrivia() {
-  const apiKey = document.getElementById('lineup-api-key').value.trim();
   const qCount = document.getElementById('lineup-q-count').value || '20';
   const activeRounds = lineup.filter(Boolean).map(id => categories.find(c=>c.id===id)).filter(Boolean);
 
-  if(!apiKey) return toast('Enter your Google API key first.', true);
   if(!activeRounds.length) return toast('Add at least one category to the lineup.', true);
 
-  // Build the trivia.html URL params
   const params = new URLSearchParams();
-  params.set('apiKey', apiKey);
-  params.set('qCount', qCount);
+  params.set('rounds', activeRounds.length);
   activeRounds.forEach((cat, i) => {
     params.set(`r${i}_url`, cat.sheetUrl);
     params.set(`r${i}_tab`, cat.tabName);
     params.set(`r${i}_bg`, cat.bgImage||'');
     params.set(`r${i}_name`, cat.name||'');
+    params.set(`r${i}_qcount`, qCount);
   });
-  params.set('rounds', activeRounds.length);
 
-  // Open trivia.html with params
   window.open(`trivia.html?${params.toString()}`, '_blank');
 }
 
@@ -701,18 +701,17 @@ function toast(msg, isError) {
   t._timer = setTimeout(()=>t.classList.remove('show'), 2800);
 }
 
-// Restore saved API key
+// Restore saved question count
 try {
   const saved = JSON.parse(localStorage.getItem('trivia_cfg')||'{}');
-  if(saved.apiKey) document.getElementById('lineup-api-key').value = saved.apiKey;
   if(saved.questionCount) document.getElementById('lineup-q-count').value = saved.questionCount;
 } catch(e){}
 
-// Save API key on change
-document.getElementById('lineup-api-key').addEventListener('input', function() {
+// Save question count on change
+document.getElementById('lineup-q-count').addEventListener('input', function() {
   try {
     const cfg = JSON.parse(localStorage.getItem('trivia_cfg')||'{}');
-    cfg.apiKey = this.value;
+    cfg.questionCount = this.value;
     localStorage.setItem('trivia_cfg', JSON.stringify(cfg));
   } catch(e){}
 });
