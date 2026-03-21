@@ -577,7 +577,7 @@ function setSyncStatus(status) {
 let categories = [];       // full library from Firebase
 let lineup = [null, null, null, null, null]; // tonight's 5 slots
 let lineupAnswers = [true, true, true, true, true]; // show answers per slot (default on)
-let activeGenre = 'all';
+let activeGenres = new Set(); // empty = show all
 let editingId = null;
 let dragCardId = null;
 
@@ -608,11 +608,11 @@ function renderLibrary() {
 
   let filtered = categories;
 
-  // Filter by tag
-  if(activeGenre !== 'all') {
+  // Filter by tags (show categories that match ANY selected tag)
+  if(activeGenres.size > 0) {
     filtered = filtered.filter(c => {
       const tags = parseTags(c.genre);
-      return tags.includes(activeGenre);
+      return tags.some(t => activeGenres.has(t));
     });
   }
 
@@ -670,14 +670,24 @@ function parseTags(genreStr) {
 function renderFilterBar() {
   const allTags = [...new Set(categories.flatMap(c => parseTags(c.genre)))].sort();
   const bar = document.getElementById('filter-bar');
-  bar.innerHTML = `<div class="pill ${activeGenre==='all'?'active':''}" data-genre="all" onclick="filterGenre('all',this)">All</div>`
-    + allTags.map(t => `<div class="pill ${activeGenre===t?'active':''}" data-genre="${t}" onclick="filterGenre('${t}',this)">${t}</div>`).join('');
+  const allActive = activeGenres.size === 0;
+  bar.innerHTML = `<div class="pill ${allActive?'active':''}" onclick="clearGenreFilter()">All</div>`
+    + allTags.map(t => `<div class="pill ${activeGenres.has(t)?'active':''}" onclick="toggleGenre('${t}')">${t}</div>`).join('');
 }
 
-function filterGenre(genre, el) {
-  activeGenre = genre;
-  document.querySelectorAll('.filter-bar .pill').forEach(p=>p.classList.remove('active'));
-  el.classList.add('active');
+function toggleGenre(tag) {
+  if(activeGenres.has(tag)) {
+    activeGenres.delete(tag);
+  } else {
+    activeGenres.add(tag);
+  }
+  renderFilterBar();
+  renderLibrary();
+}
+
+function clearGenreFilter() {
+  activeGenres.clear();
+  renderFilterBar();
   renderLibrary();
 }
 
@@ -810,18 +820,14 @@ function previewBanner(fieldId, wrapId) {
 }
 
 async function saveCategory() {
-  const name       = document.getElementById('f-name').value.trim();
-  const genre      = document.getElementById('f-genre').value.trim(); // comma separated tags
+  const name       = document.getElementById('f-name').value.trim() || 'Untitled Category';
+  const genre      = document.getElementById('f-genre').value.trim();
   const sheetUrl   = document.getElementById('f-sheet').value.trim();
   const tabName    = document.getElementById('f-tab').value.trim();
   const bgImage    = document.getElementById('f-bg').value.trim();
   const bgIntro    = document.getElementById('f-bg-intro').value.trim();
   const bgQuestion = document.getElementById('f-bg-question').value.trim();
   const notes      = document.getElementById('f-notes').value.trim();
-
-  if(!name) return toast('Category name is required.', true);
-  if(!sheetUrl) return toast('Sheet URL is required.', true);
-  if(!tabName) return toast('Tab name is required.', true);
 
   setSyncStatus('syncing');
   const data = {name, genre, sheetUrl, tabName, bgImage, bgIntro, bgQuestion, notes, updatedAt: Date.now()};
