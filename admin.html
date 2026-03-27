@@ -754,14 +754,7 @@ function renderLineup() {
           <input type="checkbox" ${mainChecked} onchange="setMainRound(${i},this.checked)"
             style="accent-color:var(--gold2);width:13px;height:13px;cursor:pointer"/>
           <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Main Round (other rounds are mini games)</span>
-        </label>
-        ${lineupMainRound[i] ? `
-        <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
-          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Slides per segment:</span>
-          <input type="number" value="${lineupSegmentSize[i]||5}" min="1" max="50"
-            onchange="lineupSegmentSize[${i}]=parseInt(this.value)||5"
-            style="width:52px;background:rgba(255,255,255,.05);border:.5px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;font-family:var(--font);color:var(--text);text-align:center"/>
-        </div>` : ''}`;
+        </label>`;
     } else {
       slot.innerHTML = `
         <div class="round-slot-label">Round ${i+1}</div>
