@@ -864,7 +864,9 @@ function closeModal() {
 }
 
 function previewBanner(fieldId, wrapId) {
+  const url = document.getElementById(fieldId)?.value?.trim() || '';
   const wrap = document.getElementById(wrapId);
+  if(!wrap) return;
   if(url) {
     const src = driveViewUrl(url);
     wrap.innerHTML = `<img class="banner-preview" src="${src}" onerror="this.outerHTML='<div class=banner-preview-placeholder><span>Could not load image</span></div>'">`;
