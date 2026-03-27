@@ -435,9 +435,9 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
       <!-- SLIDESHOW FIELDS -->
       <div id="slideshow-fields" style="display:none">
         <div class="field">
-          <div class="field-label">Google Drive Folder Link</div>
-          <input class="field-input" id="f-folder" placeholder="https://drive.google.com/drive/folders/…"/>
-          <div class="field-hint">Share the folder as "Anyone with the link can view" — images will load in filename order</div>
+          <div class="field-label">Image URLs — one per line</div>
+          <textarea class="field-input" id="f-folder" placeholder="https://example.com/slide1.png&#10;https://example.com/slide2.png&#10;https://example.com/slide3.png" rows="6" style="resize:vertical;line-height:1.6;font-size:12px;font-family:var(--font)"></textarea>
+          <div class="field-hint">Paste one image URL per line in the order you want slides to appear. Drive share links work too.</div>
         </div>
       </div>
 
