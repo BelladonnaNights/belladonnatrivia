@@ -466,6 +466,8 @@ function extractFolderId(url) {
   const m = String(url).match(/\/folders\/([a-zA-Z0-9_-]+)/);
   return m ? m[1] : String(url).trim();
 }
+
+function extractSheetId(ref) {
   const m = String(ref).match(/\/d\/([a-zA-Z0-9-_]+)/);
   return m ? m[1] : String(ref).trim();
 }
