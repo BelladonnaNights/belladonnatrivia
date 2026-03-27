@@ -341,8 +341,8 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="setup-sub" id="setup-sub-text">Let's play some trivia.</div>
   <div class="setup-rounds-grid" id="setup-rounds-grid"></div>
   <button class="setup-launch-btn" id="setup-launch-btn" onclick="launchFromSetup()" style="display:none">Launch Trivia Night →</button>
-  <button id="setup-return-btn" onclick="returnToPresentation()" style="display:none;width:100%;max-width:420px;margin-top:8px;padding:12px;font-family:var(--cinzel);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;background:transparent;color:var(--gold);border:1px solid var(--gold-glow);border-radius:var(--radius);cursor:pointer">↩ Return to Presentation</button>
-  <div class="setup-hint">Space to reveal · → next · ← back · A answer key · Esc exit · Double-click to return</div>
+  <button id="setup-return-btn" onclick="returnToPresentation()" style="display:none;width:100%;max-width:420px;margin-top:8px;padding:14px;font-family:var(--cinzel);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);cursor:pointer">↩ Return to Presentation</button>
+  <div class="setup-hint">Space to reveal · → next · ← back · A answer key · Esc exit</div>
 </div>
 
 <!-- ══════════════════════════════════════════
@@ -524,11 +524,11 @@ function currentRound() { return state.rounds[state.roundIndex]; }
 function slideCount() {
   const round = currentRound();
   if(round.type === 'slideshow') {
-    // intro(0) + slides(1..n) + end(n+1)
     return 1 + (round.slides||[]).length + 1;
   }
-  // intro(0) + questions(1..n) + answerKey(n+1) + end(n+2)
-  return 1 + round.questions.length + 1 + 1;
+  // Skip answer key slide if showAnswers is on (answers shown per question)
+  const hasAnswerKey = !round.showAnswers;
+  return 1 + round.questions.length + (hasAnswerKey ? 1 : 0) + 1;
 }
 
 function slideType() {
@@ -542,9 +542,10 @@ function slideType() {
     return S_END;
   }
   const n = round.questions.length;
+  const hasAnswerKey = !round.showAnswers;
   if(state.slideIndex === 0) return S_INTRO;
   if(state.slideIndex <= n) return S_QUESTION;
-  if(state.slideIndex === n+1) return S_ANSWERKEY;
+  if(hasAnswerKey && state.slideIndex === n+1) return S_ANSWERKEY;
   return S_END;
 }
 
@@ -687,6 +688,19 @@ function renderCurrentSlide() {
 }
 
 function renderIntro(container, round) {
+  // If there's a background image, show it fullscreen with no text overlay
+  const bgUrl = round.bgIntro || round.bgImage;
+  if(bgUrl) {
+    const bg = document.getElementById('pres-bg');
+    bg.style.backgroundImage = `url('${bgUrl}')`;
+    bg.classList.remove('no-img');
+    // Empty slide — just the background
+    const el = document.createElement('div');
+    el.style.cssText = 'position:absolute;inset:0;';
+    container.appendChild(el);
+    return;
+  }
+  // No image — show text intro
   const el = document.createElement('div');
   el.className = 'slide slide-intro active';
   const isSlideshow = round.type === 'slideshow';
@@ -915,12 +929,16 @@ document.addEventListener('keydown', e => {
         state.slideIndex++;
         // Check if we've hit the segment boundary on a main round slideshow
         if(round.isMainRound && round.type === 'slideshow' && state.mainRoundIndex >= 0) {
-          const slidesInSegment = state.slideIndex - round.segmentStart;
-          if(slidesInSegment >= round.segmentSize && state.slideIndex < max) {
-            // Pause — show jump screen
-            state.currentType = S_JUMP;
-            renderJumpScreen();
-            return;
+          const pattern = [5, 2, 1];
+          // Figure out which segment we're in based on total slides shown
+          let segEnd = 0;
+          for(let s=0; s<pattern.length; s++) {
+            segEnd += pattern[s];
+            if(state.slideIndex === segEnd && state.slideIndex < max) {
+              state.currentType = S_JUMP;
+              renderJumpScreen();
+              return;
+            }
           }
         }
         renderCurrentSlide();
@@ -948,11 +966,15 @@ document.addEventListener('keydown', e => {
       if(state.slideIndex < max) {
         state.slideIndex++;
         if(round.isMainRound && round.type === 'slideshow' && state.mainRoundIndex >= 0) {
-          const slidesInSegment = state.slideIndex - round.segmentStart;
-          if(slidesInSegment >= round.segmentSize && state.slideIndex < max) {
-            state.currentType = S_JUMP;
-            renderJumpScreen();
-            return;
+          const pattern = [5, 2, 1];
+          let segEnd = 0;
+          for(let s=0; s<pattern.length; s++) {
+            segEnd += pattern[s];
+            if(state.slideIndex === segEnd && state.slideIndex < max) {
+              state.currentType = S_JUMP;
+              renderJumpScreen();
+              return;
+            }
           }
         }
         renderCurrentSlide();
@@ -968,7 +990,8 @@ document.addEventListener('keydown', e => {
       }
     } else if(type === S_ANSWERKEY) {
       const n = currentRound().questions.length;
-      state.slideIndex = n + 2; renderCurrentSlide();
+      const hasAnswerKey = !currentRound().showAnswers;
+      state.slideIndex = n + (hasAnswerKey ? 2 : 1); renderCurrentSlide();
     } else if(type === S_END) {
       if(state.jumpingFromMain) {
         returnToMainRound();
