@@ -599,8 +599,9 @@ function setSyncStatus(status) {
 // ═══════════════════════════════════════════════
 let categories = [];       // full library from Firebase
 let lineup = [null, null, null, null, null]; // tonight's 5 slots
-let lineupAnswers = [true, true, true, true, true]; // show answers per slot (default on)
-let lineupMainRound = [false, false, false, false, false]; // is this the main round?
+let lineupAnswers = [true, true, true, true, true];
+let lineupMainRound = [false, false, false, false, false];
+let lineupSegmentSize = [5, 5, 5, 5, 5]; // slides per segment for main round
 let activeGenres = new Set(); // empty = show all
 let editingId = null;
 let dragCardId = null;
@@ -753,7 +754,14 @@ function renderLineup() {
           <input type="checkbox" ${mainChecked} onchange="setMainRound(${i},this.checked)"
             style="accent-color:var(--gold2);width:13px;height:13px;cursor:pointer"/>
           <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Main Round (other rounds are mini games)</span>
-        </label>`;
+        </label>
+        ${lineupMainRound[i] ? `
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Slides per segment:</span>
+          <input type="number" value="${lineupSegmentSize[i]||5}" min="1" max="50"
+            onchange="lineupSegmentSize[${i}]=parseInt(this.value)||5"
+            style="width:52px;background:rgba(255,255,255,.05);border:.5px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;font-family:var(--font);color:var(--text);text-align:center"/>
+        </div>` : ''}`;
     } else {
       slot.innerHTML = `
         <div class="round-slot-label">Round ${i+1}</div>
@@ -953,6 +961,7 @@ function launchTrivia() {
     params.set(`r${i}_qcount`, qCount);
     params.set(`r${i}_showAnswers`, lineupAnswers[slotIndex] !== false ? '1' : '0');
     params.set(`r${i}_isMainRound`, lineupMainRound[slotIndex] ? '1' : '0');
+    params.set(`r${i}_segmentSize`, lineupSegmentSize[slotIndex] || 5);
   });
 
   window.open(`trivia.html?${params.toString()}`, '_blank');
