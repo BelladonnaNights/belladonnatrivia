@@ -577,6 +577,7 @@ function setSyncStatus(status) {
 let categories = [];       // full library from Firebase
 let lineup = [null, null, null, null, null]; // tonight's 5 slots
 let lineupAnswers = [true, true, true, true, true]; // show answers per slot (default on)
+let lineupMainRound = [false, false, false, false, false]; // is this the main round?
 let activeGenres = new Set(); // empty = show all
 let editingId = null;
 let dragCardId = null;
@@ -709,6 +710,7 @@ function renderLineup() {
         ? `<img class="round-slot-card-thumb" src="${cat.bgImage}" style="width:48px;height:12px;object-fit:cover;border-radius:3px;flex-shrink:0" onerror="this.style.display='none'">`
         : '';
       const checked = lineupAnswers[i] !== false ? 'checked' : '';
+      const mainChecked = lineupMainRound[i] ? 'checked' : '';
       slot.innerHTML = `
         <div class="round-slot-label">Round ${i+1}</div>
         <div class="round-slot-card">
@@ -723,6 +725,11 @@ function renderLineup() {
           <input type="checkbox" ${checked} onchange="lineupAnswers[${i}]=this.checked"
             style="accent-color:var(--gold);width:13px;height:13px;cursor:pointer"/>
           <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Show answers after each question</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:5px;cursor:pointer;user-select:none">
+          <input type="checkbox" ${mainChecked} onchange="setMainRound(${i},this.checked)"
+            style="accent-color:var(--gold2);width:13px;height:13px;cursor:pointer"/>
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Main Round (other rounds are mini games)</span>
         </label>`;
     } else {
       slot.innerHTML = `
@@ -734,8 +741,16 @@ function renderLineup() {
 
 function removeFromSlot(i) {
   lineup[i] = null;
+  lineupMainRound[i] = false;
   saveLineup();
   renderLineup();
+}
+
+function setMainRound(i, val) {
+  // Only one slot can be main round at a time
+  if(val) lineupMainRound = lineupMainRound.map((_,j) => j===i);
+  else lineupMainRound[i] = false;
+  renderLineup(); // re-render to update all checkboxes
 }
 
 function saveLineup() {
@@ -892,6 +907,7 @@ function launchTrivia() {
     params.set(`r${i}_name`, cat.name||'');
     params.set(`r${i}_qcount`, qCount);
     params.set(`r${i}_showAnswers`, lineupAnswers[slotIndex] !== false ? '1' : '0');
+    params.set(`r${i}_isMainRound`, lineupMainRound[slotIndex] ? '1' : '0');
   });
 
   window.open(`trivia.html?${params.toString()}`, '_blank');
