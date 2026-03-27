@@ -310,9 +310,24 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 .fade-out{animation:fadeOut .25s ease forwards}
 @keyframes fadeOut{to{opacity:0}}
 
-/* Scrollbar for answer key */
-.slide-answerkey::-webkit-scrollbar{width:4px}
-.slide-answerkey::-webkit-scrollbar-thumb{background:var(--gold-dim);border-radius:2px}
+/* JUMP PANEL — shown during main round questions */
+#jump-panel{
+  position:fixed;top:1.5rem;right:1.5rem;z-index:860;
+  display:none;flex-direction:column;gap:6px;
+}
+#jump-panel.show{display:flex}
+.jump-btn{
+  font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  background:rgba(8,8,8,.85);backdrop-filter:blur(12px);
+  border:1px solid var(--gold-glow);border-radius:var(--radius);
+  color:var(--gold);padding:7px 14px;cursor:pointer;transition:all .2s;
+  text-align:left;white-space:nowrap;
+}
+.jump-btn:hover{background:var(--gold-dim);border-color:var(--gold-glow2)}
+.jump-panel-label{
+  font-family:var(--cinzel);font-size:8px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--text3);text-align:right;margin-bottom:2px;
+}
 </style>
 </head>
 <body>
@@ -326,7 +341,8 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="setup-sub" id="setup-sub-text">Let's play some trivia.</div>
   <div class="setup-rounds-grid" id="setup-rounds-grid"></div>
   <button class="setup-launch-btn" id="setup-launch-btn" onclick="launchFromSetup()" style="display:none">Launch Trivia Night →</button>
-  <div class="setup-hint">Space to reveal · → next · ← back · A answer key · Esc exit</div>
+  <button id="setup-return-btn" onclick="returnToPresentation()" style="display:none;width:100%;max-width:420px;margin-top:8px;padding:12px;font-family:var(--cinzel);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;background:transparent;color:var(--gold);border:1px solid var(--gold-glow);border-radius:var(--radius);cursor:pointer">↩ Return to Presentation</button>
+  <div class="setup-hint">Space to reveal · → next · ← back · A answer key · Esc exit · Double-click to return</div>
 </div>
 
 <!-- ══════════════════════════════════════════
@@ -345,6 +361,11 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div id="slide-container"></div>
 </div>
 
+<!-- JUMP PANEL -->
+<div id="jump-panel">
+  <div class="jump-panel-label">Jump to mini game</div>
+</div>
+
 <!-- HUD -->
 <div id="hud">
   <div class="hud-item">Round <span id="hud-round">—</span></div>
@@ -355,7 +376,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="hud-sep"></div>
   <div class="hud-item"><span class="hud-key">→</span> next</div>
   <div class="hud-sep"></div>
-  <div class="hud-item"><span class="hud-key">A</span> answer key</div>
+  <div class="hud-item"><span class="hud-key">J+1</span> jump</div>
   <div class="hud-sep"></div>
   <div class="hud-item"><span class="hud-key">Esc</span> exit</div>
 </div>
@@ -374,11 +395,15 @@ const MC_LABELS=['A','B','C','D'];
 const API_KEY = 'AIzaSyACMjXQCXjVo75hbMXtag_JctR4SoX70So';
 
 let state = {
-  rounds: [],         // [{sheetUrl, tabName, bgImage, title, questionCount, questions:[]}]
+  rounds: [],
   roundIndex: 0,
-  slideIndex: 0,      // 0=intro, 1..n=questions, n+1=answerKey, n+2=end
+  slideIndex: 0,
   answerVisible: false,
   answerKeyVisible: false,
+  // Main round jump state
+  mainRoundIndex: -1,       // which round is the main round (-1 = none)
+  mainRoundSavedSlide: 0,   // saved slideIndex when jumping to mini game
+  jumpingFromMain: false,   // currently in a mini game jumped from main round
 };
 
 // Slide types
@@ -527,6 +552,51 @@ function goBack() {
   }
 }
 
+function jumpToMiniGame(miniRoundIndex) {
+  if(state.jumpingFromMain) return; // already in a mini game
+  // Save main round position
+  state.mainRoundSavedSlide = state.slideIndex;
+  state.jumpingFromMain = true;
+  state.answerVisible = false;
+  // Go to mini game intro
+  state.roundIndex = miniRoundIndex;
+  state.slideIndex = 0;
+  renderCurrentSlide();
+  updateJumpPanel();
+}
+
+function returnToMainRound() {
+  state.roundIndex = state.mainRoundIndex;
+  state.slideIndex = state.mainRoundSavedSlide; // resume where we left off
+  state.jumpingFromMain = false;
+  state.answerVisible = false;
+  renderCurrentSlide();
+  updateJumpPanel();
+}
+
+function updateJumpPanel() {
+  const panel = document.getElementById('jump-panel');
+  const type = slideType();
+  const isMainRound = state.roundIndex === state.mainRoundIndex;
+  const hasMainRound = state.mainRoundIndex >= 0;
+
+  // Show jump panel only during main round question slides
+  if(hasMainRound && isMainRound && type === S_QUESTION) {
+    const miniRounds = state.rounds.map((r,i)=>({r,i})).filter(({i})=>i!==state.mainRoundIndex);
+    if(miniRounds.length) {
+      panel.classList.add('show');
+      panel.innerHTML = `<div class="jump-panel-label">Jump to mini game</div>`
+        + miniRounds.map(({r,i},mi) => `
+          <button class="jump-btn" onclick="jumpToMiniGame(${i})">
+            J+${mi+1} &nbsp;→&nbsp; ${r.title||r.tabName}
+          </button>`).join('');
+      return;
+    }
+  }
+  panel.classList.remove('show');
+  panel.innerHTML = '';
+}
+
 function goNextRound() {
   if(state.roundIndex < state.rounds.length - 1) {
     state.roundIndex++;
@@ -582,6 +652,8 @@ function renderCurrentSlide() {
   else if(type === S_QUESTION) renderQuestion(container, round);
   else if(type === S_ANSWERKEY) renderAnswerKey(container, round);
   else renderEnd(container, round);
+
+  updateJumpPanel();
 }
 
 function renderIntro(container, round) {
@@ -706,22 +778,35 @@ function renderAnswerKey(container, round) {
 
 function renderEnd(container, round) {
   const isLastRound = state.roundIndex >= state.rounds.length - 1;
+  const isMiniGame = state.jumpingFromMain;
   const el = document.createElement('div');
   el.className = 'slide slide-end active';
   el.style.position='absolute';el.style.inset='0';
+
+  let btnHtml = '';
+  if(isMiniGame) {
+    const mainRound = state.rounds[state.mainRoundIndex];
+    btnHtml = `<button class="end-btn end-btn-primary" onclick="returnToMainRound()">
+      ← Return to ${mainRound.title||mainRound.tabName}
+    </button>`;
+  } else if(!isLastRound) {
+    btnHtml = `<button class="end-btn end-btn-primary" onclick="goNextRound()">Start Round ${state.roundIndex+2} →</button>`;
+  }
+
   el.innerHTML = `
     <div class="end-label">${round.tabName} Complete</div>
-    <div class="end-title">${isLastRound ? 'That\'s a<br>Wrap!' : 'Round<br>Done!'}</div>
-    <div class="end-sub">${isLastRound
-      ? 'Thanks for playing. Check the answer key before wrapping up.'
-      : `Up next: Round ${state.roundIndex+2}`}</div>
+    <div class="end-title">${isMiniGame ? 'Mini Game<br>Done!' : isLastRound ? 'That\'s a<br>Wrap!' : 'Round<br>Done!'}</div>
+    <div class="end-sub">${isMiniGame
+      ? `Ready to head back?`
+      : isLastRound
+        ? 'Thanks for playing. Check the answer key before wrapping up.'
+        : `Up next: Round ${state.roundIndex+2}`}</div>
     <div class="end-btn-row">
       <button class="end-btn end-btn-ghost" onclick="showAnswerKey()">View Answer Key</button>
-      ${!isLastRound
-        ? `<button class="end-btn end-btn-primary" onclick="goNextRound()">Start Round ${state.roundIndex+2} →</button>`
-        : ''}
+      ${btnHtml}
     </div>
-    ${!isLastRound ? `<div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem;animation:pulse 2s ease-in-out infinite">Press → to continue</div>` : ''}
+    ${isMiniGame ? `<div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem;animation:pulse 2s ease-in-out infinite">Press → to return to main round</div>` :
+      !isLastRound ? `<div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem;animation:pulse 2s ease-in-out infinite">Press → to continue</div>` : ''}
   `;
   container.appendChild(el);
 }
@@ -743,15 +828,14 @@ document.addEventListener('keydown', e => {
   if(e.key === ' ' || e.code === 'Space') {
     e.preventDefault();
     if(type === S_INTRO) {
-      // Space on intro = go to question 1
       state.slideIndex = 1;
       renderCurrentSlide();
     } else if(type === S_QUESTION) {
-      if(!state.answerVisible) {
+      const showAnswers = currentRound().showAnswers !== false;
+      if(showAnswers && !state.answerVisible) {
         state.answerVisible = true;
         renderCurrentSlide();
       } else {
-        // double-space = next
         state.answerVisible = false;
         const max = slideCount() - 1;
         if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
@@ -765,7 +849,8 @@ document.addEventListener('keydown', e => {
     if(type === S_INTRO) {
       state.slideIndex = 1; renderCurrentSlide();
     } else if(type === S_QUESTION) {
-      if(!state.answerVisible) {
+      const showAnswers = currentRound().showAnswers !== false;
+      if(showAnswers && !state.answerVisible) {
         state.answerVisible = true; renderCurrentSlide();
       } else {
         state.answerVisible = false;
@@ -776,7 +861,9 @@ document.addEventListener('keydown', e => {
       const n = currentRound().questions.length;
       state.slideIndex = n + 2; renderCurrentSlide();
     } else if(type === S_END) {
-      if(state.roundIndex < state.rounds.length - 1) {
+      if(state.jumpingFromMain) {
+        returnToMainRound();
+      } else if(state.roundIndex < state.rounds.length - 1) {
         goNextRound();
       }
     }
@@ -793,6 +880,21 @@ document.addEventListener('keydown', e => {
   if(e.key === 'a' || e.key === 'A') {
     e.preventDefault();
     showAnswerKey();
+    return;
+  }
+
+  // J+number = jump to mini game (e.g. J then 1)
+  if((e.key === 'j' || e.key === 'J') && state.mainRoundIndex >= 0 && state.roundIndex === state.mainRoundIndex) {
+    // flag waiting for number
+    state._jumpPending = true;
+    setTimeout(()=>{ state._jumpPending = false; }, 1500);
+    return;
+  }
+  if(state._jumpPending && e.key >= '1' && e.key <= '9') {
+    state._jumpPending = false;
+    const miniRounds = state.rounds.map((_,i)=>i).filter(i=>i!==state.mainRoundIndex);
+    const idx = parseInt(e.key) - 1;
+    if(miniRounds[idx] !== undefined) jumpToMiniGame(miniRounds[idx]);
     return;
   }
 });
@@ -818,8 +920,19 @@ function exitPresentation() {
   document.getElementById('pres-screen').classList.remove('show');
   document.getElementById('hud').classList.remove('show');
   document.getElementById('setup-screen').style.display = 'flex';
+  // Show return button if we have an active presentation
+  if(state.rounds.length > 0) {
+    document.getElementById('setup-return-btn').style.display = 'block';
+  }
   document.exitFullscreen?.().catch(()=>{});
   state.answerVisible = false;
+}
+
+function returnToPresentation() {
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('pres-screen').classList.add('show');
+  document.getElementById('hud').classList.add('show');
+  document.documentElement.requestFullscreen?.().catch(()=>{});
 }
 
 function shuffle(arr) {
@@ -867,7 +980,9 @@ function checkUrlParams() {
       bgIntro:p.get(`r${i}_bgIntro`)||p.get(`r${i}_bg`)||'',
       bgQuestion:p.get(`r${i}_bgQuestion`)||p.get(`r${i}_bg`)||'',
       title:p.get(`r${i}_name`)||`Round ${i+1}`,
-      questionCount:qCount
+      questionCount:qCount,
+      showAnswers: p.get(`r${i}_showAnswers`) !== '0',
+      isMainRound: p.get(`r${i}_isMainRound`) === '1'
     });
   }
   if(!rounds.length) return false;
@@ -925,12 +1040,25 @@ async function launchFromSetup() {
     return;
   }
 
+  // Detect main round
+  state.mainRoundIndex = state.rounds.findIndex(r=>r.isMainRound);
+
   state.roundIndex = 0; state.slideIndex = 0;
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
   renderCurrentSlide();
   document.documentElement.requestFullscreen?.().catch(()=>{});
 }
+
+// Double-click setup screen = re-enter fullscreen if we have rounds loaded
+document.getElementById('setup-screen').addEventListener('dblclick', () => {
+  if(state.rounds.length > 0) {
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('pres-screen').classList.add('show');
+    document.getElementById('hud').classList.add('show');
+    document.documentElement.requestFullscreen?.().catch(()=>{});
+  }
+});
 
 checkUrlParams();
 </script>
