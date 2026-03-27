@@ -439,28 +439,15 @@ async function loadSheetQuestions(sheetUrl, tabName, count) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  SLIDESHOW LOADING — reads image URLs from a Google Sheet
+//  SLIDESHOW LOADING — parses pasted URL list
 // ═══════════════════════════════════════════════════════
-async function loadSlidesheetManifest(sheetUrl, tabName) {
-  const sheetId = extractSheetId(sheetUrl);
-  if(!sheetId) throw new Error('Could not extract Sheet ID from URL.');
-  if(!tabName) throw new Error('Tab name is required for slideshow manifest.');
-
-  const range = encodeURIComponent(`${tabName}!A2:A`);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${API_KEY}`;
-
-  const res = await fetch(url);
-  if(!res.ok) {
-    const err = await res.json().catch(()=>({}));
-    throw new Error(err?.error?.message || `HTTP ${res.status}`);
-  }
-  const data = await res.json();
-  const rows = (data.values || []);
-  const slides = rows
-    .map((r,i) => ({ id: i, name: `Slide ${i+1}`, url: driveViewUrl(safe(r[0]).trim()) }))
-    .filter(s => s.url);
-
-  if(!slides.length) throw new Error('No image URLs found in sheet.');
+function loadSlidesheetManifest(urlList) {
+  const slides = urlList
+    .split('\n')
+    .map(u => u.trim())
+    .filter(u => u.length > 0)
+    .map((u, i) => ({ id: i, name: `Slide ${i+1}`, url: driveViewUrl(u) }));
+  if(!slides.length) throw new Error('No image URLs found.');
   return slides;
 }
 
@@ -1031,7 +1018,6 @@ function checkUrlParams() {
       sheetUrl:url||'', tabName:tab||'',
       type: p.get(`r${i}_type`)||'trivia',
       folderUrl: p.get(`r${i}_folder`)||'',
-      folderTab: p.get(`r${i}_folderTab`)||'',
       bgImage:p.get(`r${i}_bg`)||'',
       bgIntro:p.get(`r${i}_bgIntro`)||p.get(`r${i}_bg`)||'',
       bgQuestion:p.get(`r${i}_bgQuestion`)||p.get(`r${i}_bg`)||'',
@@ -1082,7 +1068,7 @@ async function launchFromSetup() {
     setLoadingLabel(`Loading Round ${i+1}: ${round.title}…`);
     try {
       if(round.type === 'slideshow') {
-        round.slides = await loadSlidesheetManifest(round.folderUrl, round.folderTab);
+        round.slides = loadSlidesheetManifest(round.folderUrl);
         round.questions = [];
       } else {
         round.questions = await loadSheetQuestions(
