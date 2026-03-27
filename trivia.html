@@ -597,7 +597,8 @@ function jumpToMiniGame(miniRoundIndex) {
 function returnToMainRound() {
   state.currentType = null;
   state.roundIndex = state.mainRoundIndex;
-  state.slideIndex = state.mainRoundSavedSlide;
+  // Advance past the pause slide to the next one
+  state.slideIndex = state.mainRoundSavedSlide + 1;
   state.jumpingFromMain = false;
   state.answerVisible = false;
   renderCurrentSlide();
@@ -907,7 +908,20 @@ function doJump(i) {
   state.currentType = null;
   jumpToMiniGame(i);
 }
-// ═══════════════════════════════════════════════════════
+
+// Pause points: fire when user presses → WHILE ON slides 5 or 7
+// The slide plays, then pressing → shows GAME TIME (without advancing)
+const MAIN_ROUND_PAUSE_POINTS = new Set([5, 7]);
+
+function shouldPauseForMiniGame(round) {
+  if(!round.isMainRound || round.type !== 'slideshow' || state.mainRoundIndex < 0) return false;
+  // Check CURRENT slideIndex (before we decided to advance)
+  // We call this before incrementing now — see keyboard handler
+  if(!MAIN_ROUND_PAUSE_POINTS.has(state.slideIndex)) return false;
+  state.currentType = S_JUMP;
+  return true;
+}
+
 document.addEventListener('keydown', e => {
   // Don't capture if typing in setup inputs
   if(e.target.tagName === 'INPUT') return;
@@ -921,26 +935,16 @@ document.addEventListener('keydown', e => {
 
   if(e.key === ' ' || e.code === 'Space') {
     e.preventDefault();
-    if(type === S_JUMP) return; // wait for jump button click
+    if(type === S_JUMP) return;
     if(type === S_INTRO || type === S_SLIDE) {
       const round = currentRound();
       const max = slideCount() - 1;
+      // Check pause BEFORE advancing — slide has already played
+      if(type === S_SLIDE && shouldPauseForMiniGame(round)) {
+        renderJumpScreen(); return;
+      }
       if(state.slideIndex < max) {
         state.slideIndex++;
-        // Check if we've hit the segment boundary on a main round slideshow
-        if(round.isMainRound && round.type === 'slideshow' && state.mainRoundIndex >= 0) {
-          const pattern = [5, 2, 1];
-          // Figure out which segment we're in based on total slides shown
-          let segEnd = 0;
-          for(let s=0; s<pattern.length; s++) {
-            segEnd += pattern[s];
-            if(state.slideIndex === segEnd && state.slideIndex < max) {
-              state.currentType = S_JUMP;
-              renderJumpScreen();
-              return;
-            }
-          }
-        }
         renderCurrentSlide();
       }
     } else if(type === S_QUESTION) {
@@ -963,20 +967,12 @@ document.addEventListener('keydown', e => {
     if(type === S_INTRO || type === S_SLIDE) {
       const round = currentRound();
       const max = slideCount() - 1;
+      // Check pause BEFORE advancing — slide has already played
+      if(type === S_SLIDE && shouldPauseForMiniGame(round)) {
+        renderJumpScreen(); return;
+      }
       if(state.slideIndex < max) {
         state.slideIndex++;
-        if(round.isMainRound && round.type === 'slideshow' && state.mainRoundIndex >= 0) {
-          const pattern = [5, 2, 1];
-          let segEnd = 0;
-          for(let s=0; s<pattern.length; s++) {
-            segEnd += pattern[s];
-            if(state.slideIndex === segEnd && state.slideIndex < max) {
-              state.currentType = S_JUMP;
-              renderJumpScreen();
-              return;
-            }
-          }
-        }
         renderCurrentSlide();
       }
     } else if(type === S_QUESTION) {
@@ -1004,6 +1000,7 @@ document.addEventListener('keydown', e => {
 
   if(e.key === 'ArrowLeft') {
     e.preventDefault();
+    if(type === S_JUMP) return; // no going back from GAME TIME screen
     state.answerVisible = false;
     if(state.slideIndex > 0) { state.slideIndex--; renderCurrentSlide(); }
     return;
@@ -1225,6 +1222,11 @@ async function launchFromSetup() {
   // Start from main round if there is one, otherwise start from 0
   state.roundIndex = state.mainRoundIndex >= 0 ? state.mainRoundIndex : 0;
   state.slideIndex = 0;
+
+  // Show return button for future use
+  document.getElementById('setup-return-btn').style.display = 'block';
+
+  document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
   renderCurrentSlide();
@@ -1233,12 +1235,7 @@ async function launchFromSetup() {
 
 // Double-click setup screen = re-enter fullscreen if we have rounds loaded
 document.getElementById('setup-screen').addEventListener('dblclick', () => {
-  if(state.rounds.length > 0) {
-    document.getElementById('setup-screen').style.display = 'none';
-    document.getElementById('pres-screen').classList.add('show');
-    document.getElementById('hud').classList.add('show');
-    document.documentElement.requestFullscreen?.().catch(()=>{});
-  }
+  if(state.rounds.length > 0) returnToPresentation();
 });
 
 checkUrlParams();
