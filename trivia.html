@@ -400,14 +400,14 @@ let state = {
   slideIndex: 0,
   answerVisible: false,
   answerKeyVisible: false,
-  // Main round jump state
-  mainRoundIndex: -1,       // which round is the main round (-1 = none)
-  mainRoundSavedSlide: 0,   // saved slideIndex when jumping to mini game
-  jumpingFromMain: false,   // currently in a mini game jumped from main round
+  currentType: null, // override for S_JUMP
+  mainRoundIndex: -1,
+  mainRoundSavedSlide: 0,
+  jumpingFromMain: false,
 };
 
 // Slide types
-const S_INTRO='intro', S_QUESTION='question', S_ANSWERKEY='answerkey', S_END='end', S_SLIDE='slide';
+const S_INTRO='intro', S_QUESTION='question', S_ANSWERKEY='answerkey', S_END='end', S_SLIDE='slide', S_JUMP='jump';
 
 // ═══════════════════════════════════════════════════════
 //  LAUNCH (manual fallback — normally launched from admin)
@@ -532,6 +532,8 @@ function slideCount() {
 }
 
 function slideType() {
+  // Jump screen override
+  if(state.currentType === S_JUMP) return S_JUMP;
   const round = currentRound();
   if(round.type === 'slideshow') {
     const n = (round.slides||[]).length;
@@ -578,12 +580,13 @@ function goBack() {
 }
 
 function jumpToMiniGame(miniRoundIndex) {
-  if(state.jumpingFromMain) return; // already in a mini game
-  // Save main round position
+  if(state.jumpingFromMain) return;
+  const mainRound = state.rounds[state.mainRoundIndex];
+  // Save where we are — next segment starts after current slide
+  mainRound.segmentStart = state.slideIndex;
   state.mainRoundSavedSlide = state.slideIndex;
   state.jumpingFromMain = true;
   state.answerVisible = false;
-  // Go to mini game intro
   state.roundIndex = miniRoundIndex;
   state.slideIndex = 0;
   renderCurrentSlide();
@@ -591,8 +594,9 @@ function jumpToMiniGame(miniRoundIndex) {
 }
 
 function returnToMainRound() {
+  state.currentType = null;
   state.roundIndex = state.mainRoundIndex;
-  state.slideIndex = state.mainRoundSavedSlide; // resume where we left off
+  state.slideIndex = state.mainRoundSavedSlide;
   state.jumpingFromMain = false;
   state.answerVisible = false;
   renderCurrentSlide();
@@ -702,7 +706,7 @@ function renderSlide(container, round) {
   const slide = round.slides[state.slideIndex - 1];
   if(!slide) return;
   const el = document.createElement('div');
-  el.style.cssText = 'position:absolute;inset:0;background-size:contain;background-position:center;background-repeat:no-repeat;background-color:#000;';
+  el.style.cssText = 'position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;background-color:#000;';
   el.style.backgroundImage = `url('${slide.url}')`;
   container.appendChild(el);
 }
@@ -850,8 +854,35 @@ function renderEnd(container, round) {
   container.appendChild(el);
 }
 
-// ═══════════════════════════════════════════════════════
-//  KEYBOARD CONTROLS
+function renderJumpScreen() {
+  const container = document.getElementById('slide-container');
+  container.innerHTML = '';
+  const miniRounds = state.rounds.map((r,i)=>({r,i})).filter(({i})=>i!==state.mainRoundIndex);
+  const el = document.createElement('div');
+  el.className = 'slide slide-end active';
+  el.style.position='absolute';el.style.inset='0';
+  el.innerHTML = `
+    <div class="end-label">Main Round Paused</div>
+    <div class="end-title">GAME<br>TIME!</div>
+    <div class="end-sub">Choose a mini game to jump to</div>
+    <div class="end-btn-row">
+      ${miniRounds.map(({r,i},mi)=>`
+        <button class="end-btn end-btn-primary" onclick="jumpToMiniGame(${i})">
+          ${r.title||r.tabName} →
+        </button>`).join('')}
+    </div>
+    <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem">J+${miniRounds.map((_,mi)=>mi+1).join(' / J+')} to jump</div>
+  `;
+  container.appendChild(el);
+  document.getElementById('jump-panel').classList.remove('show');
+}
+
+// Override jumpToMiniGame to clear the jump screen state
+const _origJump = jumpToMiniGame;
+function jumpToMiniGame(i) {
+  state.currentType = null;
+  _origJump(i);
+}
 // ═══════════════════════════════════════════════════════
 document.addEventListener('keydown', e => {
   // Don't capture if typing in setup inputs
@@ -866,9 +897,24 @@ document.addEventListener('keydown', e => {
 
   if(e.key === ' ' || e.code === 'Space') {
     e.preventDefault();
+    if(type === S_JUMP) return; // wait for jump button click
     if(type === S_INTRO || type === S_SLIDE) {
+      const round = currentRound();
       const max = slideCount() - 1;
-      if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
+      if(state.slideIndex < max) {
+        state.slideIndex++;
+        // Check if we've hit the segment boundary on a main round slideshow
+        if(round.isMainRound && round.type === 'slideshow' && state.mainRoundIndex >= 0) {
+          const slidesInSegment = state.slideIndex - round.segmentStart;
+          if(slidesInSegment >= round.segmentSize && state.slideIndex < max) {
+            // Pause — show jump screen
+            state.currentType = S_JUMP;
+            renderJumpScreen();
+            return;
+          }
+        }
+        renderCurrentSlide();
+      }
     } else if(type === S_QUESTION) {
       const showAnswers = currentRound().showAnswers !== false;
       if(showAnswers && !state.answerVisible) {
@@ -885,9 +931,22 @@ document.addEventListener('keydown', e => {
 
   if(e.key === 'ArrowRight' || e.key === 'Enter') {
     e.preventDefault();
+    if(type === S_JUMP) return;
     if(type === S_INTRO || type === S_SLIDE) {
+      const round = currentRound();
       const max = slideCount() - 1;
-      if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
+      if(state.slideIndex < max) {
+        state.slideIndex++;
+        if(round.isMainRound && round.type === 'slideshow' && state.mainRoundIndex >= 0) {
+          const slidesInSegment = state.slideIndex - round.segmentStart;
+          if(slidesInSegment >= round.segmentSize && state.slideIndex < max) {
+            state.currentType = S_JUMP;
+            renderJumpScreen();
+            return;
+          }
+        }
+        renderCurrentSlide();
+      }
     } else if(type === S_QUESTION) {
       const showAnswers = currentRound().showAnswers !== false;
       if(showAnswers && !state.answerVisible) {
@@ -1025,6 +1084,8 @@ function checkUrlParams() {
       questionCount:qCount,
       showAnswers: p.get(`r${i}_showAnswers`) !== '0',
       isMainRound: p.get(`r${i}_isMainRound`) === '1',
+      segmentSize: parseInt(p.get(`r${i}_segmentSize`))||5,
+      segmentStart: 0, // which slide index the current segment started at
       slides:[] // for slideshow type
     });
   }
