@@ -409,16 +409,39 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <input class="field-input" id="f-genre" placeholder="e.g. Pop Culture, Music, 90s"/>
         <div class="field-hint">Add multiple tags separated by commas</div>
       </div>
+
+      <!-- TYPE TOGGLE -->
       <div class="field">
-        <div class="field-label">Google Sheet URL</div>
-        <input class="field-input" id="f-sheet" placeholder="https://docs.google.com/spreadsheets/d/…"/>
+        <div class="field-label">Category Type</div>
+        <div style="display:flex;gap:8px">
+          <button id="type-btn-trivia" onclick="setCatType('trivia')" class="btn btn-primary" style="flex:1">🎯 Trivia</button>
+          <button id="type-btn-slideshow" onclick="setCatType('slideshow')" class="btn btn-ghost" style="flex:1">🖼 Slideshow</button>
+        </div>
       </div>
-      <div class="field">
-        <div class="field-label">Tab Name</div>
-        <input class="field-input" id="f-tab" placeholder="Exact tab name (case sensitive)"/>
-        <div class="field-hint">Must match the tab name exactly as it appears in your Sheet</div>
+
+      <!-- TRIVIA FIELDS -->
+      <div id="trivia-fields">
+        <div class="field" style="margin-bottom:1rem">
+          <div class="field-label">Google Sheet URL</div>
+          <input class="field-input" id="f-sheet" placeholder="https://docs.google.com/spreadsheets/d/…"/>
+        </div>
+        <div class="field">
+          <div class="field-label">Tab Name</div>
+          <input class="field-input" id="f-tab" placeholder="Exact tab name (case sensitive)"/>
+          <div class="field-hint">Must match the tab name exactly as it appears in your Sheet</div>
+        </div>
       </div>
-      <div class="field">
+
+      <!-- SLIDESHOW FIELDS -->
+      <div id="slideshow-fields" style="display:none">
+        <div class="field">
+          <div class="field-label">Google Drive Folder Link</div>
+          <input class="field-input" id="f-folder" placeholder="https://drive.google.com/drive/folders/…"/>
+          <div class="field-hint">Share the folder as "Anyone with the link can view" — images will load in filename order</div>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:1rem">
         <div class="field-label">Admin Banner Image URL</div>
         <input class="field-input" id="f-bg" placeholder="https://… or Google Drive share link" oninput="previewBanner('f-bg','banner-preview-wrap')"/>
         <div class="field-hint">Wide card image shown in the admin category library</div>
@@ -426,7 +449,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
           <div class="banner-preview-placeholder"><span>Banner preview will appear here</span></div>
         </div>
       </div>
-      <div class="field">
+      <div class="field" id="intro-bg-field">
         <div class="field-label">Intro Slide Background URL</div>
         <input class="field-input" id="f-bg-intro" placeholder="https://… or Google Drive share link" oninput="previewBanner('f-bg-intro','intro-preview-wrap')"/>
         <div class="field-hint">Fullscreen background shown on the round intro slide</div>
@@ -434,7 +457,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
           <div class="banner-preview-placeholder"><span>Intro slide preview will appear here</span></div>
         </div>
       </div>
-      <div class="field">
+      <div class="field" id="question-bg-field">
         <div class="field-label">Question Slide Background URL</div>
         <input class="field-input" id="f-bg-question" placeholder="https://… or Google Drive share link" oninput="previewBanner('f-bg-question','question-preview-wrap')"/>
         <div class="field-hint">Fullscreen background shown behind every question in this round</div>
@@ -802,10 +825,15 @@ function openModal(id) {
   document.getElementById('modal-title').textContent = id ? 'EDIT CATEGORY' : 'NEW CATEGORY';
   document.getElementById('modal-delete-btn').style.display = id ? 'block' : 'none';
 
+  // Set type
+  const type = cat?.type || 'trivia';
+  setCatType(type);
+
   document.getElementById('f-name').value    = cat?.name     || '';
-  document.getElementById('f-genre').value   = cat?.genre   || '';
+  document.getElementById('f-genre').value   = cat?.genre    || '';
   document.getElementById('f-sheet').value   = cat?.sheetUrl || '';
   document.getElementById('f-tab').value     = cat?.tabName  || '';
+  document.getElementById('f-folder').value  = cat?.folderUrl|| '';
   document.getElementById('f-bg').value      = cat?.bgImage  || '';
   document.getElementById('f-bg-intro').value    = cat?.bgIntro    || '';
   document.getElementById('f-bg-question').value = cat?.bgQuestion || '';
@@ -818,13 +846,24 @@ function openModal(id) {
   document.getElementById('f-name').focus();
 }
 
+let currentCatType = 'trivia';
+
+function setCatType(type) {
+  currentCatType = type;
+  document.getElementById('trivia-fields').style.display = type === 'trivia' ? 'block' : 'none';
+  document.getElementById('slideshow-fields').style.display = type === 'slideshow' ? 'block' : 'none';
+  document.getElementById('intro-bg-field').style.display = type === 'trivia' ? 'block' : 'none';
+  document.getElementById('question-bg-field').style.display = type === 'trivia' ? 'block' : 'none';
+  document.getElementById('type-btn-trivia').className = 'btn ' + (type==='trivia' ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('type-btn-slideshow').className = 'btn ' + (type==='slideshow' ? 'btn-primary' : 'btn-ghost');
+}
+
 function closeModal() {
   document.getElementById('modal-overlay').classList.remove('show');
   editingId = null;
 }
 
 function previewBanner(fieldId, wrapId) {
-  const url = document.getElementById(fieldId).value.trim();
   const wrap = document.getElementById(wrapId);
   if(url) {
     const src = driveViewUrl(url);
@@ -837,15 +876,17 @@ function previewBanner(fieldId, wrapId) {
 async function saveCategory() {
   const name       = document.getElementById('f-name').value.trim() || 'Untitled Category';
   const genre      = document.getElementById('f-genre').value.trim();
+  const type       = currentCatType;
   const sheetUrl   = document.getElementById('f-sheet').value.trim();
   const tabName    = document.getElementById('f-tab').value.trim();
+  const folderUrl  = document.getElementById('f-folder').value.trim();
   const bgImage    = document.getElementById('f-bg').value.trim();
   const bgIntro    = document.getElementById('f-bg-intro').value.trim();
   const bgQuestion = document.getElementById('f-bg-question').value.trim();
   const notes      = document.getElementById('f-notes').value.trim();
 
   setSyncStatus('syncing');
-  const data = {name, genre, sheetUrl, tabName, bgImage, bgIntro, bgQuestion, notes, updatedAt: Date.now()};
+  const data = {name, genre, type, sheetUrl, tabName, folderUrl, bgImage, bgIntro, bgQuestion, notes, updatedAt: Date.now()};
 
   try {
     if(editingId) {
@@ -899,8 +940,10 @@ function launchTrivia() {
   const params = new URLSearchParams();
   params.set('rounds', activeRounds.length);
   activeRounds.forEach(({cat, slotIndex}, i) => {
-    params.set(`r${i}_url`, cat.sheetUrl);
-    params.set(`r${i}_tab`, cat.tabName);
+    params.set(`r${i}_url`, cat.sheetUrl||'');
+    params.set(`r${i}_tab`, cat.tabName||'');
+    params.set(`r${i}_type`, cat.type||'trivia');
+    params.set(`r${i}_folder`, cat.folderUrl||'');
     params.set(`r${i}_bg`, cat.bgImage||'');
     params.set(`r${i}_bgIntro`, cat.bgIntro||cat.bgImage||'');
     params.set(`r${i}_bgQuestion`, cat.bgQuestion||cat.bgImage||'');
