@@ -439,32 +439,29 @@ async function loadSheetQuestions(sheetUrl, tabName, count) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  DRIVE FOLDER LOADING — for slideshow rounds
+//  SLIDESHOW LOADING — reads image URLs from a Google Sheet
 // ═══════════════════════════════════════════════════════
-async function loadDriveFolder(folderUrl) {
-  const folderId = extractFolderId(folderUrl);
-  if(!folderId) throw new Error('Could not extract folder ID from URL.');
+async function loadSlidesheetManifest(sheetUrl, tabName) {
+  const sheetId = extractSheetId(sheetUrl);
+  if(!sheetId) throw new Error('Could not extract Sheet ID from URL.');
+  if(!tabName) throw new Error('Tab name is required for slideshow manifest.');
 
-  // Fetch image files from folder, sorted by name
-  const url = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+mimeType+contains+'image/'&orderBy=name&fields=files(id,name,mimeType)&key=${API_KEY}`;
+  const range = encodeURIComponent(`${tabName}!A2:A`);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${API_KEY}`;
+
   const res = await fetch(url);
   if(!res.ok) {
     const err = await res.json().catch(()=>({}));
     throw new Error(err?.error?.message || `HTTP ${res.status}`);
   }
   const data = await res.json();
-  const files = data.files || [];
-  if(!files.length) throw new Error('No images found in folder.');
-  return files.map(f => ({
-    id: f.id,
-    name: f.name,
-    url: `https://drive.google.com/uc?export=view&id=${f.id}`
-  }));
-}
+  const rows = (data.values || []);
+  const slides = rows
+    .map((r,i) => ({ id: i, name: `Slide ${i+1}`, url: driveViewUrl(safe(r[0]).trim()) }))
+    .filter(s => s.url);
 
-function extractFolderId(url) {
-  const m = String(url).match(/\/folders\/([a-zA-Z0-9_-]+)/);
-  return m ? m[1] : String(url).trim();
+  if(!slides.length) throw new Error('No image URLs found in sheet.');
+  return slides;
 }
 
 function extractSheetId(ref) {
@@ -1034,6 +1031,7 @@ function checkUrlParams() {
       sheetUrl:url||'', tabName:tab||'',
       type: p.get(`r${i}_type`)||'trivia',
       folderUrl: p.get(`r${i}_folder`)||'',
+      folderTab: p.get(`r${i}_folderTab`)||'',
       bgImage:p.get(`r${i}_bg`)||'',
       bgIntro:p.get(`r${i}_bgIntro`)||p.get(`r${i}_bg`)||'',
       bgQuestion:p.get(`r${i}_bgQuestion`)||p.get(`r${i}_bg`)||'',
@@ -1084,8 +1082,8 @@ async function launchFromSetup() {
     setLoadingLabel(`Loading Round ${i+1}: ${round.title}…`);
     try {
       if(round.type === 'slideshow') {
-        round.slides = await loadDriveFolder(round.folderUrl);
-        round.questions = []; // no questions for slideshow
+        round.slides = await loadSlidesheetManifest(round.folderUrl, round.folderTab);
+        round.questions = [];
       } else {
         round.questions = await loadSheetQuestions(
           round.sheetUrl, round.tabName, round.questionCount
