@@ -1056,12 +1056,13 @@ function checkUrlParams() {
       ? `<img class="setup-round-card-thumb" src="${thumb}" onerror="this.outerHTML='<div class=setup-round-card-thumb-placeholder></div>'">`
       : `<div class="setup-round-card-thumb-placeholder"></div>`;
     const isSlideshow = r.type === 'slideshow';
-    return `<div class="setup-round-card">
+    const hasError = r.loadError;
+    return `<div class="setup-round-card" style="${hasError ? 'border-color:var(--red);opacity:.7' : ''}">
       ${imgHtml}
       <div class="setup-round-card-body">
-        <div class="setup-round-num">Round ${i+1}${isSlideshow ? ' · 🖼' : ''}</div>
+        <div class="setup-round-num">Round ${i+1}${isSlideshow ? ' · 🖼' : ''}${hasError ? ' · ⚠' : ''}</div>
         <div class="setup-round-name">${r.title}</div>
-        <div class="setup-round-tab">${isSlideshow ? 'Image slideshow' : r.tabName}</div>
+        <div class="setup-round-tab">${hasError ? r.loadError : isSlideshow ? 'Image slideshow' : r.tabName}</div>
       </div>
     </div>`;
   }).join('');
@@ -1092,24 +1093,60 @@ async function launchFromSetup() {
       }
     } catch(e) {
       console.error('Round load failed:', e);
+      round.loadError = e.message;
       round.questions = [];
       round.slides = [];
     }
   }
 
-  state.rounds = state.rounds.filter(r => r.type === 'slideshow' ? (r.slides||[]).length > 0 : r.questions.length > 0);
+  // Don't filter out failed rounds — keep them so the index stays correct
+  // Just warn about any that failed
+  const failed = state.rounds.filter(r => r.loadError);
+  if(failed.length) {
+    console.warn('Failed rounds:', failed.map(r => r.title + ': ' + r.loadError));
+  }
+
+  // Only remove rounds that have absolutely nothing AND no error to report
+  state.rounds = state.rounds.filter(r => {
+    if(r.type === 'slideshow') return (r.slides||[]).length > 0 || r.loadError;
+    return r.questions.length > 0 || r.loadError;
+  });
+
   hideLoading();
 
-  if(!state.rounds.length) {
+  // Re-render round cards to show any load errors
+  const grid = document.getElementById('setup-rounds-grid');
+  if(grid) {
+    grid.innerHTML = state.rounds.map((r,i) => {
+      const thumb = r.bgIntro || r.bgImage;
+      const imgHtml = thumb
+        ? `<img class="setup-round-card-thumb" src="${thumb}" onerror="this.style.display='none'">`
+        : `<div class="setup-round-card-thumb-placeholder"></div>`;
+      const isSlideshow = r.type === 'slideshow';
+      const hasError = r.loadError;
+      return `<div class="setup-round-card" style="${hasError ? 'border-color:var(--red);opacity:.7' : ''}">
+        ${imgHtml}
+        <div class="setup-round-card-body">
+          <div class="setup-round-num">Round ${i+1}${isSlideshow ? ' · 🖼' : ''}${hasError ? ' · ⚠' : ''}</div>
+          <div class="setup-round-name">${r.title}</div>
+          <div class="setup-round-tab" style="${hasError?'color:var(--red)':''}">${hasError ? r.loadError : isSlideshow ? (r.slides.length + ' slides loaded') : (r.questions.length + ' questions loaded')}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  if(!state.rounds.filter(r => !r.loadError).length) {
     document.getElementById('setup-screen').style.display = 'flex';
-    toast('Could not load questions. Check your Sheet settings.');
+    toast('All rounds failed to load. Check your settings.');
     return;
   }
 
   // Detect main round
   state.mainRoundIndex = state.rounds.findIndex(r=>r.isMainRound);
 
-  state.roundIndex = 0; state.slideIndex = 0;
+  // Start from main round if there is one, otherwise start from 0
+  state.roundIndex = state.mainRoundIndex >= 0 ? state.mainRoundIndex : 0;
+  state.slideIndex = 0;
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
   renderCurrentSlide();
