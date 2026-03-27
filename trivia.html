@@ -581,8 +581,8 @@ function goBack() {
 
 function jumpToMiniGame(miniRoundIndex) {
   if(state.jumpingFromMain) return;
+  state.currentType = null;
   const mainRound = state.rounds[state.mainRoundIndex];
-  // Save where we are — next segment starts after current slide
   mainRound.segmentStart = state.slideIndex;
   state.mainRoundSavedSlide = state.slideIndex;
   state.jumpingFromMain = true;
@@ -705,8 +705,13 @@ function renderIntro(container, round) {
 function renderSlide(container, round) {
   const slide = round.slides[state.slideIndex - 1];
   if(!slide) return;
+  // Set pres-bg to black so nothing bleeds through
+  const bg = document.getElementById('pres-bg');
+  bg.style.backgroundImage = 'none';
+  bg.style.background = '#000';
+  bg.classList.remove('no-img');
   const el = document.createElement('div');
-  el.style.cssText = 'position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;background-color:#000;';
+  el.style.cssText = 'position:fixed;inset:0;z-index:801;background-size:cover;background-position:center;background-repeat:no-repeat;background-color:#000;';
   el.style.backgroundImage = `url('${slide.url}')`;
   container.appendChild(el);
 }
@@ -855,33 +860,38 @@ function renderEnd(container, round) {
 }
 
 function renderJumpScreen() {
+  // Clear any fixed slideshow overlay
   const container = document.getElementById('slide-container');
   container.innerHTML = '';
+  // Reset pres-bg
+  const bg = document.getElementById('pres-bg');
+  bg.style.background = '';
+  bg.style.backgroundImage = '';
+  bg.classList.add('no-img');
+
   const miniRounds = state.rounds.map((r,i)=>({r,i})).filter(({i})=>i!==state.mainRoundIndex);
   const el = document.createElement('div');
   el.className = 'slide slide-end active';
-  el.style.position='absolute';el.style.inset='0';
+  el.style.cssText = 'position:fixed;inset:0;z-index:820;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:3rem;';
   el.innerHTML = `
     <div class="end-label">Main Round Paused</div>
-    <div class="end-title">GAME<br>TIME!</div>
+    <div class="end-title">GAME<br><span style="background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">TIME!</span></div>
     <div class="end-sub">Choose a mini game to jump to</div>
-    <div class="end-btn-row">
+    <div class="end-btn-row" style="margin-top:1.5rem">
       ${miniRounds.map(({r,i},mi)=>`
-        <button class="end-btn end-btn-primary" onclick="jumpToMiniGame(${i})">
+        <button class="end-btn end-btn-primary" style="pointer-events:all" onclick="doJump(${i})">
           ${r.title||r.tabName} →
         </button>`).join('')}
     </div>
-    <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem">J+${miniRounds.map((_,mi)=>mi+1).join(' / J+')} to jump</div>
+    <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem">Press J+${miniRounds.map((_,mi)=>mi+1).join(' or J+')} to jump</div>
   `;
   container.appendChild(el);
   document.getElementById('jump-panel').classList.remove('show');
 }
 
-// Override jumpToMiniGame to clear the jump screen state
-const _origJump = jumpToMiniGame;
-function jumpToMiniGame(i) {
+function doJump(i) {
   state.currentType = null;
-  _origJump(i);
+  jumpToMiniGame(i);
 }
 // ═══════════════════════════════════════════════════════
 document.addEventListener('keydown', e => {
@@ -993,7 +1003,7 @@ document.addEventListener('keydown', e => {
     state._jumpPending = false;
     const miniRounds = state.rounds.map((_,i)=>i).filter(i=>i!==state.mainRoundIndex);
     const idx = parseInt(e.key) - 1;
-    if(miniRounds[idx] !== undefined) jumpToMiniGame(miniRounds[idx]);
+    if(miniRounds[idx] !== undefined) doJump(miniRounds[idx]);
     return;
   }
 });
