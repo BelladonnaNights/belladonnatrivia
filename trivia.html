@@ -407,7 +407,7 @@ let state = {
 };
 
 // Slide types
-const S_INTRO='intro', S_QUESTION='question', S_ANSWERKEY='answerkey', S_END='end';
+const S_INTRO='intro', S_QUESTION='question', S_ANSWERKEY='answerkey', S_END='end', S_SLIDE='slide';
 
 // ═══════════════════════════════════════════════════════
 //  LAUNCH (manual fallback — normally launched from admin)
@@ -438,7 +438,34 @@ async function loadSheetQuestions(sheetUrl, tabName, count) {
   return pickByDifficultySequence(rows, count);
 }
 
-function extractSheetId(ref) {
+// ═══════════════════════════════════════════════════════
+//  DRIVE FOLDER LOADING — for slideshow rounds
+// ═══════════════════════════════════════════════════════
+async function loadDriveFolder(folderUrl) {
+  const folderId = extractFolderId(folderUrl);
+  if(!folderId) throw new Error('Could not extract folder ID from URL.');
+
+  // Fetch image files from folder, sorted by name
+  const url = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+mimeType+contains+'image/'&orderBy=name&fields=files(id,name,mimeType)&key=${API_KEY}`;
+  const res = await fetch(url);
+  if(!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  const files = data.files || [];
+  if(!files.length) throw new Error('No images found in folder.');
+  return files.map(f => ({
+    id: f.id,
+    name: f.name,
+    url: `https://drive.google.com/uc?export=view&id=${f.id}`
+  }));
+}
+
+function extractFolderId(url) {
+  const m = String(url).match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : String(url).trim();
+}
   const m = String(ref).match(/\/d\/([a-zA-Z0-9-_]+)/);
   return m ? m[1] : String(ref).trim();
 }
@@ -509,12 +536,24 @@ function buildMCChoices(row) {
 function currentRound() { return state.rounds[state.roundIndex]; }
 
 function slideCount() {
+  const round = currentRound();
+  if(round.type === 'slideshow') {
+    // intro(0) + slides(1..n) + end(n+1)
+    return 1 + (round.slides||[]).length + 1;
+  }
   // intro(0) + questions(1..n) + answerKey(n+1) + end(n+2)
-  return 1 + currentRound().questions.length + 1 + 1;
+  return 1 + round.questions.length + 1 + 1;
 }
 
 function slideType() {
-  const n = currentRound().questions.length;
+  const round = currentRound();
+  if(round.type === 'slideshow') {
+    const n = (round.slides||[]).length;
+    if(state.slideIndex === 0) return S_INTRO;
+    if(state.slideIndex <= n) return S_SLIDE;
+    return S_END;
+  }
+  const n = round.questions.length;
   if(state.slideIndex === 0) return S_INTRO;
   if(state.slideIndex <= n) return S_QUESTION;
   if(state.slideIndex === n+1) return S_ANSWERKEY;
@@ -636,9 +675,9 @@ function renderCurrentSlide() {
   }
 
   // HUD
-  const n = round.questions.length;
+  const n = round.type === 'slideshow' ? (round.slides||[]).length : round.questions.length;
   document.getElementById('hud-round').textContent = `${state.roundIndex+1}/${state.rounds.length}`;
-  if(type === S_QUESTION) {
+  if(type === S_QUESTION || type === S_SLIDE) {
     document.getElementById('hud-q').textContent = `${state.slideIndex}/${n}`;
   } else {
     document.getElementById('hud-q').textContent = '—';
@@ -650,6 +689,7 @@ function renderCurrentSlide() {
 
   if(type === S_INTRO) renderIntro(container, round);
   else if(type === S_QUESTION) renderQuestion(container, round);
+  else if(type === S_SLIDE) renderSlide(container, round);
   else if(type === S_ANSWERKEY) renderAnswerKey(container, round);
   else renderEnd(container, round);
 
@@ -659,12 +699,25 @@ function renderCurrentSlide() {
 function renderIntro(container, round) {
   const el = document.createElement('div');
   el.className = 'slide slide-intro active';
+  const isSlideshow = round.type === 'slideshow';
+  const countLabel = isSlideshow
+    ? `${(round.slides||[]).length} slides`
+    : `${round.questions.length} questions · difficulty sequenced`;
   el.innerHTML = `
     <div class="round-badge">Round ${state.roundIndex+1} of ${state.rounds.length}</div>
-    <div class="round-title"><span>${round.tabName || round.title}</span></div>
-    <div class="round-sub">${round.questions.length} questions · difficulty sequenced</div>
+    <div class="round-title"><span>${round.title || round.tabName}</span></div>
+    <div class="round-sub">${countLabel}</div>
     <div class="start-hint">Press → or Space to begin</div>
   `;
+  container.appendChild(el);
+}
+
+function renderSlide(container, round) {
+  const slide = round.slides[state.slideIndex - 1];
+  if(!slide) return;
+  const el = document.createElement('div');
+  el.style.cssText = 'position:absolute;inset:0;background-size:contain;background-position:center;background-repeat:no-repeat;background-color:#000;';
+  el.style.backgroundImage = `url('${slide.url}')`;
   container.appendChild(el);
 }
 
@@ -827,9 +880,9 @@ document.addEventListener('keydown', e => {
 
   if(e.key === ' ' || e.code === 'Space') {
     e.preventDefault();
-    if(type === S_INTRO) {
-      state.slideIndex = 1;
-      renderCurrentSlide();
+    if(type === S_INTRO || type === S_SLIDE) {
+      const max = slideCount() - 1;
+      if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
     } else if(type === S_QUESTION) {
       const showAnswers = currentRound().showAnswers !== false;
       if(showAnswers && !state.answerVisible) {
@@ -846,8 +899,9 @@ document.addEventListener('keydown', e => {
 
   if(e.key === 'ArrowRight' || e.key === 'Enter') {
     e.preventDefault();
-    if(type === S_INTRO) {
-      state.slideIndex = 1; renderCurrentSlide();
+    if(type === S_INTRO || type === S_SLIDE) {
+      const max = slideCount() - 1;
+      if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
     } else if(type === S_QUESTION) {
       const showAnswers = currentRound().showAnswers !== false;
       if(showAnswers && !state.answerVisible) {
@@ -974,15 +1028,18 @@ function checkUrlParams() {
     const url = p.get(`r${i}_url`);
     const tab = p.get(`r${i}_tab`);
     const qCount = parseInt(p.get(`r${i}_qcount`))||20;
-    if(url && tab) rounds.push({
-      sheetUrl:url, tabName:tab,
+    if(url !== null || p.get(`r${i}_folder`)) rounds.push({
+      sheetUrl:url||'', tabName:tab||'',
+      type: p.get(`r${i}_type`)||'trivia',
+      folderUrl: p.get(`r${i}_folder`)||'',
       bgImage:p.get(`r${i}_bg`)||'',
       bgIntro:p.get(`r${i}_bgIntro`)||p.get(`r${i}_bg`)||'',
       bgQuestion:p.get(`r${i}_bgQuestion`)||p.get(`r${i}_bg`)||'',
       title:p.get(`r${i}_name`)||`Round ${i+1}`,
       questionCount:qCount,
       showAnswers: p.get(`r${i}_showAnswers`) !== '0',
-      isMainRound: p.get(`r${i}_isMainRound`) === '1'
+      isMainRound: p.get(`r${i}_isMainRound`) === '1',
+      slides:[] // for slideshow type
     });
   }
   if(!rounds.length) return false;
@@ -996,12 +1053,13 @@ function checkUrlParams() {
     const imgHtml = thumb
       ? `<img class="setup-round-card-thumb" src="${thumb}" onerror="this.outerHTML='<div class=setup-round-card-thumb-placeholder></div>'">`
       : `<div class="setup-round-card-thumb-placeholder"></div>`;
+    const isSlideshow = r.type === 'slideshow';
     return `<div class="setup-round-card">
       ${imgHtml}
       <div class="setup-round-card-body">
-        <div class="setup-round-num">Round ${i+1}</div>
+        <div class="setup-round-num">Round ${i+1}${isSlideshow ? ' · 🖼' : ''}</div>
         <div class="setup-round-name">${r.title}</div>
-        <div class="setup-round-tab">${r.tabName}</div>
+        <div class="setup-round-tab">${isSlideshow ? 'Image slideshow' : r.tabName}</div>
       </div>
     </div>`;
   }).join('');
@@ -1014,24 +1072,30 @@ function checkUrlParams() {
 async function launchFromSetup() {
   if(!pendingRounds.length) return;
 
-  state.rounds = pendingRounds.map(r=>({...r, questions:[]}));
+  state.rounds = pendingRounds.map(r=>({...r, questions:[], slides:[]}));
   document.getElementById('setup-screen').style.display = 'none';
   showLoading('Loading questions…');
 
   for(let i=0;i<state.rounds.length;i++) {
-    setLoadingLabel(`Loading Round ${i+1}: ${state.rounds[i].tabName}…`);
+    const round = state.rounds[i];
+    setLoadingLabel(`Loading Round ${i+1}: ${round.title}…`);
     try {
-      state.rounds[i].questions = await loadSheetQuestions(
-        state.rounds[i].sheetUrl,
-        state.rounds[i].tabName,
-        state.rounds[i].questionCount
-      );
+      if(round.type === 'slideshow') {
+        round.slides = await loadDriveFolder(round.folderUrl);
+        round.questions = []; // no questions for slideshow
+      } else {
+        round.questions = await loadSheetQuestions(
+          round.sheetUrl, round.tabName, round.questionCount
+        );
+      }
     } catch(e) {
       console.error('Round load failed:', e);
+      round.questions = [];
+      round.slides = [];
     }
   }
 
-  state.rounds = state.rounds.filter(r=>r.questions.length>0);
+  state.rounds = state.rounds.filter(r => r.type === 'slideshow' ? (r.slides||[]).length > 0 : r.questions.length > 0);
   hideLoading();
 
   if(!state.rounds.length) {
