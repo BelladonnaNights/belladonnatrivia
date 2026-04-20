@@ -256,15 +256,15 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 /* Bullet list section of answer key */
 .ak-bullets{
   width:100%;margin-top:1.5rem;
-  display:grid;grid-template-columns:1fr 1fr;gap:4px 2rem;
+  display:grid;grid-template-columns:1fr 1fr;gap:6px 2rem;
 }
 .ak-bullet{
-  font-family:var(--cinzel);font-size:12px;letter-spacing:.04em;
-  color:var(--text2);display:flex;gap:8px;align-items:baseline;
-  padding:4px 0;border-bottom:.5px solid var(--border);
+  font-family:var(--cinzel);font-size:16px;letter-spacing:.04em;
+  color:var(--text2);display:flex;gap:10px;align-items:baseline;
+  padding:5px 0;border-bottom:.5px solid var(--border);
 }
-.ak-bullet-num{color:var(--gold);font-size:11px;min-width:22px;flex-shrink:0}
-.ak-bullet-a{color:var(--text)}
+.ak-bullet-num{color:var(--gold);font-size:13px;min-width:28px;flex-shrink:0}
+.ak-bullet-a{color:var(--text);font-size:16px}
 
 /* THANK YOU / NEXT ROUND SLIDE */
 .slide-end{text-align:center}
@@ -879,6 +879,18 @@ function renderEnd(container, round) {
   el.className = 'slide slide-end active';
   el.style.position='absolute';el.style.inset='0';
 
+  // On the final slide, check how many rounds have answer keys
+  const roundsWithKeys = isLastRound
+    ? state.rounds.filter(r => r.type !== 'slideshow' && !r.showAnswers && r.questions.length > 0)
+    : [];
+  const akBtn = isLastRound && roundsWithKeys.length > 0
+    ? `<button class="end-btn end-btn-ghost" onclick="renderAllAnswerKeys()">View All Answer Keys</button>`
+    : !isLastRound && !isMiniGame
+      ? `<button class="end-btn end-btn-ghost" onclick="showAnswerKey()">View Answer Key</button>`
+      : isMiniGame
+        ? `<button class="end-btn end-btn-ghost" onclick="showAnswerKey()">View Answer Key</button>`
+        : '';
+
   let btnHtml = '';
   if(isMiniGame) {
     const mainRound = state.rounds[state.mainRoundIndex];
@@ -895,14 +907,48 @@ function renderEnd(container, round) {
     <div class="end-sub">${isMiniGame
       ? `Ready to head back?`
       : isLastRound
-        ? 'Thanks for playing. Check the answer key before wrapping up.'
+        ? 'Thanks for playing.'
         : `Up next: Round ${state.roundIndex+2}`}</div>
     <div class="end-btn-row">
-      <button class="end-btn end-btn-ghost" onclick="showAnswerKey()">View Answer Key</button>
+      ${akBtn}
       ${btnHtml}
     </div>
     ${isMiniGame ? `<div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem;animation:pulse 2s ease-in-out infinite">Press → to return to main round</div>` :
       !isLastRound ? `<div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem;animation:pulse 2s ease-in-out infinite">Press → to continue</div>` : ''}
+  `;
+  container.appendChild(el);
+}
+
+function renderAllAnswerKeys() {
+  const container = document.getElementById('slide-container');
+  container.innerHTML = '';
+
+  const roundsWithKeys = state.rounds.filter(r =>
+    r.type !== 'slideshow' && !r.showAnswers && r.questions.length > 0
+  );
+
+  const el = document.createElement('div');
+  el.className = 'slide slide-answerkey active';
+  el.style.cssText = 'position:absolute;inset:0;overflow-y:auto;padding:2.5rem 3.5rem;';
+
+  const sections = roundsWithKeys.map(r => {
+    const bullets = r.questions.map((q,i) => `
+      <div class="ak-bullet">
+        <span class="ak-bullet-num">${i+1}.</span>
+        <span class="ak-bullet-a">${q.answer}</span>
+      </div>`).join('');
+    return `
+      <div style="margin-bottom:2rem">
+        <div style="font-family:var(--display);font-size:clamp(22px,3vw,36px);letter-spacing:.06em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:.75rem">
+          ${r.title||r.tabName}
+        </div>
+        <div class="ak-bullets">${bullets}</div>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="ak-title">All Answer Keys</div>
+    ${sections}
   `;
   container.appendChild(el);
 }
@@ -969,13 +1015,22 @@ document.addEventListener('keydown', e => {
   if(e.key === ' ' || e.code === 'Space') {
     e.preventDefault();
     if(type === S_JUMP) return;
-    // Space always advances — no reveal, no answer key
     if(type === S_INTRO || type === S_SLIDE) {
       const round = currentRound();
       if(type === S_SLIDE && shouldPauseForMiniGame(round)) { renderJumpScreen(); return; }
       const max = slideCount() - 1;
       if(state.slideIndex < max) { state.slideIndex++; state.answerVisible=false; renderCurrentSlide(); }
-    } else if(type === S_QUESTION || type === S_ANSWERKEY) {
+    } else if(type === S_QUESTION) {
+      // Space reveals answer if showAnswers is on, otherwise just advances
+      const showAnswers = currentRound().showAnswers !== false;
+      if(showAnswers && !state.answerVisible) {
+        state.answerVisible = true; renderCurrentSlide();
+      } else {
+        state.answerVisible = false;
+        const max = slideCount() - 1;
+        if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
+      }
+    } else if(type === S_ANSWERKEY) {
       state.answerVisible = false;
       const max = slideCount() - 1;
       if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
