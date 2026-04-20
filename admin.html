@@ -597,12 +597,13 @@ function setSyncStatus(status) {
 // ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
-let categories = [];       // full library from Firebase
-let lineup = [null, null, null, null, null]; // tonight's 5 slots
+let categories = [];
+let lineup = [null, null, null, null, null];
 let lineupAnswers = [true, true, true, true, true];
 let lineupMainRound = [false, false, false, false, false];
-let lineupSegmentSize = [5, 5, 5, 5, 5]; // slides per segment for main round
-let activeGenres = new Set(); // empty = show all
+let lineupSegmentSize = [5, 5, 5, 5, 5];
+let lineupQCount = [20, 20, 20, 20, 20]; // questions per round per slot
+let activeGenres = new Set();
 let editingId = null;
 let dragCardId = null;
 
@@ -741,15 +742,22 @@ function renderLineup() {
           ${thumb}
           <div class="round-slot-card-info">
             <div class="round-slot-card-name">${cat.name}</div>
-            <div class="round-slot-card-tab">${cat.tabName}</div>
+            <div class="round-slot-card-tab">${cat.tabName||cat.type||''}</div>
           </div>
           <button class="round-slot-remove" onclick="removeFromSlot(${i})">×</button>
         </div>
-        <label style="display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer;user-select:none">
+        ${cat.type !== 'slideshow' ? `
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Questions:</span>
+          <input type="number" value="${lineupQCount[i]||20}" min="1" max="100"
+            onchange="lineupQCount[${i}]=parseInt(this.value)||20"
+            style="width:52px;background:rgba(255,255,255,.05);border:.5px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;font-family:var(--font);color:var(--text);text-align:center"/>
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:6px;cursor:pointer;user-select:none">
           <input type="checkbox" ${checked} onchange="lineupAnswers[${i}]=this.checked"
             style="accent-color:var(--gold);width:13px;height:13px;cursor:pointer"/>
           <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Show answers after each question</span>
-        </label>
+        </label>` : ''}
         <label style="display:flex;align-items:center;gap:7px;margin-top:5px;cursor:pointer;user-select:none">
           <input type="checkbox" ${mainChecked} onchange="setMainRound(${i},this.checked)"
             style="accent-color:var(--gold2);width:13px;height:13px;cursor:pointer"/>
@@ -951,7 +959,7 @@ function launchTrivia() {
     params.set(`r${i}_bgIntro`, cat.bgIntro||cat.bgImage||'');
     params.set(`r${i}_bgQuestion`, cat.bgQuestion||cat.bgImage||'');
     params.set(`r${i}_name`, cat.name||'');
-    params.set(`r${i}_qcount`, qCount);
+    params.set(`r${i}_qcount`, lineupQCount[slotIndex] || 20);
     params.set(`r${i}_showAnswers`, lineupAnswers[slotIndex] !== false ? '1' : '0');
     params.set(`r${i}_isMainRound`, lineupMainRound[slotIndex] ? '1' : '0');
     params.set(`r${i}_segmentSize`, lineupSegmentSize[slotIndex] || 5);
