@@ -253,19 +253,6 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 .ak-q{font-size:11px;color:var(--text3);line-height:1.4;margin-bottom:3px}
 .ak-a{font-family:var(--cinzel);font-size:13px;color:var(--text);letter-spacing:.04em;line-height:1.3}
 
-/* Bullet list section of answer key */
-.ak-bullets{
-  width:100%;margin-top:1.5rem;
-  display:grid;grid-template-columns:1fr 1fr;gap:6px 2rem;
-}
-.ak-bullet{
-  font-family:var(--cinzel);font-size:16px;letter-spacing:.04em;
-  color:var(--text2);display:flex;gap:10px;align-items:baseline;
-  padding:5px 0;border-bottom:.5px solid var(--border);
-}
-.ak-bullet-num{color:var(--gold);font-size:13px;min-width:28px;flex-shrink:0}
-.ak-bullet-a{color:var(--text);font-size:16px}
-
 /* THANK YOU / NEXT ROUND SLIDE */
 .slide-end{text-align:center}
 .slide-end .end-label{
@@ -374,16 +361,6 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div id="slide-container"></div>
 </div>
 
-<!-- FULLSCREEN BUTTON — always visible during presentation -->
-<button id="fullscreen-btn" onclick="document.documentElement.requestFullscreen?.().catch(()=>{})" style="
-  display:none;position:fixed;top:1rem;right:1rem;z-index:900;
-  background:rgba(8,8,8,.8);backdrop-filter:blur(8px);
-  border:1px solid rgba(201,168,76,.35);border-radius:8px;
-  padding:7px 12px;cursor:pointer;
-  font-family:'Cinzel',serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
-  color:#c9a84c;transition:all .2s;
-" title="Enter fullscreen">⛶ Fullscreen</button>
-
 <!-- JUMP PANEL -->
 <div id="jump-panel">
   <div class="jump-panel-label">Jump to mini game</div>
@@ -395,11 +372,9 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="hud-sep"></div>
   <div class="hud-item">Q <span id="hud-q">—</span></div>
   <div class="hud-sep"></div>
-  <div class="hud-item"><span class="hud-key">Space</span> next</div>
+  <div class="hud-item"><span class="hud-key">Space</span> reveal</div>
   <div class="hud-sep"></div>
   <div class="hud-item"><span class="hud-key">→</span> next</div>
-  <div class="hud-sep"></div>
-  <div class="hud-item"><span class="hud-key">A</span> answer key</div>
   <div class="hud-sep"></div>
   <div class="hud-item"><span class="hud-key">J+1</span> jump</div>
   <div class="hud-sep"></div>
@@ -792,7 +767,12 @@ function renderQuestion(container, round) {
   let imageHtml = '';
   if(q.imageUrl) {
     const src = driveViewUrl(q.imageUrl);
-    imageHtml = `<div class="q-image-wrap"><img src="${src}" onerror="this.closest('.q-image-wrap').style.display='none'" loading="lazy"/></div>`;
+    imageHtml = `<div class="q-image-wrap" id="img-wrap-${state.slideIndex}" style="display:none">
+      <img src="${src}"
+        onload="document.getElementById('img-wrap-${state.slideIndex}').style.display='block'"
+        onerror="this.closest('.q-image-wrap').remove()"
+        loading="eager"/>
+    </div>`;
   }
 
   // Audio
@@ -854,20 +834,12 @@ function renderAnswerKey(container, round) {
       </div>
     </div>`).join('');
 
-  // Two-column bullet list
-  const bullets = round.questions.map((q,i)=>`
-    <div class="ak-bullet">
-      <span class="ak-bullet-num">${i+1}.</span>
-      <span class="ak-bullet-a">${q.answer}</span>
-    </div>`).join('');
-
   const el = document.createElement('div');
   el.className = 'slide slide-answerkey active';
   el.style.position='absolute';el.style.inset='0';
   el.innerHTML = `
     <div class="ak-title">Answer Key — ${round.tabName}</div>
     <div class="ak-grid">${items}</div>
-    <div class="ak-bullets">${bullets}</div>
   `;
   container.appendChild(el);
 }
@@ -878,18 +850,6 @@ function renderEnd(container, round) {
   const el = document.createElement('div');
   el.className = 'slide slide-end active';
   el.style.position='absolute';el.style.inset='0';
-
-  // On the final slide, check how many rounds have answer keys
-  const roundsWithKeys = isLastRound
-    ? state.rounds.filter(r => r.type !== 'slideshow' && !r.showAnswers && r.questions.length > 0)
-    : [];
-  const akBtn = isLastRound && roundsWithKeys.length > 0
-    ? `<button class="end-btn end-btn-ghost" onclick="renderAllAnswerKeys()">View All Answer Keys</button>`
-    : !isLastRound && !isMiniGame
-      ? `<button class="end-btn end-btn-ghost" onclick="showAnswerKey()">View Answer Key</button>`
-      : isMiniGame
-        ? `<button class="end-btn end-btn-ghost" onclick="showAnswerKey()">View Answer Key</button>`
-        : '';
 
   let btnHtml = '';
   if(isMiniGame) {
@@ -907,48 +867,14 @@ function renderEnd(container, round) {
     <div class="end-sub">${isMiniGame
       ? `Ready to head back?`
       : isLastRound
-        ? 'Thanks for playing.'
+        ? 'Thanks for playing. Check the answer key before wrapping up.'
         : `Up next: Round ${state.roundIndex+2}`}</div>
     <div class="end-btn-row">
-      ${akBtn}
+      <button class="end-btn end-btn-ghost" onclick="showAnswerKey()">View Answer Key</button>
       ${btnHtml}
     </div>
     ${isMiniGame ? `<div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem;animation:pulse 2s ease-in-out infinite">Press → to return to main round</div>` :
       !isLastRound ? `<div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem;animation:pulse 2s ease-in-out infinite">Press → to continue</div>` : ''}
-  `;
-  container.appendChild(el);
-}
-
-function renderAllAnswerKeys() {
-  const container = document.getElementById('slide-container');
-  container.innerHTML = '';
-
-  const roundsWithKeys = state.rounds.filter(r =>
-    r.type !== 'slideshow' && !r.showAnswers && r.questions.length > 0
-  );
-
-  const el = document.createElement('div');
-  el.className = 'slide slide-answerkey active';
-  el.style.cssText = 'position:absolute;inset:0;overflow-y:auto;padding:2.5rem 3.5rem;';
-
-  const sections = roundsWithKeys.map(r => {
-    const bullets = r.questions.map((q,i) => `
-      <div class="ak-bullet">
-        <span class="ak-bullet-num">${i+1}.</span>
-        <span class="ak-bullet-a">${q.answer}</span>
-      </div>`).join('');
-    return `
-      <div style="margin-bottom:2rem">
-        <div style="font-family:var(--display);font-size:clamp(22px,3vw,36px);letter-spacing:.06em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:.75rem">
-          ${r.title||r.tabName}
-        </div>
-        <div class="ak-bullets">${bullets}</div>
-      </div>`;
-  }).join('');
-
-  el.innerHTML = `
-    <div class="ak-title">All Answer Keys</div>
-    ${sections}
   `;
   container.appendChild(el);
 }
@@ -1017,26 +943,25 @@ document.addEventListener('keydown', e => {
     if(type === S_JUMP) return;
     if(type === S_INTRO || type === S_SLIDE) {
       const round = currentRound();
-      if(type === S_SLIDE && shouldPauseForMiniGame(round)) { renderJumpScreen(); return; }
       const max = slideCount() - 1;
-      if(state.slideIndex < max) { state.slideIndex++; state.answerVisible=false; renderCurrentSlide(); }
+      // Check pause BEFORE advancing — slide has already played
+      if(type === S_SLIDE && shouldPauseForMiniGame(round)) {
+        renderJumpScreen(); return;
+      }
+      if(state.slideIndex < max) {
+        state.slideIndex++;
+        renderCurrentSlide();
+      }
     } else if(type === S_QUESTION) {
-      // Space reveals answer if showAnswers is on, otherwise just advances
       const showAnswers = currentRound().showAnswers !== false;
       if(showAnswers && !state.answerVisible) {
-        state.answerVisible = true; renderCurrentSlide();
+        state.answerVisible = true;
+        renderCurrentSlide();
       } else {
         state.answerVisible = false;
         const max = slideCount() - 1;
         if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
       }
-    } else if(type === S_ANSWERKEY) {
-      state.answerVisible = false;
-      const max = slideCount() - 1;
-      if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
-    } else if(type === S_END) {
-      if(state.jumpingFromMain) returnToMainRound();
-      else if(state.roundIndex < state.rounds.length - 1) goNextRound();
     }
     return;
   }
@@ -1046,9 +971,15 @@ document.addEventListener('keydown', e => {
     if(type === S_JUMP) return;
     if(type === S_INTRO || type === S_SLIDE) {
       const round = currentRound();
-      if(type === S_SLIDE && shouldPauseForMiniGame(round)) { renderJumpScreen(); return; }
       const max = slideCount() - 1;
-      if(state.slideIndex < max) { state.slideIndex++; state.answerVisible=false; renderCurrentSlide(); }
+      // Check pause BEFORE advancing — slide has already played
+      if(type === S_SLIDE && shouldPauseForMiniGame(round)) {
+        renderJumpScreen(); return;
+      }
+      if(state.slideIndex < max) {
+        state.slideIndex++;
+        renderCurrentSlide();
+      }
     } else if(type === S_QUESTION) {
       const showAnswers = currentRound().showAnswers !== false;
       if(showAnswers && !state.answerVisible) {
@@ -1063,21 +994,20 @@ document.addEventListener('keydown', e => {
       const hasAnswerKey = !currentRound().showAnswers;
       state.slideIndex = n + (hasAnswerKey ? 2 : 1); renderCurrentSlide();
     } else if(type === S_END) {
-      if(state.jumpingFromMain) returnToMainRound();
-      else if(state.roundIndex < state.rounds.length - 1) goNextRound();
+      if(state.jumpingFromMain) {
+        returnToMainRound();
+      } else if(state.roundIndex < state.rounds.length - 1) {
+        goNextRound();
+      }
     }
     return;
   }
 
   if(e.key === 'ArrowLeft') {
     e.preventDefault();
-    if(type === S_JUMP) return;
-    // Safe back — clamp to 0, clear all volatile state
+    if(type === S_JUMP) return; // no going back from GAME TIME screen
     state.answerVisible = false;
-    state.currentType = null;
-    const newIdx = Math.max(0, state.slideIndex - 1);
-    state.slideIndex = newIdx;
-    renderCurrentSlide();
+    if(state.slideIndex > 0) { state.slideIndex--; renderCurrentSlide(); }
     return;
   }
 
@@ -1107,10 +1037,16 @@ document.addEventListener('keydown', e => {
 //  UTILS
 // ═══════════════════════════════════════════════════════
 function driveViewUrl(url) {
-  // Convert Google Drive share link to direct/embed URL
   if(!url) return url;
+  // Already a direct image URL (Wix, imgur, etc.) — pass through
+  if(url.match(/\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i)) return url;
+  // Google Drive file share link — convert to thumbnail URL (more reliable than uc?export=view)
   const fm = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if(fm) return `https://drive.google.com/uc?export=view&id=${fm[1]}`;
+  if(fm) return `https://drive.google.com/thumbnail?id=${fm[1]}&sz=w800`;
+  // Google Drive uc?id= format
+  const fm2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if(fm2) return `https://drive.google.com/thumbnail?id=${fm2[1]}&sz=w800`;
+  // Anything else — pass through as-is
   return url;
 }
 
@@ -1123,8 +1059,8 @@ function playAudio(src) {
 function exitPresentation() {
   document.getElementById('pres-screen').classList.remove('show');
   document.getElementById('hud').classList.remove('show');
-  document.getElementById('fullscreen-btn').style.display = 'none';
   document.getElementById('setup-screen').style.display = 'flex';
+  // Show return button if we have an active presentation
   if(state.rounds.length > 0) {
     document.getElementById('setup-return-btn').style.display = 'block';
   }
@@ -1136,7 +1072,6 @@ function returnToPresentation() {
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
-  document.getElementById('fullscreen-btn').style.display = 'block';
   document.documentElement.requestFullscreen?.().catch(()=>{});
 }
 
@@ -1305,7 +1240,6 @@ async function launchFromSetup() {
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
-  document.getElementById('fullscreen-btn').style.display = 'block';
   renderCurrentSlide();
   document.documentElement.requestFullscreen?.().catch(()=>{});
 }
