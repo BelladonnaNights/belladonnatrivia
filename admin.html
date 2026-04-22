@@ -976,15 +976,6 @@ function toast(msg, isError) {
 
 // Always reset to 20 on refresh — don't restore from localStorage
 
-// Save question count on change
-document.getElementById('lineup-q-count').addEventListener('input', function() {
-  try {
-    const cfg = JSON.parse(localStorage.getItem('trivia_cfg')||'{}');
-    cfg.questionCount = this.value;
-    localStorage.setItem('trivia_cfg', JSON.stringify(cfg));
-  } catch(e){}
-});
-
 // Keyboard
 document.addEventListener('keydown', e => {
   if(e.key === 'Escape') closeModal();
