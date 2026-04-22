@@ -767,17 +767,18 @@ function renderQuestion(container, round) {
   let imageHtml = '';
   if(q.imageUrl) {
     const src = driveViewUrl(q.imageUrl);
-    imageHtml = `<div class="q-image-wrap" id="img-wrap-${state.slideIndex}" style="display:none">
+    const wrapId = `img-wrap-${state.slideIndex}-${Date.now()}`;
+    imageHtml = `<div class="q-image-wrap" id="${wrapId}" style="display:none">
       <img src="${src}"
-        onload="document.getElementById('img-wrap-${state.slideIndex}').style.display='block'"
-        onerror="this.closest('.q-image-wrap').remove()"
+        onload="var w=document.getElementById('${wrapId}');if(w)w.style.display='block'"
+        onerror="var w=document.getElementById('${wrapId}');if(w)w.remove()"
         loading="eager"/>
     </div>`;
   }
 
   // Audio
   let audioHtml = '';
-  if(q.audioUrl) {
+  if(q.audioUrl && q.audioUrl.trim().length > 0) {
     const src = driveViewUrl(q.audioUrl);
     audioHtml = `<button class="audio-btn" onclick="playAudio('${src}')">
       <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
@@ -1038,15 +1039,13 @@ document.addEventListener('keydown', e => {
 // ═══════════════════════════════════════════════════════
 function driveViewUrl(url) {
   if(!url) return url;
-  // Already a direct image URL (Wix, imgur, etc.) — pass through
-  if(url.match(/\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i)) return url;
-  // Google Drive file share link — convert to thumbnail URL (more reliable than uc?export=view)
+  // Google Drive file share link → thumbnail (more reliable than uc?export=view)
   const fm = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   if(fm) return `https://drive.google.com/thumbnail?id=${fm[1]}&sz=w800`;
-  // Google Drive uc?id= format
+  // Google Drive uc?id= or open?id= format
   const fm2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if(fm2) return `https://drive.google.com/thumbnail?id=${fm2[1]}&sz=w800`;
-  // Anything else — pass through as-is
+  // Everything else (Wix, imgur, direct URLs) — pass through unchanged
   return url;
 }
 
