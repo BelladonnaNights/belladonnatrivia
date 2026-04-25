@@ -1146,16 +1146,8 @@ function launchTrivia() {
 
   if(!activeRounds.length) return toast('Add at least one category to the lineup.', true);
 
-  // Pass app settings (follow us, etc.)
-  const settingsParam = encodeURIComponent(JSON.stringify(appSettings));
-
-  // Pass category types for rules lookup
-  const typesParam = encodeURIComponent(JSON.stringify(categoryTypes));
-
   const params = new URLSearchParams();
   params.set('rounds', activeRounds.length);
-  params.set('settings', settingsParam);
-  params.set('catTypes', typesParam);
 
   activeRounds.forEach(({cat, slotIndex}, i) => {
     params.set(`r${i}_url`, cat.sheetUrl||'');
