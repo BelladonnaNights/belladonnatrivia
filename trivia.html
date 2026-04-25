@@ -1328,34 +1328,26 @@ async function launchFromSetup() {
         round.slides = loadSlidesheetManifest(round.folderUrl);
         round.questions = [];
       } else {
+        if(!round.sheetUrl) throw new Error('No Sheet URL set for this category.');
+        if(!round.tabName) throw new Error('No tab name set for this category.');
         round.questions = await loadSheetQuestions(
           round.sheetUrl, round.tabName, round.questionCount
         );
       }
     } catch(e) {
-      console.error('Round load failed:', e);
+      console.error(`Round ${i+1} load failed:`, e);
       round.loadError = e.message;
       round.questions = [];
       round.slides = [];
     }
   }
 
-  // Don't filter out failed rounds — keep them so the index stays correct
-  // Just warn about any that failed
-  const failed = state.rounds.filter(r => r.loadError);
-  if(failed.length) {
-    console.warn('Failed rounds:', failed.map(r => r.title + ': ' + r.loadError));
-  }
-
-  // Only remove rounds that have absolutely nothing AND no error to report
-  state.rounds = state.rounds.filter(r => {
-    if(r.type === 'slideshow') return (r.slides||[]).length > 0 || r.loadError;
-    return r.questions.length > 0 || r.loadError;
-  });
-
   hideLoading();
 
-  // Re-render round cards to show any load errors
+  // Show setup screen with results
+  document.getElementById('setup-screen').style.display = 'flex';
+
+  // Re-render round cards to show load status
   const grid = document.getElementById('setup-rounds-grid');
   if(grid) {
     grid.innerHTML = state.rounds.map((r,i) => {
@@ -1365,32 +1357,43 @@ async function launchFromSetup() {
         : `<div class="setup-round-card-thumb-placeholder"></div>`;
       const isSlideshow = r.type === 'slideshow';
       const hasError = r.loadError;
+      const count = isSlideshow ? r.slides.length : r.questions.length;
       return `<div class="setup-round-card" style="${hasError ? 'border-color:var(--red);opacity:.7' : ''}">
         ${imgHtml}
         <div class="setup-round-card-body">
-          <div class="setup-round-num">Round ${i+1}${isSlideshow ? ' · 🖼' : ''}${hasError ? ' · ⚠' : ''}</div>
+          <div class="setup-round-num">Round ${i+1}${isSlideshow ? ' · 🖼' : ''}${hasError ? ' · ⚠' : ' · ✓'}</div>
           <div class="setup-round-name">${r.title}</div>
-          <div class="setup-round-tab" style="${hasError?'color:var(--red)':''}">${hasError ? r.loadError : isSlideshow ? (r.slides.length + ' slides loaded') : (r.questions.length + ' questions loaded')}</div>
+          <div class="setup-round-tab" style="${hasError?'color:var(--red)':'color:#2ecc71'}">${hasError ? r.loadError : (count + (isSlideshow?' slides':' questions') + ' loaded')}</div>
         </div>
       </div>`;
     }).join('');
   }
 
-  if(!state.rounds.filter(r => !r.loadError).length) {
-    document.getElementById('setup-screen').style.display = 'flex';
-    toast('All rounds failed to load. Check your settings.');
+  const loadedRounds = state.rounds.filter(r => !r.loadError);
+  if(!loadedRounds.length) {
+    toast('All rounds failed to load. Check console for details.');
     return;
   }
 
+  // Filter out completely failed rounds
+  state.rounds = state.rounds.filter(r =>
+    r.type === 'slideshow' ? (r.slides||[]).length > 0 : r.questions.length > 0
+  );
+
+  // Show launch button again with updated status
+  document.getElementById('setup-launch-btn').textContent = `▶ Start Presentation (${state.rounds.length} round${state.rounds.length>1?'s':''} loaded)`;
+  document.getElementById('setup-launch-btn').onclick = startPresentation;
+}
+
+function startPresentation() {
+  if(!state.rounds.length) return;
+
   // Detect main round
   state.mainRoundIndex = state.rounds.findIndex(r=>r.isMainRound);
-
-  // Start from main round if there is one, otherwise start from 0
   state.roundIndex = state.mainRoundIndex >= 0 ? state.mainRoundIndex : 0;
   state.slideIndex = 0;
 
   document.getElementById('setup-return-btn').style.display = 'block';
-
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
