@@ -240,18 +240,23 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   margin-bottom:1.5rem;flex-shrink:0;
 }
 .ak-grid{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
-  gap:8px;width:100%;
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:6px 3rem;width:100%;
 }
 .ak-item{
-  background:rgba(10,10,10,.6);border:.5px solid var(--border2);
-  border-radius:var(--radius);padding:10px 14px;
-  backdrop-filter:blur(8px);display:flex;gap:10px;align-items:flex-start;
+  display:flex;align-items:center;gap:10px;
+  padding:7px 0;border-bottom:.5px solid rgba(255,255,255,.08);
 }
-.ak-num{font-family:var(--display);font-size:20px;color:var(--gold);min-width:28px;line-height:1}
-.ak-qa{flex:1}
-.ak-q{font-size:11px;color:var(--text3);line-height:1.4;margin-bottom:3px}
-.ak-a{font-family:var(--cinzel);font-size:13px;color:var(--text);letter-spacing:.04em;line-height:1.3}
+.ak-num{
+  font-family:var(--cinzel);font-size:13px;font-weight:700;
+  color:#000;background:#c9a84c;
+  border-radius:4px;padding:2px 7px;text-align:center;
+  min-width:30px;flex-shrink:0;line-height:1.6;
+}
+.ak-a{
+  font-family:var(--cinzel);font-size:clamp(16px,2vw,24px);
+  color:var(--text);letter-spacing:.04em;line-height:1.2;
+}
 
 /* THANK YOU / NEXT ROUND SLIDE */
 .slide-end{text-align:center}
@@ -526,8 +531,8 @@ function slideCount() {
   if(round.type === 'slideshow') {
     return 1 + (round.slides||[]).length + 1;
   }
-  // Skip answer key slide if showAnswers is on (answers shown per question)
-  const hasAnswerKey = !round.showAnswers;
+  // Skip answer key if: showAnswers is on (per-question reveal) OR twoPass mode
+  const hasAnswerKey = !round.showAnswers && !round.twoPass;
   return 1 + round.questions.length + (hasAnswerKey ? 1 : 0) + 1;
 }
 
@@ -542,7 +547,7 @@ function slideType() {
     return S_END;
   }
   const n = round.questions.length;
-  const hasAnswerKey = !round.showAnswers;
+  const hasAnswerKey = !round.showAnswers && !round.twoPass;
   if(state.slideIndex === 0) return S_INTRO;
   if(state.slideIndex <= n) return S_QUESTION;
   if(hasAnswerKey && state.slideIndex === n+1) return S_ANSWERKEY;
@@ -767,18 +772,12 @@ function renderQuestion(container, round) {
   let imageHtml = '';
   if(q.imageUrl) {
     const src = driveViewUrl(q.imageUrl);
-    const wrapId = `img-wrap-${state.slideIndex}-${Date.now()}`;
-    imageHtml = `<div class="q-image-wrap" id="${wrapId}" style="display:none">
-      <img src="${src}"
-        onload="var w=document.getElementById('${wrapId}');if(w)w.style.display='block'"
-        onerror="var w=document.getElementById('${wrapId}');if(w)w.remove()"
-        loading="eager"/>
-    </div>`;
+    imageHtml = `<div class="q-image-wrap"><img src="${src}" onerror="this.closest('.q-image-wrap').style.display='none'" loading="lazy"/></div>`;
   }
 
   // Audio
   let audioHtml = '';
-  if(q.audioUrl && q.audioUrl.trim().length > 0) {
+  if(q.audioUrl) {
     const src = driveViewUrl(q.audioUrl);
     audioHtml = `<button class="audio-btn" onclick="playAudio('${src}')">
       <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
@@ -829,17 +828,14 @@ function renderAnswerKey(container, round) {
   const items = round.questions.map((q,i)=>`
     <div class="ak-item">
       <div class="ak-num">${i+1}</div>
-      <div class="ak-qa">
-        <div class="ak-q">${q.question}</div>
-        <div class="ak-a">${q.answer}</div>
-      </div>
+      <div class="ak-a">${q.answer}</div>
     </div>`).join('');
 
   const el = document.createElement('div');
   el.className = 'slide slide-answerkey active';
   el.style.position='absolute';el.style.inset='0';
   el.innerHTML = `
-    <div class="ak-title">Answer Key — ${round.tabName}</div>
+    <div class="ak-title">Answer Key</div>
     <div class="ak-grid">${items}</div>
   `;
   container.appendChild(el);
@@ -992,7 +988,7 @@ document.addEventListener('keydown', e => {
       }
     } else if(type === S_ANSWERKEY) {
       const n = currentRound().questions.length;
-      const hasAnswerKey = !currentRound().showAnswers;
+      const hasAnswerKey = !currentRound().showAnswers && !currentRound().twoPass;
       state.slideIndex = n + (hasAnswerKey ? 2 : 1); renderCurrentSlide();
     } else if(type === S_END) {
       if(state.jumpingFromMain) {
@@ -1038,14 +1034,10 @@ document.addEventListener('keydown', e => {
 //  UTILS
 // ═══════════════════════════════════════════════════════
 function driveViewUrl(url) {
+  // Convert Google Drive share link to direct/embed URL
   if(!url) return url;
-  // Google Drive file share link → thumbnail (more reliable than uc?export=view)
   const fm = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if(fm) return `https://drive.google.com/thumbnail?id=${fm[1]}&sz=w800`;
-  // Google Drive uc?id= or open?id= format
-  const fm2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if(fm2) return `https://drive.google.com/thumbnail?id=${fm2[1]}&sz=w800`;
-  // Everything else (Wix, imgur, direct URLs) — pass through unchanged
+  if(fm) return `https://drive.google.com/uc?export=view&id=${fm[1]}`;
   return url;
 }
 
