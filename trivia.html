@@ -570,17 +570,20 @@ const isFirstRound = () => state.roundIndex === 0;
 
 function slideCount() {
   const round = currentRound();
-  const prefix = isFirstRound() ? 3 : 1; // intro + [followus + rules] only on round 1
+  const prefix = isFirstRound() ? 3 : 1;
 
   if(round.type === 'slideshow') {
+    // prefix + slides + end
     return prefix + (round.slides||[]).length + 1;
   }
   const n = round.questions.length;
   const hasThankyou = !!round.thankYouUrl;
   if(round.twoPass) {
+    // prefix + pass1(n) + interstitial(1) + pass2(n) + [thankyou] + end
     return prefix + n + 1 + n + (hasThankyou ? 1 : 0) + 1;
   }
   const hasAnswerKey = !round.showAnswers && !round.twoPass;
+  // prefix + questions(n) + [answerKey] + [thankyou] + end
   return prefix + n + (hasAnswerKey ? 1 : 0) + (hasThankyou ? 1 : 0) + 1;
 }
 
@@ -588,7 +591,7 @@ function slideType() {
   if(state.currentType === S_JUMP) return S_JUMP;
   const round = currentRound();
   const si = state.slideIndex;
-  const prefix = isFirstRound() ? 3 : 1;
+  const prefix = isFirstRound() ? 3 : 1; // number of slides before questions
 
   if(si === 0) return S_INTRO;
   if(isFirstRound() && si === 1) return S_FOLLOWUS;
@@ -596,28 +599,34 @@ function slideType() {
 
   if(round.type === 'slideshow') {
     const n = (round.slides||[]).length;
-    if(si <= prefix - 1 + n) return S_SLIDE;
+    // slides occupy indices [prefix .. prefix+n-1]
+    if(si >= prefix && si < prefix + n) return S_SLIDE;
     return S_END;
   }
 
   const n = round.questions.length;
-  const afterPrefix = si - prefix; // 1-based within questions
+  // questions start at index `prefix` (0-based qIndex = si - prefix)
+  const qIndex = si - prefix;
 
   if(round.twoPass) {
-    if(afterPrefix >= 1 && afterPrefix <= n) return S_QUESTION;
-    if(afterPrefix === n + 1) return S_INTERSTITIAL;
-    if(afterPrefix >= n + 2 && afterPrefix <= 2*n + 1) return S_QUESTION;
+    // pass1: [prefix .. prefix+n-1]
+    if(qIndex >= 0 && qIndex < n) return S_QUESTION;
+    // interstitial: prefix+n
+    if(si === prefix + n) return S_INTERSTITIAL;
+    // pass2: [prefix+n+1 .. prefix+2n]
+    if(si >= prefix + n + 1 && si <= prefix + 2*n) return S_QUESTION;
     const hasThankyou = !!round.thankYouUrl;
-    if(hasThankyou && afterPrefix === 2*n + 2) return S_THANKYOU;
+    if(hasThankyou && si === prefix + 2*n + 1) return S_THANKYOU;
     return S_END;
   }
 
-  if(afterPrefix >= 1 && afterPrefix <= n) return S_QUESTION;
-  const hasAnswerKey = !round.showAnswers;
+  // Standard single pass
+  if(qIndex >= 0 && qIndex < n) return S_QUESTION;
+  const hasAnswerKey = !round.showAnswers && !round.twoPass;
   const hasThankyou = !!round.thankYouUrl;
-  if(hasAnswerKey && afterPrefix === n + 1) return S_ANSWERKEY;
-  const afterAK = hasAnswerKey ? n + 2 : n + 1;
-  if(hasThankyou && afterPrefix === afterAK) return S_THANKYOU;
+  if(hasAnswerKey && si === prefix + n) return S_ANSWERKEY;
+  const afterQuestions = prefix + n + (hasAnswerKey ? 1 : 0);
+  if(hasThankyou && si === afterQuestions) return S_THANKYOU;
   return S_END;
 }
 
@@ -625,13 +634,14 @@ function questionInfo() {
   const round = currentRound();
   const n = round.questions.length;
   const prefix = isFirstRound() ? 3 : 1;
-  const afterPrefix = state.slideIndex - prefix;
+  const qIndex = state.slideIndex - prefix;
 
   if(round.twoPass) {
-    if(afterPrefix >= 1 && afterPrefix <= n) return { qIndex: afterPrefix - 1, isPass2: false };
-    if(afterPrefix >= n + 2 && afterPrefix <= 2*n + 1) return { qIndex: afterPrefix - n - 2, isPass2: true };
+    if(qIndex >= 0 && qIndex < n) return { qIndex, isPass2: false };
+    const pass2Index = state.slideIndex - (prefix + n + 1);
+    if(pass2Index >= 0 && pass2Index < n) return { qIndex: pass2Index, isPass2: true };
   }
-  return { qIndex: afterPrefix - 1, isPass2: false };
+  return { qIndex: Math.max(0, qIndex), isPass2: false };
 }
 
 function currentQuestion() {
@@ -1328,8 +1338,8 @@ async function launchFromSetup() {
         round.slides = loadSlidesheetManifest(round.folderUrl);
         round.questions = [];
       } else {
-        if(!round.sheetUrl) throw new Error('No Sheet URL set for this category.');
-        if(!round.tabName) throw new Error('No tab name set for this category.');
+        if(!round.sheetUrl) throw new Error('No Sheet URL configured for this category.');
+        if(!round.tabName) throw new Error('No tab name configured for this category.');
         round.questions = await loadSheetQuestions(
           round.sheetUrl, round.tabName, round.questionCount
         );
@@ -1344,51 +1354,19 @@ async function launchFromSetup() {
 
   hideLoading();
 
-  // Show setup screen with results
-  document.getElementById('setup-screen').style.display = 'flex';
-
-  // Re-render round cards to show load status
-  const grid = document.getElementById('setup-rounds-grid');
-  if(grid) {
-    grid.innerHTML = state.rounds.map((r,i) => {
-      const thumb = r.bgIntro || r.bgImage;
-      const imgHtml = thumb
-        ? `<img class="setup-round-card-thumb" src="${thumb}" onerror="this.style.display='none'">`
-        : `<div class="setup-round-card-thumb-placeholder"></div>`;
-      const isSlideshow = r.type === 'slideshow';
-      const hasError = r.loadError;
-      const count = isSlideshow ? r.slides.length : r.questions.length;
-      return `<div class="setup-round-card" style="${hasError ? 'border-color:var(--red);opacity:.7' : ''}">
-        ${imgHtml}
-        <div class="setup-round-card-body">
-          <div class="setup-round-num">Round ${i+1}${isSlideshow ? ' · 🖼' : ''}${hasError ? ' · ⚠' : ' · ✓'}</div>
-          <div class="setup-round-name">${r.title}</div>
-          <div class="setup-round-tab" style="${hasError?'color:var(--red)':'color:#2ecc71'}">${hasError ? r.loadError : (count + (isSlideshow?' slides':' questions') + ' loaded')}</div>
-        </div>
-      </div>`;
-    }).join('');
-  }
-
-  const loadedRounds = state.rounds.filter(r => !r.loadError);
-  if(!loadedRounds.length) {
-    toast('All rounds failed to load. Check console for details.');
-    return;
-  }
-
-  // Filter out completely failed rounds
+  // Filter to only rounds that loaded successfully
   state.rounds = state.rounds.filter(r =>
     r.type === 'slideshow' ? (r.slides||[]).length > 0 : r.questions.length > 0
   );
 
-  // Show launch button again with updated status
-  document.getElementById('setup-launch-btn').textContent = `▶ Start Presentation (${state.rounds.length} round${state.rounds.length>1?'s':''} loaded)`;
-  document.getElementById('setup-launch-btn').onclick = startPresentation;
-}
+  if(!state.rounds.length) {
+    // Nothing loaded — go back to setup with error
+    document.getElementById('setup-screen').style.display = 'flex';
+    toast('No questions loaded. Check your Sheet URLs, tab names, and that the sheet is publicly shared.');
+    return;
+  }
 
-function startPresentation() {
-  if(!state.rounds.length) return;
-
-  // Detect main round
+  // Detect main round and start
   state.mainRoundIndex = state.rounds.findIndex(r=>r.isMainRound);
   state.roundIndex = state.mainRoundIndex >= 0 ? state.mainRoundIndex : 0;
   state.slideIndex = 0;
