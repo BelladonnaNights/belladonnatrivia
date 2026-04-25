@@ -268,6 +268,9 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <button class="nav-btn nav-btn-ghost" onclick="openChangePassword()" id="admin-pw-btn" style="display:none;font-size:9px">
       Change Password
     </button>
+    <button class="nav-btn nav-btn-ghost" onclick="openSettings()" id="admin-settings-btn" style="display:none">
+      ⚙ Settings
+    </button>
     <button class="nav-btn nav-btn-ghost" onclick="exitAdminMode()" id="admin-exit-btn" style="display:none;color:var(--red);border-color:rgba(231,76,60,.3)">
       Exit Admin
     </button>
@@ -389,6 +392,63 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   </div>
 </div>
 
+<!-- SETTINGS MODAL -->
+<div class="overlay" id="settings-overlay" onclick="if(event.target===this)closeSettings()">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <div class="modal-title">SETTINGS</div>
+      <button class="modal-close" onclick="closeSettings()">×</button>
+    </div>
+    <div class="modal-body" style="gap:1.5rem">
+
+      <!-- FOLLOW US -->
+      <div>
+        <div class="field-label" style="font-size:11px;margin-bottom:10px;color:var(--gold)">Follow Us Slide</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field">
+            <div class="field-label">Instagram Handle</div>
+            <input class="field-input" id="s-instagram" placeholder="@belladonnaaudio"/>
+          </div>
+          <div class="field">
+            <div class="field-label">TikTok Handle</div>
+            <input class="field-input" id="s-tiktok" placeholder="@belladonnaaudio"/>
+          </div>
+          <div class="field">
+            <div class="field-label">Website</div>
+            <input class="field-input" id="s-website" placeholder="belladonnaaudio.com"/>
+          </div>
+          <div class="field">
+            <div class="field-label">QR Code Image URL</div>
+            <input class="field-input" id="s-qr" placeholder="https://…"/>
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <div class="field-label">Tagline / Subtext</div>
+            <input class="field-input" id="s-tagline" placeholder="Your unforgettable trivia night experience"/>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:1px;background:var(--border)"></div>
+
+      <!-- CATEGORY TYPES -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div class="field-label" style="font-size:11px;color:var(--gold)">Category Types & Rules</div>
+          <button class="btn btn-primary" onclick="addCategoryType()" style="font-size:9px;padding:5px 12px">+ Add Type</button>
+        </div>
+        <div id="cat-types-list" style="display:flex;flex-direction:column;gap:8px">
+          <!-- injected by JS -->
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+    </div>
+  </div>
+</div>
+
 <!-- ADD/EDIT MODAL -->
 <div class="overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
   <div class="modal">
@@ -463,6 +523,23 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         </div>
       </div>
       <div class="field">
+        <div class="field-label">Plain Background URL</div>
+        <input class="field-input" id="f-bg-plain" placeholder="https://… — used for Follow Us and Rules slides"/>
+        <div class="field-hint">Simple/dark background for auto-generated overlay slides</div>
+      </div>
+      <div class="field">
+        <div class="field-label">Thank You Slide URL</div>
+        <input class="field-input" id="f-thankyou" placeholder="https://… — fullscreen image shown at end of round"/>
+        <div class="field-hint">Fullscreen image shown as the last slide of this round</div>
+      </div>
+      <div class="field">
+        <div class="field-label">Category Type</div>
+        <select class="field-input" id="f-cattype" style="cursor:pointer">
+          <option value="">— None —</option>
+        </select>
+        <div class="field-hint">Assigns rules from the selected type to the Rules slide</div>
+      </div>
+      <div class="field">
         <div class="field-label">Notes (optional)</div>
         <input class="field-input" id="f-notes" placeholder="Any notes about this category…"/>
       </div>
@@ -524,6 +601,104 @@ function exitAdminMode() {
   document.getElementById('admin-exit-btn').style.display = 'none';
   renderLibrary();
   toast('Admin mode off.');
+}
+
+function enterAdminMode() {
+  adminMode = true;
+  document.getElementById('add-cat-btn').style.display = 'block';
+  document.getElementById('admin-gear-btn').style.display = 'none';
+  document.getElementById('admin-pw-btn').style.display = 'block';
+  document.getElementById('admin-settings-btn').style.display = 'block';
+  document.getElementById('admin-exit-btn').style.display = 'block';
+  renderLibrary();
+  toast('Admin mode on — you can now edit categories.');
+}
+function exitAdminMode() {
+  adminMode = false;
+  document.getElementById('add-cat-btn').style.display = 'none';
+  document.getElementById('admin-gear-btn').style.display = 'block';
+  document.getElementById('admin-pw-btn').style.display = 'none';
+  document.getElementById('admin-settings-btn').style.display = 'none';
+  document.getElementById('admin-exit-btn').style.display = 'none';
+  renderLibrary();
+  toast('Admin mode off.');
+}
+
+// ═══════════════════════════════════════════════
+//  SETTINGS — Follow Us + Category Types
+// ═══════════════════════════════════════════════
+function openSettings() {
+  // Populate follow us fields
+  document.getElementById('s-instagram').value = appSettings.instagram||'';
+  document.getElementById('s-tiktok').value = appSettings.tiktok||'';
+  document.getElementById('s-website').value = appSettings.website||'';
+  document.getElementById('s-qr').value = appSettings.qr||'';
+  document.getElementById('s-tagline').value = appSettings.tagline||'';
+  renderCatTypesList();
+  document.getElementById('settings-overlay').classList.add('show');
+}
+function closeSettings() {
+  document.getElementById('settings-overlay').classList.remove('show');
+}
+async function saveSettings() {
+  const settings = {
+    instagram: document.getElementById('s-instagram').value.trim(),
+    tiktok: document.getElementById('s-tiktok').value.trim(),
+    website: document.getElementById('s-website').value.trim(),
+    qr: document.getElementById('s-qr').value.trim(),
+    tagline: document.getElementById('s-tagline').value.trim(),
+  };
+  try {
+    await db.ref('appSettings').set(settings);
+    toast('Settings saved!');
+    closeSettings();
+  } catch(e) { toast('Save failed: '+e.message, true); }
+}
+
+function renderCatTypesList() {
+  const list = document.getElementById('cat-types-list');
+  if(!categoryTypes.length) {
+    list.innerHTML = `<div style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">No category types yet — add one above.</div>`;
+    return;
+  }
+  list.innerHTML = categoryTypes.map((t,idx) => `
+    <div style="background:rgba(255,255,255,.03);border:.5px solid var(--border2);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="field-input" value="${t.name||''}" placeholder="Type name (e.g. Music Trivia)"
+          onchange="categoryTypes[${idx}].name=this.value" style="flex:1"/>
+        <button class="btn btn-danger" onclick="deleteCategoryType('${t.id}')" style="padding:6px 10px;font-size:10px">×</button>
+      </div>
+      <textarea class="field-input" placeholder="Rules for this category type…" rows="3"
+        style="resize:vertical;font-size:12px;line-height:1.5"
+        onchange="categoryTypes[${idx}].rules=this.value">${t.rules||''}</textarea>
+    </div>`).join('');
+}
+
+async function addCategoryType() {
+  const newType = {name:'New Type', rules:'', createdAt:Date.now()};
+  try {
+    const ref = await db.ref('categoryTypes').push(newType);
+    categoryTypes.push({id:ref.key, ...newType});
+    renderCatTypesList();
+    // Save immediately
+    await db.ref(`categoryTypes/${ref.key}`).set(newType);
+  } catch(e) { toast('Failed: '+e.message, true); }
+}
+
+async function deleteCategoryType(id) {
+  if(!confirm('Delete this category type?')) return;
+  try {
+    await db.ref(`categoryTypes/${id}`).remove();
+    toast('Category type deleted.');
+  } catch(e) { toast('Failed: '+e.message, true); }
+}
+
+function renderCatTypeDropdown() {
+  const sel = document.getElementById('f-cattype');
+  if(!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— None —</option>' +
+    categoryTypes.map(t=>`<option value="${t.id}" ${t.id===current?'selected':''}>${t.name}</option>`).join('');
 }
 
 function openChangePassword() {
@@ -594,16 +769,18 @@ function setSyncStatus(status) {
 // ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
-let categories = [];       // full library from Firebase
+let categories = [];
 let lineup = [null, null, null, null, null];
 let lineupAnswers = [true, true, true, true, true];
 let lineupMainRound = [false, false, false, false, false];
 let lineupSegmentSize = [5, 5, 5, 5, 5];
 let lineupQCount = [20, 20, 20, 20, 20];
 let lineupTwoPass = [false, false, false, false, false];
-let activeGenres = new Set(); // empty = show all
+let activeGenres = new Set();
 let editingId = null;
 let dragCardId = null;
+let categoryTypes = []; // [{id, name, rules}]
+let appSettings = {}; // follow us info, etc.
 
 // ═══════════════════════════════════════════════
 //  FIREBASE LISTENERS
@@ -618,6 +795,16 @@ db.ref('categories').on('value', snap => {
   console.error(err);
   setSyncStatus('error');
   toast('Could not connect to Firebase. Check your database rules.', true);
+});
+
+db.ref('categoryTypes').on('value', snap => {
+  const data = snap.val() || {};
+  categoryTypes = Object.entries(data).map(([id, v]) => ({id, ...v}));
+  renderCatTypeDropdown();
+});
+
+db.ref('appSettings').on('value', snap => {
+  appSettings = snap.val() || {};
 });
 
 // Lineup is local only — resets on refresh, each host manages their own
@@ -761,7 +948,7 @@ function renderLineup() {
         <label style="display:flex;align-items:center;gap:7px;margin-top:5px;cursor:pointer;user-select:none">
           <input type="checkbox" ${twoPassChecked} onchange="lineupTwoPass[${i}]=this.checked"
             style="accent-color:var(--gold);width:13px;height:13px;cursor:pointer"/>
-          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Two-pass mode (repeat questions, answers on 2nd pass)</span>
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Two-pass mode (questions twice, answers on 2nd pass)</span>
         </label>` : ''}
         <label style="display:flex;align-items:center;gap:7px;margin-top:5px;cursor:pointer;user-select:none">
           <input type="checkbox" ${mainChecked} onchange="setMainRound(${i},this.checked)"
@@ -851,7 +1038,11 @@ function openModal(id) {
   document.getElementById('f-bg').value      = cat?.bgImage  || '';
   document.getElementById('f-bg-intro').value    = cat?.bgIntro    || '';
   document.getElementById('f-bg-question').value = cat?.bgQuestion || '';
+  document.getElementById('f-bg-plain').value    = cat?.bgPlain    || '';
+  document.getElementById('f-thankyou').value    = cat?.thankYouUrl|| '';
   document.getElementById('f-notes').value   = cat?.notes    || '';
+  renderCatTypeDropdown();
+  document.getElementById('f-cattype').value = cat?.catType || '';
 
   previewBanner('f-bg','banner-preview-wrap');
   previewBanner('f-bg-intro','intro-preview-wrap');
@@ -899,10 +1090,13 @@ async function saveCategory() {
   const bgImage    = document.getElementById('f-bg').value.trim();
   const bgIntro    = document.getElementById('f-bg-intro').value.trim();
   const bgQuestion = document.getElementById('f-bg-question').value.trim();
+  const bgPlain    = document.getElementById('f-bg-plain').value.trim();
+  const thankYouUrl= document.getElementById('f-thankyou').value.trim();
+  const catType    = document.getElementById('f-cattype').value;
   const notes      = document.getElementById('f-notes').value.trim();
 
   setSyncStatus('syncing');
-  const data = {name, genre, type, sheetUrl, tabName, folderUrl, bgImage, bgIntro, bgQuestion, notes, updatedAt: Date.now()};
+  const data = {name, genre, type, sheetUrl, tabName, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, notes, updatedAt: Date.now()};
 
   try {
     if(editingId) {
@@ -952,8 +1146,17 @@ function launchTrivia() {
 
   if(!activeRounds.length) return toast('Add at least one category to the lineup.', true);
 
+  // Pass app settings (follow us, etc.)
+  const settingsParam = encodeURIComponent(JSON.stringify(appSettings));
+
+  // Pass category types for rules lookup
+  const typesParam = encodeURIComponent(JSON.stringify(categoryTypes));
+
   const params = new URLSearchParams();
   params.set('rounds', activeRounds.length);
+  params.set('settings', settingsParam);
+  params.set('catTypes', typesParam);
+
   activeRounds.forEach(({cat, slotIndex}, i) => {
     params.set(`r${i}_url`, cat.sheetUrl||'');
     params.set(`r${i}_tab`, cat.tabName||'');
@@ -962,6 +1165,9 @@ function launchTrivia() {
     params.set(`r${i}_bg`, cat.bgImage||'');
     params.set(`r${i}_bgIntro`, cat.bgIntro||cat.bgImage||'');
     params.set(`r${i}_bgQuestion`, cat.bgQuestion||cat.bgImage||'');
+    params.set(`r${i}_bgPlain`, cat.bgPlain||'');
+    params.set(`r${i}_thankYou`, cat.thankYouUrl||'');
+    params.set(`r${i}_catType`, cat.catType||'');
     params.set(`r${i}_name`, cat.name||'');
     params.set(`r${i}_qcount`, lineupQCount[slotIndex] || 20);
     params.set(`r${i}_showAnswers`, lineupAnswers[slotIndex] !== false ? '1' : '0');
@@ -979,7 +1185,9 @@ function launchTrivia() {
 function driveViewUrl(url) {
   if(!url) return url;
   const fm = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if(fm) return `https://drive.google.com/uc?export=view&id=${fm[1]}`;
+  if(fm) return `https://drive.google.com/thumbnail?id=${fm[1]}&sz=w800`;
+  const fm2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if(fm2) return `https://drive.google.com/thumbnail?id=${fm2[1]}&sz=w800`;
   return url;
 }
 
@@ -990,6 +1198,11 @@ function toast(msg, isError) {
   clearTimeout(t._timer);
   t._timer = setTimeout(()=>t.classList.remove('show'), 2800);
 }
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') closeModal();
+});
 
 // Keyboard
 document.addEventListener('keydown', e => {
