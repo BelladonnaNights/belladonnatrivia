@@ -366,6 +366,16 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div id="slide-container"></div>
 </div>
 
+<!-- FULLSCREEN BUTTON -->
+<button id="fullscreen-btn" onclick="document.documentElement.requestFullscreen?.().catch(()=>{})" style="
+  display:none;position:fixed;top:1rem;right:1rem;z-index:900;
+  background:rgba(8,8,8,.8);backdrop-filter:blur(8px);
+  border:1px solid rgba(201,168,76,.35);border-radius:8px;
+  padding:7px 12px;cursor:pointer;
+  font-family:'Cinzel',serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:#c9a84c;transition:all .2s;
+">⛶ Fullscreen</button>
+
 <!-- JUMP PANEL -->
 <div id="jump-panel">
   <div class="jump-panel-label">Jump to mini game</div>
@@ -531,13 +541,13 @@ function slideCount() {
   if(round.type === 'slideshow') {
     return 1 + (round.slides||[]).length + 1;
   }
-  // Skip answer key if: showAnswers is on (per-question reveal) OR twoPass mode
+  const n = round.questions.length;
+  if(round.twoPass) return 1 + n + n + 1;
   const hasAnswerKey = !round.showAnswers && !round.twoPass;
-  return 1 + round.questions.length + (hasAnswerKey ? 1 : 0) + 1;
+  return 1 + n + (hasAnswerKey ? 1 : 0) + 1;
 }
 
 function slideType() {
-  // Jump screen override
   if(state.currentType === S_JUMP) return S_JUMP;
   const round = currentRound();
   if(round.type === 'slideshow') {
@@ -547,15 +557,31 @@ function slideType() {
     return S_END;
   }
   const n = round.questions.length;
-  const hasAnswerKey = !round.showAnswers && !round.twoPass;
   if(state.slideIndex === 0) return S_INTRO;
+  if(round.twoPass) {
+    if(state.slideIndex <= n * 2) return S_QUESTION;
+    return S_END;
+  }
   if(state.slideIndex <= n) return S_QUESTION;
+  const hasAnswerKey = !round.showAnswers;
   if(hasAnswerKey && state.slideIndex === n+1) return S_ANSWERKEY;
   return S_END;
 }
 
+function questionInfo() {
+  const round = currentRound();
+  const n = round.questions.length;
+  if(round.twoPass) {
+    const isPass2 = state.slideIndex > n;
+    const qIndex = isPass2 ? state.slideIndex - n - 1 : state.slideIndex - 1;
+    return { qIndex, isPass2 };
+  }
+  return { qIndex: state.slideIndex - 1, isPass2: false };
+}
+
 function currentQuestion() {
-  return currentRound().questions[state.slideIndex - 1];
+  const { qIndex } = questionInfo();
+  return currentRound().questions[qIndex];
 }
 
 function advance() {
@@ -737,25 +763,28 @@ function renderSlide(container, round) {
 }
 
 function renderQuestion(container, round) {
-  const q = currentQuestion();
+  const { qIndex, isPass2 } = questionInfo();
+  const q = round.questions[qIndex];
   const n = round.questions.length;
-  const qNum = state.slideIndex;
 
-  // Progress dots (max 20 shown)
+  // Progress dots
   const dotsToShow = Math.min(n, 20);
   let dots = '';
-  for(let i=1;i<=dotsToShow;i++) {
-    const cls = i < qNum ? 'done' : i === qNum ? 'current' : '';
+  for(let i=0;i<dotsToShow;i++) {
+    const cls = i < qIndex ? 'done' : i === qIndex ? 'current' : '';
     dots += `<div class="q-progress-dot ${cls}"></div>`;
   }
+
+  // Pass indicator for twoPass mode
+  const passLabel = round.twoPass && isPass2
+    ? `<span style="color:var(--gold);font-size:8px;letter-spacing:.12em;display:block;margin-top:2px">ANSWERS PASS</span>`
+    : '';
 
   // MC choices
   let optionsHtml = '';
   if(q.type === 'mc') {
-    const choices = buildMCChoices(q);
-    // store on question for answer reveal
-    q._choices = choices;
-    const items = choices.map(c=>`
+    if(!q._choices) q._choices = buildMCChoices(q);
+    const items = q._choices.map(c=>`
       <div class="mc-opt">
         <div class="mc-opt-letter">${c.label}</div>
         <div class="mc-opt-text">${c.text}</div>
@@ -768,16 +797,22 @@ function renderQuestion(container, round) {
     </div>`;
   }
 
-  // Image
+  // Image — hidden until loaded, removed on error (no flash)
   let imageHtml = '';
-  if(q.imageUrl) {
+  if(q.imageUrl && q.imageUrl.trim()) {
     const src = driveViewUrl(q.imageUrl);
-    imageHtml = `<div class="q-image-wrap"><img src="${src}" onerror="this.closest('.q-image-wrap').style.display='none'" loading="lazy"/></div>`;
+    const wrapId = `img-${qIndex}-${isPass2?'b':'a'}`;
+    imageHtml = `<div class="q-image-wrap" id="${wrapId}" style="display:none">
+      <img src="${src}"
+        onload="var w=document.getElementById('${wrapId}');if(w)w.style.display='block'"
+        onerror="var w=document.getElementById('${wrapId}');if(w)w.remove()"
+        loading="eager"/>
+    </div>`;
   }
 
-  // Audio
+  // Audio — only show if genuinely non-empty
   let audioHtml = '';
-  if(q.audioUrl) {
+  if(q.audioUrl && q.audioUrl.trim().length > 0) {
     const src = driveViewUrl(q.audioUrl);
     audioHtml = `<button class="audio-btn" onclick="playAudio('${src}')">
       <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
@@ -785,9 +820,10 @@ function renderQuestion(container, round) {
     </button>`;
   }
 
-  // Answer (hidden until revealed)
+  // Answer label
   let answerLabel = q.answer;
-  if(q.type === 'mc' && q._choices) {
+  if(q.type === 'mc') {
+    if(!q._choices) q._choices = buildMCChoices(q);
     const correct = q._choices.find(c=>c.correct);
     if(correct) answerLabel = `${correct.label} — ${q.answer}`;
   }
@@ -796,7 +832,7 @@ function renderQuestion(container, round) {
     <div class="answer-overlay">
       <div class="answer-label">Answer</div>
       <div class="answer-text">${answerLabel}</div>
-      <div class="answer-next-hint">Press → for next question</div>
+      <div class="answer-next-hint">Press Space or → for next</div>
     </div>` : '';
 
   const el = document.createElement('div');
@@ -805,9 +841,9 @@ function renderQuestion(container, round) {
   el.style.inset = '0';
   el.innerHTML = `
     <div class="q-header">
-      <div class="q-num-badge">${String(qNum).padStart(2,'0')}</div>
+      <div class="q-num-badge">${String(qIndex+1).padStart(2,'0')}</div>
       <div class="q-round-label">
-        ${round.tabName}<br>
+        ${round.tabName||round.title}${passLabel}
         <div class="q-progress">${dots}</div>
       </div>
     </div>
@@ -924,99 +960,60 @@ function shouldPauseForMiniGame(round) {
   return true;
 }
 
-document.addEventListener('keydown', e => {
-  // Don't capture if typing in setup inputs
-  if(e.target.tagName === 'INPUT') return;
-  if(document.getElementById('pres-screen').classList.contains('show') === false) return;
-
+function advanceSlide() {
   const type = slideType();
-
-  if(e.key === 'Escape') {
-    exitPresentation(); return;
-  }
-
-  if(e.key === ' ' || e.code === 'Space') {
-    e.preventDefault();
-    if(type === S_JUMP) return;
-    if(type === S_INTRO || type === S_SLIDE) {
-      const round = currentRound();
+  if(type === S_JUMP) return;
+  if(type === S_INTRO || type === S_SLIDE) {
+    const round = currentRound();
+    if(type === S_SLIDE && shouldPauseForMiniGame(round)) { renderJumpScreen(); return; }
+    const max = slideCount() - 1;
+    if(state.slideIndex < max) { state.slideIndex++; state.answerVisible=false; renderCurrentSlide(); }
+  } else if(type === S_QUESTION) {
+    const round = currentRound();
+    const { isPass2 } = questionInfo();
+    const shouldReveal = (round.twoPass && isPass2) || (!round.twoPass && round.showAnswers !== false);
+    if(shouldReveal && !state.answerVisible) {
+      state.answerVisible = true; renderCurrentSlide();
+    } else {
+      state.answerVisible = false;
       const max = slideCount() - 1;
-      // Check pause BEFORE advancing — slide has already played
-      if(type === S_SLIDE && shouldPauseForMiniGame(round)) {
-        renderJumpScreen(); return;
-      }
-      if(state.slideIndex < max) {
-        state.slideIndex++;
-        renderCurrentSlide();
-      }
-    } else if(type === S_QUESTION) {
-      const showAnswers = currentRound().showAnswers !== false;
-      if(showAnswers && !state.answerVisible) {
-        state.answerVisible = true;
-        renderCurrentSlide();
-      } else {
-        state.answerVisible = false;
-        const max = slideCount() - 1;
-        if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
-      }
+      if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
     }
-    return;
+  } else if(type === S_ANSWERKEY) {
+    const n = currentRound().questions.length;
+    const hasAnswerKey = !currentRound().showAnswers && !currentRound().twoPass;
+    state.slideIndex = n + (hasAnswerKey ? 2 : 1); renderCurrentSlide();
+  } else if(type === S_END) {
+    if(state.jumpingFromMain) returnToMainRound();
+    else if(state.roundIndex < state.rounds.length - 1) goNextRound();
+  }
+}
+
+function retreatSlide() {
+  if(slideType() === S_JUMP) return;
+  state.answerVisible = false;
+  state.currentType = null;
+  if(state.slideIndex > 0) { state.slideIndex--; renderCurrentSlide(); }
+}
+
+document.addEventListener('keydown', e => {
+  if(e.target.tagName === 'INPUT') return;
+  if(!document.getElementById('pres-screen').classList.contains('show')) return;
+
+  if(e.key === 'Escape') { exitPresentation(); return; }
+
+  // Forward: Space, →, Enter, PageDown (clicker)
+  if(e.key === ' ' || e.code === 'Space' || e.key === 'ArrowRight' || e.key === 'Enter' || e.key === 'PageDown') {
+    e.preventDefault(); advanceSlide(); return;
   }
 
-  if(e.key === 'ArrowRight' || e.key === 'Enter') {
-    e.preventDefault();
-    if(type === S_JUMP) return;
-    if(type === S_INTRO || type === S_SLIDE) {
-      const round = currentRound();
-      const max = slideCount() - 1;
-      // Check pause BEFORE advancing — slide has already played
-      if(type === S_SLIDE && shouldPauseForMiniGame(round)) {
-        renderJumpScreen(); return;
-      }
-      if(state.slideIndex < max) {
-        state.slideIndex++;
-        renderCurrentSlide();
-      }
-    } else if(type === S_QUESTION) {
-      const showAnswers = currentRound().showAnswers !== false;
-      if(showAnswers && !state.answerVisible) {
-        state.answerVisible = true; renderCurrentSlide();
-      } else {
-        state.answerVisible = false;
-        const max = slideCount() - 1;
-        if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
-      }
-    } else if(type === S_ANSWERKEY) {
-      const n = currentRound().questions.length;
-      const hasAnswerKey = !currentRound().showAnswers && !currentRound().twoPass;
-      state.slideIndex = n + (hasAnswerKey ? 2 : 1); renderCurrentSlide();
-    } else if(type === S_END) {
-      if(state.jumpingFromMain) {
-        returnToMainRound();
-      } else if(state.roundIndex < state.rounds.length - 1) {
-        goNextRound();
-      }
-    }
-    return;
+  // Back: ←, PageUp (clicker)
+  if(e.key === 'ArrowLeft' || e.key === 'PageUp') {
+    e.preventDefault(); retreatSlide(); return;
   }
 
-  if(e.key === 'ArrowLeft') {
-    e.preventDefault();
-    if(type === S_JUMP) return; // no going back from GAME TIME screen
-    state.answerVisible = false;
-    if(state.slideIndex > 0) { state.slideIndex--; renderCurrentSlide(); }
-    return;
-  }
-
-  if(e.key === 'a' || e.key === 'A') {
-    e.preventDefault();
-    showAnswerKey();
-    return;
-  }
-
-  // J+number = jump to mini game (e.g. J then 1)
+  // J+number = jump to mini game
   if((e.key === 'j' || e.key === 'J') && state.mainRoundIndex >= 0 && state.roundIndex === state.mainRoundIndex) {
-    // flag waiting for number
     state._jumpPending = true;
     setTimeout(()=>{ state._jumpPending = false; }, 1500);
     return;
@@ -1030,14 +1027,22 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// Click anywhere on presentation = advance (mouse / clicker click)
+document.getElementById('pres-screen').addEventListener('click', e => {
+  if(e.target.closest('button')) return;
+  if(!document.getElementById('pres-screen').classList.contains('show')) return;
+  advanceSlide();
+});
+
 // ═══════════════════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════════════════
 function driveViewUrl(url) {
-  // Convert Google Drive share link to direct/embed URL
   if(!url) return url;
   const fm = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if(fm) return `https://drive.google.com/uc?export=view&id=${fm[1]}`;
+  if(fm) return `https://drive.google.com/thumbnail?id=${fm[1]}&sz=w800`;
+  const fm2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if(fm2) return `https://drive.google.com/thumbnail?id=${fm2[1]}&sz=w800`;
   return url;
 }
 
@@ -1050,8 +1055,8 @@ function playAudio(src) {
 function exitPresentation() {
   document.getElementById('pres-screen').classList.remove('show');
   document.getElementById('hud').classList.remove('show');
+  document.getElementById('fullscreen-btn').style.display = 'none';
   document.getElementById('setup-screen').style.display = 'flex';
-  // Show return button if we have an active presentation
   if(state.rounds.length > 0) {
     document.getElementById('setup-return-btn').style.display = 'block';
   }
@@ -1063,6 +1068,7 @@ function returnToPresentation() {
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
+  document.getElementById('fullscreen-btn').style.display = 'block';
   document.documentElement.requestFullscreen?.().catch(()=>{});
 }
 
@@ -1115,6 +1121,7 @@ function checkUrlParams() {
       title:p.get(`r${i}_name`)||`Round ${i+1}`,
       questionCount:qCount,
       showAnswers: p.get(`r${i}_showAnswers`) !== '0',
+      twoPass: p.get(`r${i}_twoPass`) === '1',
       isMainRound: p.get(`r${i}_isMainRound`) === '1',
       segmentSize: parseInt(p.get(`r${i}_segmentSize`))||5,
       segmentStart: 0, // which slide index the current segment started at
@@ -1231,6 +1238,7 @@ async function launchFromSetup() {
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
+  document.getElementById('fullscreen-btn').style.display = 'block';
   renderCurrentSlide();
   document.documentElement.requestFullscreen?.().catch(()=>{});
 }
