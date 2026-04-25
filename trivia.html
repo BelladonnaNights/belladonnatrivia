@@ -18,11 +18,19 @@ firebase.initializeApp({
   appId:"1:658670195433:web:f66cbc32344f4d4d63d678"
 });
 const _db = firebase.database();
-// Load settings and category types into globals before anything renders
-_db.ref('appSettings').once('value', s => { appSettings = s.val()||{}; });
+// Declare globals here so main script can access them
+var appSettings = {};
+var catTypes = [];
+var _settingsLoaded = false;
+var _typesLoaded = false;
+_db.ref('appSettings').once('value', s => {
+  appSettings = s.val()||{};
+  _settingsLoaded = true;
+});
 _db.ref('categoryTypes').once('value', s => {
   const d = s.val()||{};
   catTypes = Object.entries(d).map(([id,v])=>({id,...v}));
+  _typesLoaded = true;
 });
 </script>
 <style>
@@ -440,8 +448,7 @@ let state = {
   mainRoundSavedSlide: 0,
   jumpingFromMain: false,
 };
-let appSettings = {};
-let catTypes = [];
+// appSettings and catTypes are declared as var in Firebase init script above
 
 // Slide types
 const S_INTRO='intro', S_FOLLOWUS='followus', S_RULES='rules', S_QUESTION='question', S_INTERSTITIAL='interstitial', S_ANSWERKEY='answerkey', S_THANKYOU='thankyou', S_END='end', S_SLIDE='slide', S_JUMP='jump';
@@ -1251,10 +1258,8 @@ function checkUrlParams() {
 
   const roundCount = parseInt(p.get('rounds'))||1;
   const rounds = [];
-  // Read app-level settings and category types from state (loaded from Firebase)
-  // Don't re-declare here — use globals set during Firebase load
-  state.appSettings = appSettings;
-  state.catTypes = catTypes;
+  // appSettings and catTypes are loaded from Firebase directly (global vars)
+  // No need to pass via URL params
 
   for(let i=0;i<roundCount;i++) {
     const url = p.get(`r${i}_url`);
