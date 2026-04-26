@@ -764,10 +764,33 @@ function renderCurrentSlide() {
   else if(type === S_SLIDE) bgUrl = '';
   else bgUrl = round.bgQuestion || round.bgImage || '';
 
+  // Set background — inject as a fixed div so we control the overlay per slide type
+  // This bypasses pres-bg::after which would otherwise darken everything
+  const existingBg = document.getElementById('slide-bg-layer');
+  if(existingBg) existingBg.remove();
+
   if(bgUrl && type !== S_SLIDE && type !== S_THANKYOU) {
-    bg.style.backgroundImage = `url('${driveViewUrl(bgUrl)}')`;
+    const bgLayer = document.createElement('div');
+    bgLayer.id = 'slide-bg-layer';
+    // For questions/answerkey, add a dark overlay so text is readable
+    const needsOverlay = type === S_QUESTION || type === S_ANSWERKEY || type === S_INTERSTITIAL;
+    bgLayer.style.cssText = [
+      'position:fixed;inset:0;z-index:799;',
+      `background-image:url('${driveViewUrl(bgUrl)}');`,
+      'background-size:cover;background-position:center;background-repeat:no-repeat;',
+      needsOverlay ? 'background-color:#000;' : '',
+    ].join('');
+    if(needsOverlay) {
+      // Dark overlay for readability
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.5) 0%,rgba(0,0,0,.25) 40%,rgba(0,0,0,.65) 100%);';
+      bgLayer.appendChild(overlay);
+    }
+    document.getElementById('pres-screen').insertBefore(bgLayer, document.getElementById('slide-container'));
+    // Clear pres-bg so it doesn't interfere
+    bg.style.backgroundImage = '';
     bg.style.background = '';
-    bg.classList.remove('no-img');
+    bg.classList.add('no-img');
   } else if(!bgUrl) {
     bg.style.backgroundImage = '';
     bg.style.background = '';
@@ -790,6 +813,9 @@ function renderCurrentSlide() {
   // Render slide
   const container = document.getElementById('slide-container');
   container.innerHTML = '';
+  // Remove any previous bg layer (slides/thankyou manage their own)
+  const oldBgLayer = document.getElementById('slide-bg-layer');
+  if(oldBgLayer && type !== S_SLIDE && type !== S_THANKYOU) oldBgLayer.remove();
 
   if(type === S_INTRO) renderIntro(container, round);
   else if(type === S_FOLLOWUS) renderFollowUs(container, round);
@@ -805,13 +831,11 @@ function renderCurrentSlide() {
 }
 
 function renderIntro(container, round) {
-  // If there's a background image, show it fullscreen with no text overlay
+  // Background is handled by renderCurrentSlide via slide-bg-layer
+  // Just render content (empty = fullscreen bg only)
   const bgUrl = round.bgIntro || round.bgImage;
   if(bgUrl) {
-    const bg = document.getElementById('pres-bg');
-    bg.style.backgroundImage = `url('${driveViewUrl(bgUrl)}')`;
-    bg.classList.remove('no-img');
-    // Empty slide — just the background
+    // Background already set — just add empty placeholder so slide registers
     const el = document.createElement('div');
     el.style.cssText = 'position:absolute;inset:0;';
     container.appendChild(el);
@@ -881,11 +905,12 @@ function renderInterstitial(container, round) {
 }
 
 function renderThankyou(container, round) {
-  // Fullscreen image — rendered as fixed overlay like slideshow slides (no dark overlay)
+  const old = document.getElementById('slide-bg-layer');
+  if(old) old.remove();
   const bg = document.getElementById('pres-bg');
   bg.style.backgroundImage = 'none';
   bg.style.background = '#000';
-  bg.classList.remove('no-img');
+  bg.classList.add('no-img');
   const el = document.createElement('div');
   el.style.cssText = 'position:fixed;inset:0;z-index:801;background-size:cover;background-position:center;background-repeat:no-repeat;background-color:#000;';
   if(round.thankYouUrl) el.style.backgroundImage = `url('${driveViewUrl(round.thankYouUrl)}')`;
@@ -893,16 +918,16 @@ function renderThankyou(container, round) {
 }
 
 function renderSlide(container, round) {
-  // prefix = 3 for round 0, 1 for others
   const prefix = isFirstRound() ? 3 : 1;
-  const slideIdx = state.slideIndex - prefix; // 0-based
+  const slideIdx = state.slideIndex - prefix;
   const slide = round.slides[slideIdx];
   if(!slide) return;
-  if(!slide) return;
+  const old = document.getElementById('slide-bg-layer');
+  if(old) old.remove();
   const bg = document.getElementById('pres-bg');
   bg.style.backgroundImage = 'none';
   bg.style.background = '#000';
-  bg.classList.remove('no-img');
+  bg.classList.add('no-img');
   const el = document.createElement('div');
   el.style.cssText = 'position:fixed;inset:0;z-index:801;background-size:cover;background-position:center;background-repeat:no-repeat;background-color:#000;';
   el.style.backgroundImage = `url('${slide.url}')`;
