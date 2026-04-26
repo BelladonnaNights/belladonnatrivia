@@ -267,29 +267,29 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 }
 
 /* ANSWER KEY SLIDE */
-.slide-answerkey{align-items:flex-start;justify-content:flex-start;padding:2.5rem 3.5rem;overflow-y:auto}
+.slide-answerkey{align-items:flex-start;justify-content:flex-start;padding:2rem 3rem;overflow-y:auto}
 .ak-title{
-  font-family:var(--display);font-size:clamp(36px,5vw,60px);letter-spacing:.06em;
-  background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-  margin-bottom:1.5rem;flex-shrink:0;
+  font-family:var(--display);font-size:clamp(28px,4vw,48px);letter-spacing:.06em;
+  color:var(--text);
+  margin-bottom:1rem;flex-shrink:0;
 }
 .ak-grid{
   display:grid;grid-template-columns:1fr 1fr;
-  gap:6px 3rem;width:100%;
+  gap:4px 2rem;width:100%;flex:1;
 }
 .ak-item{
   display:flex;align-items:center;gap:10px;
-  padding:7px 0;border-bottom:.5px solid rgba(255,255,255,.08);
+  padding:5px 0;border-bottom:.5px solid rgba(255,255,255,.08);
 }
 .ak-num{
-  font-family:var(--cinzel);font-size:13px;font-weight:700;
+  font-family:var(--cinzel);font-size:clamp(11px,1.2vw,15px);font-weight:700;
   color:#000;background:#c9a84c;
-  border-radius:4px;padding:2px 7px;text-align:center;
-  min-width:30px;flex-shrink:0;line-height:1.6;
+  border-radius:4px;padding:2px 6px;text-align:center;
+  min-width:28px;flex-shrink:0;line-height:1.6;
 }
 .ak-a{
-  font-family:var(--cinzel);font-size:clamp(16px,2vw,24px);
-  color:var(--text);letter-spacing:.04em;line-height:1.2;
+  font-family:var(--cinzel);font-size:clamp(18px,2.4vw,32px);
+  color:var(--text);letter-spacing:.03em;line-height:1.15;
 }
 
 /* THANK YOU / NEXT ROUND SLIDE */
@@ -757,10 +757,11 @@ function renderCurrentSlide() {
   // Background
   const bg = document.getElementById('pres-bg');
   let bgUrl = '';
+  const round0 = state.rounds[0] || round; // first round for shared assets
   if(type === S_INTRO) bgUrl = round.bgIntro || round.bgImage || '';
-  else if(type === S_FOLLOWUS || type === S_RULES || type === S_INTERSTITIAL) bgUrl = round.bgPlain || round.bgQuestion || round.bgImage || '';
+  else if(type === S_FOLLOWUS || type === S_RULES || type === S_INTERSTITIAL) bgUrl = round0.bgPlain || round0.bgQuestion || round0.bgImage || '';
   else if(type === S_THANKYOU) bgUrl = round.thankYouUrl || '';
-  else if(type === S_SLIDE) bgUrl = ''; // slideshow sets its own bg
+  else if(type === S_SLIDE) bgUrl = '';
   else bgUrl = round.bgQuestion || round.bgImage || '';
 
   if(bgUrl && type !== S_SLIDE && type !== S_THANKYOU) {
