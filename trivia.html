@@ -764,7 +764,7 @@ function renderCurrentSlide() {
   else bgUrl = round.bgQuestion || round.bgImage || '';
 
   if(bgUrl && type !== S_SLIDE && type !== S_THANKYOU) {
-    bg.style.backgroundImage = `url('${bgUrl}')`;
+    bg.style.backgroundImage = `url('${driveViewUrl(bgUrl)}')`;
     bg.style.background = '';
     bg.classList.remove('no-img');
   } else if(!bgUrl) {
@@ -808,7 +808,7 @@ function renderIntro(container, round) {
   const bgUrl = round.bgIntro || round.bgImage;
   if(bgUrl) {
     const bg = document.getElementById('pres-bg');
-    bg.style.backgroundImage = `url('${bgUrl}')`;
+    bg.style.backgroundImage = `url('${driveViewUrl(bgUrl)}')`;
     bg.classList.remove('no-img');
     // Empty slide — just the background
     const el = document.createElement('div');
@@ -880,23 +880,23 @@ function renderInterstitial(container, round) {
 }
 
 function renderThankyou(container, round) {
-  // Fullscreen image — set as pres-bg
+  // Fullscreen image — rendered as fixed overlay like slideshow slides (no dark overlay)
   const bg = document.getElementById('pres-bg');
-  if(round.thankYouUrl) {
-    bg.style.backgroundImage = `url('${round.thankYouUrl}')`;
-    bg.style.background = '';
-    bg.classList.remove('no-img');
-  }
-  // Empty container — just the background image
+  bg.style.backgroundImage = 'none';
+  bg.style.background = '#000';
+  bg.classList.remove('no-img');
   const el = document.createElement('div');
-  el.style.cssText = 'position:absolute;inset:0;';
+  el.style.cssText = 'position:fixed;inset:0;z-index:801;background-size:cover;background-position:center;background-repeat:no-repeat;background-color:#000;';
+  if(round.thankYouUrl) el.style.backgroundImage = `url('${driveViewUrl(round.thankYouUrl)}')`;
   container.appendChild(el);
 }
 
 function renderSlide(container, round) {
-  // Slide index within slideshow: subtract PREFIX (intro+followus+rules = 3)
-  const slideIdx = state.slideIndex - PREFIX - 1; // 0-based
+  // prefix = 3 for round 0, 1 for others
+  const prefix = isFirstRound() ? 3 : 1;
+  const slideIdx = state.slideIndex - prefix; // 0-based
   const slide = round.slides[slideIdx];
+  if(!slide) return;
   if(!slide) return;
   const bg = document.getElementById('pres-bg');
   bg.style.backgroundImage = 'none';
