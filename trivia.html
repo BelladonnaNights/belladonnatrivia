@@ -5,39 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Trivia</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 <script>
-firebase.initializeApp({
-  apiKey:"AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",
-  authDomain:"belladonnatrivia.firebaseapp.com",
-  databaseURL:"https://belladonnatrivia-default-rtdb.firebaseio.com",
-  projectId:"belladonnatrivia",
-  storageBucket:"belladonnatrivia.firebasestorage.app",
-  messagingSenderId:"658670195433",
-  appId:"1:658670195433:web:f66cbc32344f4d4d63d678"
-});
-const _db = firebase.database();
 var appSettings = {};
 var catTypes = [];
-var _settingsLoaded = false;
-var _typesLoaded = false;
-// Load in parallel, track completion
-_db.ref('appSettings').once('value', s => {
-  appSettings = s.val()||{};
-  _settingsLoaded = true;
-});
-_db.ref('categoryTypes').once('value', s => {
-  const d = s.val()||{};
-  catTypes = Object.entries(d).map(([id,v])=>({id,...v}));
-  _typesLoaded = true;
-});
-
-// Wait for both to load before allowing launch
-function waitForFirebase(cb) {
-  if(_settingsLoaded && _typesLoaded) { cb(); return; }
-  setTimeout(() => waitForFirebase(cb), 100);
-}
 </script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -762,12 +732,6 @@ function renderCurrentSlide() {
   else if(type === S_THANKYOU) bgUrl = round.thankYouUrl || '';
   else if(type === S_SLIDE) bgUrl = ''; // slideshow sets its own bg
   else bgUrl = round.bgQuestion || round.bgImage || '';
-
-  // DEBUG - remove after testing
-  if(type === S_QUESTION && !window._bgDebugShown) {
-    window._bgDebugShown = true;
-    alert('bgQuestion: ' + round.bgQuestion + '\nbgImage: ' + round.bgImage + '\nbgUrl: ' + bgUrl);
-  }
 
   if(bgUrl && type !== S_SLIDE && type !== S_THANKYOU) {
     bg.style.backgroundImage = `url('${bgUrl}')`;
