@@ -757,15 +757,14 @@ function renderCurrentSlide() {
   // Background
   const bg = document.getElementById('pres-bg');
   let bgUrl = '';
-  const round0 = state.rounds[0] || round;
   if(type === S_INTRO) bgUrl = round.bgIntro || round.bgImage || '';
-  else if(type === S_FOLLOWUS || type === S_RULES || type === S_INTERSTITIAL) bgUrl = round0.bgPlain || round0.bgQuestion || round0.bgImage || '';
+  else if(type === S_FOLLOWUS || type === S_RULES || type === S_INTERSTITIAL) bgUrl = round.bgPlain || round.bgQuestion || round.bgImage || '';
   else if(type === S_THANKYOU) bgUrl = round.thankYouUrl || '';
-  else if(type === S_SLIDE) bgUrl = '';
+  else if(type === S_SLIDE) bgUrl = ''; // slideshow sets its own bg
   else bgUrl = round.bgQuestion || round.bgImage || '';
 
   if(bgUrl && type !== S_SLIDE && type !== S_THANKYOU) {
-    bg.style.backgroundImage = `url('${driveViewUrl(bgUrl)}')`;
+    bg.style.backgroundImage = `url('${bgUrl}')`;
     bg.style.background = '';
     bg.classList.remove('no-img');
   } else if(!bgUrl) {
@@ -805,11 +804,13 @@ function renderCurrentSlide() {
 }
 
 function renderIntro(container, round) {
+  // If there's a background image, show it fullscreen with no text overlay
   const bgUrl = round.bgIntro || round.bgImage;
   if(bgUrl) {
     const bg = document.getElementById('pres-bg');
-    bg.style.backgroundImage = `url('${driveViewUrl(bgUrl)}')`;
+    bg.style.backgroundImage = `url('${bgUrl}')`;
     bg.classList.remove('no-img');
+    // Empty slide — just the background
     const el = document.createElement('div');
     el.style.cssText = 'position:absolute;inset:0;';
     container.appendChild(el);
@@ -879,20 +880,21 @@ function renderInterstitial(container, round) {
 }
 
 function renderThankyou(container, round) {
-  // Only actually show on the last round
+  // Only show on last round
   if(state.roundIndex < state.rounds.length - 1) {
     renderEnd(container, round);
     return;
   }
-  const old = document.getElementById('slide-bg-layer');
-  if(old) old.remove();
+  // Fullscreen image — set as pres-bg
   const bg = document.getElementById('pres-bg');
-  bg.style.backgroundImage = 'none';
-  bg.style.background = '#000';
-  bg.classList.add('no-img');
+  if(round.thankYouUrl) {
+    bg.style.backgroundImage = `url('${round.thankYouUrl}')`;
+    bg.style.background = '';
+    bg.classList.remove('no-img');
+  }
+  // Empty container — just the background image
   const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;inset:0;z-index:801;background-size:cover;background-position:center;background-repeat:no-repeat;background-color:#000;';
-  if(round.thankYouUrl) el.style.backgroundImage = `url('${driveViewUrl(round.thankYouUrl)}')`;
+  el.style.cssText = 'position:absolute;inset:0;';
   container.appendChild(el);
 }
 
@@ -962,7 +964,7 @@ function renderQuestion(container, round) {
 
   // Audio — only show if genuinely non-empty
   let audioHtml = '';
-  if(q.audioUrl && q.audioUrl.trim().length > 4 && q.audioUrl.includes('://')) {
+  if(q.audioUrl && q.audioUrl.trim().length > 0) {
     const src = driveViewUrl(q.audioUrl);
     audioHtml = `<button class="audio-btn" onclick="playAudio('${src}')">
       <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
