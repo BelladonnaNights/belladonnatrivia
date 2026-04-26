@@ -18,11 +18,11 @@ firebase.initializeApp({
   appId:"1:658670195433:web:f66cbc32344f4d4d63d678"
 });
 const _db = firebase.database();
-// Declare globals here so main script can access them
 var appSettings = {};
 var catTypes = [];
 var _settingsLoaded = false;
 var _typesLoaded = false;
+// Load in parallel, track completion
 _db.ref('appSettings').once('value', s => {
   appSettings = s.val()||{};
   _settingsLoaded = true;
@@ -32,6 +32,12 @@ _db.ref('categoryTypes').once('value', s => {
   catTypes = Object.entries(d).map(([id,v])=>({id,...v}));
   _typesLoaded = true;
 });
+
+// Wait for both to load before allowing launch
+function waitForFirebase(cb) {
+  if(_settingsLoaded && _typesLoaded) { cb(); return; }
+  setTimeout(() => waitForFirebase(cb), 100);
+}
 </script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -577,7 +583,7 @@ function slideCount() {
     return prefix + (round.slides||[]).length + 1;
   }
   const n = round.questions.length;
-  const hasThankyou = !!round.thankYouUrl;
+  const hasThankyou = !!round.thankYouUrl && state.roundIndex >= state.rounds.length - 1;
   if(round.twoPass) {
     // prefix + pass1(n) + interstitial(1) + pass2(n) + [thankyou] + end
     return prefix + n + 1 + n + (hasThankyou ? 1 : 0) + 1;
@@ -615,7 +621,7 @@ function slideType() {
     if(si === prefix + n) return S_INTERSTITIAL;
     // pass2: [prefix+n+1 .. prefix+2n]
     if(si >= prefix + n + 1 && si <= prefix + 2*n) return S_QUESTION;
-    const hasThankyou = !!round.thankYouUrl;
+    const hasThankyou = !!round.thankYouUrl && state.roundIndex >= state.rounds.length - 1;
     if(hasThankyou && si === prefix + 2*n + 1) return S_THANKYOU;
     return S_END;
   }
@@ -623,7 +629,7 @@ function slideType() {
   // Standard single pass
   if(qIndex >= 0 && qIndex < n) return S_QUESTION;
   const hasAnswerKey = !round.showAnswers && !round.twoPass;
-  const hasThankyou = !!round.thankYouUrl;
+  const hasThankyou = !!round.thankYouUrl && state.roundIndex >= state.rounds.length - 1;
   if(hasAnswerKey && si === prefix + n) return S_ANSWERKEY;
   const afterQuestions = prefix + n + (hasAnswerKey ? 1 : 0);
   if(hasThankyou && si === afterQuestions) return S_THANKYOU;
@@ -1328,7 +1334,10 @@ async function launchFromSetup() {
 
   state.rounds = pendingRounds.map(r=>({...r, questions:[], slides:[]}));
   document.getElementById('setup-screen').style.display = 'none';
-  showLoading('Loading questions…');
+  showLoading('Loading…');
+
+  // Wait for Firebase settings/types to be ready
+  await new Promise(resolve => waitForFirebase(resolve));
 
   for(let i=0;i<state.rounds.length;i++) {
     const round = state.rounds[i];
