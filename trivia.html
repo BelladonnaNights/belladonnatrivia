@@ -583,7 +583,7 @@ function slideCount() {
     return prefix + (round.slides||[]).length + 1;
   }
   const n = round.questions.length;
-  const hasThankyou = !!round.thankYouUrl && state.roundIndex >= state.rounds.length - 1;
+  const hasThankyou = !!round.thankYouUrl;
   if(round.twoPass) {
     // prefix + pass1(n) + interstitial(1) + pass2(n) + [thankyou] + end
     return prefix + n + 1 + n + (hasThankyou ? 1 : 0) + 1;
@@ -621,7 +621,7 @@ function slideType() {
     if(si === prefix + n) return S_INTERSTITIAL;
     // pass2: [prefix+n+1 .. prefix+2n]
     if(si >= prefix + n + 1 && si <= prefix + 2*n) return S_QUESTION;
-    const hasThankyou = !!round.thankYouUrl && state.roundIndex >= state.rounds.length - 1;
+    const hasThankyou = !!round.thankYouUrl;
     if(hasThankyou && si === prefix + 2*n + 1) return S_THANKYOU;
     return S_END;
   }
@@ -629,7 +629,7 @@ function slideType() {
   // Standard single pass
   if(qIndex >= 0 && qIndex < n) return S_QUESTION;
   const hasAnswerKey = !round.showAnswers && !round.twoPass;
-  const hasThankyou = !!round.thankYouUrl && state.roundIndex >= state.rounds.length - 1;
+  const hasThankyou = !!round.thankYouUrl;
   if(hasAnswerKey && si === prefix + n) return S_ANSWERKEY;
   const afterQuestions = prefix + n + (hasAnswerKey ? 1 : 0);
   if(hasThankyou && si === afterQuestions) return S_THANKYOU;
@@ -879,6 +879,11 @@ function renderInterstitial(container, round) {
 }
 
 function renderThankyou(container, round) {
+  // Only actually show on the last round
+  if(state.roundIndex < state.rounds.length - 1) {
+    renderEnd(container, round);
+    return;
+  }
   const old = document.getElementById('slide-bg-layer');
   if(old) old.remove();
   const bg = document.getElementById('pres-bg');
