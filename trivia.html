@@ -813,9 +813,6 @@ function renderCurrentSlide() {
   // Render slide
   const container = document.getElementById('slide-container');
   container.innerHTML = '';
-  // Remove any previous bg layer (slides/thankyou manage their own)
-  const oldBgLayer = document.getElementById('slide-bg-layer');
-  if(oldBgLayer && type !== S_SLIDE && type !== S_THANKYOU) oldBgLayer.remove();
 
   if(type === S_INTRO) renderIntro(container, round);
   else if(type === S_FOLLOWUS) renderFollowUs(container, round);
@@ -983,7 +980,7 @@ function renderQuestion(container, round) {
 
   // Audio — only show if genuinely non-empty
   let audioHtml = '';
-  if(q.audioUrl && q.audioUrl.trim().length > 0) {
+  if(q.audioUrl && q.audioUrl.trim().length > 4 && q.audioUrl.includes('://')) {
     const src = driveViewUrl(q.audioUrl);
     audioHtml = `<button class="audio-btn" onclick="playAudio('${src}')">
       <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
