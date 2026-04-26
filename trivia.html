@@ -763,6 +763,12 @@ function renderCurrentSlide() {
   else if(type === S_SLIDE) bgUrl = ''; // slideshow sets its own bg
   else bgUrl = round.bgQuestion || round.bgImage || '';
 
+  // DEBUG - remove after testing
+  if(type === S_QUESTION && !window._bgDebugShown) {
+    window._bgDebugShown = true;
+    alert('bgQuestion: ' + round.bgQuestion + '\nbgImage: ' + round.bgImage + '\nbgUrl: ' + bgUrl);
+  }
+
   if(bgUrl && type !== S_SLIDE && type !== S_THANKYOU) {
     bg.style.backgroundImage = `url('${bgUrl}')`;
     bg.style.background = '';
