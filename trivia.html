@@ -1334,10 +1334,7 @@ async function launchFromSetup() {
 
   state.rounds = pendingRounds.map(r=>({...r, questions:[], slides:[]}));
   document.getElementById('setup-screen').style.display = 'none';
-  showLoading('Loading…');
-
-  // Wait for Firebase settings/types to be ready
-  await new Promise(resolve => waitForFirebase(resolve));
+  showLoading('Loading questions…');
 
   for(let i=0;i<state.rounds.length;i++) {
     const round = state.rounds[i];
