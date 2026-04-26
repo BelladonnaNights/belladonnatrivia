@@ -650,6 +650,16 @@ async function saveSettings() {
   };
   try {
     await db.ref('appSettings').set(settings);
+
+    // Also save any edited category types
+    for(const t of categoryTypes) {
+      await db.ref(`categoryTypes/${t.id}`).set({
+        name: t.name||'',
+        rules: t.rules||'',
+        createdAt: t.createdAt||Date.now()
+      });
+    }
+
     toast('Settings saved!');
     closeSettings();
   } catch(e) { toast('Save failed: '+e.message, true); }
@@ -665,12 +675,12 @@ function renderCatTypesList() {
     <div style="background:rgba(255,255,255,.03);border:.5px solid var(--border2);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;gap:8px">
       <div style="display:flex;gap:8px;align-items:center">
         <input class="field-input" value="${t.name||''}" placeholder="Type name (e.g. Music Trivia)"
-          onchange="categoryTypes[${idx}].name=this.value" style="flex:1"/>
+          oninput="categoryTypes[${idx}].name=this.value" style="flex:1"/>
         <button class="btn btn-danger" onclick="deleteCategoryType('${t.id}')" style="padding:6px 10px;font-size:10px">×</button>
       </div>
       <textarea class="field-input" placeholder="Rules for this category type…" rows="3"
         style="resize:vertical;font-size:12px;line-height:1.5"
-        onchange="categoryTypes[${idx}].rules=this.value">${t.rules||''}</textarea>
+        oninput="categoryTypes[${idx}].rules=this.value">${t.rules||''}</textarea>
     </div>`).join('');
 }
 
