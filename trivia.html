@@ -240,23 +240,18 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   margin-bottom:1.5rem;flex-shrink:0;
 }
 .ak-grid{
-  display:grid;grid-template-columns:1fr 1fr;
-  gap:6px 3rem;width:100%;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:8px;width:100%;
 }
 .ak-item{
-  display:flex;align-items:center;gap:10px;
-  padding:7px 0;border-bottom:.5px solid rgba(255,255,255,.08);
+  background:rgba(10,10,10,.6);border:.5px solid var(--border2);
+  border-radius:var(--radius);padding:10px 14px;
+  backdrop-filter:blur(8px);display:flex;gap:10px;align-items:flex-start;
 }
-.ak-num{
-  font-family:var(--cinzel);font-size:13px;font-weight:700;
-  color:#000;background:#c9a84c;
-  border-radius:4px;padding:2px 7px;text-align:center;
-  min-width:30px;flex-shrink:0;line-height:1.6;
-}
-.ak-a{
-  font-family:var(--cinzel);font-size:clamp(16px,2vw,24px);
-  color:var(--text);letter-spacing:.04em;line-height:1.2;
-}
+.ak-num{font-family:var(--display);font-size:20px;color:var(--gold);min-width:28px;line-height:1}
+.ak-qa{flex:1}
+.ak-q{font-size:11px;color:var(--text3);line-height:1.4;margin-bottom:3px}
+.ak-a{font-family:var(--cinzel);font-size:13px;color:var(--text);letter-spacing:.04em;line-height:1.3}
 
 /* THANK YOU / NEXT ROUND SLIDE */
 .slide-end{text-align:center}
@@ -366,16 +361,6 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div id="slide-container"></div>
 </div>
 
-<!-- FULLSCREEN BUTTON -->
-<button id="fullscreen-btn" onclick="document.documentElement.requestFullscreen?.().catch(()=>{})" style="
-  display:none;position:fixed;top:1rem;right:1rem;z-index:900;
-  background:rgba(8,8,8,.8);backdrop-filter:blur(8px);
-  border:1px solid rgba(201,168,76,.35);border-radius:8px;
-  padding:7px 14px;cursor:pointer;
-  font-family:'Cinzel',serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
-  color:#c9a84c;transition:all .2s;
-">⛶ Fullscreen</button>
-
 <!-- JUMP PANEL -->
 <div id="jump-panel">
   <div class="jump-panel-label">Jump to mini game</div>
@@ -387,7 +372,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="hud-sep"></div>
   <div class="hud-item">Q <span id="hud-q">—</span></div>
   <div class="hud-sep"></div>
-  <div class="hud-item"><span class="hud-key">Space</span> next</div>
+  <div class="hud-item"><span class="hud-key">Space</span> reveal</div>
   <div class="hud-sep"></div>
   <div class="hud-item"><span class="hud-key">→</span> next</div>
   <div class="hud-sep"></div>
@@ -415,16 +400,14 @@ let state = {
   slideIndex: 0,
   answerVisible: false,
   answerKeyVisible: false,
-  currentType: null,
+  currentType: null, // override for S_JUMP
   mainRoundIndex: -1,
   mainRoundSavedSlide: 0,
   jumpingFromMain: false,
 };
-let appSettings = {};
-let catTypes = [];
 
 // Slide types
-const S_INTRO='intro', S_FOLLOWUS='followus', S_RULES='rules', S_QUESTION='question', S_INTERSTITIAL='interstitial', S_ANSWERKEY='answerkey', S_THANKYOU='thankyou', S_END='end', S_SLIDE='slide', S_JUMP='jump';
+const S_INTRO='intro', S_QUESTION='question', S_ANSWERKEY='answerkey', S_END='end', S_SLIDE='slide', S_JUMP='jump';
 
 // ═══════════════════════════════════════════════════════
 //  LAUNCH (manual fallback — normally launched from admin)
@@ -541,88 +524,33 @@ function currentRound() { return state.rounds[state.roundIndex]; }
 function slideCount() {
   const round = currentRound();
   if(round.type === 'slideshow') {
-    // intro + followus + rules + slides + end (no thankyou for slideshow)
-    return 1 + 1 + 1 + (round.slides||[]).length + 1;
+    return 1 + (round.slides||[]).length + 1;
   }
-  const n = round.questions.length;
-  // intro(0) + followus(1) + rules(2) + questions...
-  // twoPass: intro+followus+rules + pass1(n) + interstitial + pass2(n) + [thankyou] + end
-  // standard: intro+followus+rules + questions(n) + [answerKey] + [thankyou] + end
-  const hasThankyou = !!round.thankYouUrl;
-  if(round.twoPass) {
-    return 1 + 1 + 1 + n + 1 + n + (hasThankyou ? 1 : 0) + 1;
-  }
-  const hasAnswerKey = !round.showAnswers && !round.twoPass;
-  return 1 + 1 + 1 + n + (hasAnswerKey ? 1 : 0) + (hasThankyou ? 1 : 0) + 1;
+  // Skip answer key slide if showAnswers is on (answers shown per question)
+  const hasAnswerKey = !round.showAnswers;
+  return 1 + round.questions.length + (hasAnswerKey ? 1 : 0) + 1;
 }
 
-// Returns the slide index offset after the fixed prefix slides (intro+followus+rules)
-const PREFIX = 3; // intro(0) + followus(1) + rules(2)
-
 function slideType() {
+  // Jump screen override
   if(state.currentType === S_JUMP) return S_JUMP;
   const round = currentRound();
-  const si = state.slideIndex;
-
   if(round.type === 'slideshow') {
     const n = (round.slides||[]).length;
-    if(si === 0) return S_INTRO;
-    if(si === 1) return S_FOLLOWUS;
-    if(si === 2) return S_RULES;
-    if(si <= 2 + n) return S_SLIDE;
+    if(state.slideIndex === 0) return S_INTRO;
+    if(state.slideIndex <= n) return S_SLIDE;
     return S_END;
   }
-
-  if(si === 0) return S_INTRO;
-  if(si === 1) return S_FOLLOWUS;
-  if(si === 2) return S_RULES;
-
   const n = round.questions.length;
-  const afterPrefix = si - PREFIX; // 1-based within questions
-
-  if(round.twoPass) {
-    // pass1: PREFIX+1 .. PREFIX+n
-    if(afterPrefix >= 1 && afterPrefix <= n) return S_QUESTION;
-    // interstitial: PREFIX+n+1
-    if(afterPrefix === n + 1) return S_INTERSTITIAL;
-    // pass2: PREFIX+n+2 .. PREFIX+2n+1
-    if(afterPrefix >= n + 2 && afterPrefix <= 2*n + 1) return S_QUESTION;
-    // thankyou if exists
-    const hasThankyou = !!round.thankYouUrl;
-    if(hasThankyou && afterPrefix === 2*n + 2) return S_THANKYOU;
-    return S_END;
-  }
-
-  // Standard
-  if(afterPrefix >= 1 && afterPrefix <= n) return S_QUESTION;
   const hasAnswerKey = !round.showAnswers;
-  const hasThankyou = !!round.thankYouUrl;
-  if(hasAnswerKey && afterPrefix === n + 1) return S_ANSWERKEY;
-  const afterAK = hasAnswerKey ? n + 2 : n + 1;
-  if(hasThankyou && afterPrefix === afterAK) return S_THANKYOU;
+  if(state.slideIndex === 0) return S_INTRO;
+  if(state.slideIndex <= n) return S_QUESTION;
+  if(hasAnswerKey && state.slideIndex === n+1) return S_ANSWERKEY;
   return S_END;
 }
 
-// Returns question index (0-based) and pass info
-function questionInfo() {
-  const round = currentRound();
-  const n = round.questions.length;
-  const afterPrefix = state.slideIndex - PREFIX;
-
-  if(round.twoPass) {
-    if(afterPrefix >= 1 && afterPrefix <= n) {
-      return { qIndex: afterPrefix - 1, isPass2: false };
-    }
-    if(afterPrefix >= n + 2 && afterPrefix <= 2*n + 1) {
-      return { qIndex: afterPrefix - n - 2, isPass2: true };
-    }
-  }
-  return { qIndex: afterPrefix - 1, isPass2: false };
-}
-
 function currentQuestion() {
-  const { qIndex } = questionInfo();
-  return currentRound().questions[qIndex];
+  return currentRound().questions[state.slideIndex - 1];
 }
 
 function advance() {
@@ -724,33 +652,25 @@ function renderCurrentSlide() {
   const round = currentRound();
   const type = slideType();
 
-  // Background
+  // Background — use different images for intro vs question slides
   const bg = document.getElementById('pres-bg');
-  let bgUrl = '';
-  if(type === S_INTRO) bgUrl = round.bgIntro || round.bgImage || '';
-  else if(type === S_FOLLOWUS || type === S_RULES || type === S_INTERSTITIAL) bgUrl = round.bgPlain || round.bgQuestion || round.bgImage || '';
-  else if(type === S_THANKYOU) bgUrl = round.thankYouUrl || '';
-  else if(type === S_SLIDE) bgUrl = ''; // slideshow sets its own bg
-  else bgUrl = round.bgQuestion || round.bgImage || '';
+  const bgUrl = (type === S_INTRO)
+    ? (round.bgIntro || round.bgImage || '')
+    : (round.bgQuestion || round.bgImage || '');
 
-  if(bgUrl && type !== S_SLIDE && type !== S_THANKYOU) {
+  if(bgUrl) {
     bg.style.backgroundImage = `url('${bgUrl}')`;
-    bg.style.background = '';
     bg.classList.remove('no-img');
-  } else if(!bgUrl) {
+  } else {
     bg.style.backgroundImage = '';
-    bg.style.background = '';
     bg.classList.add('no-img');
   }
 
   // HUD
   const n = round.type === 'slideshow' ? (round.slides||[]).length : round.questions.length;
   document.getElementById('hud-round').textContent = `${state.roundIndex+1}/${state.rounds.length}`;
-  if(type === S_QUESTION) {
-    const { qIndex, isPass2 } = questionInfo();
-    document.getElementById('hud-q').textContent = `${qIndex+1}/${n}${round.twoPass?(isPass2?' ★':' ○'):''}`;
-  } else if(type === S_SLIDE) {
-    document.getElementById('hud-q').textContent = `${state.slideIndex - 2}/${n}`;
+  if(type === S_QUESTION || type === S_SLIDE) {
+    document.getElementById('hud-q').textContent = `${state.slideIndex}/${n}`;
   } else {
     document.getElementById('hud-q').textContent = '—';
   }
@@ -760,13 +680,9 @@ function renderCurrentSlide() {
   container.innerHTML = '';
 
   if(type === S_INTRO) renderIntro(container, round);
-  else if(type === S_FOLLOWUS) renderFollowUs(container, round);
-  else if(type === S_RULES) renderRules(container, round);
   else if(type === S_QUESTION) renderQuestion(container, round);
-  else if(type === S_INTERSTITIAL) renderInterstitial(container, round);
   else if(type === S_SLIDE) renderSlide(container, round);
   else if(type === S_ANSWERKEY) renderAnswerKey(container, round);
-  else if(type === S_THANKYOU) renderThankyou(container, round);
   else renderEnd(container, round);
 
   updateJumpPanel();
@@ -801,77 +717,10 @@ function renderIntro(container, round) {
   container.appendChild(el);
 }
 
-function renderFollowUs(container, round) {
-  const s = appSettings;
-  const el = document.createElement('div');
-  el.className = 'slide slide-intro active';
-  el.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem;text-align:center;';
-  el.innerHTML = `
-    <div style="font-family:var(--cinzel);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-bottom:1rem">Follow Along</div>
-    <div style="font-family:var(--display);font-size:clamp(48px,8vw,100px);letter-spacing:.04em;line-height:.9;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:1.5rem">BELLADONNA</div>
-    <div style="display:flex;gap:2.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:1.5rem">
-      ${s.instagram ? `<div style="text-align:center"><div style="font-size:11px;font-family:var(--cinzel);letter-spacing:.1em;color:var(--text3);margin-bottom:4px">INSTAGRAM</div><div style="font-family:var(--display);font-size:clamp(20px,3vw,36px);color:var(--text);letter-spacing:.06em">${s.instagram}</div></div>` : ''}
-      ${s.qr ? `<img src="${s.qr}" style="width:min(140px,18vw);height:min(140px,18vw);border-radius:8px;border:2px solid var(--gold-glow);object-fit:contain;background:#fff;padding:6px" onerror="this.style.display='none'"/>` : ''}
-      ${s.tiktok ? `<div style="text-align:center"><div style="font-size:11px;font-family:var(--cinzel);letter-spacing:.1em;color:var(--text3);margin-bottom:4px">TIKTOK</div><div style="font-family:var(--display);font-size:clamp(20px,3vw,36px);color:var(--text);letter-spacing:.06em">${s.tiktok}</div></div>` : ''}
-    </div>
-    ${s.website ? `<div style="font-family:var(--serif);font-style:italic;font-size:clamp(14px,2vw,20px);color:var(--text2)">${s.website}</div>` : ''}
-    ${s.tagline ? `<div style="font-family:var(--serif);font-style:italic;font-size:clamp(13px,1.6vw,17px);color:var(--text3);margin-top:.5rem">${s.tagline}</div>` : ''}
-  `;
-  container.appendChild(el);
-}
-
-function renderRules(container, round) {
-  // Find rules from catType
-  const catType = catTypes.find(t => t.id === round.catType);
-  const rules = catType?.rules || 'Rules for this round will appear here.';
-  const typeName = catType?.name || round.title || round.tabName;
-  const el = document.createElement('div');
-  el.className = 'slide slide-intro active';
-  el.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 4rem;text-align:center;';
-  el.innerHTML = `
-    <div style="font-family:var(--cinzel);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-bottom:1rem">How to Play</div>
-    <div style="font-family:var(--display);font-size:clamp(36px,6vw,72px);letter-spacing:.04em;line-height:.9;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:1.5rem">${typeName.toUpperCase()}</div>
-    <div style="font-family:var(--serif);font-size:clamp(16px,2.2vw,24px);color:var(--text2);line-height:1.7;max-width:700px;white-space:pre-wrap">${rules}</div>
-  `;
-  container.appendChild(el);
-}
-
-function renderInterstitial(container, round) {
-  const el = document.createElement('div');
-  el.className = 'slide slide-intro active';
-  el.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:3rem;';
-  el.innerHTML = `
-    <div style="font-family:var(--cinzel);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-bottom:1rem">Pass 1 Complete</div>
-    <div style="font-family:var(--display);font-size:clamp(48px,9vw,110px);letter-spacing:.04em;line-height:.9;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:1.2rem">READY FOR<br>THE ANSWERS?</div>
-    <div style="font-family:var(--serif);font-style:italic;font-size:clamp(16px,2.2vw,24px);color:var(--text2)">Press → to go through them together</div>
-  `;
-  container.appendChild(el);
-}
-
-function renderThankyou(container, round) {
-  // Only show on last round — otherwise show end slide
-  if(state.roundIndex < state.rounds.length - 1) {
-    renderEnd(container, round);
-    return;
-  }
-  // Fullscreen image — set as pres-bg
-  const bg = document.getElementById('pres-bg');
-  if(round.thankYouUrl) {
-    bg.style.backgroundImage = `url('${round.thankYouUrl}')`;
-    bg.style.background = '';
-    bg.classList.remove('no-img');
-  }
-  // Empty container — just the background image
-  const el = document.createElement('div');
-  el.style.cssText = 'position:absolute;inset:0;';
-  container.appendChild(el);
-}
-
 function renderSlide(container, round) {
-  // Slide index within slideshow: subtract PREFIX (intro+followus+rules = 3)
-  const slideIdx = state.slideIndex - PREFIX - 1; // 0-based
-  const slide = round.slides[slideIdx];
+  const slide = round.slides[state.slideIndex - 1];
   if(!slide) return;
+  // Set pres-bg to black so nothing bleeds through
   const bg = document.getElementById('pres-bg');
   bg.style.backgroundImage = 'none';
   bg.style.background = '#000';
@@ -883,27 +732,25 @@ function renderSlide(container, round) {
 }
 
 function renderQuestion(container, round) {
-  const { qIndex, isPass2 } = questionInfo();
-  const q = round.questions[qIndex];
+  const q = currentQuestion();
   const n = round.questions.length;
+  const qNum = state.slideIndex;
 
-  // Progress dots
+  // Progress dots (max 20 shown)
   const dotsToShow = Math.min(n, 20);
   let dots = '';
-  for(let i=0;i<dotsToShow;i++) {
-    const cls = i < qIndex ? 'done' : i === qIndex ? 'current' : '';
+  for(let i=1;i<=dotsToShow;i++) {
+    const cls = i < qNum ? 'done' : i === qNum ? 'current' : '';
     dots += `<div class="q-progress-dot ${cls}"></div>`;
   }
-
-  const passLabel = round.twoPass && isPass2
-    ? `<span style="color:var(--gold);font-size:8px;letter-spacing:.12em;display:block;margin-top:2px">ANSWERS PASS</span>`
-    : '';
 
   // MC choices
   let optionsHtml = '';
   if(q.type === 'mc') {
-    if(!q._choices) q._choices = buildMCChoices(q);
-    const items = q._choices.map(c=>`
+    const choices = buildMCChoices(q);
+    // store on question for answer reveal
+    q._choices = choices;
+    const items = choices.map(c=>`
       <div class="mc-opt">
         <div class="mc-opt-letter">${c.label}</div>
         <div class="mc-opt-text">${c.text}</div>
@@ -916,11 +763,11 @@ function renderQuestion(container, round) {
     </div>`;
   }
 
-  // Image — hidden until loaded, removed on error
+  // Image
   let imageHtml = '';
-  if(q.imageUrl && q.imageUrl.trim()) {
+  if(q.imageUrl) {
     const src = driveViewUrl(q.imageUrl);
-    const wrapId = `img-${qIndex}-${isPass2?'b':'a'}`;
+    const wrapId = `img-wrap-${state.slideIndex}-${Date.now()}`;
     imageHtml = `<div class="q-image-wrap" id="${wrapId}" style="display:none">
       <img src="${src}"
         onload="var w=document.getElementById('${wrapId}');if(w)w.style.display='block'"
@@ -929,7 +776,7 @@ function renderQuestion(container, round) {
     </div>`;
   }
 
-  // Audio — only show if genuinely non-empty
+  // Audio
   let audioHtml = '';
   if(q.audioUrl && q.audioUrl.trim().length > 0) {
     const src = driveViewUrl(q.audioUrl);
@@ -939,10 +786,9 @@ function renderQuestion(container, round) {
     </button>`;
   }
 
-  // Answer label
+  // Answer (hidden until revealed)
   let answerLabel = q.answer;
-  if(q.type === 'mc') {
-    if(!q._choices) q._choices = buildMCChoices(q);
+  if(q.type === 'mc' && q._choices) {
     const correct = q._choices.find(c=>c.correct);
     if(correct) answerLabel = `${correct.label} — ${q.answer}`;
   }
@@ -951,7 +797,7 @@ function renderQuestion(container, round) {
     <div class="answer-overlay">
       <div class="answer-label">Answer</div>
       <div class="answer-text">${answerLabel}</div>
-      <div class="answer-next-hint">Press Space or → for next</div>
+      <div class="answer-next-hint">Press → for next question</div>
     </div>` : '';
 
   const el = document.createElement('div');
@@ -960,9 +806,9 @@ function renderQuestion(container, round) {
   el.style.inset = '0';
   el.innerHTML = `
     <div class="q-header">
-      <div class="q-num-badge">${String(qIndex+1).padStart(2,'0')}</div>
+      <div class="q-num-badge">${String(qNum).padStart(2,'0')}</div>
       <div class="q-round-label">
-        ${round.tabName||round.title}${passLabel}
+        ${round.tabName}<br>
         <div class="q-progress">${dots}</div>
       </div>
     </div>
@@ -983,13 +829,17 @@ function renderAnswerKey(container, round) {
   const items = round.questions.map((q,i)=>`
     <div class="ak-item">
       <div class="ak-num">${i+1}</div>
-      <div class="ak-a">${q.answer}</div>
+      <div class="ak-qa">
+        <div class="ak-q">${q.question}</div>
+        <div class="ak-a">${q.answer}</div>
+      </div>
     </div>`).join('');
+
   const el = document.createElement('div');
   el.className = 'slide slide-answerkey active';
   el.style.position='absolute';el.style.inset='0';
   el.innerHTML = `
-    <div class="ak-title">Answer Key</div>
+    <div class="ak-title">Answer Key — ${round.tabName}</div>
     <div class="ak-grid">${items}</div>
   `;
   container.appendChild(el);
@@ -998,7 +848,6 @@ function renderAnswerKey(container, round) {
 function renderEnd(container, round) {
   const isLastRound = state.roundIndex >= state.rounds.length - 1;
   const isMiniGame = state.jumpingFromMain;
-  const showAKBtn = !round.twoPass && !round.showAnswers; // only show if not twoPass and not per-question reveal
   const el = document.createElement('div');
   el.className = 'slide slide-end active';
   el.style.position='absolute';el.style.inset='0';
@@ -1014,15 +863,15 @@ function renderEnd(container, round) {
   }
 
   el.innerHTML = `
-    <div class="end-label">${round.tabName||round.title} Complete</div>
+    <div class="end-label">${round.tabName} Complete</div>
     <div class="end-title">${isMiniGame ? 'Mini Game<br>Done!' : isLastRound ? 'That\'s a<br>Wrap!' : 'Round<br>Done!'}</div>
     <div class="end-sub">${isMiniGame
-      ? 'Ready to head back?'
+      ? `Ready to head back?`
       : isLastRound
-        ? 'Thanks for playing!'
+        ? 'Thanks for playing. Check the answer key before wrapping up.'
         : `Up next: Round ${state.roundIndex+2}`}</div>
     <div class="end-btn-row">
-      ${showAKBtn ? `<button class="end-btn end-btn-ghost" onclick="showAnswerKey()">View Answer Key</button>` : ''}
+      <button class="end-btn end-btn-ghost" onclick="showAnswerKey()">View Answer Key</button>
       ${btnHtml}
     </div>
     ${isMiniGame ? `<div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem;animation:pulse 2s ease-in-out infinite">Press → to return to main round</div>` :
@@ -1066,9 +915,9 @@ function doJump(i) {
   jumpToMiniGame(i);
 }
 
-// Pause points: fire when user is ON slide 7 or 9 (after intro+followus+rules+5 slides, then +2 more)
-// Segment: 7 slides (PREFIX=3 + 4 content) → GAME TIME → 2 more → GAME TIME → 1 last
-const MAIN_ROUND_PAUSE_POINTS = new Set([7, 9]);
+// Pause points: fire when user presses → WHILE ON slides 5 or 7
+// The slide plays, then pressing → shows GAME TIME (without advancing)
+const MAIN_ROUND_PAUSE_POINTS = new Set([5, 7]);
 
 function shouldPauseForMiniGame(round) {
   if(!round.isMainRound || round.type !== 'slideshow' || state.mainRoundIndex < 0) return false;
@@ -1079,81 +928,99 @@ function shouldPauseForMiniGame(round) {
   return true;
 }
 
-// ═══════════════════════════════════════════════════════
-//  CENTRAL ADVANCE / RETREAT
-// ═══════════════════════════════════════════════════════
-function advanceSlide() {
+document.addEventListener('keydown', e => {
+  // Don't capture if typing in setup inputs
+  if(e.target.tagName === 'INPUT') return;
+  if(document.getElementById('pres-screen').classList.contains('show') === false) return;
+
   const type = slideType();
-  if(type === S_JUMP) return;
 
-  // Simple advance types
-  if(type === S_INTRO || type === S_FOLLOWUS || type === S_RULES ||
-     type === S_INTERSTITIAL || type === S_THANKYOU) {
-    const max = slideCount() - 1;
-    if(state.slideIndex < max) { state.slideIndex++; state.answerVisible=false; renderCurrentSlide(); }
-    return;
+  if(e.key === 'Escape') {
+    exitPresentation(); return;
   }
 
-  if(type === S_SLIDE) {
-    const round = currentRound();
-    if(shouldPauseForMiniGame(round)) { renderJumpScreen(); return; }
-    const max = slideCount() - 1;
-    if(state.slideIndex < max) { state.slideIndex++; state.answerVisible=false; renderCurrentSlide(); }
-    return;
-  }
-
-  if(type === S_QUESTION) {
-    const round = currentRound();
-    const { isPass2 } = questionInfo();
-    const shouldReveal = (round.twoPass && isPass2) || (!round.twoPass && round.showAnswers !== false);
-    if(shouldReveal && !state.answerVisible) {
-      state.answerVisible = true; renderCurrentSlide();
-    } else {
-      state.answerVisible = false;
+  if(e.key === ' ' || e.code === 'Space') {
+    e.preventDefault();
+    if(type === S_JUMP) return;
+    if(type === S_INTRO || type === S_SLIDE) {
+      const round = currentRound();
       const max = slideCount() - 1;
-      if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
+      // Check pause BEFORE advancing — slide has already played
+      if(type === S_SLIDE && shouldPauseForMiniGame(round)) {
+        renderJumpScreen(); return;
+      }
+      if(state.slideIndex < max) {
+        state.slideIndex++;
+        renderCurrentSlide();
+      }
+    } else if(type === S_QUESTION) {
+      const showAnswers = currentRound().showAnswers !== false;
+      if(showAnswers && !state.answerVisible) {
+        state.answerVisible = true;
+        renderCurrentSlide();
+      } else {
+        state.answerVisible = false;
+        const max = slideCount() - 1;
+        if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
+      }
     }
     return;
   }
 
-  if(type === S_ANSWERKEY) {
-    state.answerVisible = false;
-    const max = slideCount() - 1;
-    if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
+  if(e.key === 'ArrowRight' || e.key === 'Enter') {
+    e.preventDefault();
+    if(type === S_JUMP) return;
+    if(type === S_INTRO || type === S_SLIDE) {
+      const round = currentRound();
+      const max = slideCount() - 1;
+      // Check pause BEFORE advancing — slide has already played
+      if(type === S_SLIDE && shouldPauseForMiniGame(round)) {
+        renderJumpScreen(); return;
+      }
+      if(state.slideIndex < max) {
+        state.slideIndex++;
+        renderCurrentSlide();
+      }
+    } else if(type === S_QUESTION) {
+      const showAnswers = currentRound().showAnswers !== false;
+      if(showAnswers && !state.answerVisible) {
+        state.answerVisible = true; renderCurrentSlide();
+      } else {
+        state.answerVisible = false;
+        const max = slideCount() - 1;
+        if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
+      }
+    } else if(type === S_ANSWERKEY) {
+      const n = currentRound().questions.length;
+      const hasAnswerKey = !currentRound().showAnswers;
+      state.slideIndex = n + (hasAnswerKey ? 2 : 1); renderCurrentSlide();
+    } else if(type === S_END) {
+      if(state.jumpingFromMain) {
+        returnToMainRound();
+      } else if(state.roundIndex < state.rounds.length - 1) {
+        goNextRound();
+      }
+    }
     return;
   }
 
-  if(type === S_END) {
-    if(state.jumpingFromMain) returnToMainRound();
-    else if(state.roundIndex < state.rounds.length - 1) goNextRound();
-  }
-}
-
-function retreatSlide() {
-  if(slideType() === S_JUMP) return;
-  state.answerVisible = false;
-  state.currentType = null;
-  if(state.slideIndex > 0) { state.slideIndex--; renderCurrentSlide(); }
-}
-
-document.addEventListener('keydown', e => {
-  if(e.target.tagName === 'INPUT') return;
-  if(!document.getElementById('pres-screen').classList.contains('show')) return;
-
-  if(e.key === 'Escape') { exitPresentation(); return; }
-
-  // Forward: Space, →, Enter, PageDown (clicker forward)
-  if(e.key === ' ' || e.code === 'Space' || e.key === 'ArrowRight' || e.key === 'Enter' || e.key === 'PageDown') {
-    e.preventDefault(); advanceSlide(); return;
+  if(e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if(type === S_JUMP) return; // no going back from GAME TIME screen
+    state.answerVisible = false;
+    if(state.slideIndex > 0) { state.slideIndex--; renderCurrentSlide(); }
+    return;
   }
 
-  // Back: ←, PageUp (clicker back)
-  if(e.key === 'ArrowLeft' || e.key === 'PageUp') {
-    e.preventDefault(); retreatSlide(); return;
+  if(e.key === 'a' || e.key === 'A') {
+    e.preventDefault();
+    showAnswerKey();
+    return;
   }
 
-  // J+number = jump to mini game
+  // J+number = jump to mini game (e.g. J then 1)
   if((e.key === 'j' || e.key === 'J') && state.mainRoundIndex >= 0 && state.roundIndex === state.mainRoundIndex) {
+    // flag waiting for number
     state._jumpPending = true;
     setTimeout(()=>{ state._jumpPending = false; }, 1500);
     return;
@@ -1167,22 +1034,18 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// Click anywhere on slide = advance (mouse / clicker click)
-document.getElementById('pres-screen').addEventListener('click', e => {
-  if(e.target.closest('button')) return;
-  if(!document.getElementById('pres-screen').classList.contains('show')) return;
-  advanceSlide();
-});
-
 // ═══════════════════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════════════════
 function driveViewUrl(url) {
   if(!url) return url;
+  // Google Drive file share link → thumbnail (more reliable than uc?export=view)
   const fm = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   if(fm) return `https://drive.google.com/thumbnail?id=${fm[1]}&sz=w800`;
+  // Google Drive uc?id= or open?id= format
   const fm2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if(fm2) return `https://drive.google.com/thumbnail?id=${fm2[1]}&sz=w800`;
+  // Everything else (Wix, imgur, direct URLs) — pass through unchanged
   return url;
 }
 
@@ -1195,8 +1058,8 @@ function playAudio(src) {
 function exitPresentation() {
   document.getElementById('pres-screen').classList.remove('show');
   document.getElementById('hud').classList.remove('show');
-  document.getElementById('fullscreen-btn').style.display = 'none';
   document.getElementById('setup-screen').style.display = 'flex';
+  // Show return button if we have an active presentation
   if(state.rounds.length > 0) {
     document.getElementById('setup-return-btn').style.display = 'block';
   }
@@ -1208,7 +1071,6 @@ function returnToPresentation() {
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
-  document.getElementById('fullscreen-btn').style.display = 'block';
   document.documentElement.requestFullscreen?.().catch(()=>{});
 }
 
@@ -1247,14 +1109,6 @@ function checkUrlParams() {
 
   const roundCount = parseInt(p.get('rounds'))||1;
   const rounds = [];
-  // Read app-level settings and category types
-  let appSettings = {};
-  let catTypes = [];
-  try { appSettings = JSON.parse(decodeURIComponent(p.get('settings')||'{}')); } catch(e){}
-  try { catTypes = JSON.parse(decodeURIComponent(p.get('catTypes')||'[]')); } catch(e){}
-  state.appSettings = appSettings;
-  state.catTypes = catTypes;
-
   for(let i=0;i<roundCount;i++) {
     const url = p.get(`r${i}_url`);
     const tab = p.get(`r${i}_tab`);
@@ -1266,17 +1120,13 @@ function checkUrlParams() {
       bgImage:p.get(`r${i}_bg`)||'',
       bgIntro:p.get(`r${i}_bgIntro`)||p.get(`r${i}_bg`)||'',
       bgQuestion:p.get(`r${i}_bgQuestion`)||p.get(`r${i}_bg`)||'',
-      bgPlain:p.get(`r${i}_bgPlain`)||'',
-      thankYouUrl:p.get(`r${i}_thankYou`)||'',
-      catType:p.get(`r${i}_catType`)||'',
       title:p.get(`r${i}_name`)||`Round ${i+1}`,
       questionCount:qCount,
       showAnswers: p.get(`r${i}_showAnswers`) !== '0',
-      twoPass: p.get(`r${i}_twoPass`) === '1',
       isMainRound: p.get(`r${i}_isMainRound`) === '1',
       segmentSize: parseInt(p.get(`r${i}_segmentSize`))||5,
-      segmentStart: 0,
-      slides:[]
+      segmentStart: 0, // which slide index the current segment started at
+      slides:[] // for slideshow type
     });
   }
   if(!rounds.length) return false;
@@ -1383,12 +1233,12 @@ async function launchFromSetup() {
   state.roundIndex = state.mainRoundIndex >= 0 ? state.mainRoundIndex : 0;
   state.slideIndex = 0;
 
+  // Show return button for future use
   document.getElementById('setup-return-btn').style.display = 'block';
 
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
-  document.getElementById('fullscreen-btn').style.display = 'block';
   renderCurrentSlide();
   document.documentElement.requestFullscreen?.().catch(()=>{});
 }
