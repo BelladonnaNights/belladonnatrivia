@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Trivia Admin — Belladonna</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080808;--surface:#111111;--surface2:#181818;--surface3:#222222;
+  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.13);--border3:rgba(255,255,255,.22);
+  --text:#f0ede8;--text2:#b0a898;--text3:#5a5248;
+  --gold:#c9a84c;--gold2:#e8c96a;--gold3:#f5df90;
+  --gold-shine:linear-gradient(135deg,#c9a84c 0%,#f5df90 45%,#c9a84c 70%,#e2b84a 100%);
+  --gold-dim:rgba(201,168,76,.10);--gold-glow:rgba(201,168,76,.28);--gold-glow2:rgba(201,168,76,.5);
+  --red:#e74c3c;--red-dim:rgba(231,76,60,.12);
+  --green:#2ecc71;--green-dim:rgba(46,204,113,.12);
+  --radius:8px;--radius-lg:14px;
+  --display:'Bebas Neue',sans-serif;
+  --cinzel:'Cinzel',serif;
+  --serif:'EB Garamond',serif;
+  --font:'DM Sans',sans-serif;
+}
+html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var(--text)}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-thumb{background:rgba(201,168,76,.2);border-radius:3px}
+
+/* ── NAV ── */
+.nav{
+  position:sticky;top:0;z-index:200;
+  background:rgba(8,8,8,.95);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  padding:0 2rem;height:64px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.nav-left{display:flex;align-items:center;gap:14px}
+.nav-title{font-family:var(--display);font-size:24px;letter-spacing:.06em;line-height:1}
+.nav-title span{background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.nav-subtitle{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-left:4px;padding-left:14px;border-left:1px solid var(--border2)}
+.nav-right{display:flex;align-items:center;gap:10px}
+.nav-btn{
+  font-family:var(--cinzel);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  border-radius:var(--radius);padding:8px 16px;cursor:pointer;transition:all .2s;border:none;
+}
+.nav-btn-ghost{background:transparent;color:var(--gold);border:1px solid var(--gold-glow)}
+.nav-btn-ghost:hover{background:var(--gold-dim)}
+.nav-btn-primary{background:var(--gold-shine);color:#000;font-weight:600}
+.nav-btn-primary:hover{opacity:.88}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0;transition:background .3s}
+.sync-dot.synced{background:var(--green)}
+.sync-dot.syncing{background:var(--gold);animation:pulse .8s ease-in-out infinite}
+.sync-dot.error{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+.sync-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
+
+/* ── LAYOUT ── */
+.layout{display:grid;grid-template-columns:1fr 340px;gap:0;min-height:calc(100vh - 64px)}
+
+/* ── LEFT: CATEGORY LIBRARY ── */
+.library{padding:2rem;border-right:1px solid var(--border)}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem}
+.section-title{font-family:var(--display);font-size:32px;letter-spacing:.05em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.section-sub{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-top:2px}
+.add-btn{
+  font-family:var(--cinzel);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);
+  padding:9px 18px;cursor:pointer;transition:opacity .2s;font-weight:600;white-space:nowrap;
+}
+.add-btn:hover{opacity:.85}
+
+/* Filter pills */
+.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.25rem}
+.pill{
+  background:transparent;border:1px solid var(--border2);border-radius:99px;
+  padding:5px 14px;font-size:10px;font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--text3);cursor:pointer;transition:all .2s;
+}
+.pill:hover{border-color:var(--gold-glow);color:var(--gold2)}
+.pill.active{background:var(--gold-dim);border-color:var(--gold-glow2);color:var(--gold2)}
+
+/* Category grid */
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.cat-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  overflow:hidden;cursor:grab;transition:border-color .2s,transform .2s,box-shadow .2s;
+  position:relative;user-select:none;
+}
+.cat-card:hover{border-color:var(--gold-glow);transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.cat-card.dragging{opacity:.45;transform:scale(.97);cursor:grabbing}
+.cat-card.reorder-target{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-glow),4px 0 0 0 var(--gold);transform:translateY(-2px)}
+
+.cat-banner{
+  width:100%;aspect-ratio:16/4;object-fit:cover;display:block;
+  background:var(--surface2);
+}
+.cat-banner-placeholder{
+  width:100%;aspect-ratio:16/4;
+  background:linear-gradient(135deg,var(--surface2),var(--surface3));
+  display:flex;align-items:center;justify-content:center;
+  border-bottom:1px solid var(--border);
+}
+.cat-banner-placeholder span{font-family:var(--display);font-size:18px;letter-spacing:.12em;color:var(--text3)}
+.cat-body{padding:11px 14px 13px}
+.cat-title{font-family:var(--cinzel);font-size:13px;font-weight:600;letter-spacing:.07em;color:var(--text);margin-bottom:5px}
+.cat-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.cat-genre{
+  font-size:9px;background:var(--gold-dim);border-radius:99px;
+  padding:2px 9px;border:1px solid var(--gold-glow);
+  font-family:var(--cinzel);letter-spacing:.06em;text-transform:uppercase;color:var(--gold2);
+}
+.cat-tab{font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic}
+.cat-actions{
+  position:absolute;top:8px;right:8px;display:flex;gap:5px;
+  opacity:0;transition:opacity .15s;
+}
+.cat-card:hover .cat-actions{opacity:1}
+.cat-action-btn{
+  width:26px;height:26px;border-radius:50%;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:12px;
+  transition:all .15s;backdrop-filter:blur(8px);
+}
+.cat-action-edit{background:rgba(10,10,10,.8);color:var(--gold)}
+.cat-action-edit:hover{background:var(--gold);color:#000}
+.cat-action-del{background:rgba(10,10,10,.8);color:var(--text3)}
+.cat-action-del:hover{background:var(--red);color:#fff}
+.drag-hint{
+  position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+  font-family:var(--cinzel);font-size:8px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text3);background:rgba(8,8,8,.7);border-radius:99px;padding:2px 8px;
+  opacity:0;transition:opacity .15s;white-space:nowrap;
+}
+.cat-card:hover .drag-hint{opacity:1}
+
+.empty-library{
+  grid-column:1/-1;text-align:center;padding:4rem 1rem;
+}
+.empty-icon{font-size:32px;margin-bottom:12px;color:var(--text3)}
+.empty-text{font-family:var(--serif);font-style:italic;color:var(--text3);font-size:15px}
+
+/* ── RIGHT: TONIGHT'S LINEUP ── */
+.lineup{padding:2rem;display:flex;flex-direction:column;gap:0;background:var(--surface)}
+.lineup-header{margin-bottom:1.5rem}
+.lineup-title{font-family:var(--display);font-size:28px;letter-spacing:.05em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.lineup-sub{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-top:3px}
+
+.round-slots{display:flex;flex-direction:column;gap:10px;margin-bottom:1.5rem}
+.round-slot{
+  border:1.5px dashed rgba(201,168,76,.2);border-radius:var(--radius-lg);
+  padding:14px;min-height:90px;transition:all .25s;
+  display:flex;flex-direction:column;
+}
+.round-slot.drag-target{border-color:var(--gold);background:var(--gold-dim)}
+.round-slot.has-card{border-style:solid;border-color:var(--border2)}
+.round-slot-label{
+  font-family:var(--cinzel);font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:8px;
+}
+.round-slot-empty{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);
+}
+.round-slot-card{
+  background:var(--surface2);border-radius:var(--radius);
+  padding:10px 12px;display:flex;align-items:center;gap:10px;
+  border:1px solid var(--border2);
+}
+.round-slot-card-thumb{
+  width:48px;height:12px;border-radius:3px;object-fit:cover;flex-shrink:0;
+  background:var(--surface3);
+}
+.round-slot-card-info{flex:1;min-width:0}
+.round-slot-card-name{font-family:var(--cinzel);font-size:11px;letter-spacing:.06em;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.round-slot-card-tab{font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.round-slot-remove{background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:2px;transition:color .15s;flex-shrink:0}
+.round-slot-remove:hover{color:var(--red)}
+
+.lineup-divider{height:1px;background:var(--border);margin:1.25rem 0}
+
+/* API Key in lineup */
+.lineup-field-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.lineup-input{
+  width:100%;background:rgba(255,255,255,.04);border:.5px solid var(--border2);
+  border-radius:var(--radius);padding:9px 12px;font-size:13px;font-family:var(--font);
+  color:var(--text);transition:border-color .2s;margin-bottom:10px;
+}
+.lineup-input:focus{outline:none;border-color:var(--gold-glow2)}
+.lineup-input::placeholder{color:var(--text3)}
+.lineup-row{display:flex;gap:8px;margin-bottom:10px}
+.lineup-row .lineup-input{margin-bottom:0}
+
+.launch-btn{
+  width:100%;padding:14px;font-family:var(--cinzel);font-size:12px;font-weight:700;
+  letter-spacing:.16em;text-transform:uppercase;
+  background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);
+  cursor:pointer;transition:opacity .2s,transform .15s;margin-top:auto;
+}
+.launch-btn:hover{opacity:.88;transform:translateY(-1px)}
+.launch-btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+
+/* ── MODAL ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+.overlay.show{display:flex}
+.modal{
+  background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);
+  width:min(580px,95vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;
+}
+.modal-header{padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-family:var(--display);font-size:24px;letter-spacing:.06em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.modal-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;transition:color .15s;padding:2px 6px}
+.modal-close:hover{color:var(--text)}
+.modal-body{padding:1.5rem;overflow-y:auto;display:flex;flex-direction:column;gap:1rem}
+.modal-footer{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+
+.field{display:flex;flex-direction:column;gap:5px}
+.field-label{font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
+.field-input{
+  background:rgba(255,255,255,.04);border:.5px solid var(--border2);border-radius:var(--radius);
+  padding:10px 13px;font-size:14px;font-family:var(--font);color:var(--text);transition:border-color .2s;
+}
+.field-input:focus{outline:none;border-color:var(--gold-glow2)}
+.field-input::placeholder{color:var(--text3)}
+.field-row{display:flex;gap:10px}
+.field-row .field{flex:1}
+.field-hint{font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic}
+
+.btn{font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;border-radius:var(--radius);padding:9px 18px;cursor:pointer;transition:all .15s}
+.btn-primary{background:var(--gold-shine);color:#000;border:none;font-weight:600}
+.btn-primary:hover{opacity:.85}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border2)}
+.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+.btn-danger{background:transparent;color:var(--red);border:1px solid rgba(231,76,60,.3)}
+.btn-danger:hover{background:var(--red-dim)}
+
+/* Preview banner in modal */
+.banner-preview{width:100%;aspect-ratio:16/4;border-radius:var(--radius);object-fit:cover;background:var(--surface2);border:1px solid var(--border);display:block}
+.banner-preview-placeholder{width:100%;aspect-ratio:16/4;border-radius:var(--radius);background:var(--surface2);border:1px dashed var(--border2);display:flex;align-items:center;justify-content:center}
+.banner-preview-placeholder span{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)}
+
+/* Toast */
+#toast{
+  position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(10px);
+  background:rgba(201,168,76,.15);border:1px solid var(--gold-glow);
+  border-radius:99px;padding:8px 20px;
+  font-family:var(--cinzel);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);
+  opacity:0;transition:all .3s;z-index:999;pointer-events:none;white-space:nowrap;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.error{background:rgba(231,76,60,.15);border-color:rgba(231,76,60,.4);color:var(--red)}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-left">
+    <div class="nav-title">BELLADONNA <span>TRIVIA</span></div>
+    <div class="nav-subtitle">Category Manager</div>
+  </div>
+  <div class="nav-right">
+    <div class="sync-dot" id="sync-dot"></div>
+    <div class="sync-label" id="sync-label">connecting…</div>
+    <button class="nav-btn nav-btn-ghost" onclick="openAdminLogin()" id="admin-gear-btn" title="Admin">
+      ⚙ Admin
+    </button>
+    <button class="nav-btn nav-btn-ghost" onclick="openChangePassword()" id="admin-pw-btn" style="display:none;font-size:9px">
+      Change Password
+    </button>
+    <button class="nav-btn nav-btn-ghost" onclick="exitAdminMode()" id="admin-exit-btn" style="display:none;color:var(--red);border-color:rgba(231,76,60,.3)">
+      Exit Admin
+    </button>
+  </div>
+</nav>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- LEFT: LIBRARY -->
+  <div class="library">
+    <div class="section-header">
+      <div>
+        <div class="section-title">CATEGORY LIBRARY</div>
+        <div class="section-sub">Drag any category into a round slot →</div>
+      </div>
+      <button class="add-btn" onclick="openModal()" id="add-cat-btn" style="display:none">+ New Category</button>
+    </div>
+
+    <div style="position:relative;margin-bottom:10px">
+      <input id="search-input" class="field-input" placeholder="Search categories…" oninput="renderLibrary()"
+        style="width:100%;padding-left:34px;font-size:13px"/>
+      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;pointer-events:none">⌕</span>
+    </div>
+
+    <div class="filter-bar" id="filter-bar">
+      <div class="pill active" data-genre="all" onclick="filterGenre('all',this)">All</div>
+    </div>
+
+    <div class="cat-grid" id="cat-grid">
+      <div class="empty-library">
+        <div class="empty-icon">✦</div>
+        <div class="empty-text">No categories yet — add your first one</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: LINEUP -->
+  <div class="lineup">
+    <div class="lineup-header">
+      <div class="lineup-title">TONIGHT'S LINEUP</div>
+      <div class="lineup-sub">Drop categories into rounds below</div>
+    </div>
+
+    <div class="round-slots" id="round-slots">
+      <div class="round-slot" id="slot-0" data-slot="0" ondragover="onSlotDragOver(event,0)" ondrop="onSlotDrop(event,0)" ondragleave="onSlotDragLeave(0)">
+        <div class="round-slot-label">Round 1</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+      <div class="round-slot" id="slot-1" data-slot="1" ondragover="onSlotDragOver(event,1)" ondrop="onSlotDrop(event,1)" ondragleave="onSlotDragLeave(1)">
+        <div class="round-slot-label">Round 2</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+      <div class="round-slot" id="slot-2" data-slot="2" ondragover="onSlotDragOver(event,2)" ondrop="onSlotDrop(event,2)" ondragleave="onSlotDragLeave(2)">
+        <div class="round-slot-label">Round 3</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+      <div class="round-slot" id="slot-3" data-slot="3" ondragover="onSlotDragOver(event,3)" ondrop="onSlotDrop(event,3)" ondragleave="onSlotDragLeave(3)">
+        <div class="round-slot-label">Round 4</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+      <div class="round-slot" id="slot-4" data-slot="4" ondragover="onSlotDragOver(event,4)" ondrop="onSlotDrop(event,4)" ondragleave="onSlotDragLeave(4)">
+        <div class="round-slot-label">Round 5</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+    </div>
+
+    <div class="lineup-divider"></div>
+
+    <div class="lineup-field-label">Questions per Round (default: 20)</div>
+    <input class="lineup-input" id="lineup-q-count" type="number" value="20" min="1" max="50" style="margin-bottom:1.25rem"/>
+
+    <button class="launch-btn" id="launch-btn" onclick="launchTrivia()">Launch Trivia Night →</button>
+  </div>
+</div>
+
+<!-- PASSWORD MODAL -->
+<div class="overlay" id="pw-modal-overlay">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-header">
+      <div class="modal-title">⚙ ADMIN</div>
+      <button class="modal-close" onclick="closeAdminLogin()">×</button>
+    </div>
+    <div class="modal-body" style="gap:.75rem">
+      <div style="font-family:var(--serif);font-style:italic;font-size:14px;color:var(--text3)">Enter your admin password to edit categories.</div>
+      <input id="pw-input" type="password" class="field-input" placeholder="Password" style="letter-spacing:.2em;text-align:center" onkeydown="if(event.key==='Enter')checkPassword()"/>
+      <div id="pw-error" style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--red);opacity:0;transition:opacity .2s;text-align:center">Incorrect password</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeAdminLogin()">Cancel</button>
+      <button class="btn btn-primary" onclick="checkPassword()">Enter</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANGE PASSWORD MODAL -->
+<div class="overlay" id="change-pw-overlay" onclick="if(event.target===this)closeChangePassword()">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-header">
+      <div class="modal-title">CHANGE PASSWORD</div>
+      <button class="modal-close" onclick="closeChangePassword()">×</button>
+    </div>
+    <div class="modal-body" style="gap:.75rem">
+      <div class="field">
+        <div class="field-label">Current Password</div>
+        <input id="cpw-current" type="password" class="field-input" placeholder="Current password" style="letter-spacing:.1em"/>
+      </div>
+      <div class="field">
+        <div class="field-label">New Password</div>
+        <input id="cpw-new" type="password" class="field-input" placeholder="New password" style="letter-spacing:.1em"/>
+      </div>
+      <div class="field">
+        <div class="field-label">Confirm New Password</div>
+        <input id="cpw-confirm" type="password" class="field-input" placeholder="Confirm new password" style="letter-spacing:.1em" onkeydown="if(event.key==='Enter')saveNewPassword()"/>
+      </div>
+      <div id="cpw-error" style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--red);opacity:0;transition:opacity .2s">Passwords don't match</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeChangePassword()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewPassword()">Save Password</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD/EDIT MODAL -->
+<div class="overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">NEW CATEGORY</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <div class="field-label">Category Name</div>
+        <input class="field-input" id="f-name" placeholder="e.g. General Knowledge"/>
+      </div>
+      <div class="field">
+        <div class="field-label">Tags (comma separated)</div>
+        <input class="field-input" id="f-genre" placeholder="e.g. Pop Culture, Music, 90s"/>
+        <div class="field-hint">Add multiple tags separated by commas</div>
+      </div>
+
+      <!-- TYPE TOGGLE -->
+      <div class="field">
+        <div class="field-label">Category Type</div>
+        <div style="display:flex;gap:8px">
+          <button id="type-btn-trivia" onclick="setCatType('trivia')" class="btn btn-primary" style="flex:1">🎯 Trivia</button>
+          <button id="type-btn-slideshow" onclick="setCatType('slideshow')" class="btn btn-ghost" style="flex:1">🖼 Slideshow</button>
+        </div>
+      </div>
+
+      <!-- TRIVIA FIELDS -->
+      <div id="trivia-fields">
+        <div class="field" style="margin-bottom:1rem">
+          <div class="field-label">Google Sheet URL</div>
+          <input class="field-input" id="f-sheet" placeholder="https://docs.google.com/spreadsheets/d/…"/>
+        </div>
+        <div class="field">
+          <div class="field-label">Tab Name</div>
+          <input class="field-input" id="f-tab" placeholder="Exact tab name (case sensitive)"/>
+          <div class="field-hint">Must match the tab name exactly as it appears in your Sheet</div>
+        </div>
+      </div>
+
+      <!-- SLIDESHOW FIELDS -->
+      <div id="slideshow-fields" style="display:none">
+        <div class="field">
+          <div class="field-label">Image URLs — one per line</div>
+          <textarea class="field-input" id="f-folder" placeholder="https://example.com/slide1.png&#10;https://example.com/slide2.png&#10;https://example.com/slide3.png" rows="6" style="resize:vertical;line-height:1.6;font-size:12px;font-family:var(--font)"></textarea>
+          <div class="field-hint">Paste one image URL per line in the order you want slides to appear. Drive share links work too.</div>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:1rem">
+        <div class="field-label">Admin Banner Image URL</div>
+        <input class="field-input" id="f-bg" placeholder="https://… or Google Drive share link" oninput="previewBanner('f-bg','banner-preview-wrap')"/>
+        <div class="field-hint">Wide card image shown in the admin category library</div>
+        <div id="banner-preview-wrap" style="margin-top:8px">
+          <div class="banner-preview-placeholder"><span>Banner preview will appear here</span></div>
+        </div>
+      </div>
+      <div class="field" id="intro-bg-field">
+        <div class="field-label">Intro Slide Background URL</div>
+        <input class="field-input" id="f-bg-intro" placeholder="https://… or Google Drive share link" oninput="previewBanner('f-bg-intro','intro-preview-wrap')"/>
+        <div class="field-hint">Fullscreen background shown on the round intro slide</div>
+        <div id="intro-preview-wrap" style="margin-top:8px">
+          <div class="banner-preview-placeholder"><span>Intro slide preview will appear here</span></div>
+        </div>
+      </div>
+      <div class="field" id="question-bg-field">
+        <div class="field-label">Question Slide Background URL</div>
+        <input class="field-input" id="f-bg-question" placeholder="https://… or Google Drive share link" oninput="previewBanner('f-bg-question','question-preview-wrap')"/>
+        <div class="field-hint">Fullscreen background shown behind every question in this round</div>
+        <div id="question-preview-wrap" style="margin-top:8px">
+          <div class="banner-preview-placeholder"><span>Question slide preview will appear here</span></div>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-label">Notes (optional)</div>
+        <input class="field-input" id="f-notes" placeholder="Any notes about this category…"/>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="modal-delete-btn" style="display:none;margin-right:auto" onclick="deleteCategory()">Delete</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCategory()">Save Category</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  PASSWORD & ADMIN MODE
+// ═══════════════════════════════════════════════
+const DEFAULT_PASSWORD = '1111';
+let adminPassword = localStorage.getItem('trivia_admin_pw') || DEFAULT_PASSWORD;
+let adminMode = false;
+
+function openAdminLogin() {
+  document.getElementById('pw-modal-overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('pw-input').focus(), 100);
+}
+function closeAdminLogin() {
+  document.getElementById('pw-modal-overlay').classList.remove('show');
+  document.getElementById('pw-input').value = '';
+  document.getElementById('pw-error').style.opacity = '0';
+}
+function checkPassword() {
+  const val = document.getElementById('pw-input').value;
+  if(val === adminPassword) {
+    closeAdminLogin();
+    enterAdminMode();
+  } else {
+    const err = document.getElementById('pw-error');
+    err.style.opacity = '1';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-input').focus();
+    setTimeout(()=>err.style.opacity='0', 2000);
+  }
+}
+function enterAdminMode() {
+  adminMode = true;
+  document.getElementById('add-cat-btn').style.display = 'block';
+  document.getElementById('admin-gear-btn').style.display = 'none';
+  document.getElementById('admin-pw-btn').style.display = 'block';
+  document.getElementById('admin-exit-btn').style.display = 'block';
+  renderLibrary();
+  toast('Admin mode on — you can now edit categories.');
+}
+function exitAdminMode() {
+  adminMode = false;
+  document.getElementById('add-cat-btn').style.display = 'none';
+  document.getElementById('admin-gear-btn').style.display = 'block';
+  document.getElementById('admin-pw-btn').style.display = 'none';
+  document.getElementById('admin-exit-btn').style.display = 'none';
+  renderLibrary();
+  toast('Admin mode off.');
+}
+
+function openChangePassword() {
+  document.getElementById('change-pw-overlay').classList.add('show');
+  document.getElementById('cpw-current').value = '';
+  document.getElementById('cpw-new').value = '';
+  document.getElementById('cpw-confirm').value = '';
+  document.getElementById('cpw-error').style.opacity = '0';
+  setTimeout(()=>document.getElementById('cpw-current').focus(), 100);
+}
+function closeChangePassword() {
+  document.getElementById('change-pw-overlay').classList.remove('show');
+}
+function saveNewPassword() {
+  const current  = document.getElementById('cpw-current').value;
+  const newPw    = document.getElementById('cpw-new').value;
+  const confirm  = document.getElementById('cpw-confirm').value;
+  const errEl    = document.getElementById('cpw-error');
+
+  if(current !== adminPassword) {
+    errEl.textContent = 'Current password is incorrect.';
+    errEl.style.opacity = '1';
+    setTimeout(()=>errEl.style.opacity='0', 2500);
+    return;
+  }
+  if(!newPw) {
+    errEl.textContent = 'New password cannot be empty.';
+    errEl.style.opacity = '1';
+    setTimeout(()=>errEl.style.opacity='0', 2500);
+    return;
+  }
+  if(newPw !== confirm) {
+    errEl.textContent = "Passwords don't match.";
+    errEl.style.opacity = '1';
+    setTimeout(()=>errEl.style.opacity='0', 2500);
+    return;
+  }
+  adminPassword = newPw;
+  localStorage.setItem('trivia_admin_pw', newPw);
+  closeChangePassword();
+  toast('Password updated!');
+}
+
+// ═══════════════════════════════════════════════
+//  FIREBASE
+// ═══════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",
+  authDomain: "belladonnatrivia.firebaseapp.com",
+  databaseURL: "https://belladonnatrivia-default-rtdb.firebaseio.com",
+  projectId: "belladonnatrivia",
+  storageBucket: "belladonnatrivia.firebasestorage.app",
+  messagingSenderId: "658670195433",
+  appId: "1:658670195433:web:f66cbc32344f4d4d63d678"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// Sync status
+function setSyncStatus(status) {
+  const dot = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-label');
+  dot.className = 'sync-dot ' + status;
+  label.textContent = status === 'synced' ? 'synced' : status === 'syncing' ? 'saving…' : status === 'error' ? 'error' : 'connecting…';
+}
+
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+let categories = [];       // full library from Firebase
+let lineup = [null, null, null, null, null]; // tonight's 5 slots
+let lineupAnswers = [true, true, true, true, true];
+let lineupMainRound = [false, false, false, false, false];
+let lineupSegmentSize = [5, 5, 5, 5, 5]; // slides per segment for main round
+let activeGenres = new Set(); // empty = show all
+let editingId = null;
+let dragCardId = null;
+
+// ═══════════════════════════════════════════════
+//  FIREBASE LISTENERS
+// ═══════════════════════════════════════════════
+db.ref('categories').on('value', snap => {
+  const data = snap.val() || {};
+  categories = Object.entries(data).map(([id, v]) => ({id, ...v}));
+  renderLibrary();
+  renderFilterBar();
+  setSyncStatus('synced');
+}, err => {
+  console.error(err);
+  setSyncStatus('error');
+  toast('Could not connect to Firebase. Check your database rules.', true);
+});
+
+// Lineup is local only — resets on refresh, each host manages their own
+renderLineup();
+
+// ═══════════════════════════════════════════════
+//  RENDER LIBRARY
+// ═══════════════════════════════════════════════
+function renderLibrary() {
+  const grid = document.getElementById('cat-grid');
+  const searchVal = (document.getElementById('search-input')?.value||'').toLowerCase().trim();
+
+  let filtered = categories;
+
+  // Filter by tags (show categories that match ANY selected tag)
+  if(activeGenres.size > 0) {
+    filtered = filtered.filter(c => {
+      const tags = parseTags(c.genre);
+      return tags.some(t => activeGenres.has(t));
+    });
+  }
+
+  // Filter by search
+  if(searchVal) {
+    filtered = filtered.filter(c =>
+      (c.name||'').toLowerCase().includes(searchVal) ||
+      (c.genre||'').toLowerCase().includes(searchVal) ||
+      (c.tabName||'').toLowerCase().includes(searchVal) ||
+      (c.notes||'').toLowerCase().includes(searchVal)
+    );
+  }
+
+  if(!filtered.length) {
+    grid.innerHTML = `<div class="empty-library">
+      <div class="empty-icon">✦</div>
+      <div class="empty-text">${categories.length ? 'No categories match' : 'No categories yet — add your first one'}</div>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered
+    .sort((a,b) => (a.sortOrder||0) - (b.sortOrder||0))
+    .map(cat => {
+    const tags = parseTags(cat.genre);
+    const bannerHtml = cat.bgImage
+      ? `<img class="cat-banner" src="${cat.bgImage}" onerror="this.outerHTML='<div class=cat-banner-placeholder><span>${cat.name}</span></div>'">`
+      : `<div class="cat-banner-placeholder"><span>${cat.name||'UNTITLED'}</span></div>`;
+    const tagPills = tags.map(t=>`<span class="cat-genre">${t}</span>`).join('');
+    return `
+      <div class="cat-card" draggable="true" data-id="${cat.id}"
+        ondragstart="onCardDragStart(event,'${cat.id}')"
+        ondragend="onCardDragEnd(event)"
+        ondragover="onCardDragOver(event,'${cat.id}')"
+        ondragleave="onCardDragLeave(event,'${cat.id}')"
+        ondrop="onCardDrop(event,'${cat.id}')">
+        ${bannerHtml}
+        <div class="cat-body">
+          <div class="cat-title">${cat.name||'Untitled'}</div>
+          <div class="cat-meta">
+            ${tagPills}
+            <span class="cat-tab">${cat.tabName||''}</span>
+          </div>
+          ${cat.notes ? `<div style="font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;margin-top:4px">${cat.notes}</div>` : ''}
+        </div>
+        <div class="cat-actions">
+          ${adminMode ? `<button class="cat-action-btn cat-action-edit" onclick="event.stopPropagation();openModal('${cat.id}')">✎</button>
+          <button class="cat-action-btn cat-action-del" onclick="event.stopPropagation();confirmDelete('${cat.id}')">×</button>` : ''}
+        </div>
+        <div class="drag-hint">${adminMode ? 'drag to reorder or drop into round →' : 'drag to round →'}</div>
+      </div>`;
+  }).join('');
+}
+
+function parseTags(genreStr) {
+  if(!genreStr) return [];
+  return genreStr.split(',').map(t=>t.trim()).filter(Boolean);
+}
+
+function renderFilterBar() {
+  const allTags = [...new Set(categories.flatMap(c => parseTags(c.genre)))].sort();
+  const bar = document.getElementById('filter-bar');
+  const allActive = activeGenres.size === 0;
+  bar.innerHTML = `<div class="pill ${allActive?'active':''}" onclick="clearGenreFilter()">All</div>`
+    + allTags.map(t => `<div class="pill ${activeGenres.has(t)?'active':''}" onclick="toggleGenre('${t}')">${t}</div>`).join('');
+}
+
+function toggleGenre(tag) {
+  if(activeGenres.has(tag)) {
+    activeGenres.delete(tag);
+  } else {
+    activeGenres.add(tag);
+  }
+  renderFilterBar();
+  renderLibrary();
+}
+
+function clearGenreFilter() {
+  activeGenres.clear();
+  renderFilterBar();
+  renderLibrary();
+}
+
+// ═══════════════════════════════════════════════
+//  RENDER LINEUP
+// ═══════════════════════════════════════════════
+function renderLineup() {
+  for(let i=0;i<5;i++) {
+    const slot = document.getElementById(`slot-${i}`);
+    const cat = lineup[i] ? categories.find(c=>c.id===lineup[i]) : null;
+    slot.className = 'round-slot' + (cat ? ' has-card' : '');
+    // re-attach drag events
+    slot.ondragover = (e) => onSlotDragOver(e,i);
+    slot.ondrop = (e) => onSlotDrop(e,i);
+    slot.ondragleave = () => onSlotDragLeave(i);
+
+    if(cat) {
+      const thumb = cat.bgImage
+        ? `<img class="round-slot-card-thumb" src="${cat.bgImage}" style="width:48px;height:12px;object-fit:cover;border-radius:3px;flex-shrink:0" onerror="this.style.display='none'">`
+        : '';
+      const checked = lineupAnswers[i] !== false ? 'checked' : '';
+      const mainChecked = lineupMainRound[i] ? 'checked' : '';
+      slot.innerHTML = `
+        <div class="round-slot-label">Round ${i+1}</div>
+        <div class="round-slot-card">
+          ${thumb}
+          <div class="round-slot-card-info">
+            <div class="round-slot-card-name">${cat.name}</div>
+            <div class="round-slot-card-tab">${cat.tabName}</div>
+          </div>
+          <button class="round-slot-remove" onclick="removeFromSlot(${i})">×</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer;user-select:none">
+          <input type="checkbox" ${checked} onchange="lineupAnswers[${i}]=this.checked"
+            style="accent-color:var(--gold);width:13px;height:13px;cursor:pointer"/>
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Show answers after each question</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:5px;cursor:pointer;user-select:none">
+          <input type="checkbox" ${mainChecked} onchange="setMainRound(${i},this.checked)"
+            style="accent-color:var(--gold2);width:13px;height:13px;cursor:pointer"/>
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Main Round (other rounds are mini games)</span>
+        </label>`;
+    } else {
+      slot.innerHTML = `
+        <div class="round-slot-label">Round ${i+1}</div>
+        <div class="round-slot-empty">Drop a category here</div>`;
+    }
+  }
+}
+
+function removeFromSlot(i) {
+  lineup[i] = null;
+  lineupMainRound[i] = false;
+  saveLineup();
+  renderLineup();
+}
+
+function setMainRound(i, val) {
+  // Only one slot can be main round at a time
+  if(val) lineupMainRound = lineupMainRound.map((_,j) => j===i);
+  else lineupMainRound[i] = false;
+  renderLineup(); // re-render to update all checkboxes
+}
+
+function saveLineup() {
+  // Lineup is intentionally local only — not synced to Firebase
+  // Each host builds their own lineup independently
+}
+
+// ═══════════════════════════════════════════════
+//  DRAG & DROP
+// ═══════════════════════════════════════════════
+let dragReorderSourceId = null;
+let dragReorderTargetId = null;
+
+function onCardDragStart(e, id) {
+  dragCardId = id;
+  dragReorderSourceId = id;
+  e.dataTransfer.effectAllowed = 'copyMove';
+  e.dataTransfer.setData('text/plain', id);
+  setTimeout(()=>e.target.classList.add('dragging'),0);
+}
+
+function onCardDragEnd(e) {
+  e.target.classList.remove('dragging');
+  dragCardId = null;
+  dragReorderSourceId = null;
+  dragReorderTargetId = null;
+  // Clear any reorder highlights
+  document.querySelectorAll('.cat-card.reorder-target').forEach(el => el.classList.remove('reorder-target'));
+}
+
+function onCardDragOver(e, id) {
+  e.preventDefault();
+  // Only show reorder target if dragging over a different card AND not dragging to a slot
+  if(dragReorderSourceId && dragReorderSourceId !== id) {
+    dragReorderTargetId = id;
+    document.querySelectorAll('.cat-card.reorder-target').forEach(el => el.classList.remove('reorder-target'));
+    e.currentTarget.classList.add('reorder-target');
+  }
+}
+
+function onCardDragLeave(e, id) {
+  e.currentTarget.classList.remove('reorder-target');
+  if(dragReorderTargetId === id) dragReorderTargetId = null;
+}
+
+async function onCardDrop(e, targetId) {
+  e.preventDefault();
+  e.stopPropagation(); // don't bubble to slot drop handlers
+  document.querySelectorAll('.cat-card.reorder-target').forEach(el => el.classList.remove('reorder-target'));
+
+  const sourceId = dragReorderSourceId;
+  dragReorderSourceId = null;
+  dragReorderTargetId = null;
+
+  if(!sourceId || sourceId === targetId) return;
+
+  // Get current sorted list
+  const sorted = [...categories].sort((a,b) => (a.sortOrder||0) - (b.sortOrder||0));
+  const sourceIdx = sorted.findIndex(c => c.id === sourceId);
+  const targetIdx = sorted.findIndex(c => c.id === targetId);
+  if(sourceIdx < 0 || targetIdx < 0) return;
+
+  // Reorder: remove source, insert before target
+  const [moved] = sorted.splice(sourceIdx, 1);
+  const insertAt = targetIdx > sourceIdx ? targetIdx - 1 : targetIdx;
+  sorted.splice(insertAt, 0, moved);
+
+  // Save new sortOrder values to Firebase
+  const updates = {};
+  sorted.forEach((cat, i) => {
+    updates[`categories/${cat.id}/sortOrder`] = i;
+  });
+  try {
+    await db.ref().update(updates);
+    toast('Order saved');
+  } catch(err) {
+    toast('Could not save order: ' + err.message, true);
+  }
+}
+
+function onSlotDragOver(e, i) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  document.getElementById(`slot-${i}`).classList.add('drag-target');
+}
+
+function onSlotDragLeave(i) {
+  document.getElementById(`slot-${i}`).classList.remove('drag-target');
+}
+
+function onSlotDrop(e, i) {
+  e.preventDefault();
+  document.getElementById(`slot-${i}`).classList.remove('drag-target');
+  if(!dragCardId) return;
+  lineup[i] = dragCardId;
+  saveLineup();
+  renderLineup();
+  toast(`Added to Round ${i+1}`);
+}
+
+// ═══════════════════════════════════════════════
+//  MODAL — ADD / EDIT
+// ═══════════════════════════════════════════════
+function openModal(id) {
+  editingId = id || null;
+  const cat = id ? categories.find(c=>c.id===id) : null;
+
+  document.getElementById('modal-title').textContent = id ? 'EDIT CATEGORY' : 'NEW CATEGORY';
+  document.getElementById('modal-delete-btn').style.display = id ? 'block' : 'none';
+
+  // Set type
+  const type = cat?.type || 'trivia';
+  setCatType(type);
+
+  document.getElementById('f-name').value    = cat?.name     || '';
+  document.getElementById('f-genre').value   = cat?.genre    || '';
+  document.getElementById('f-sheet').value   = cat?.sheetUrl || '';
+  document.getElementById('f-tab').value     = cat?.tabName  || '';
+  document.getElementById('f-folder').value  = cat?.folderUrl|| '';
+  document.getElementById('f-bg').value      = cat?.bgImage  || '';
+  document.getElementById('f-bg-intro').value    = cat?.bgIntro    || '';
+  document.getElementById('f-bg-question').value = cat?.bgQuestion || '';
+  document.getElementById('f-notes').value   = cat?.notes    || '';
+
+  previewBanner('f-bg','banner-preview-wrap');
+  previewBanner('f-bg-intro','intro-preview-wrap');
+  previewBanner('f-bg-question','question-preview-wrap');
+  document.getElementById('modal-overlay').classList.add('show');
+  document.getElementById('f-name').focus();
+}
+
+let currentCatType = 'trivia';
+
+function setCatType(type) {
+  currentCatType = type;
+  document.getElementById('trivia-fields').style.display = type === 'trivia' ? 'block' : 'none';
+  document.getElementById('slideshow-fields').style.display = type === 'slideshow' ? 'block' : 'none';
+  document.getElementById('intro-bg-field').style.display = type === 'trivia' ? 'block' : 'none';
+  document.getElementById('question-bg-field').style.display = type === 'trivia' ? 'block' : 'none';
+  document.getElementById('type-btn-trivia').className = 'btn ' + (type==='trivia' ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('type-btn-slideshow').className = 'btn ' + (type==='slideshow' ? 'btn-primary' : 'btn-ghost');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('show');
+  editingId = null;
+}
+
+function previewBanner(fieldId, wrapId) {
+  const url = document.getElementById(fieldId)?.value?.trim() || '';
+  const wrap = document.getElementById(wrapId);
+  if(!wrap) return;
+  if(url) {
+    const src = driveViewUrl(url);
+    wrap.innerHTML = `<img class="banner-preview" src="${src}" onerror="this.outerHTML='<div class=banner-preview-placeholder><span>Could not load image</span></div>'">`;
+  } else {
+    wrap.innerHTML = `<div class="banner-preview-placeholder"><span>Preview will appear here</span></div>`;
+  }
+}
+
+async function saveCategory() {
+  const name       = document.getElementById('f-name').value.trim() || 'Untitled Category';
+  const genre      = document.getElementById('f-genre').value.trim();
+  const type       = currentCatType;
+  const sheetUrl   = document.getElementById('f-sheet').value.trim();
+  const tabName    = document.getElementById('f-tab').value.trim();
+  const folderUrl  = document.getElementById('f-folder').value.trim();
+  const bgImage    = document.getElementById('f-bg').value.trim();
+  const bgIntro    = document.getElementById('f-bg-intro').value.trim();
+  const bgQuestion = document.getElementById('f-bg-question').value.trim();
+  const notes      = document.getElementById('f-notes').value.trim();
+
+  setSyncStatus('syncing');
+  const data = {name, genre, type, sheetUrl, tabName, folderUrl, bgImage, bgIntro, bgQuestion, notes, updatedAt: Date.now()};
+
+  try {
+    if(editingId) {
+      await db.ref(`categories/${editingId}`).update(data);
+      toast('Category updated!');
+    } else {
+      await db.ref('categories').push({...data, createdAt: Date.now()});
+      toast('Category added!');
+    }
+    setSyncStatus('synced');
+    closeModal();
+  } catch(e) {
+    setSyncStatus('error');
+    toast('Save failed: ' + e.message, true);
+  }
+}
+
+function confirmDelete(id) {
+  editingId = id;
+  openModal(id);
+}
+
+async function deleteCategory() {
+  if(!editingId) return;
+  if(!confirm('Delete this category? This cannot be undone.')) return;
+  setSyncStatus('syncing');
+  try {
+    await db.ref(`categories/${editingId}`).remove();
+    // Also remove from lineup if present
+    lineup = lineup.map(id => id === editingId ? null : id);
+    saveLineup();
+    setSyncStatus('synced');
+    toast('Category deleted.');
+    closeModal();
+  } catch(e) {
+    setSyncStatus('error');
+    toast('Delete failed: ' + e.message, true);
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  LAUNCH TRIVIA
+// ═══════════════════════════════════════════════
+function launchTrivia() {
+  const qCount = document.getElementById('lineup-q-count').value || '20';
+  const activeRounds = lineup.map((id,i) => id ? {cat: categories.find(c=>c.id===id), slotIndex: i} : null)
+    .filter(r => r && r.cat);
+
+  if(!activeRounds.length) return toast('Add at least one category to the lineup.', true);
+
+  const params = new URLSearchParams();
+  params.set('rounds', activeRounds.length);
+  activeRounds.forEach(({cat, slotIndex}, i) => {
+    params.set(`r${i}_url`, cat.sheetUrl||'');
+    params.set(`r${i}_tab`, cat.tabName||'');
+    params.set(`r${i}_type`, cat.type||'trivia');
+    params.set(`r${i}_folder`, cat.folderUrl||'');
+    params.set(`r${i}_bg`, cat.bgImage||'');
+    params.set(`r${i}_bgIntro`, cat.bgIntro||cat.bgImage||'');
+    params.set(`r${i}_bgQuestion`, cat.bgQuestion||cat.bgImage||'');
+    params.set(`r${i}_name`, cat.name||'');
+    params.set(`r${i}_qcount`, qCount);
+    params.set(`r${i}_showAnswers`, lineupAnswers[slotIndex] !== false ? '1' : '0');
+    params.set(`r${i}_isMainRound`, lineupMainRound[slotIndex] ? '1' : '0');
+    params.set(`r${i}_segmentSize`, lineupSegmentSize[slotIndex] || 5);
+  });
+
+  window.open(`trivia.html?${params.toString()}`, '_blank');
+}
+
+// ═══════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════
+function driveViewUrl(url) {
+  if(!url) return url;
+  const fm = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if(fm) return `https://drive.google.com/uc?export=view&id=${fm[1]}`;
+  return url;
+}
+
+function toast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 2800);
+}
+
+// Always reset to 20 on refresh — don't restore from localStorage
+
+// Save question count on change
+document.getElementById('lineup-q-count').addEventListener('input', function() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('trivia_cfg')||'{}');
+    cfg.questionCount = this.value;
+    localStorage.setItem('trivia_cfg', JSON.stringify(cfg));
+  } catch(e){}
+});
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') closeModal();
+});
+</script>
+</body>
+</html>
