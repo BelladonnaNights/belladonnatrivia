@@ -1347,7 +1347,7 @@ async function launchFromSetup() {
   state.mainRoundIndex = state.rounds.findIndex(r=>r.isMainRound);
 
   // Start from main round if there is one, otherwise start from 0
-  state.roundIndex = state.mainRoundIndex >= 0 ? state.mainRoundIndex : 0;
+  state.roundIndex = 0;
   state.slideIndex = 0;
 
   document.getElementById('setup-return-btn').style.display = 'block';
