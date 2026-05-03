@@ -71,8 +71,39 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 }
 .add-btn:hover{opacity:.85}
 
-/* Filter pills */
-.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.25rem}
+/* Filter pills collapse */
+.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.25rem;align-items:center}
+.filter-toggle-btn{
+  background:transparent;border:1px solid var(--border2);border-radius:99px;
+  padding:5px 10px;font-size:10px;font-family:var(--cinzel);letter-spacing:.08em;
+  color:var(--text3);cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:4px;
+  flex-shrink:0;
+}
+.filter-toggle-btn:hover{border-color:var(--gold-glow);color:var(--gold2)}
+.filter-toggle-btn .chevron{display:inline-block;transition:transform .2s;font-style:normal}
+.filter-toggle-btn.open .chevron{transform:rotate(180deg)}
+.filter-pills-wrap{
+  display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+  overflow:hidden;max-height:0;opacity:0;
+  transition:max-height .28s ease, opacity .2s ease;
+  pointer-events:none;
+}
+.filter-pills-wrap.open{max-height:200px;opacity:1;pointer-events:auto}
+
+/* Slot drag handle */
+.slot-drag-handle{
+  cursor:grab;color:var(--text3);font-size:14px;padding:2px 4px;
+  flex-shrink:0;transition:color .15s;user-select:none;
+  display:flex;align-items:center;
+}
+.slot-drag-handle:hover{color:var(--gold)}
+.slot-drag-handle:active{cursor:grabbing}
+.round-slot.slot-dragging{opacity:.4}
+.round-slot.slot-drag-target{border-color:var(--gold)!important;background:var(--gold-dim)!important}
+
+/* Add-to-round button on cat card */
+.cat-action-add{background:rgba(10,10,10,.8);color:var(--green)}
+.cat-action-add:hover{background:var(--green);color:#000}
 .pill{
   background:transparent;border:1px solid var(--border2);border-radius:99px;
   padding:5px 14px;font-size:10px;font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;
@@ -298,7 +329,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     </div>
 
     <div class="filter-bar" id="filter-bar">
-      <div class="pill active" data-genre="all" onclick="filterGenre('all',this)">All</div>
+      <div class="pill active" data-genre="all" onclick="clearGenreFilter()">All</div>
+      <button class="filter-toggle-btn" id="filter-toggle-btn" onclick="toggleFilterPills()">
+        <span>Filters</span><i class="chevron">▾</i>
+      </button>
+      <div class="filter-pills-wrap" id="filter-pills-wrap"></div>
     </div>
 
     <div class="cat-grid" id="cat-grid">
@@ -317,26 +352,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     </div>
 
     <div class="round-slots" id="round-slots">
-      <div class="round-slot" id="slot-0" data-slot="0" ondragover="onSlotDragOver(event,0)" ondrop="onSlotDrop(event,0)" ondragleave="onSlotDragLeave(0)">
-        <div class="round-slot-label">Round 1</div>
-        <div class="round-slot-empty">Drop a category here</div>
-      </div>
-      <div class="round-slot" id="slot-1" data-slot="1" ondragover="onSlotDragOver(event,1)" ondrop="onSlotDrop(event,1)" ondragleave="onSlotDragLeave(1)">
-        <div class="round-slot-label">Round 2</div>
-        <div class="round-slot-empty">Drop a category here</div>
-      </div>
-      <div class="round-slot" id="slot-2" data-slot="2" ondragover="onSlotDragOver(event,2)" ondrop="onSlotDrop(event,2)" ondragleave="onSlotDragLeave(2)">
-        <div class="round-slot-label">Round 3</div>
-        <div class="round-slot-empty">Drop a category here</div>
-      </div>
-      <div class="round-slot" id="slot-3" data-slot="3" ondragover="onSlotDragOver(event,3)" ondrop="onSlotDrop(event,3)" ondragleave="onSlotDragLeave(3)">
-        <div class="round-slot-label">Round 4</div>
-        <div class="round-slot-empty">Drop a category here</div>
-      </div>
-      <div class="round-slot" id="slot-4" data-slot="4" ondragover="onSlotDragOver(event,4)" ondrop="onSlotDrop(event,4)" ondragleave="onSlotDragLeave(4)">
-        <div class="round-slot-label">Round 5</div>
-        <div class="round-slot-empty">Drop a category here</div>
-      </div>
+      <div class="round-slot" id="slot-0" data-slot="0" ondragover="onSlotDragOver(event,0)" ondrop="onSlotDrop(event,0)" ondragleave="onSlotDragLeave(0)"></div>
+      <div class="round-slot" id="slot-1" data-slot="1" ondragover="onSlotDragOver(event,1)" ondrop="onSlotDrop(event,1)" ondragleave="onSlotDragLeave(1)"></div>
+      <div class="round-slot" id="slot-2" data-slot="2" ondragover="onSlotDragOver(event,2)" ondrop="onSlotDrop(event,2)" ondragleave="onSlotDragLeave(2)"></div>
+      <div class="round-slot" id="slot-3" data-slot="3" ondragover="onSlotDragOver(event,3)" ondrop="onSlotDrop(event,3)" ondragleave="onSlotDragLeave(3)"></div>
+      <div class="round-slot" id="slot-4" data-slot="4" ondragover="onSlotDragOver(event,4)" ondrop="onSlotDrop(event,4)" ondragleave="onSlotDragLeave(4)"></div>
     </div>
 
     <div class="lineup-divider"></div>
@@ -726,6 +746,23 @@ let lineupTwoPass = [false, false, false, false, false];
 let activeGenres = new Set(); // empty = show all
 let editingId = null;
 let dragCardId = null;
+let dragSlotIndex = null; // which round slot is being dragged
+let filterPillsOpen = false;
+
+function toggleFilterPills() {
+  filterPillsOpen = !filterPillsOpen;
+  document.getElementById('filter-pills-wrap').classList.toggle('open', filterPillsOpen);
+  document.getElementById('filter-toggle-btn').classList.toggle('open', filterPillsOpen);
+}
+
+function addToNextRound(catId) {
+  const nextOpen = lineup.findIndex(id => id === null);
+  if(nextOpen === -1) return toast('All rounds are full!', true);
+  lineup[nextOpen] = catId;
+  saveLineup();
+  renderLineup();
+  toast(`Added to Round ${nextOpen + 1}`);
+}
 
 // ═══════════════════════════════════════════════
 //  FIREBASE LISTENERS
@@ -900,6 +937,7 @@ function renderLibrary() {
           ${cat.notes ? `<div style="font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;margin-top:4px">${cat.notes}</div>` : ''}
         </div>
         <div class="cat-actions">
+          <button class="cat-action-btn cat-action-add" onclick="event.stopPropagation();addToNextRound('${cat.id}')" title="Add to next open round">+</button>
           ${adminMode ? `<button class="cat-action-btn cat-action-edit" onclick="event.stopPropagation();openModal('${cat.id}')">✎</button>
           <button class="cat-action-btn cat-action-del" onclick="event.stopPropagation();confirmDelete('${cat.id}')">×</button>` : ''}
         </div>
@@ -915,10 +953,13 @@ function parseTags(genreStr) {
 
 function renderFilterBar() {
   const allTags = [...new Set(categories.flatMap(c => parseTags(c.genre)))].sort();
-  const bar = document.getElementById('filter-bar');
-  const allActive = activeGenres.size === 0;
-  bar.innerHTML = `<div class="pill ${allActive?'active':''}" onclick="clearGenreFilter()">All</div>`
-    + allTags.map(t => `<div class="pill ${activeGenres.has(t)?'active':''}" onclick="toggleGenre('${t}')">${t}</div>`).join('');
+  const wrap = document.getElementById('filter-pills-wrap');
+  const allPill = document.querySelector('.filter-bar .pill');
+  // Update All pill active state
+  if(allPill) allPill.className = 'pill' + (activeGenres.size === 0 ? ' active' : '');
+  wrap.innerHTML = allTags.map(t =>
+    `<div class="pill ${activeGenres.has(t)?'active':''}" onclick="toggleGenre('${t}')">${t}</div>`
+  ).join('');
 }
 
 function toggleGenre(tag) {
@@ -945,7 +986,6 @@ function renderLineup() {
     const slot = document.getElementById(`slot-${i}`);
     const cat = lineup[i] ? categories.find(c=>c.id===lineup[i]) : null;
     slot.className = 'round-slot' + (cat ? ' has-card' : '');
-    // re-attach drag events
     slot.ondragover = (e) => onSlotDragOver(e,i);
     slot.ondrop = (e) => onSlotDrop(e,i);
     slot.ondragleave = () => onSlotDragLeave(i);
@@ -961,6 +1001,10 @@ function renderLineup() {
       slot.innerHTML = `
         <div class="round-slot-label">Round ${i+1}</div>
         <div class="round-slot-card">
+          <div class="slot-drag-handle" draggable="true"
+            ondragstart="onSlotDragStart(event,${i})"
+            ondragend="onSlotDragEnd(event,${i})"
+            title="Drag to reorder rounds">⠿</div>
           ${thumb}
           <div class="round-slot-card-info">
             <div class="round-slot-card-name">${cat.name}</div>
@@ -1024,6 +1068,7 @@ let dragReorderSourceId = null;
 
 function onCardDragStart(e, id) {
   dragCardId = id;
+  dragSlotIndex = null; // ensure slot drag state is clear
   dragReorderSourceId = id;
   e.dataTransfer.effectAllowed = 'copyMove';
   e.dataTransfer.setData('text/plain', id);
@@ -1075,22 +1120,67 @@ async function onCardDrop(e, targetId) {
 
 function onSlotDragOver(e, i) {
   e.preventDefault();
-  e.dataTransfer.dropEffect = 'copy';
-  document.getElementById(`slot-${i}`).classList.add('drag-target');
+  // If dragging a slot, show reorder target; if dragging a card, show card drop target
+  if(dragSlotIndex !== null && dragSlotIndex !== i) {
+    e.dataTransfer.dropEffect = 'move';
+    document.getElementById(`slot-${i}`).classList.add('slot-drag-target');
+  } else if(dragCardId) {
+    e.dataTransfer.dropEffect = 'copy';
+    document.getElementById(`slot-${i}`).classList.add('drag-target');
+  }
 }
 
 function onSlotDragLeave(i) {
   document.getElementById(`slot-${i}`).classList.remove('drag-target');
+  document.getElementById(`slot-${i}`).classList.remove('slot-drag-target');
 }
 
 function onSlotDrop(e, i) {
   e.preventDefault();
   document.getElementById(`slot-${i}`).classList.remove('drag-target');
+  document.getElementById(`slot-${i}`).classList.remove('slot-drag-target');
+
+  // Slot-to-slot reorder takes priority
+  if(dragSlotIndex !== null && dragSlotIndex !== i) {
+    const from = dragSlotIndex;
+    const to = i;
+    dragSlotIndex = null;
+    // Swap all lineup state arrays between from and to
+    [lineup[from], lineup[to]] = [lineup[to], lineup[from]];
+    [lineupAnswers[from], lineupAnswers[to]] = [lineupAnswers[to], lineupAnswers[from]];
+    [lineupTwoPass[from], lineupTwoPass[to]] = [lineupTwoPass[to], lineupTwoPass[from]];
+    [lineupMainRound[from], lineupMainRound[to]] = [lineupMainRound[to], lineupMainRound[from]];
+    [lineupQCount[from], lineupQCount[to]] = [lineupQCount[to], lineupQCount[from]];
+    [lineupSegmentSize[from], lineupSegmentSize[to]] = [lineupSegmentSize[to], lineupSegmentSize[from]];
+    saveLineup();
+    renderLineup();
+    toast(`Rounds ${from+1} and ${to+1} swapped`);
+    return;
+  }
+
+  // Card-from-library drop
   if(!dragCardId) return;
   lineup[i] = dragCardId;
   saveLineup();
   renderLineup();
   toast(`Added to Round ${i+1}`);
+}
+
+function onSlotDragStart(e, i) {
+  dragSlotIndex = i;
+  dragCardId = null; // make sure card drag doesn't interfere
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', `slot:${i}`);
+  setTimeout(() => document.getElementById(`slot-${i}`).classList.add('slot-dragging'), 0);
+}
+
+function onSlotDragEnd(e, i) {
+  dragSlotIndex = null;
+  document.getElementById(`slot-${i}`)?.classList.remove('slot-dragging');
+  document.querySelectorAll('.round-slot').forEach(el => {
+    el.classList.remove('slot-drag-target');
+    el.classList.remove('drag-target');
+  });
 }
 
 // ═══════════════════════════════════════════════
