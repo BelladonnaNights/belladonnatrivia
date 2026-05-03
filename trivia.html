@@ -491,6 +491,7 @@ let state = {
   roundIndex: 0,
   slideIndex: 0,
   answerVisible: false,
+  bonusVisible: false,   // showing bonus question/answer for current question
   answerKeyVisible: false,
   currentType: null,
   mainRoundIndex: -1,
@@ -518,8 +519,8 @@ async function loadSheetQuestions(sheetUrl, tabName, count) {
   const sheetId = extractSheetId(sheetUrl);
   if(!sheetId) throw new Error('Could not extract Sheet ID from URL.');
 
-  // Fetch A:I (cols 1–9)
-  const range = encodeURIComponent(`${tabName}!A2:I`);
+  // Fetch A:K (cols 1–11, includes bonus question J + bonus answer K)
+  const range = encodeURIComponent(`${tabName}!A2:K`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${API_KEY}`;
 
   const res = await fetch(url);
@@ -530,7 +531,8 @@ async function loadSheetQuestions(sheetUrl, tabName, count) {
   const data = await res.json();
   const rows = (data.values || []).map(parseRow).filter(Boolean);
   if(!rows.length) throw new Error('No valid rows found.');
-  return pickByDifficultySequence(rows, count);
+  const picked = pickByDifficultySequence(rows, count);
+  return capBonusQuestions(picked, 2);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -568,7 +570,10 @@ function parseRow(r) {
              : mcOptions.length > 0 ? 'mc'
              : 'standard';
 
-  return {question:q, answer:a, difficulty:diff, imageUrl:img, audioUrl:audio, type, mcOptions};
+  const bonusQuestion = safe(r[9]).trim();
+  const bonusAnswer   = safe(r[10]).trim();
+
+  return {question:q, answer:a, difficulty:diff, imageUrl:img, audioUrl:audio, type, mcOptions, bonusQuestion, bonusAnswer};
 }
 
 function pickByDifficultySequence(rows, n) {
@@ -595,6 +600,19 @@ function pickByDifficultySequence(rows, n) {
     chosen.push(row);
   }
   return chosen;
+}
+
+// After selection, randomly nullify bonus questions beyond the 2-per-round cap
+function capBonusQuestions(questions, max) {
+  const bonusIndices = questions.map((q,i)=>q.bonusQuestion ? i : -1).filter(i=>i>=0);
+  if(bonusIndices.length <= max) return questions;
+  // Shuffle bonus indices and null out the extras
+  const shuffled = shuffle([...bonusIndices]);
+  const toNull = new Set(shuffled.slice(max));
+  return questions.map((q,i) => toNull.has(i)
+    ? {...q, bonusQuestion:'', bonusAnswer:''}
+    : q
+  );
 }
 
 function pullUnused(pool, usedIds) {
@@ -708,11 +726,49 @@ function advanceSlide() {
 
   if(type === S_QUESTION) {
     const round = currentRound();
-    const { isPass2 } = questionInfo();
+    const { qIndex, isPass2 } = questionInfo();
+    const q = round.questions[qIndex];
+    const hasBonus = !!(q && q.bonusQuestion);
+    // shouldReveal: true when answers should be shown at this stage
     const shouldReveal = (round.twoPass && isPass2) || (!round.twoPass && round.showAnswers !== false);
-    if(shouldReveal && !state.answerVisible) {
-      state.answerVisible = true; renderCurrentSlide();
+
+    // ── CURRENTLY SHOWING BONUS QUESTION ──
+    if(state.bonusVisible) {
+      if(shouldReveal && !state.answerVisible) {
+        // Show the bonus answer
+        state.answerVisible = true;
+        renderCurrentSlide();
+      } else {
+        // Done with bonus — advance to next real slide
+        state.bonusVisible = false;
+        state.answerVisible = false;
+        const max = slideCount() - 1;
+        if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
+      }
+      return;
+    }
+
+    // ── CURRENTLY SHOWING REGULAR QUESTION ──
+    if(!shouldReveal) {
+      // Pass 1 of twoPass: no answers shown — go straight from question to bonus (if any) or next
+      if(hasBonus) {
+        state.bonusVisible = true;
+        renderCurrentSlide();
+      } else {
+        const max = slideCount() - 1;
+        if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
+      }
+    } else if(!state.answerVisible) {
+      // Reveal the regular answer first
+      state.answerVisible = true;
+      renderCurrentSlide();
+    } else if(hasBonus) {
+      // Answer was shown, question has bonus — enter bonus
+      state.answerVisible = false;
+      state.bonusVisible = true;
+      renderCurrentSlide();
     } else {
+      // No bonus — advance
       state.answerVisible = false;
       const max = slideCount() - 1;
       if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
@@ -729,6 +785,7 @@ function advanceSlide() {
 function retreatSlide() {
   if(slideType() === S_JUMP) return;
   state.answerVisible = false;
+  state.bonusVisible = false;
   state.currentType = null;
   if(state.slideIndex > 0) { state.slideIndex--; renderCurrentSlide(); }
 }
@@ -844,6 +901,7 @@ function renderCurrentSlide() {
   if(type !== S_SLIDE) { const sl = document.getElementById('slide-layer'); if(sl) sl.remove(); }
 
   if(type === S_INTRO) renderIntro(container, round);
+  else if(type === S_QUESTION && state.bonusVisible) renderBonusQuestion(container, round);
   else if(type === S_QUESTION) renderQuestion(container, round);
   else if(type === S_INTERSTITIAL) renderInterstitial(container, round);
   else if(type === S_SLIDE) renderSlide(container, round);
@@ -1101,6 +1159,51 @@ function renderQuestion(container, round) {
       ${imageHtml}
     </div>
     ${answerOverlay}
+  `;
+  container.appendChild(el);
+}
+
+function renderBonusQuestion(container, round) {
+  const { qIndex, isPass2 } = questionInfo();
+  const q = round.questions[qIndex];
+
+  // Pass label (same as regular questions for consistency)
+  const passLabel = round.twoPass && isPass2
+    ? `<span style="color:var(--gold);font-size:8px;letter-spacing:.12em;display:block;margin-top:2px">ANSWERS PASS</span>`
+    : '';
+
+  // Bonus answer overlay
+  const bonusAnswerOverlay = state.answerVisible ? `
+    <div class="answer-overlay">
+      <div class="answer-label">Bonus Answer</div>
+      <div class="answer-text">${q.bonusAnswer}</div>
+      <div class="answer-next-hint">Press → for next question</div>
+    </div>` : '';
+
+  const el = document.createElement('div');
+  el.className = 'slide slide-question active';
+  el.style.position = 'absolute';
+  el.style.inset = '0';
+  el.innerHTML = `
+    <div class="q-header">
+      <div style="
+        font-family:var(--cinzel);font-size:clamp(13px,1.6vw,19px);font-weight:700;
+        letter-spacing:.18em;text-transform:uppercase;
+        background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+        border:1px solid var(--gold-glow);border-radius:99px;
+        padding:6px 22px;display:inline-flex;align-items:center;gap:8px;
+        white-space:nowrap;line-height:1;
+      ">✦ BONUS QUESTION</div>
+      <div class="q-round-label">
+        ${round.tabName||round.title}${passLabel}
+      </div>
+    </div>
+    <div class="q-body">
+      <div class="q-text-block">
+        <div class="q-question">${q.bonusQuestion}</div>
+      </div>
+    </div>
+    ${bonusAnswerOverlay}
   `;
   container.appendChild(el);
 }
