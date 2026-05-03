@@ -521,7 +521,7 @@ async function loadSheetQuestions(sheetUrl, tabName, count) {
 
   // Fetch A:K (cols 1–11, includes bonus question J + bonus answer K)
   const range = encodeURIComponent(`${tabName}!A2:K`);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${API_KEY}`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${API_KEY}&_=${Date.now()}`;
 
   const res = await fetch(url);
   if(!res.ok) {
@@ -1167,12 +1167,10 @@ function renderBonusQuestion(container, round) {
   const { qIndex, isPass2 } = questionInfo();
   const q = round.questions[qIndex];
 
-  // Pass label (same as regular questions for consistency)
   const passLabel = round.twoPass && isPass2
     ? `<span style="color:var(--gold);font-size:8px;letter-spacing:.12em;display:block;margin-top:2px">ANSWERS PASS</span>`
     : '';
 
-  // Bonus answer overlay
   const bonusAnswerOverlay = state.answerVisible ? `
     <div class="answer-overlay">
       <div class="answer-label">Bonus Answer</div>
@@ -1184,22 +1182,47 @@ function renderBonusQuestion(container, round) {
   el.className = 'slide slide-question active';
   el.style.position = 'absolute';
   el.style.inset = '0';
+
+  // Animated gold border around the entire screen
+  el.style.cssText += `
+    position:absolute;inset:0;
+    box-shadow:inset 0 0 0 6px var(--gold), inset 0 0 0 10px rgba(201,168,76,.18), inset 0 0 60px rgba(201,168,76,.12);
+    animation:bonusBorderPulse 2s ease-in-out infinite;
+  `;
+
   el.innerHTML = `
-    <div class="q-header">
-      <div style="
-        font-family:var(--cinzel);font-size:clamp(13px,1.6vw,19px);font-weight:700;
-        letter-spacing:.18em;text-transform:uppercase;
-        background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-        border:1px solid var(--gold-glow);border-radius:99px;
-        padding:6px 22px;display:inline-flex;align-items:center;gap:8px;
-        white-space:nowrap;line-height:1;
-      ">✦ BONUS QUESTION</div>
-      <div class="q-round-label">
-        ${round.tabName||round.title}${passLabel}
-      </div>
+    <style>
+      @keyframes bonusBorderPulse {
+        0%,100% { box-shadow: inset 0 0 0 6px var(--gold), inset 0 0 0 10px rgba(201,168,76,.18), inset 0 0 60px rgba(201,168,76,.10); }
+        50%      { box-shadow: inset 0 0 0 6px var(--gold3), inset 0 0 0 10px rgba(245,223,144,.3), inset 0 0 80px rgba(201,168,76,.22); }
+      }
+    </style>
+
+    <div class="q-header" style="padding:1.5rem 2rem 0">
+      <div style="font-family:var(--cinzel);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--text3)">${round.tabName||round.title}${passLabel}</div>
     </div>
+
     <div class="q-body">
       <div class="q-text-block">
+
+        <!-- BONUS QUESTION label sits directly above the question -->
+        <div style="
+          display:flex;flex-direction:column;align-items:center;gap:6px;
+          margin-bottom:1.4rem;
+        ">
+          <div style="
+            font-family:var(--cinzel);font-size:clamp(10px,1.1vw,13px);
+            letter-spacing:.3em;text-transform:uppercase;color:var(--gold);
+          ">✦ &nbsp; BONUS &nbsp; ✦</div>
+          <div style="
+            font-family:var(--display);font-size:clamp(38px,6vw,72px);
+            letter-spacing:.12em;line-height:1;
+            background:var(--gold-shine);
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+          ">QUESTION</div>
+          <div style="width:180px;height:1.5px;background:linear-gradient(90deg,transparent,var(--gold),transparent);margin-top:4px;"></div>
+        </div>
+
         <div class="q-question">${q.bonusQuestion}</div>
       </div>
     </div>
