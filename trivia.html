@@ -246,6 +246,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 }
 .ak-grid{
   display:grid;grid-template-columns:1fr 1fr;
+  grid-auto-flow:column;
   gap:4px 3rem;width:100%;
 }
 .ak-item{
@@ -1233,7 +1234,9 @@ function renderBonusQuestion(container, round) {
 }
 
 function renderAnswerKey(container, round) {
-  const items = round.questions.map((q,i)=>`
+  const questions = round.questions;
+  const rows = Math.ceil(questions.length / 2);
+  const items = questions.map((q,i)=>`
     <div class="ak-item">
       <div class="ak-num">${i+1}</div>
       <div class="ak-a">${q.answer}</div>
@@ -1244,7 +1247,7 @@ function renderAnswerKey(container, round) {
   el.style.position='absolute';el.style.inset='0';
   el.innerHTML = `
     <div class="ak-title">Answer Key</div>
-    <div class="ak-grid">${items}</div>
+    <div class="ak-grid" style="grid-template-rows:repeat(${rows},auto)">${items}</div>
   `;
   container.appendChild(el);
 }
