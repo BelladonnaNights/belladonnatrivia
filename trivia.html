@@ -1394,9 +1394,38 @@ function driveViewUrl(url) {
 }
 
 function playAudio(src) {
-  const audio = document.getElementById('audio-player');
-  audio.src = src;
-  audio.play().catch(()=>toast('Audio blocked — click again'));
+  // Stop anything already playing
+  const existing = document.getElementById('audio-player');
+  if(existing) { existing.pause(); existing.src = ''; }
+
+  // Create a brand-new Audio object and call play() in the same synchronous
+  // tick as the user gesture — this is what Safari requires
+  const audio = new Audio(src);
+  audio.id = 'audio-player-active';
+
+  // Show loading state on the button that was clicked
+  const btn = document.querySelector('.audio-btn');
+  if(btn) btn.textContent = '⏳ Loading…';
+
+  audio.addEventListener('canplaythrough', () => {
+    if(btn) { btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> Playing`; }
+  });
+  audio.addEventListener('ended', () => {
+    if(btn) { btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg> Click to play`; }
+  });
+  audio.addEventListener('error', (e) => {
+    console.error('Audio error:', e, audio.error);
+    toast('Audio error — check console');
+    if(btn) { btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg> Click to play`; }
+  });
+
+  const playPromise = audio.play();
+  if(playPromise !== undefined) {
+    playPromise.catch(err => {
+      console.error('play() rejected:', err);
+      toast('Audio blocked — check console');
+    });
+  }
 }
 
 function exitPresentation() {
