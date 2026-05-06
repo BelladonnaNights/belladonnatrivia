@@ -97,7 +97,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 }
 #pres-bg::after{
   content:'';position:absolute;inset:0;
-  background:linear-gradient(to bottom, rgba(0,0,0,.45) 0%, rgba(0,0,0,.2) 40%, rgba(0,0,0,.7) 100%);
+  background:linear-gradient(to bottom, rgba(0,0,0,.15) 0%, rgba(0,0,0,.05) 40%, rgba(0,0,0,.25) 100%);
 }
 /* fallback solid when no bg image */
 #pres-bg.no-img{background:radial-gradient(ellipse at 30% 20%, #1a1200 0%, #080808 70%)}
@@ -1398,25 +1398,38 @@ function playAudio(src) {
   const existing = document.getElementById('audio-player');
   if(existing) { existing.pause(); existing.src = ''; }
 
+  const btn = document.querySelector('.audio-btn');
+
   // Create a brand-new Audio object and call play() in the same synchronous
   // tick as the user gesture — this is what Safari requires
   const audio = new Audio(src);
   audio.id = 'audio-player-active';
 
-  // Show loading state on the button that was clicked
-  const btn = document.querySelector('.audio-btn');
-  if(btn) btn.textContent = '⏳ Loading…';
+  // Disable the button immediately so it can't be pressed again mid-playback
+  if(btn) {
+    btn.disabled = true;
+    btn.style.opacity = '.5';
+    btn.style.cursor = 'not-allowed';
+    btn.textContent = '⏳ Loading…';
+  }
+
+  const resetBtn = () => {
+    if(btn) {
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.cursor = '';
+      btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg> Click to play`;
+    }
+  };
 
   audio.addEventListener('canplaythrough', () => {
-    if(btn) { btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> Playing`; }
+    if(btn) { btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> Playing…`; }
   });
-  audio.addEventListener('ended', () => {
-    if(btn) { btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg> Click to play`; }
-  });
+  audio.addEventListener('ended', resetBtn);
   audio.addEventListener('error', (e) => {
     console.error('Audio error:', e, audio.error);
     toast('Audio error — check console');
-    if(btn) { btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg> Click to play`; }
+    resetBtn();
   });
 
   const playPromise = audio.play();
@@ -1424,6 +1437,7 @@ function playAudio(src) {
     playPromise.catch(err => {
       console.error('play() rejected:', err);
       toast('Audio blocked — check console');
+      resetBtn();
     });
   }
 }
