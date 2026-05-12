@@ -352,8 +352,18 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="setup-sub" id="setup-sub-text">Let's play some trivia.</div>
   <div class="setup-rounds-grid" id="setup-rounds-grid"></div>
   <button class="setup-launch-btn" id="setup-launch-btn" onclick="launchFromSetup()" style="display:none">Launch Trivia Night →</button>
+  <button class="setup-launch-btn" id="setup-preview-btn" onclick="startPreview()" style="display:none;margin-top:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:11px;padding:10px 32px">Preview Intro Slides</button>
   <button id="setup-return-btn" onclick="returnToPresentation()" style="display:none;width:100%;max-width:420px;margin-top:8px;padding:14px;font-family:var(--cinzel);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);cursor:pointer">↩ Return to Presentation</button>
   <div class="setup-hint">Space to reveal · → next · ← back · A answer key · Esc exit</div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCREENSAVER / PREVIEW
+══════════════════════════════════════════ -->
+<div id="screensaver" style="display:none;position:fixed;inset:0;z-index:2000;background:#000;cursor:pointer" onclick="stopPreview()" onkeydown="stopPreview()">
+  <div id="ss-slide-a" style="position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;opacity:0;transition:opacity 1.5s ease"></div>
+  <div id="ss-slide-b" style="position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;opacity:0;transition:opacity 1.5s ease"></div>
+  <div style="position:absolute;bottom:2rem;width:100%;text-align:center;font-family:var(--cinzel);font-size:11px;letter-spacing:.2em;color:rgba(255,255,255,.4)">CLICK OR PRESS ANY KEY TO DISMISS</div>
 </div>
 
 <!-- ══════════════════════════════════════════
@@ -799,7 +809,75 @@ function renderCurrentSlide() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  PRE-SHOW (Follow Us + Rules — separate from slide system)
+//  SCREENSAVER / INTRO PREVIEW
+// ═══════════════════════════════════════════════════════
+let ssTimer = null;
+let ssIndex = 0;
+let ssImages = [];
+let ssActive = false; // which div is currently showing (false=A, true=B)
+
+function startPreview() {
+  // Collect all bgIntro images from pending rounds, fall back to bgQuestion
+  ssImages = pendingRounds
+    .map(r => r.bgIntro || r.bgQuestion || r.bgImage || '')
+    .filter(Boolean);
+
+  if(!ssImages.length) {
+    toast('No intro slide images found — add Intro Slide Background URLs to your categories');
+    return;
+  }
+
+  // Preload images
+  ssImages.forEach(url => { const img = new Image(); img.src = url; });
+
+  ssIndex = 0;
+  ssActive = false;
+  document.getElementById('screensaver').style.display = 'block';
+  document.documentElement.requestFullscreen?.().catch(()=>{});
+  ssShowNext();
+}
+
+function ssShowNext() {
+  const url = ssImages[ssIndex % ssImages.length];
+  ssIndex++;
+
+  const current = document.getElementById(ssActive ? 'ss-slide-b' : 'ss-slide-a');
+  const next    = document.getElementById(ssActive ? 'ss-slide-a' : 'ss-slide-b');
+
+  // Load new image into next layer (hidden)
+  next.style.backgroundImage = `url('${url}')`;
+  next.style.opacity = '0';
+
+  // Crossfade after a tick
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      next.style.opacity = '1';
+      // Fade out current after transition starts
+      setTimeout(() => { current.style.opacity = '0'; }, 100);
+    });
+  });
+
+  ssActive = !ssActive;
+
+  // Schedule next slide — 30 seconds
+  ssTimer = setTimeout(ssShowNext, 30000);
+}
+
+function stopPreview() {
+  clearTimeout(ssTimer);
+  ssTimer = null;
+  document.getElementById('screensaver').style.display = 'none';
+  document.getElementById('ss-slide-a').style.opacity = '0';
+  document.getElementById('ss-slide-b').style.opacity = '0';
+  document.exitFullscreen?.().catch(()=>{});
+}
+
+// Also stop on any keypress
+document.addEventListener('keydown', e => {
+  if(document.getElementById('screensaver').style.display !== 'none') {
+    stopPreview();
+  }
+});
 // ═══════════════════════════════════════════════════════
 function showPreShow() {
   state.preShow = PS_FOLLOWUS;
@@ -1324,6 +1402,7 @@ function checkUrlParams() {
 
   document.getElementById('setup-sub-text').textContent = `${rounds.length} round${rounds.length>1?'s':''} ready to go.`;
   document.getElementById('setup-launch-btn').style.display = 'block';
+  document.getElementById('setup-preview-btn').style.display = 'block';
   return true;
 }
 
