@@ -97,7 +97,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 }
 #pres-bg::after{
   content:'';position:absolute;inset:0;
-  background:linear-gradient(to bottom, rgba(0,0,0,.15) 0%, rgba(0,0,0,.05) 40%, rgba(0,0,0,.25) 100%);
+  background:linear-gradient(to bottom, rgba(0,0,0,.45) 0%, rgba(0,0,0,.2) 40%, rgba(0,0,0,.7) 100%);
 }
 /* fallback solid when no bg image */
 #pres-bg.no-img{background:radial-gradient(ellipse at 30% 20%, #1a1200 0%, #080808 70%)}
@@ -241,13 +241,13 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 /* ANSWER KEY SLIDE */
 .slide-answerkey{align-items:flex-start;justify-content:flex-start;padding:2rem 3rem;overflow-y:auto}
 .ak-title{
-  font-family:var(--display);font-size:clamp(28px,4vw,48px);letter-spacing:.06em;
-  color:var(--text);margin-bottom:1rem;flex-shrink:0;
+  font-family:var(--display);font-size:clamp(22px,3vw,36px);letter-spacing:.06em;
+  color:var(--text);margin-bottom:.5rem;flex-shrink:0;
 }
 .ak-grid{
   display:grid;grid-template-columns:1fr 1fr;
-  grid-auto-flow:column;
-  gap:4px 3rem;width:100%;
+  gap:0 3rem;width:100%;flex:1;min-height:0;
+  align-content:space-between;
 }
 .ak-item{
   display:flex;align-items:baseline;gap:12px;
@@ -321,51 +321,6 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 .fade-out{animation:fadeOut .25s ease forwards}
 @keyframes fadeOut{to{opacity:0}}
 
-/* ── INTRO SLIDESHOW PREVIEW ── */
-#intro-preview-overlay{
-  position:fixed;inset:0;z-index:2000;
-  background:#000;
-  display:none;
-  cursor:pointer;
-}
-#intro-preview-overlay.show{display:block}
-#intro-preview-layer-a,
-#intro-preview-layer-b{
-  position:absolute;inset:0;
-  background-size:cover;background-position:center;background-repeat:no-repeat;
-  transition:opacity 1.8s ease-in-out;
-}
-#intro-preview-layer-a{opacity:1;}
-#intro-preview-layer-b{opacity:0;}
-#intro-preview-close{
-  position:absolute;top:1.5rem;right:1.5rem;z-index:10;
-  background:rgba(8,8,8,.75);backdrop-filter:blur(10px);
-  border:1px solid var(--gold-glow);border-radius:99px;
-  padding:7px 18px;font-family:var(--cinzel);font-size:10px;
-  letter-spacing:.14em;text-transform:uppercase;color:var(--gold);
-  cursor:pointer;transition:all .2s;pointer-events:auto;
-}
-#intro-preview-close:hover{background:var(--gold-dim)}
-#intro-preview-progress{
-  position:absolute;bottom:0;left:0;right:0;height:2px;
-  background:rgba(255,255,255,.08);pointer-events:none;
-}
-#intro-preview-progress-bar{
-  height:100%;background:var(--gold-shine);
-  width:0%;transition:width linear;
-}
-#intro-preview-label{
-  position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);
-  font-family:var(--cinzel);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
-  color:rgba(255,255,255,.35);pointer-events:none;white-space:nowrap;
-}
-#intro-preview-counter{
-  position:absolute;top:1.5rem;left:1.5rem;
-  font-family:var(--display);font-size:28px;letter-spacing:.06em;
-  background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-  pointer-events:none;
-}
-
 /* JUMP PANEL — shown during main round questions */
 #jump-panel{
   position:fixed;top:1.5rem;right:1.5rem;z-index:860;
@@ -396,7 +351,6 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="setup-title">TRIVIA<br><span>NIGHT</span></div>
   <div class="setup-sub" id="setup-sub-text">Let's play some trivia.</div>
   <div class="setup-rounds-grid" id="setup-rounds-grid"></div>
-  <button id="setup-preview-btn" onclick="launchIntroPreview()" style="display:none;width:100%;max-width:420px;margin-bottom:8px;padding:13px;font-family:var(--cinzel);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;background:transparent;color:var(--gold);border:1px solid var(--gold-glow);border-radius:var(--radius);cursor:pointer;transition:all .2s;" onmouseover="this.style.background='var(--gold-dim)'" onmouseout="this.style.background='transparent'">✦ Preview Intro Slides</button>
   <button class="setup-launch-btn" id="setup-launch-btn" onclick="launchFromSetup()" style="display:none">Launch Trivia Night →</button>
   <button id="setup-return-btn" onclick="returnToPresentation()" style="display:none;width:100%;max-width:420px;margin-top:8px;padding:14px;font-family:var(--cinzel);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);cursor:pointer">↩ Return to Presentation</button>
   <div class="setup-hint">Space to reveal · → next · ← back · A answer key · Esc exit</div>
@@ -444,18 +398,6 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 
 <audio id="audio-player" style="display:none"></audio>
 
-<!-- ══════════════════════════════════════════
-     INTRO SLIDESHOW PREVIEW OVERLAY
-══════════════════════════════════════════ -->
-<div id="intro-preview-overlay" onclick="closeIntroPreview()">
-  <div id="intro-preview-layer-a"></div>
-  <div id="intro-preview-layer-b"></div>
-  <div id="intro-preview-counter"></div>
-  <button id="intro-preview-close" onclick="event.stopPropagation();closeIntroPreview()">✕ Close</button>
-  <div id="intro-preview-label">Click anywhere to close</div>
-  <div id="intro-preview-progress"><div id="intro-preview-progress-bar"></div></div>
-</div>
-
 <script>
 // ═══════════════════════════════════════════════════════
 //  CONFIG & STATE
@@ -492,7 +434,6 @@ let state = {
   roundIndex: 0,
   slideIndex: 0,
   answerVisible: false,
-  bonusVisible: false,   // showing bonus question/answer for current question
   answerKeyVisible: false,
   currentType: null,
   mainRoundIndex: -1,
@@ -520,9 +461,9 @@ async function loadSheetQuestions(sheetUrl, tabName, count) {
   const sheetId = extractSheetId(sheetUrl);
   if(!sheetId) throw new Error('Could not extract Sheet ID from URL.');
 
-  // Fetch A:K (cols 1–11, includes bonus question J + bonus answer K)
-  const range = encodeURIComponent(`${tabName}!A2:K`);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${API_KEY}&_=${Date.now()}`;
+  // Fetch A:I (cols 1–9)
+  const range = encodeURIComponent(`${tabName}!A2:I`);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${API_KEY}`;
 
   const res = await fetch(url);
   if(!res.ok) {
@@ -532,8 +473,7 @@ async function loadSheetQuestions(sheetUrl, tabName, count) {
   const data = await res.json();
   const rows = (data.values || []).map(parseRow).filter(Boolean);
   if(!rows.length) throw new Error('No valid rows found.');
-  const picked = pickByDifficultySequence(rows, count);
-  return capBonusQuestions(picked, 2);
+  return pickByDifficultySequence(rows, count);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -571,10 +511,7 @@ function parseRow(r) {
              : mcOptions.length > 0 ? 'mc'
              : 'standard';
 
-  const bonusQuestion = safe(r[9]).trim();
-  const bonusAnswer   = safe(r[10]).trim();
-
-  return {question:q, answer:a, difficulty:diff, imageUrl:img, audioUrl:audio, type, mcOptions, bonusQuestion, bonusAnswer};
+  return {question:q, answer:a, difficulty:diff, imageUrl:img, audioUrl:audio, type, mcOptions};
 }
 
 function pickByDifficultySequence(rows, n) {
@@ -601,19 +538,6 @@ function pickByDifficultySequence(rows, n) {
     chosen.push(row);
   }
   return chosen;
-}
-
-// After selection, randomly nullify bonus questions beyond the 2-per-round cap
-function capBonusQuestions(questions, max) {
-  const bonusIndices = questions.map((q,i)=>q.bonusQuestion ? i : -1).filter(i=>i>=0);
-  if(bonusIndices.length <= max) return questions;
-  // Shuffle bonus indices and null out the extras
-  const shuffled = shuffle([...bonusIndices]);
-  const toNull = new Set(shuffled.slice(max));
-  return questions.map((q,i) => toNull.has(i)
-    ? {...q, bonusQuestion:'', bonusAnswer:''}
-    : q
-  );
 }
 
 function pullUnused(pool, usedIds) {
@@ -727,49 +651,11 @@ function advanceSlide() {
 
   if(type === S_QUESTION) {
     const round = currentRound();
-    const { qIndex, isPass2 } = questionInfo();
-    const q = round.questions[qIndex];
-    const hasBonus = !!(q && q.bonusQuestion);
-    // shouldReveal: true when answers should be shown at this stage
+    const { isPass2 } = questionInfo();
     const shouldReveal = (round.twoPass && isPass2) || (!round.twoPass && round.showAnswers !== false);
-
-    // ── CURRENTLY SHOWING BONUS QUESTION ──
-    if(state.bonusVisible) {
-      if(shouldReveal && !state.answerVisible) {
-        // Show the bonus answer
-        state.answerVisible = true;
-        renderCurrentSlide();
-      } else {
-        // Done with bonus — advance to next real slide
-        state.bonusVisible = false;
-        state.answerVisible = false;
-        const max = slideCount() - 1;
-        if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
-      }
-      return;
-    }
-
-    // ── CURRENTLY SHOWING REGULAR QUESTION ──
-    if(!shouldReveal) {
-      // Pass 1 of twoPass: no answers shown — go straight from question to bonus (if any) or next
-      if(hasBonus) {
-        state.bonusVisible = true;
-        renderCurrentSlide();
-      } else {
-        const max = slideCount() - 1;
-        if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
-      }
-    } else if(!state.answerVisible) {
-      // Reveal the regular answer first
-      state.answerVisible = true;
-      renderCurrentSlide();
-    } else if(hasBonus) {
-      // Answer was shown, question has bonus — enter bonus
-      state.answerVisible = false;
-      state.bonusVisible = true;
-      renderCurrentSlide();
+    if(shouldReveal && !state.answerVisible) {
+      state.answerVisible = true; renderCurrentSlide();
     } else {
-      // No bonus — advance
       state.answerVisible = false;
       const max = slideCount() - 1;
       if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
@@ -786,7 +672,6 @@ function advanceSlide() {
 function retreatSlide() {
   if(slideType() === S_JUMP) return;
   state.answerVisible = false;
-  state.bonusVisible = false;
   state.currentType = null;
   if(state.slideIndex > 0) { state.slideIndex--; renderCurrentSlide(); }
 }
@@ -874,6 +759,7 @@ function renderCurrentSlide() {
   else if(type === S_INTERSTITIAL) bgUrl = round.bgQuestion || round.bgImage || '';
   else if(type === S_THANKYOU) bgUrl = '';  // renderThankyou handles its own bg
   else if(type === S_SLIDE) bgUrl = '';
+  else if(type === S_END) bgUrl = round.bgQuestion || ''; // never fall back to bgImage (admin banner)
   else bgUrl = round.bgQuestion || round.bgImage || '';
 
   if(bgUrl) {
@@ -902,7 +788,6 @@ function renderCurrentSlide() {
   if(type !== S_SLIDE) { const sl = document.getElementById('slide-layer'); if(sl) sl.remove(); }
 
   if(type === S_INTRO) renderIntro(container, round);
-  else if(type === S_QUESTION && state.bonusVisible) renderBonusQuestion(container, round);
   else if(type === S_QUESTION) renderQuestion(container, round);
   else if(type === S_INTERSTITIAL) renderInterstitial(container, round);
   else if(type === S_SLIDE) renderSlide(container, round);
@@ -1059,7 +944,7 @@ function renderSlide(container, round) {
   const presScreen = document.getElementById('pres-screen');
   const el = document.createElement('div');
   el.id = 'slide-layer';
-  el.style.cssText = 'position:fixed;inset:0;z-index:801;background-color:#000;background-size:contain;background-position:center;background-repeat:no-repeat;';
+  el.style.cssText = 'position:fixed;inset:0;z-index:801;background-color:#000;background-size:contain !important;background-position:center;background-repeat:no-repeat;';
   el.style.backgroundImage = `url('${slide.url}')`;
   presScreen.appendChild(el);
 }
@@ -1118,9 +1003,8 @@ function renderQuestion(container, round) {
   // Audio
   let audioHtml = '';
   if(q.audioUrl && q.audioUrl.startsWith('http')) {
-    const WORKER = 'https://canva-slides.belladonnaaudioalchemies.workers.dev';
-    const src = `${WORKER}/audio?url=${encodeURIComponent(q.audioUrl)}`;
-    audioHtml = `<button class="audio-btn" data-audio-src="${src}" onclick="playAudio(this.dataset.audioSrc)">
+    const src = driveViewUrl(q.audioUrl);
+    audioHtml = `<button class="audio-btn" onclick="playAudio('${src}')">
       <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
       Click to play
     </button>`;
@@ -1165,78 +1049,14 @@ function renderQuestion(container, round) {
   container.appendChild(el);
 }
 
-function renderBonusQuestion(container, round) {
-  const { qIndex, isPass2 } = questionInfo();
-  const q = round.questions[qIndex];
-
-  const passLabel = round.twoPass && isPass2
-    ? `<span style="color:var(--gold);font-size:8px;letter-spacing:.12em;display:block;margin-top:2px">ANSWERS PASS</span>`
-    : '';
-
-  const bonusAnswerOverlay = state.answerVisible ? `
-    <div class="answer-overlay">
-      <div class="answer-label">Bonus Answer</div>
-      <div class="answer-text">${q.bonusAnswer}</div>
-      <div class="answer-next-hint">Press → for next question</div>
-    </div>` : '';
-
-  const el = document.createElement('div');
-  el.className = 'slide slide-question active';
-  el.style.position = 'absolute';
-  el.style.inset = '0';
-
-  // Animated gold border around the entire screen
-  el.style.cssText += `
-    position:absolute;inset:0;
-    box-shadow:inset 0 0 0 6px var(--gold), inset 0 0 0 10px rgba(201,168,76,.18), inset 0 0 60px rgba(201,168,76,.12);
-    animation:bonusBorderPulse 2s ease-in-out infinite;
-  `;
-
-  el.innerHTML = `
-    <style>
-      @keyframes bonusBorderPulse {
-        0%,100% { box-shadow: inset 0 0 0 6px var(--gold), inset 0 0 0 10px rgba(201,168,76,.18), inset 0 0 60px rgba(201,168,76,.10); }
-        50%      { box-shadow: inset 0 0 0 6px var(--gold3), inset 0 0 0 10px rgba(245,223,144,.3), inset 0 0 80px rgba(201,168,76,.22); }
-      }
-    </style>
-
-    <div class="q-header" style="padding:1.5rem 2rem 0">
-      <div style="font-family:var(--cinzel);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--text3)">${round.tabName||round.title}${passLabel}</div>
-    </div>
-
-    <div class="q-body">
-      <div class="q-text-block">
-
-        <!-- BONUS QUESTION label sits directly above the question -->
-        <div style="
-          display:flex;flex-direction:column;align-items:center;gap:6px;
-          margin-bottom:1.4rem;
-        ">
-          <div style="
-            font-family:var(--cinzel);font-size:clamp(10px,1.1vw,13px);
-            letter-spacing:.3em;text-transform:uppercase;color:var(--gold);
-          ">✦ &nbsp; BONUS &nbsp; ✦</div>
-          <div style="
-            font-family:var(--display);font-size:clamp(38px,6vw,72px);
-            letter-spacing:.12em;line-height:1;
-            background:var(--gold-shine);
-            -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-          ">QUESTION</div>
-          <div style="width:180px;height:1.5px;background:linear-gradient(90deg,transparent,var(--gold),transparent);margin-top:4px;"></div>
-        </div>
-
-        <div class="q-question">${q.bonusQuestion}</div>
-      </div>
-    </div>
-    ${bonusAnswerOverlay}
-  `;
-  container.appendChild(el);
-}
-
 function renderAnswerKey(container, round) {
-  const questions = round.questions;
-  const rows = Math.ceil(questions.length / 2);
-  const items = questions.map((q,i)=>`
+  const n = round.questions.length;
+  // Auto-size font so answers fill the full screen height
+  const perCol = Math.ceil(n / 2);
+  // Available height roughly 85vh minus title — bigger font for fewer questions
+  const fontSize = Math.min(32, Math.max(14, Math.floor(72 / perCol)));
+
+  const items = round.questions.map((q,i)=>`
     <div class="ak-item">
       <div class="ak-num">${i+1}</div>
       <div class="ak-a">${q.answer}</div>
@@ -1244,10 +1064,10 @@ function renderAnswerKey(container, round) {
 
   const el = document.createElement('div');
   el.className = 'slide slide-answerkey active';
-  el.style.position='absolute';el.style.inset='0';
+  el.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;';
   el.innerHTML = `
     <div class="ak-title">Answer Key</div>
-    <div class="ak-grid" style="grid-template-rows:repeat(${rows},auto)">${items}</div>
+    <div class="ak-grid" style="font-size:${fontSize}px;flex:1;min-height:0;">${items}</div>
   `;
   container.appendChild(el);
 }
@@ -1394,52 +1214,9 @@ function driveViewUrl(url) {
 }
 
 function playAudio(src) {
-  // Stop anything already playing
-  const existing = document.getElementById('audio-player');
-  if(existing) { existing.pause(); existing.src = ''; }
-
-  const btn = document.querySelector('.audio-btn');
-
-  // Create a brand-new Audio object and call play() in the same synchronous
-  // tick as the user gesture — this is what Safari requires
-  const audio = new Audio(src);
-  audio.id = 'audio-player-active';
-
-  // Disable the button immediately so it can't be pressed again mid-playback
-  if(btn) {
-    btn.disabled = true;
-    btn.style.opacity = '.5';
-    btn.style.cursor = 'not-allowed';
-    btn.textContent = '⏳ Loading…';
-  }
-
-  const resetBtn = () => {
-    if(btn) {
-      btn.disabled = false;
-      btn.style.opacity = '';
-      btn.style.cursor = '';
-      btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg> Click to play`;
-    }
-  };
-
-  audio.addEventListener('canplaythrough', () => {
-    if(btn) { btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> Playing…`; }
-  });
-  audio.addEventListener('ended', resetBtn);
-  audio.addEventListener('error', (e) => {
-    console.error('Audio error:', e, audio.error);
-    toast('Audio error — check console');
-    resetBtn();
-  });
-
-  const playPromise = audio.play();
-  if(playPromise !== undefined) {
-    playPromise.catch(err => {
-      console.error('play() rejected:', err);
-      toast('Audio blocked — check console');
-      resetBtn();
-    });
-  }
+  const audio = document.getElementById('audio-player');
+  audio.src = src;
+  audio.play().catch(()=>toast('Audio blocked — click again'));
 }
 
 function exitPresentation() {
@@ -1547,7 +1324,6 @@ function checkUrlParams() {
 
   document.getElementById('setup-sub-text').textContent = `${rounds.length} round${rounds.length>1?'s':''} ready to go.`;
   document.getElementById('setup-launch-btn').style.display = 'block';
-  document.getElementById('setup-preview-btn').style.display = 'block';
   return true;
 }
 
@@ -1650,132 +1426,6 @@ async function launchFromSetup() {
 document.getElementById('setup-screen').addEventListener('dblclick', () => {
   if(state.rounds.length > 0) returnToPresentation();
 });
-
-// ═══════════════════════════════════════════════════════
-//  INTRO SLIDESHOW PREVIEW
-// ═══════════════════════════════════════════════════════
-let introPreviewState = {
-  images: [],
-  current: 0,
-  activeLayer: 'a', // 'a' or 'b'
-  timer: null,
-  progressTimer: null,
-  startedAt: null,
-};
-
-const INTRO_SLIDE_DURATION = 90000; // 1.5 minutes in ms
-const INTRO_FADE_DURATION  = 1800;  // 1.8s crossfade (matches CSS)
-
-function launchIntroPreview() {
-  // Collect all bgIntro images from pendingRounds (or state.rounds if already loaded)
-  const rounds = pendingRounds.length ? pendingRounds : (state.rounds||[]);
-  const images = rounds
-    .map(r => r.bgIntro || r.bgImage || '')
-    .filter(u => u.length > 0);
-
-  if(!images.length) {
-    toast('No intro slide images found.');
-    return;
-  }
-
-  introPreviewState.images = images;
-  introPreviewState.current = 0;
-  introPreviewState.activeLayer = 'a';
-
-  const overlay = document.getElementById('intro-preview-overlay');
-  const layerA  = document.getElementById('intro-preview-layer-a');
-  const layerB  = document.getElementById('intro-preview-layer-b');
-
-  // Prime first image on active layer, make instantly visible
-  layerA.style.backgroundImage = `url('${images[0]}')`;
-  layerA.style.opacity = '1';
-  layerB.style.backgroundImage = '';
-  layerB.style.opacity = '0';
-
-  overlay.classList.add('show');
-  document.documentElement.requestFullscreen?.().catch(()=>{});
-
-  updateIntroPreviewCounter();
-  startIntroPreviewTimer();
-}
-
-function updateIntroPreviewCounter() {
-  const { current, images } = introPreviewState;
-  const el = document.getElementById('intro-preview-counter');
-  if(el) el.textContent = `${current + 1} / ${images.length}`;
-}
-
-function startIntroPreviewTimer() {
-  clearIntroPreviewTimers();
-
-  const bar = document.getElementById('intro-preview-progress-bar');
-  if(bar) {
-    bar.style.transition = 'none';
-    bar.style.width = '0%';
-    bar.offsetWidth;
-    bar.style.transition = `width ${INTRO_SLIDE_DURATION}ms linear`;
-    bar.style.width = '100%';
-  }
-
-  introPreviewState.timer = setTimeout(() => {
-    stepIntroPreview();
-  }, INTRO_SLIDE_DURATION);
-}
-
-function stepIntroPreview() {
-  const s = introPreviewState;
-  const nextIndex = (s.current + 1) % s.images.length;
-  const nextImage = s.images[nextIndex];
-
-  const layerA = document.getElementById('intro-preview-layer-a');
-  const layerB = document.getElementById('intro-preview-layer-b');
-
-  // Determine incoming / outgoing layers
-  const incoming = s.activeLayer === 'a' ? layerB : layerA;
-  const outgoing  = s.activeLayer === 'a' ? layerA : layerB;
-
-  // Load next image on the hidden layer, then crossfade
-  incoming.style.backgroundImage = `url('${nextImage}')`;
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      incoming.style.opacity = '1';
-      outgoing.style.opacity  = '0';
-    });
-  });
-
-  s.activeLayer = s.activeLayer === 'a' ? 'b' : 'a';
-  s.current = nextIndex;
-  updateIntroPreviewCounter();
-
-  // Reset progress bar then start new hold timer after fade completes
-  clearTimeout(s.timer);
-  s.timer = setTimeout(() => {
-    const bar = document.getElementById('intro-preview-progress-bar');
-    if(bar) {
-      bar.style.transition = 'none';
-      bar.style.width = '0%';
-      bar.offsetWidth;
-      bar.style.transition = `width ${INTRO_SLIDE_DURATION}ms linear`;
-      bar.style.width = '100%';
-    }
-    // Schedule next step
-    s.timer = setTimeout(() => { stepIntroPreview(); }, INTRO_SLIDE_DURATION);
-  }, INTRO_FADE_DURATION);
-}
-
-function clearIntroPreviewTimers() {
-  clearTimeout(introPreviewState.timer);
-  clearTimeout(introPreviewState.progressTimer);
-}
-
-function closeIntroPreview() {
-  clearIntroPreviewTimers();
-  const overlay = document.getElementById('intro-preview-overlay');
-  overlay.classList.remove('show');
-  // Reset layers
-  const bar = document.getElementById('intro-preview-progress-bar');
-  if(bar) { bar.style.transition = 'none'; bar.style.width = '0%'; }
-}
 
 checkUrlParams();
 </script>
