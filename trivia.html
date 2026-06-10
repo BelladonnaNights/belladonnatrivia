@@ -354,12 +354,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="setup-rounds-grid" id="setup-rounds-grid"></div>
   <button class="setup-launch-btn" id="setup-launch-btn" onclick="launchFromSetup()" style="display:none">Launch Trivia Night →</button>
   <button class="setup-launch-btn" id="setup-preview-btn" onclick="startPreview()" style="display:none;margin-top:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:11px;padding:10px 32px">Preview Intro Slides</button>
-  <button class="setup-launch-btn" id="setup-join-btn" onclick="toggleJoinPanel()" style="display:none;margin-top:8px;background:transparent;border:1px solid rgba(52,152,219,.5);color:#3498db;font-size:11px;padding:10px 32px">📱 Show Join QR Code</button>
-  <div id="join-panel" style="display:none;text-align:center;margin-top:12px;padding:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;max-width:360px;width:100%">
-    <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#3498db;margin-bottom:8px">Players — scan or visit:</div>
-    <div id="join-url" style="font-family:var(--font);font-size:12px;color:var(--text2);word-break:break-all;margin-bottom:10px"></div>
-    <div id="qr-container" style="display:inline-block;background:#fff;padding:10px;border-radius:8px;margin:0 auto"></div>
-  </div>
+  <button class="setup-launch-btn" id="setup-join-btn" onclick="toggleJoinPopup()" style="display:none;margin-top:8px;background:transparent;border:1px solid rgba(52,152,219,.5);color:#3498db;font-size:11px;padding:10px 32px">📱 Show Join QR Code</button>
   <button id="setup-return-btn" onclick="returnToPresentation()" style="display:none;width:100%;max-width:420px;margin-top:8px;padding:14px;font-family:var(--cinzel);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);cursor:pointer">↩ Return to Presentation</button>
   <div class="setup-hint">Space to reveal · → next · ← back · A answer key · Esc exit</div>
 </div>
@@ -444,29 +439,68 @@ var catTypes = [];
 // ═══════════════════════════════════════════════════════
 let leaderboardVisible = false;
 
-function toggleJoinPanel() {
-  const panel = document.getElementById('join-panel');
+// ── JOIN POPUP ──────────────────────────────────
+let joinPopupOpen = false;
+let joinUrlCached = '';
+
+function toggleJoinPopup() {
+  const popup = document.getElementById('join-popup');
   const btn = document.getElementById('setup-join-btn');
-  const showing = panel.style.display !== 'none';
-  panel.style.display = showing ? 'none' : 'block';
-  btn.textContent = showing ? '📱 Show Join QR Code' : '📱 Hide Join QR Code';
+  joinPopupOpen = !joinPopupOpen;
+  popup.style.display = joinPopupOpen ? 'block' : 'none';
+  if(btn) btn.textContent = joinPopupOpen ? '📱 Hide Join QR Code' : '📱 Show Join QR Code';
+  if(joinPopupOpen && joinUrlCached) {
+    document.getElementById('join-url-display').textContent = joinUrlCached;
+    generateQR(joinUrlCached);
+  }
 }
 
 function generateQR(url) {
-  const container = document.getElementById('qr-container');
+  const container = document.getElementById('join-qr');
   if(!container) return;
   container.innerHTML = '';
   if(typeof QRCode !== 'undefined') {
     new QRCode(container, {
       text: url, width: 200, height: 200,
-      colorDark: '#000000', colorLight: '#ffffff',
+      colorDark:'#000000', colorLight:'#ffffff',
       correctLevel: QRCode.CorrectLevel.M
     });
   } else {
-    // Library not loaded yet — retry after a moment
-    setTimeout(() => generateQR(url), 500);
+    // QRCode lib not loaded yet — show URL as fallback
+    container.innerHTML = `<div style="font-size:11px;color:#333;padding:8px;max-width:200px;word-break:break-all">${url}</div>`;
   }
 }
+
+// Make popup draggable
+(function() {
+  let dragging = false, ox = 0, oy = 0;
+  document.addEventListener('DOMContentLoaded', () => {
+    const handle = document.getElementById('join-popup-handle');
+    const popup  = document.getElementById('join-popup');
+    if(!handle || !popup) return;
+    handle.addEventListener('mousedown', e => {
+      dragging = true;
+      // Switch from transform-based centering to absolute position
+      const r = popup.getBoundingClientRect();
+      popup.style.left = r.left + 'px';
+      popup.style.top  = r.top  + 'px';
+      popup.style.transform = 'none';
+      ox = e.clientX - r.left;
+      oy = e.clientY - r.top;
+      handle.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if(!dragging) return;
+      popup.style.left = (e.clientX - ox) + 'px';
+      popup.style.top  = (e.clientY - oy) + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+      dragging = false;
+      handle.style.cursor = 'grab';
+    });
+  });
+})();
 
 function initLiveGame() {
   db.ref('liveGame').set({
@@ -930,13 +964,6 @@ function renderCurrentSlide() {
   else if(type === S_ANSWERKEY) renderAnswerKey(container, round);
   else if(type === S_THANKYOU) renderThankyou(container, round);
   else renderEnd(container, round);
-
-  // Make slides visible after layout — prevents flash of invisible content
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      document.querySelectorAll('#slide-container .slide.active').forEach(el => el.classList.add('visible'));
-    });
-  });
 
   updateJumpPanel();
 }
@@ -1543,10 +1570,8 @@ function checkUrlParams() {
   document.getElementById('setup-launch-btn').style.display = 'block';
   document.getElementById('setup-preview-btn').style.display = 'block';
   document.getElementById('setup-join-btn').style.display = 'block';
-  // Set join URL
-  const joinUrl = window.location.href.replace(/\/[^/]*$/, '/play.html');
-  document.getElementById('join-url').textContent = joinUrl;
-  generateQR(joinUrl);
+  // Cache the join URL for when popup opens
+  joinUrlCached = window.location.href.replace(/\/[^/]*(\?.*)?$/, '/play.html');
   return true;
 }
 
@@ -1655,5 +1680,58 @@ document.getElementById('setup-screen').addEventListener('dblclick', () => {
 
 checkUrlParams();
 </script>
+
+<!-- ══════════════════════════════════════════
+     JOIN QR POPUP (draggable floating window)
+══════════════════════════════════════════ -->
+<div id="join-popup" style="
+  display:none;
+  position:fixed;
+  top:80px;left:50%;
+  transform:translateX(-50%);
+  z-index:3000;
+  background:#111;
+  border:1px solid rgba(52,152,219,.4);
+  border-radius:14px;
+  box-shadow:0 8px 40px rgba(0,0,0,.8);
+  min-width:280px;
+  user-select:none;
+  cursor:default;
+">
+  <!-- Drag handle -->
+  <div id="join-popup-handle" style="
+    display:flex;align-items:center;justify-content:space-between;
+    padding:12px 16px 10px;
+    border-bottom:1px solid rgba(255,255,255,.08);
+    cursor:grab;
+    font-family:'Cinzel',serif;font-size:10px;letter-spacing:.18em;
+    text-transform:uppercase;color:rgba(52,152,219,.9);
+  ">
+    <span>📱 Join Game</span>
+    <button onclick="toggleJoinPopup()" style="
+      background:none;border:none;color:rgba(255,255,255,.4);
+      font-size:18px;cursor:pointer;line-height:1;padding:0 0 2px 8px;
+    ">×</button>
+  </div>
+  <!-- Content -->
+  <div style="padding:16px;text-align:center">
+    <div id="join-url-display" style="
+      font-family:'DM Sans',sans-serif;font-size:11px;
+      color:rgba(255,255,255,.5);word-break:break-all;
+      margin-bottom:12px;line-height:1.4;
+    "></div>
+    <div id="join-qr" style="
+      display:inline-block;
+      background:#fff;padding:10px;border-radius:8px;
+    "></div>
+    <div style="
+      margin-top:10px;
+      font-family:'Cinzel',serif;font-size:9px;
+      letter-spacing:.12em;text-transform:uppercase;
+      color:rgba(255,255,255,.3);
+    ">Drag to move · click × to close</div>
+  </div>
+</div>
+
 </body>
 </html>
