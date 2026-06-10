@@ -353,6 +353,12 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="setup-rounds-grid" id="setup-rounds-grid"></div>
   <button class="setup-launch-btn" id="setup-launch-btn" onclick="launchFromSetup()" style="display:none">Launch Trivia Night →</button>
   <button class="setup-launch-btn" id="setup-preview-btn" onclick="startPreview()" style="display:none;margin-top:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:11px;padding:10px 32px">Preview Intro Slides</button>
+  <button class="setup-launch-btn" id="setup-join-btn" onclick="toggleJoinPanel()" style="display:none;margin-top:8px;background:transparent;border:1px solid rgba(52,152,219,.5);color:#3498db;font-size:11px;padding:10px 32px">📱 Show Join QR Code</button>
+  <div id="join-panel" style="display:none;text-align:center;margin-top:12px;padding:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;max-width:360px;width:100%">
+    <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#3498db;margin-bottom:8px">Players — scan or visit:</div>
+    <div id="join-url" style="font-family:var(--font);font-size:12px;color:var(--text2);word-break:break-all;margin-bottom:10px"></div>
+    <canvas id="qr-canvas" style="border-radius:8px;background:#fff;padding:8px;display:block;margin:0 auto"></canvas>
+  </div>
   <button id="setup-return-btn" onclick="returnToPresentation()" style="display:none;width:100%;max-width:420px;margin-top:8px;padding:14px;font-family:var(--cinzel);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);cursor:pointer">↩ Return to Presentation</button>
   <div class="setup-hint">Space to reveal · → next · ← back · A answer key · Esc exit</div>
 </div>
@@ -416,9 +422,51 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 
 <script>
 // ═══════════════════════════════════════════════════════
+//  CONFIG & STATE
+// ═══════════════════════════════════════════════════════
+const DIFF_EASY=1,DIFF_MEDIUM=2,DIFF_HARD=3;
+const MC_LABELS=['A','B','C','D'];
+
+const API_KEY = 'AIzaSyACMjXQCXjVo75hbMXtag_JctR4SoX70So';
+
+// Follow Us / Rules data — loaded from Firebase non-blocking
+var appSettings = {};
+var catTypes = [];
+(function() {
+  try {
+    const cfg = {apiKey:"AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",authDomain:"belladonnatrivia.firebaseapp.com",databaseURL:"https://belladonnatrivia-default-rtdb.firebaseio.com",projectId:"belladonnatrivia"};
+    if(!firebase.apps.length) firebase.initializeApp(cfg);
+    const db = firebase.database();
+
+// ═══════════════════════════════════════════════════════
 //  LIVE GAME — Digital Answering System
 // ═══════════════════════════════════════════════════════
 let leaderboardVisible = false;
+
+function toggleJoinPanel() {
+  const panel = document.getElementById('join-panel');
+  const btn = document.getElementById('setup-join-btn');
+  const showing = panel.style.display !== 'none';
+  panel.style.display = showing ? 'none' : 'block';
+  btn.textContent = showing ? '📱 Show Join QR Code' : '📱 Hide Join QR Code';
+}
+
+function generateQR(url) {
+  // Simple QR using a free API — no library needed
+  const canvas = document.getElementById('qr-canvas');
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+  };
+  img.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+  // Fallback: just show canvas as background if API fails
+  img.onerror = () => {
+    canvas.style.display = 'none';
+  };
+}
 
 function initLiveGame() {
   db.ref('liveGame').set({
@@ -497,22 +545,7 @@ function fuzzyConfidence(submitted,correct) {
   return 'wrong';
 }
 
-// ═══════════════════════════════════════════════════════
-//  CONFIG & STATE
-// ═══════════════════════════════════════════════════════
-const DIFF_EASY=1,DIFF_MEDIUM=2,DIFF_HARD=3;
-const MC_LABELS=['A','B','C','D'];
 
-const API_KEY = 'AIzaSyACMjXQCXjVo75hbMXtag_JctR4SoX70So';
-
-// Follow Us / Rules data — loaded from Firebase non-blocking
-var appSettings = {};
-var catTypes = [];
-(function() {
-  try {
-    const cfg = {apiKey:"AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",authDomain:"belladonnatrivia.firebaseapp.com",databaseURL:"https://belladonnatrivia-default-rtdb.firebaseio.com",projectId:"belladonnatrivia"};
-    if(!firebase.apps.length) firebase.initializeApp(cfg);
-    const db = firebase.database();
     db.ref('appSettings').once('value', s => { appSettings = s.val()||{}; });
     db.ref('categoryTypes').once('value', s => { const d=s.val()||{}; catTypes=Object.entries(d).map(([id,v])=>({id,...v})); });
   } catch(e) {}
@@ -898,13 +931,6 @@ function renderCurrentSlide() {
   else if(type === S_THANKYOU) renderThankyou(container, round);
   else renderEnd(container, round);
 
-  // Make slides visible after layout settles — prevents opacity:0 black screen
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      container.querySelectorAll('.slide.active').forEach(el => el.classList.add('visible'));
-    });
-  });
-
   updateJumpPanel();
 }
 
@@ -1017,11 +1043,6 @@ function renderPreShow() {
   } else {
     renderRules(container, round);
   }
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      container.querySelectorAll('.slide.active').forEach(el => el.classList.add('visible'));
-    });
-  });
 }
 
 function renderIntro(container, round) {
@@ -1514,6 +1535,11 @@ function checkUrlParams() {
   document.getElementById('setup-sub-text').textContent = `${rounds.length} round${rounds.length>1?'s':''} ready to go.`;
   document.getElementById('setup-launch-btn').style.display = 'block';
   document.getElementById('setup-preview-btn').style.display = 'block';
+  document.getElementById('setup-join-btn').style.display = 'block';
+  // Set join URL
+  const joinUrl = window.location.href.replace(/\/[^/]*$/, '/play.html');
+  document.getElementById('join-url').textContent = joinUrl;
+  generateQR(joinUrl);
   return true;
 }
 
