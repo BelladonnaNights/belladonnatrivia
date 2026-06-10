@@ -380,6 +380,12 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 <div id="pres-screen">
   <div id="pres-bg" class="no-img"></div>
   <div id="slide-container"></div>
+  <!-- Leaderboard overlay (shown over current slide) -->
+  <div id="lb-overlay" style="display:none;position:fixed;inset:0;z-index:850;background:rgba(8,8,8,.92);backdrop-filter:blur(8px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:2rem">
+    <div style="font-family:var(--display);font-size:clamp(40px,8vw,64px);letter-spacing:.08em;color:var(--gold)">LEADERBOARD</div>
+    <div id="lb-overlay-list" style="width:100%;max-width:600px;display:flex;flex-direction:column;gap:8px"></div>
+    <button class="end-btn end-btn-ghost" onclick="toggleLeaderboard()" style="margin-top:1rem">Close</button>
+  </div>
 </div>
 
 <button id="fullscreen-btn" onclick="document.documentElement.requestFullscreen?.().catch(()=>{})" style="display:none;position:fixed;top:1rem;right:1rem;z-index:900;background:rgba(8,8,8,.8);backdrop-filter:blur(8px);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:7px 12px;cursor:pointer;font-family:'Cinzel',serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#c9a84c;">⛶ Fullscreen</button>
@@ -409,6 +415,88 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 <audio id="audio-player" style="display:none"></audio>
 
 <script>
+// ═══════════════════════════════════════════════════════
+//  LIVE GAME — Digital Answering System
+// ═══════════════════════════════════════════════════════
+let leaderboardVisible = false;
+
+function initLiveGame() {
+  db.ref('liveGame').set({
+    status: 'waiting',
+    currentQuestion: null,
+    leaderboardVisible: false,
+    startedAt: Date.now(),
+  });
+}
+
+function toggleLeaderboard() {
+  leaderboardVisible = !leaderboardVisible;
+  const overlay = document.getElementById('lb-overlay');
+  overlay.style.display = leaderboardVisible ? 'flex' : 'none';
+  db.ref('liveGame/leaderboardVisible').set(leaderboardVisible);
+  const btn = document.getElementById('lb-toggle-btn');
+  if(btn) btn.textContent = leaderboardVisible ? 'Hide Leaderboard' : 'Show Leaderboard';
+  if(leaderboardVisible) {
+    db.ref('liveGame/teams').once('value', snap => renderLeaderboardOverlay(snap.val()||{}));
+  }
+}
+
+function renderLeaderboardOverlay(teams) {
+  const sorted = Object.entries(teams)
+    .map(([id,t]) => ({id,name:t.name,score:t.score||0}))
+    .sort((a,b) => b.score-a.score);
+  const list = document.getElementById('lb-overlay-list');
+  list.innerHTML = sorted.map((t,i) => `
+    <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;
+      background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px">
+      <div style="font-family:var(--display);font-size:32px;color:${i<3?'var(--gold)':'var(--text3)'};min-width:36px">${i+1}</div>
+      <div style="flex:1;font-family:var(--cinzel);font-size:15px;letter-spacing:.08em">${t.name}</div>
+      <div style="font-family:var(--display);font-size:32px;color:var(--gold)">${t.score}</div>
+    </div>`).join('');
+}
+
+function pushLiveQuestion(q, qIndex, round) {
+  const choices = q.type==='mc' ? (q._choices||[]).map(c=>c.text) :
+                  q.type==='tf' ? ['True','False'] : null;
+  const qId = `q_${state.roundIndex}_${qIndex}`;
+  db.ref('liveGame').update({
+    status: 'question',
+    currentQuestion: {
+      id: qId, text: q.question, type: q.type||'open',
+      choices, correct: q.answer, index: qIndex,
+      timed: round.timed||false, timeLimit: 10,
+      roundIndex: state.roundIndex, openedAt: Date.now(),
+    }
+  });
+  db.ref(`liveGame/answers/${qId}`).remove();
+}
+
+// Fuzzy grading
+function normalizeAnswer(s) {
+  return s.toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').replace(/\b(a|an|the)\b/g,'').trim();
+}
+function levenshtein(a,b) {
+  const m=a.length,n=b.length;
+  const dp=Array.from({length:m+1},(_,i)=>[i,...Array(n).fill(0)]);
+  for(let j=0;j<=n;j++) dp[0][j]=j;
+  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++) {
+    dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
+  }
+  return dp[m][n];
+}
+function fuzzyConfidence(submitted,correct) {
+  if(!submitted||!correct) return 'wrong';
+  const a=normalizeAnswer(submitted),b=normalizeAnswer(correct);
+  if(a===b) return 'correct';
+  const dist=levenshtein(a,b);
+  const ratio=1-dist/Math.max(a.length,b.length);
+  if(ratio>=0.85) return 'correct';
+  if(ratio>=0.65) return 'needs_review';
+  if(b.length>3&&a.includes(b)) return 'correct';
+  if(a.length>3&&b.includes(a)) return 'needs_review';
+  return 'wrong';
+}
+
 // ═══════════════════════════════════════════════════════
 //  CONFIG & STATE
 // ═══════════════════════════════════════════════════════
@@ -644,6 +732,11 @@ function currentQuestion() {
 function advanceSlide() {
   const type = slideType();
   if(type === S_JUMP) return;
+
+  // Close digital answers when leaving a question
+  if(type === S_QUESTION) {
+    db.ref('liveGame/status').set('closed');
+  }
 
   if(type === S_INTRO || type === S_INTERSTITIAL || type === S_THANKYOU || type === S_ANSWERKEY) {
     const max = slideCount() - 1;
@@ -1125,13 +1218,17 @@ function renderQuestion(container, round) {
     ${answerOverlay}
   `;
   container.appendChild(el);
+
+  // Push to Firebase for digital answering (only on new question, not answer reveal)
+  if(!state.answerVisible && !questionInfo().isPass2) {
+    pushLiveQuestion(q, qIndex, round);
+  }
 }
 
 function renderAnswerKey(container, round) {
   const n = round.questions.length;
   // Auto-size font so answers fill the full screen height
   const perCol = Math.ceil(n / 2);
-  // Available height roughly 85vh minus title — bigger font for fewer questions
   const fontSize = Math.min(32, Math.max(14, Math.floor(72 / perCol)));
 
   const items = round.questions.map((q,i)=>`
@@ -1177,6 +1274,7 @@ function renderEnd(container, round) {
         : `Up next: Round ${state.roundIndex+2}`}</div>
     <div class="end-btn-row">
       <button class="end-btn end-btn-ghost" onclick="showAnswerKey()">View Answer Key</button>
+      <button class="end-btn end-btn-ghost" onclick="toggleLeaderboard()" id="lb-toggle-btn">Show Leaderboard</button>
       ${btnHtml}
     </div>
     ${isMiniGame ? `<div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem;animation:pulse 2s ease-in-out infinite">Press → to return to main round</div>` :
@@ -1371,6 +1469,7 @@ function checkUrlParams() {
       questionCount:qCount,
       showAnswers: p.get(`r${i}_showAnswers`) !== '0',
       twoPass: p.get(`r${i}_twoPass`) === '1',
+      timed: p.get(`r${i}_timed`) === '1',
       isMainRound: p.get(`r${i}_isMainRound`) === '1',
       segmentSize: parseInt(p.get(`r${i}_segmentSize`))||5,
       segmentStart: 0, // which slide index the current segment started at
@@ -1488,7 +1587,10 @@ async function launchFromSetup() {
 
   state.roundIndex = 0;
   state.slideIndex = 0;
-  state.preShow = null; // will be set below
+  state.preShow = null;
+
+  // Initialize digital answering game in Firebase
+  initLiveGame(); // will be set below
 
   document.getElementById('setup-return-btn').style.display = 'block';
   document.getElementById('setup-screen').style.display = 'none';
