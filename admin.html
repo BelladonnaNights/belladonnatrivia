@@ -342,6 +342,27 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <div class="lineup-divider"></div>
 
     <button class="launch-btn" id="launch-btn" onclick="launchTrivia()">Launch Trivia Night →</button>
+
+    <!-- LIVE GAME PANEL -->
+    <div id="live-game-panel" style="margin-top:1.5rem;display:none">
+      <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:10px">⚡ Live Game</div>
+
+      <!-- Controls row -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn btn-ghost" onclick="clearScores()" style="font-size:10px;color:var(--red);border-color:rgba(231,76,60,.3)">🗑 Clear Scores</button>
+        <button class="btn btn-ghost" onclick="toggleLbAdmin()" id="lb-admin-btn" style="font-size:10px">📊 Show Leaderboard</button>
+      </div>
+
+      <!-- Review queue -->
+      <div style="font-family:var(--cinzel);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Answers Needing Review</div>
+      <div id="review-queue" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto">
+        <div style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3);padding:8px 0">No answers need review right now.</div>
+      </div>
+
+      <!-- Scores summary -->
+      <div style="font-family:var(--cinzel);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--text3);margin-top:12px;margin-bottom:6px">Current Scores</div>
+      <div id="scores-list" style="display:flex;flex-direction:column;gap:4px"></div>
+    </div>
   </div>
 </div>
 
@@ -728,6 +749,7 @@ let lineupMainRound = [false, false, false, false, false];
 let lineupSegmentSize = [5, 5, 5, 5, 5];
 let lineupQCount = [20, 20, 20, 20, 20];
 let lineupTwoPass = [false, false, false, false, false];
+let lineupTimed   = [false, false, false, false, false];
 let activeGenres = new Set(); // empty = show all
 let editingId = null;
 let dragCardId = null;
@@ -990,6 +1012,11 @@ function renderLineup() {
             style="accent-color:var(--gold);width:13px;height:13px;cursor:pointer"/>
           <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Two-pass mode (questions twice, answers on 2nd pass)</span>
         </label>` : ''}
+        <label style="display:flex;align-items:center;gap:7px;margin-top:5px;cursor:pointer;user-select:none">
+          <input type="checkbox" ${lineupTimed[i] ? 'checked' : ''} onchange="lineupTimed[${i}]=this.checked"
+            style="accent-color:var(--blue,#3498db);width:13px;height:13px;cursor:pointer"/>
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">⏱ Timed answers (10s per question)</span>
+        </label>
         <label style="display:flex;align-items:center;gap:7px;margin-top:5px;cursor:pointer;user-select:none">
           <input type="checkbox" ${mainChecked} onchange="setMainRound(${i},this.checked)"
             style="accent-color:var(--gold2);width:13px;height:13px;cursor:pointer"/>
@@ -1298,6 +1325,7 @@ function launchTrivia() {
     params.set(`r${i}_qcount`, lineupQCount[slotIndex]||20);
     params.set(`r${i}_showAnswers`, lineupAnswers[slotIndex] === true ? '1' : '0');
     params.set(`r${i}_twoPass`, lineupTwoPass[slotIndex] ? '1' : '0');
+    params.set(`r${i}_timed`, lineupTimed[slotIndex] ? '1' : '0');
     params.set(`r${i}_isMainRound`, lineupMainRound[slotIndex] ? '1' : '0');
     params.set(`r${i}_segmentSize`, lineupSegmentSize[slotIndex]||5);
   });
@@ -1306,7 +1334,115 @@ function launchTrivia() {
 }
 
 // ═══════════════════════════════════════════════
-//  UTILS
+//  LIVE GAME — Admin Controls
+// ═══════════════════════════════════════════════
+let lbAdminVisible = false;
+let reviewItems = {}; // qId+teamId → item data
+
+// Show live game panel and start listening when a game is active
+db.ref('liveGame/status').on('value', snap => {
+  const status = snap.val();
+  const panel = document.getElementById('live-game-panel');
+  if(panel) panel.style.display = status ? 'block' : 'none';
+});
+
+// Listen for answers needing review
+db.ref('liveGame/answers').on('value', snap => {
+  const allAnswers = snap.val() || {};
+  const queue = [];
+  for(const [qId, answers] of Object.entries(allAnswers)) {
+    for(const [teamId, ans] of Object.entries(answers)) {
+      if(ans.status === 'needs_review') {
+        queue.push({qId, teamId, ...ans});
+      }
+    }
+  }
+  renderReviewQueue(queue);
+});
+
+// Listen for scores
+db.ref('liveGame/teams').on('value', snap => {
+  const teams = snap.val() || {};
+  const sorted = Object.entries(teams)
+    .map(([id,t]) => ({id, name:t.name, score:t.score||0}))
+    .sort((a,b) => b.score-a.score);
+
+  const list = document.getElementById('scores-list');
+  if(!list) return;
+  list.innerHTML = sorted.length ? sorted.map((t,i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;
+      background:rgba(255,255,255,.03);border-radius:6px">
+      <span style="font-family:var(--display);font-size:18px;color:${i<3?'var(--gold)':'var(--text3)'};min-width:22px">${i+1}</span>
+      <span style="flex:1;font-family:var(--cinzel);font-size:11px;letter-spacing:.06em">${t.name}</span>
+      <span style="font-family:var(--display);font-size:20px;color:var(--gold)">${t.score}</span>
+    </div>`).join('')
+  : '<div style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet.</div>';
+});
+
+function renderReviewQueue(queue) {
+  const el = document.getElementById('review-queue');
+  if(!el) return;
+  if(!queue.length) {
+    el.innerHTML = '<div style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3);padding:8px 0">No answers need review right now.</div>';
+    return;
+  }
+  el.innerHTML = queue.map(item => `
+    <div style="background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:8px;padding:10px 12px">
+      <div style="font-size:10px;color:var(--text3);font-family:var(--cinzel);letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${item.teamName||'Unknown team'}</div>
+      <div style="font-size:13px;color:var(--text);margin-bottom:6px">
+        Submitted: <strong>"${item.answer}"</strong>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary" onclick="resolveAnswer('${item.qId}','${item.teamId}',true)"
+          style="font-size:10px;padding:5px 12px;flex:1">✓ Correct</button>
+        <button class="btn btn-ghost" onclick="resolveAnswer('${item.qId}','${item.teamId}',false)"
+          style="font-size:10px;padding:5px 12px;flex:1;color:var(--red);border-color:rgba(231,76,60,.3)">✗ Wrong</button>
+      </div>
+    </div>`).join('');
+}
+
+async function resolveAnswer(qId, teamId, isCorrect) {
+  const snap = await db.ref(`liveGame/answers/${qId}/${teamId}`).once('value');
+  const ans = snap.val();
+  if(!ans) return;
+
+  const updates = {};
+  updates[`liveGame/answers/${qId}/${teamId}/status`] = isCorrect ? 'correct' : 'wrong';
+
+  if(isCorrect) {
+    const timed = ans.elapsed !== null;
+    let pts = 1;
+    if(timed && ans.elapsed !== undefined) {
+      pts = ans.elapsed <= 3 ? 3 : ans.elapsed <= 6 ? 2 : 1;
+    }
+    updates[`liveGame/answers/${qId}/${teamId}/points`] = pts;
+    const scoreSnap = await db.ref(`liveGame/teams/${teamId}/score`).once('value');
+    updates[`liveGame/teams/${teamId}/score`] = (scoreSnap.val()||0) + pts;
+  } else {
+    updates[`liveGame/answers/${qId}/${teamId}/points`] = 0;
+  }
+
+  await db.ref().update(updates);
+  toast(isCorrect ? 'Marked correct!' : 'Marked wrong');
+}
+
+async function clearScores() {
+  if(!confirm('Clear all scores and teams? This cannot be undone.')) return;
+  await db.ref('liveGame/teams').remove();
+  await db.ref('liveGame/answers').remove();
+  await db.ref('liveGame/status').set('waiting');
+  toast('Scores cleared');
+}
+
+function toggleLbAdmin() {
+  lbAdminVisible = !lbAdminVisible;
+  db.ref('liveGame/leaderboardVisible').set(lbAdminVisible);
+  const btn = document.getElementById('lb-admin-btn');
+  if(btn) btn.textContent = lbAdminVisible ? '📊 Hide Leaderboard' : '📊 Show Leaderboard';
+  toast(lbAdminVisible ? 'Leaderboard visible to players' : 'Leaderboard hidden');
+}
+
+// ═══════════════════════════════════════════════
 // ═══════════════════════════════════════════════
 function driveViewUrl(url) {
   if(!url) return url;
