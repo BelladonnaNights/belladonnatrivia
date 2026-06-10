@@ -898,6 +898,13 @@ function renderCurrentSlide() {
   else if(type === S_THANKYOU) renderThankyou(container, round);
   else renderEnd(container, round);
 
+  // Make slides visible after layout settles — prevents opacity:0 black screen
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      container.querySelectorAll('.slide.active').forEach(el => el.classList.add('visible'));
+    });
+  });
+
   updateJumpPanel();
 }
 
@@ -1010,6 +1017,11 @@ function renderPreShow() {
   } else {
     renderRules(container, round);
   }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      container.querySelectorAll('.slide.active').forEach(el => el.classList.add('visible'));
+    });
+  });
 }
 
 function renderIntro(container, round) {
