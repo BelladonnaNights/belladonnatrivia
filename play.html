@@ -20,8 +20,8 @@
   --cinzel:'Cinzel',serif;
   --serif:'EB Garamond',serif;
   --font:'DM Sans',sans-serif;
-  /* Answer button colors */
-  --c1:#c0392b;--c2:#2980b9;--c3:#27ae60;--c4:#8e44ad;
+  /* Answer button colors — shades of gold */
+  --c1:#8B6914;--c2:#C4952A;--c3:#E8C547;--c4:#F5DFA0;
 }
 html,body{
   height:100%;width:100%;
@@ -92,13 +92,7 @@ html,body{
 #wait-screen{
   background:var(--bg);gap:1rem;text-align:center;
 }
-.wait-pulse{
-  width:48px;height:48px;border-radius:50%;
-  border:2px solid var(--gold);
-  border-top-color:transparent;
-  animation:spin 1s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg)}}
+
 .wait-name{
   font-family:var(--cinzel);font-size:14px;letter-spacing:.12em;
   color:var(--gold);text-transform:uppercase;
@@ -170,7 +164,7 @@ html,body{
 .choice-btn{
   padding:14px 10px;
   border:none;border-radius:var(--radius);
-  color:#fff;font-family:var(--font);font-size:14px;font-weight:500;
+  color:#111;font-family:var(--font);font-size:14px;font-weight:500;
   cursor:pointer;text-align:center;line-height:1.3;
   transition:transform .1s,opacity .15s;
   min-height:60px;
@@ -201,8 +195,8 @@ html,body{
   transition:transform .1s,opacity .15s;
 }
 .tf-btn:active{transform:scale(.96)}
-.tf-btn.t{background:var(--c3)}
-.tf-btn.f{background:var(--c1)}
+.tf-btn.t{background:var(--c2);color:#111}
+.tf-btn.f{background:var(--c1);color:#fff}
 .tf-btn.selected{outline:3px solid #fff;outline-offset:2px}
 .tf-btn:disabled{cursor:not-allowed}
 
@@ -300,8 +294,10 @@ html,body{
 
 <!-- ── REGISTER ── -->
 <div class="screen" id="reg-screen">
-  <div class="reg-logo">Belladonna Audio Alchemies</div>
-  <div class="reg-title">TRIVIA<br><span>NIGHT</span></div>
+  <div style="margin-bottom:1rem">
+    <div style="font-family:var(--cinzel);font-size:9px;letter-spacing:.3em;text-transform:uppercase;color:var(--gold);margin-bottom:6px">Belladonna Audio Alchemies</div>
+    <div style="font-family:var(--display);font-size:clamp(52px,14vw,80px);line-height:.9;letter-spacing:.04em;color:var(--text)">TRIVIA<br><span style="color:var(--gold)">NIGHT</span></div>
+  </div>
   <div class="reg-sub">Enter your name to join the game</div>
   <input class="reg-input" id="reg-input" type="text" placeholder="Name or Team Name" maxlength="32" autocomplete="off" autocorrect="off" spellcheck="false"/>
   <button class="reg-btn" id="reg-btn" onclick="register()">Join Game</button>
@@ -310,9 +306,10 @@ html,body{
 
 <!-- ── WAITING ── -->
 <div class="screen hidden" id="wait-screen">
-  <div class="wait-pulse"></div>
+  <div style="font-family:var(--display);font-size:28px;letter-spacing:.1em;color:var(--gold);margin-bottom:.25rem">BELLADONNA</div>
+  <div style="font-family:var(--cinzel);font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:var(--text3);margin-bottom:2rem">Audio Alchemies</div>
   <div class="wait-name" id="wait-name"></div>
-  <div class="wait-msg">Waiting for the next question…</div>
+  <div class="wait-msg" id="wait-msg">Waiting for the round to start…</div>
   <div class="wait-score-wrap">
     <div class="wait-score-label">Your Score</div>
     <div class="wait-score-val" id="wait-score">0</div>
@@ -366,6 +363,8 @@ let currentQ = null;
 let answered = false;
 let timerInterval = null;
 let timerStart = null;
+let myAnswers = []; // history of answers this game
+let inTwoPass = false; // track if current round is two-pass
 
 // ═══════════════════════════════════════════════
 //  SCREENS
@@ -460,8 +459,14 @@ function startListening() {
         lockAnswers();
         break;
       case 'waiting':
-        showWait();
         clearTimer();
+        if(myAnswers.length > 0) {
+          showAnswerReview();
+        } else {
+          showWait();
+          const wm = document.getElementById('wait-msg');
+          if(wm) wm.textContent = 'Waiting for the next question…';
+        }
         break;
     }
   });
@@ -543,6 +548,24 @@ function renderQuestion(q) {
     body.appendChild(wrap);
   }
 
+  // Audio button (if question has audio)
+  if(q.audioUrl) {
+    const audioWrap = document.createElement('div');
+    audioWrap.style.cssText = 'display:flex;gap:8px;margin-top:.5rem;';
+    audioWrap.innerHTML = `
+      <button id="audio-play-btn" onclick="playQuestionAudio('${q.audioUrl}')"
+        style="flex:1;padding:12px;background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.4);
+          border-radius:var(--radius);color:var(--gold);font-family:var(--font);font-size:13px;cursor:pointer">
+        ▶ Play Audio
+      </button>
+      <button id="audio-stop-btn" onclick="stopQuestionAudio()"
+        style="display:none;flex:1;padding:12px;background:rgba(231,76,60,.15);border:1px solid rgba(231,76,60,.4);
+          border-radius:var(--radius);color:#e74c3c;font-family:var(--font);font-size:13px;cursor:pointer">
+        ■ Stop
+      </button>`;
+    body.appendChild(audioWrap);
+  }
+
   // Timer
   const timerWrap = document.getElementById('timer-bar-wrap');
   const timerBar = document.getElementById('timer-bar');
@@ -570,26 +593,74 @@ function renderQuestion(q) {
 // ═══════════════════════════════════════════════
 //  SUBMIT ANSWER
 // ═══════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════
+//  AUDIO
+// ═══════════════════════════════════════════════
+let currentAudio = null;
+
+function playQuestionAudio(url) {
+  if(currentAudio) { currentAudio.pause(); currentAudio = null; }
+  currentAudio = new Audio(url);
+  currentAudio.play().catch(()=>{});
+  currentAudio.onended = () => { currentAudio = null; updateAudioBtn(); };
+  updateAudioBtn();
+}
+
+function stopQuestionAudio() {
+  if(currentAudio) { currentAudio.pause(); currentAudio = null; }
+  updateAudioBtn();
+}
+
+function updateAudioBtn() {
+  const playBtn = document.getElementById('audio-play-btn');
+  const stopBtn = document.getElementById('audio-stop-btn');
+  if(playBtn) playBtn.style.display = currentAudio ? 'none' : 'block';
+  if(stopBtn) stopBtn.style.display = currentAudio ? 'block' : 'none';
+}
+
 async function submitAnswer(value, btn, type) {
-  if(answered) return;
-  answered = true;
-  clearTimer();
+  if(!currentQ) return;
+  const isTimed = currentQ.timed;
+
+  // Timed: lock after first answer. Untimed: allow changing until host advances.
+  if(isTimed && answered) return;
 
   const elapsed = timerStart ? (Date.now() - timerStart) / 1000 : null;
 
-  // Disable all inputs
-  lockInputs();
+  if(isTimed) {
+    answered = true;
+    clearTimer();
+    lockInputs();
+  } else {
+    // Untimed — clear previous selection highlight, allow re-select
+    document.querySelectorAll('.choice-btn, .tf-btn').forEach(b => b.classList.remove('selected'));
+  }
 
   // Show selected state
   if(btn) btn.classList.add('selected');
 
-  // Show submitted message for open answers
+  // Show submitted message for open answers (once)
   if(type === 'open') {
-    const body = document.getElementById('q-body');
-    const msg = document.createElement('div');
-    msg.className = 'submitted-msg';
-    msg.innerHTML = `<span class="submitted-check">✓</span>Answer submitted`;
-    body.appendChild(msg);
+    const existing = document.querySelector('.submitted-msg');
+    if(!existing) {
+      const body = document.getElementById('q-body');
+      const msg = document.createElement('div');
+      msg.className = 'submitted-msg';
+      msg.innerHTML = `<span class="submitted-check">✓</span>Answer submitted — you can change it until the next question`;
+      body.appendChild(msg);
+    }
+  }
+
+  answered = true; // mark as answered (for open — prevents empty submits counting)
+
+  // Store in local history
+  if(value !== null) {
+    // Update or add to history
+    const existing = myAnswers.findIndex(a => a.qId === currentQ.id);
+    const entry = { qId: currentQ.id, index: currentQ.index, text: currentQ.text, answer: value, elapsed };
+    if(existing >= 0) myAnswers[existing] = entry;
+    else myAnswers.push(entry);
   }
 
   // Write to Firebase
@@ -623,6 +694,31 @@ function clearTimer() {
   timerStart = null;
   const bar = document.getElementById('timer-bar');
   if(bar) { bar.style.transition = 'none'; bar.style.width = '0%'; }
+}
+
+// ═══════════════════════════════════════════════
+//  ANSWER REVIEW
+// ═══════════════════════════════════════════════
+function showAnswerReview() {
+  const list = document.getElementById('review-list');
+  const label = document.getElementById('review-round-label');
+  if(!list) { showWait(); return; }
+
+  if(label) label.textContent = `Round ${(currentQ?.roundIndex ?? 0) + 1} · ${myAnswers.length} answers`;
+
+  list.innerHTML = myAnswers.map((a, i) => `
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+      border-radius:var(--radius);padding:12px 14px;">
+      <div style="font-size:10px;color:var(--text3);font-family:var(--cinzel);
+        letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px">Q${a.index + 1}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:6px;line-height:1.4">${a.text}</div>
+      <div style="font-family:var(--cinzel);font-size:14px;color:var(--gold);letter-spacing:.04em">
+        Your answer: ${a.answer}
+      </div>
+    </div>
+  `).join('');
+
+  showScreen('review-screen');
 }
 
 // ═══════════════════════════════════════════════
@@ -670,5 +766,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 });
 </script>
+
+<!-- ── ANSWER REVIEW ── -->
+<div class="screen hidden" id="review-screen" style="justify-content:flex-start;padding-top:2rem;overflow-y:auto">
+  <div style="font-family:var(--display);font-size:clamp(28px,8vw,42px);letter-spacing:.06em;color:var(--gold);margin-bottom:.25rem;text-align:center">YOUR ANSWERS</div>
+  <div id="review-round-label" style="font-family:var(--cinzel);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);margin-bottom:1.5rem;text-align:center"></div>
+  <div id="review-list" style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:8px;padding-bottom:3rem"></div>
+</div>
+
 </body>
 </html>
