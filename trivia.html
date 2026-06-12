@@ -426,14 +426,20 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 <audio id="audio-player" style="display:none"></audio>
 
 <!-- JOIN POPUP -->
-<div id="join-popup" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2000;background:rgba(10,10,10,.96);border:1px solid rgba(255,255,255,.15);border-radius:14px;box-shadow:0 12px 48px rgba(0,0,0,.7);min-width:260px;overflow:hidden;">
-  <div id="join-popup-handle" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.08);cursor:move;">
+<div id="join-popup" style="display:none;flex-direction:column;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2000;background:rgba(10,10,10,.96);border:1px solid rgba(255,255,255,.15);border-radius:14px;box-shadow:0 12px 48px rgba(0,0,0,.7);min-width:260px;min-height:180px;width:280px;overflow:hidden;">
+  <div id="join-popup-handle" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.08);cursor:move;flex-shrink:0;">
     <span style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#3498db;">Join Game</span>
-    <button onclick="toggleJoinPopup()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:0 4px;">✕</button>
+    <div style="display:flex;align-items:center;gap:4px;">
+      <button id="join-popup-fs-btn" onclick="toggleJoinFullscreen()" title="Fullscreen" style="background:none;border:1px solid rgba(255,255,255,.12);border-radius:4px;color:var(--text2);cursor:pointer;font-size:13px;line-height:1;padding:2px 5px;">⛶</button>
+      <button onclick="toggleJoinPopup()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:0 4px;">✕</button>
+    </div>
   </div>
-  <div style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:10px;">
-    <div id="join-popup-url" style="font-family:var(--font);font-size:11px;color:var(--text2);word-break:break-all;text-align:center;max-width:220px;"></div>
-    <div id="join-popup-qr"></div>
+  <div id="join-popup-body" style="flex:1;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;overflow:auto;">
+    <div id="join-popup-url" style="font-family:var(--font);font-size:11px;color:var(--text2);word-break:break-all;text-align:center;"></div>
+    <div id="join-popup-qr" style="flex-shrink:0;"></div>
+  </div>
+  <div id="join-popup-resize" style="position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:se-resize;opacity:.4;" title="Resize">
+    <svg viewBox="0 0 16 16" style="width:16px;height:16px;fill:var(--text3)"><path d="M14 10l-4 4h4v-4zM14 6l-8 8h2l8-8H14V6zM14 2l-12 12h2L14 4V2z"/></svg>
   </div>
 </div>
 
@@ -1080,6 +1086,11 @@ function renderPreShow() {
   } else {
     renderRules(container, round);
   }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      container.querySelectorAll('.slide.active').forEach(el => el.classList.add('visible'));
+    });
+  });
 }
 
 function renderIntro(container, round) {
@@ -1380,6 +1391,11 @@ function renderJumpScreen() {
     <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem">Press J+${miniRounds.map((_,mi)=>mi+1).join(' or J+')} to jump</div>
   `;
   container.appendChild(el);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      container.querySelectorAll('.slide.active').forEach(el => el.classList.add('visible'));
+    });
+  });
   document.getElementById('jump-panel').classList.remove('show');
 }
 
@@ -1513,40 +1529,91 @@ function toast(msg) {
 //  JOIN POPUP
 // ═══════════════════════════════════════════════════════
 let _joinQrGenerated = false;
+let _joinFsMode = false;
+
+function _buildJoinQR(size) {
+  const qrDiv = document.getElementById('join-popup-qr');
+  qrDiv.innerHTML = '';
+  const url = window.location.href.replace(/\/[^/]*$/, '/play.html');
+  document.getElementById('join-popup-url').textContent = url;
+  new QRCode(qrDiv, {
+    text: url, width: size, height: size,
+    colorDark: '#000000', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M,
+  });
+}
+
 function toggleJoinPopup() {
   const popup = document.getElementById('join-popup');
-  if(popup.style.display !== 'none') { popup.style.display = 'none'; return; }
+  const showing = popup.style.display === 'flex';
+  if(showing) {
+    if(_joinFsMode) toggleJoinFullscreen();
+    popup.style.display = 'none';
+    return;
+  }
   if(!_joinQrGenerated) {
-    const url = window.location.href.replace(/\/[^/]*$/, '/play.html');
-    document.getElementById('join-popup-url').textContent = url;
-    new QRCode(document.getElementById('join-popup-qr'), {
-      text: url, width: 200, height: 200,
-      colorDark: '#000000', colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.M,
-    });
+    _buildJoinQR(220);
     _joinQrGenerated = true;
   }
-  popup.style.display = 'block';
+  popup.style.display = 'flex';
 }
-(function() {
+
+function toggleJoinFullscreen() {
   const popup = document.getElementById('join-popup');
+  const fsBtn = document.getElementById('join-popup-fs-btn');
+  _joinFsMode = !_joinFsMode;
+  if(_joinFsMode) {
+    popup.style.cssText = 'display:flex;flex-direction:column;position:fixed;inset:0;z-index:2000;background:rgba(10,10,10,.98);border:none;border-radius:0;box-shadow:none;width:100%;height:100%;';
+    const size = Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.8);
+    _buildJoinQR(size);
+    fsBtn.textContent = '✕ Exit Fullscreen';
+    fsBtn.style.fontSize = '11px';
+  } else {
+    popup.style.cssText = 'display:flex;flex-direction:column;position:fixed;z-index:2000;background:rgba(10,10,10,.96);border:1px solid rgba(255,255,255,.15);border-radius:14px;box-shadow:0 12px 48px rgba(0,0,0,.7);min-width:260px;min-height:180px;width:280px;overflow:hidden;top:50%;left:50%;transform:translate(-50%,-50%);';
+    _buildJoinQR(220);
+    fsBtn.textContent = '⛶';
+    fsBtn.style.fontSize = '13px';
+  }
+}
+
+(function() {
+  const popup  = document.getElementById('join-popup');
   const handle = document.getElementById('join-popup-handle');
+  const grip   = document.getElementById('join-popup-resize');
+
+  // ── Drag ──────────────────────────────────────────────
   let dragging = false, ox = 0, oy = 0;
   handle.addEventListener('mousedown', e => {
-    if(e.target.tagName === 'BUTTON') return;
+    if(e.target.tagName === 'BUTTON' || _joinFsMode) return;
     dragging = true;
     const r = popup.getBoundingClientRect();
     ox = e.clientX - r.left;
     oy = e.clientY - r.top;
     e.preventDefault();
   });
-  document.addEventListener('mousemove', e => {
-    if(!dragging) return;
-    popup.style.transform = 'none';
-    popup.style.left = (e.clientX - ox) + 'px';
-    popup.style.top  = (e.clientY - oy) + 'px';
+
+  // ── Resize ────────────────────────────────────────────
+  let resizing = false, rStartX = 0, rStartY = 0, rStartW = 0, rStartH = 0;
+  grip.addEventListener('mousedown', e => {
+    if(_joinFsMode) return;
+    resizing = true;
+    rStartX = e.clientX; rStartY = e.clientY;
+    rStartW = popup.offsetWidth; rStartH = popup.offsetHeight;
+    e.preventDefault(); e.stopPropagation();
   });
-  document.addEventListener('mouseup', () => { dragging = false; });
+
+  document.addEventListener('mousemove', e => {
+    if(dragging) {
+      popup.style.transform = 'none';
+      popup.style.left = (e.clientX - ox) + 'px';
+      popup.style.top  = (e.clientY - oy) + 'px';
+    }
+    if(resizing) {
+      popup.style.width  = Math.max(220, rStartW + e.clientX - rStartX) + 'px';
+      popup.style.height = Math.max(180, rStartH + e.clientY - rStartY) + 'px';
+    }
+  });
+  document.addEventListener('mouseup', () => { dragging = false; resizing = false; });
 })();
 
 // ═══════════════════════════════════════════════════════
