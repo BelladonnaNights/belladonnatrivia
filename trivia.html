@@ -6,6 +6,7 @@
 <title>Trivia</title>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -109,7 +110,8 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   padding:3rem 4rem;overflow:hidden;
   animation:slideIn .35s ease forwards;
 }
-.slide.active{display:flex}
+.slide.active{display:flex;opacity:0}
+.slide.active.visible{opacity:1;transition:opacity .3s ease}
 @keyframes slideIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 
 /* INTRO SLIDE */
@@ -353,12 +355,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="setup-rounds-grid" id="setup-rounds-grid"></div>
   <button class="setup-launch-btn" id="setup-launch-btn" onclick="launchFromSetup()" style="display:none">Launch Trivia Night →</button>
   <button class="setup-launch-btn" id="setup-preview-btn" onclick="startPreview()" style="display:none;margin-top:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:11px;padding:10px 32px">Preview Intro Slides</button>
-  <button class="setup-launch-btn" id="setup-join-btn" onclick="toggleJoinPanel()" style="display:none;margin-top:8px;background:transparent;border:1px solid rgba(52,152,219,.5);color:#3498db;font-size:11px;padding:10px 32px">📱 Show Join QR Code</button>
-  <div id="join-panel" style="display:none;text-align:center;margin-top:12px;padding:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;max-width:360px;width:100%">
-    <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#3498db;margin-bottom:8px">Players — scan or visit:</div>
-    <div id="join-url" style="font-family:var(--font);font-size:12px;color:var(--text2);word-break:break-all;margin-bottom:10px"></div>
-    <canvas id="qr-canvas" style="border-radius:8px;background:#fff;padding:8px;display:block;margin:0 auto"></canvas>
-  </div>
+  <button class="setup-launch-btn" id="setup-join-btn" onclick="toggleJoinPopup()" style="display:none;margin-top:8px;background:transparent;border:1px solid rgba(52,152,219,.5);color:#3498db;font-size:11px;padding:10px 32px">📱 Show Join QR Code</button>
   <button id="setup-return-btn" onclick="returnToPresentation()" style="display:none;width:100%;max-width:420px;margin-top:8px;padding:14px;font-family:var(--cinzel);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);cursor:pointer">↩ Return to Presentation</button>
   <div class="setup-hint">Space to reveal · → next · ← back · A answer key · Esc exit</div>
 </div>
@@ -428,6 +425,18 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 
 <audio id="audio-player" style="display:none"></audio>
 
+<!-- JOIN POPUP -->
+<div id="join-popup" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2000;background:rgba(10,10,10,.96);border:1px solid rgba(255,255,255,.15);border-radius:14px;box-shadow:0 12px 48px rgba(0,0,0,.7);min-width:260px;overflow:hidden;">
+  <div id="join-popup-handle" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.08);cursor:move;">
+    <span style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#3498db;">Join Game</span>
+    <button onclick="toggleJoinPopup()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:0 4px;">✕</button>
+  </div>
+  <div style="padding:16px;display:flex;flex-direction:column;align-items:center;gap:10px;">
+    <div id="join-popup-url" style="font-family:var(--font);font-size:11px;color:var(--text2);word-break:break-all;text-align:center;max-width:220px;"></div>
+    <div id="join-popup-qr"></div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════
 //  CONFIG & STATE
@@ -450,31 +459,6 @@ var catTypes = [];
 //  LIVE GAME — Digital Answering System
 // ═══════════════════════════════════════════════════════
 let leaderboardVisible = false;
-
-function toggleJoinPanel() {
-  const panel = document.getElementById('join-panel');
-  const btn = document.getElementById('setup-join-btn');
-  const showing = panel.style.display !== 'none';
-  panel.style.display = showing ? 'none' : 'block';
-  btn.textContent = showing ? '📱 Show Join QR Code' : '📱 Hide Join QR Code';
-}
-
-function generateQR(url) {
-  // Simple QR using a free API — no library needed
-  const canvas = document.getElementById('qr-canvas');
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  img.onload = () => {
-    canvas.width = img.width;
-    canvas.height = img.height;
-    canvas.getContext('2d').drawImage(img, 0, 0);
-  };
-  img.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
-  // Fallback: just show canvas as background if API fails
-  img.onerror = () => {
-    canvas.style.display = 'none';
-  };
-}
 
 function initLiveGame() {
   db.ref('liveGame').set({
@@ -1526,6 +1510,46 @@ function toast(msg) {
 }
 
 // ═══════════════════════════════════════════════════════
+//  JOIN POPUP
+// ═══════════════════════════════════════════════════════
+let _joinQrGenerated = false;
+function toggleJoinPopup() {
+  const popup = document.getElementById('join-popup');
+  if(popup.style.display !== 'none') { popup.style.display = 'none'; return; }
+  if(!_joinQrGenerated) {
+    const url = window.location.href.replace(/\/[^/]*$/, '/play.html');
+    document.getElementById('join-popup-url').textContent = url;
+    new QRCode(document.getElementById('join-popup-qr'), {
+      text: url, width: 200, height: 200,
+      colorDark: '#000000', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M,
+    });
+    _joinQrGenerated = true;
+  }
+  popup.style.display = 'block';
+}
+(function() {
+  const popup = document.getElementById('join-popup');
+  const handle = document.getElementById('join-popup-handle');
+  let dragging = false, ox = 0, oy = 0;
+  handle.addEventListener('mousedown', e => {
+    if(e.target.tagName === 'BUTTON') return;
+    dragging = true;
+    const r = popup.getBoundingClientRect();
+    ox = e.clientX - r.left;
+    oy = e.clientY - r.top;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if(!dragging) return;
+    popup.style.transform = 'none';
+    popup.style.left = (e.clientX - ox) + 'px';
+    popup.style.top  = (e.clientY - oy) + 'px';
+  });
+  document.addEventListener('mouseup', () => { dragging = false; });
+})();
+
+// ═══════════════════════════════════════════════════════
 //  INIT — read URL params, show round cards, wait for Launch click
 // ═══════════════════════════════════════════════════════
 let pendingRounds = [];
@@ -1589,10 +1613,6 @@ function checkUrlParams() {
   document.getElementById('setup-launch-btn').style.display = 'block';
   document.getElementById('setup-preview-btn').style.display = 'block';
   document.getElementById('setup-join-btn').style.display = 'block';
-  // Set join URL
-  const joinUrl = window.location.href.replace(/\/[^/]*$/, '/play.html');
-  document.getElementById('join-url').textContent = joinUrl;
-  generateQR(joinUrl);
   return true;
 }
 
