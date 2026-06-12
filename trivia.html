@@ -425,23 +425,6 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 
 <audio id="audio-player" style="display:none"></audio>
 
-<!-- JOIN POPUP -->
-<div id="join-popup" style="display:none;flex-direction:column;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2000;background:rgba(10,10,10,.96);border:1px solid rgba(255,255,255,.15);border-radius:14px;box-shadow:0 12px 48px rgba(0,0,0,.7);min-width:260px;min-height:180px;width:280px;overflow:hidden;">
-  <div id="join-popup-handle" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.08);cursor:move;flex-shrink:0;">
-    <span style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#3498db;">Join Game</span>
-    <div style="display:flex;align-items:center;gap:4px;">
-      <button id="join-popup-fs-btn" onclick="toggleJoinFullscreen()" title="Fullscreen" style="background:none;border:1px solid rgba(255,255,255,.12);border-radius:4px;color:var(--text2);cursor:pointer;font-size:13px;line-height:1;padding:2px 5px;">⛶</button>
-      <button onclick="toggleJoinPopup()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:0 4px;">✕</button>
-    </div>
-  </div>
-  <div id="join-popup-body" style="flex:1;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;overflow:auto;">
-    <div id="join-popup-url" style="font-family:var(--font);font-size:11px;color:var(--text2);word-break:break-all;text-align:center;"></div>
-    <div id="join-popup-qr" style="flex-shrink:0;"></div>
-  </div>
-  <div id="join-popup-resize" style="position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:se-resize;opacity:.4;" title="Resize">
-    <svg viewBox="0 0 16 16" style="width:16px;height:16px;fill:var(--text3)"><path d="M14 10l-4 4h4v-4zM14 6l-8 8h2l8-8H14V6zM14 2l-12 12h2L14 4V2z"/></svg>
-  </div>
-</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -455,11 +438,16 @@ const API_KEY = 'AIzaSyACMjXQCXjVo75hbMXtag_JctR4SoX70So';
 // Follow Us / Rules data — loaded from Firebase non-blocking
 var appSettings = {};
 var catTypes = [];
+var db;
 (function() {
   try {
     const cfg = {apiKey:"AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",authDomain:"belladonnatrivia.firebaseapp.com",databaseURL:"https://belladonnatrivia-default-rtdb.firebaseio.com",projectId:"belladonnatrivia"};
     if(!firebase.apps.length) firebase.initializeApp(cfg);
-    const db = firebase.database();
+    db = firebase.database();
+    db.ref('appSettings').once('value', s => { appSettings = s.val()||{}; });
+    db.ref('categoryTypes').once('value', s => { const d=s.val()||{}; catTypes=Object.entries(d).map(([id,v])=>({id,...v})); });
+  } catch(e) {}
+})();
 
 // ═══════════════════════════════════════════════════════
 //  LIVE GAME — Digital Answering System
@@ -467,6 +455,7 @@ var catTypes = [];
 let leaderboardVisible = false;
 
 function initLiveGame() {
+  if(!db) return;
   db.ref('liveGame').set({
     status: 'waiting',
     currentQuestion: null,
@@ -479,10 +468,10 @@ function toggleLeaderboard() {
   leaderboardVisible = !leaderboardVisible;
   const overlay = document.getElementById('lb-overlay');
   overlay.style.display = leaderboardVisible ? 'flex' : 'none';
-  db.ref('liveGame/leaderboardVisible').set(leaderboardVisible);
+  if(db) db.ref('liveGame/leaderboardVisible').set(leaderboardVisible);
   const btn = document.getElementById('lb-toggle-btn');
   if(btn) btn.textContent = leaderboardVisible ? 'Hide Leaderboard' : 'Show Leaderboard';
-  if(leaderboardVisible) {
+  if(leaderboardVisible && db) {
     db.ref('liveGame/teams').once('value', snap => renderLeaderboardOverlay(snap.val()||{}));
   }
 }
@@ -502,7 +491,7 @@ function renderLeaderboardOverlay(teams) {
 }
 
 // ─── Per-question timed override ─────────────────────────────────────
-let nextQuestionTimedOverride = null; // null = use round default, true/false = override
+let nextQuestionTimedOverride = null;
 
 function overrideNextTimed(val) {
   nextQuestionTimedOverride = val;
@@ -518,7 +507,6 @@ function updateHudTimedCheckbox(round) {
   const sep  = document.getElementById('hud-timed-sep');
   const chk  = document.getElementById('hud-timed-check');
   const type = slideType();
-  // Only show on question slides for trivia rounds
   const show = type === S_QUESTION && round.type !== 'slideshow' && round.type !== 'canva';
   wrap.style.display = show ? 'flex' : 'none';
   sep.style.display  = show ? 'block' : 'none';
@@ -531,11 +519,11 @@ function updateHudTimedCheckbox(round) {
 // ─── END timed override ───────────────────────────────────────────────
 
 function pushLiveQuestion(q, qIndex, round) {
+  if(!db) return;
   const choices = q.type==='mc' ? (q._choices||[]).map(c=>c.text) :
                   q.type==='tf' ? ['True','False'] : null;
   const qId = `q_${state.roundIndex}_${qIndex}`;
   const timed = getEffectiveTimed(round);
-  // Reset override after use — applies to this question only
   nextQuestionTimedOverride = null;
   const chk = document.getElementById('hud-timed-check');
   if(chk) chk.checked = round.timed || false;
@@ -577,12 +565,6 @@ function fuzzyConfidence(submitted,correct) {
   if(a.length>3&&b.includes(a)) return 'needs_review';
   return 'wrong';
 }
-
-
-    db.ref('appSettings').once('value', s => { appSettings = s.val()||{}; });
-    db.ref('categoryTypes').once('value', s => { const d=s.val()||{}; catTypes=Object.entries(d).map(([id,v])=>({id,...v})); });
-  } catch(e) {}
-})();
 
 // Only show Follow Us + Rules on round 1
 const isFirstRound = () => state.roundIndex === 0;
@@ -800,7 +782,7 @@ function advanceSlide() {
   if(type === S_JUMP) return;
 
   // Close digital answers when leaving a question
-  if(type === S_QUESTION) {
+  if(type === S_QUESTION && db) {
     db.ref('liveGame/status').set('closed');
   }
 
@@ -1526,95 +1508,71 @@ function toast(msg) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  JOIN POPUP
+//  JOIN WINDOW — opens as a separate OS window (can move to any screen)
 // ═══════════════════════════════════════════════════════
-let _joinQrGenerated = false;
-let _joinFsMode = false;
-
-function _buildJoinQR(size) {
-  const qrDiv = document.getElementById('join-popup-qr');
-  qrDiv.innerHTML = '';
-  const url = window.location.href.replace(/\/[^/]*$/, '/play.html');
-  document.getElementById('join-popup-url').textContent = url;
-  new QRCode(qrDiv, {
-    text: url, width: size, height: size,
-    colorDark: '#000000', colorLight: '#ffffff',
-    correctLevel: QRCode.CorrectLevel.M,
-  });
-}
+let _joinWin = null;
 
 function toggleJoinPopup() {
-  const popup = document.getElementById('join-popup');
-  const showing = popup.style.display === 'flex';
-  if(showing) {
-    if(_joinFsMode) toggleJoinFullscreen();
-    popup.style.display = 'none';
+  // Close if already open
+  if(_joinWin && !_joinWin.closed) { _joinWin.close(); _joinWin = null; return; }
+
+  const playUrl = window.location.href.replace(/\/[^/]*$/, '/play.html');
+  const qrSize  = 400;
+  const winW    = qrSize + 80;
+  const winH    = qrSize + 160;
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Join Trivia</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=DM+Sans:wght@400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#080808;color:#f0ede8;font-family:'DM Sans',sans-serif;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:100vh;gap:18px;padding:28px;text-align:center;}
+.label{font-family:'Cinzel',serif;font-size:12px;letter-spacing:.2em;
+  text-transform:uppercase;color:#3498db;}
+.url{font-size:12px;color:#b0a898;word-break:break-all;max-width:420px;}
+#qr{background:#fff;padding:12px;border-radius:10px;display:inline-block;}
+.hint{font-family:'Cinzel',serif;font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:#3a3630;margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="label">Scan to Join</div>
+<div id="qr"></div>
+<div class="url">${playUrl}</div>
+<div class="hint">You can resize or move this window to any screen</div>
+<script>
+(function(){
+  function render(){
+    var d=document.getElementById('qr');
+    d.innerHTML='';
+    var s=Math.round(Math.min(window.innerWidth,window.innerHeight)*0.72);
+    if(s<120)s=120;
+    new QRCode(d,{text:${JSON.stringify(playUrl)},width:s,height:s,
+      colorDark:'#000000',colorLight:'#ffffff',
+      correctLevel:QRCode.CorrectLevel.M});
+  }
+  render();
+  window.addEventListener('resize',function(){render();});
+})();
+<\/script>
+</body>
+</html>`;
+
+  _joinWin = window.open('', 'join-qr',
+    `width=${winW},height=${winH},resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no`);
+  if(!_joinWin) {
+    toast('Pop-up blocked — allow pop-ups for this page then try again');
     return;
   }
-  if(!_joinQrGenerated) {
-    _buildJoinQR(220);
-    _joinQrGenerated = true;
-  }
-  popup.style.display = 'flex';
+  _joinWin.document.write(html);
+  _joinWin.document.close();
 }
-
-function toggleJoinFullscreen() {
-  const popup = document.getElementById('join-popup');
-  const fsBtn = document.getElementById('join-popup-fs-btn');
-  _joinFsMode = !_joinFsMode;
-  if(_joinFsMode) {
-    popup.style.cssText = 'display:flex;flex-direction:column;position:fixed;inset:0;z-index:2000;background:rgba(10,10,10,.98);border:none;border-radius:0;box-shadow:none;width:100%;height:100%;';
-    const size = Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.8);
-    _buildJoinQR(size);
-    fsBtn.textContent = '✕ Exit Fullscreen';
-    fsBtn.style.fontSize = '11px';
-  } else {
-    popup.style.cssText = 'display:flex;flex-direction:column;position:fixed;z-index:2000;background:rgba(10,10,10,.96);border:1px solid rgba(255,255,255,.15);border-radius:14px;box-shadow:0 12px 48px rgba(0,0,0,.7);min-width:260px;min-height:180px;width:280px;overflow:hidden;top:50%;left:50%;transform:translate(-50%,-50%);';
-    _buildJoinQR(220);
-    fsBtn.textContent = '⛶';
-    fsBtn.style.fontSize = '13px';
-  }
-}
-
-(function() {
-  const popup  = document.getElementById('join-popup');
-  const handle = document.getElementById('join-popup-handle');
-  const grip   = document.getElementById('join-popup-resize');
-
-  // ── Drag ──────────────────────────────────────────────
-  let dragging = false, ox = 0, oy = 0;
-  handle.addEventListener('mousedown', e => {
-    if(e.target.tagName === 'BUTTON' || _joinFsMode) return;
-    dragging = true;
-    const r = popup.getBoundingClientRect();
-    ox = e.clientX - r.left;
-    oy = e.clientY - r.top;
-    e.preventDefault();
-  });
-
-  // ── Resize ────────────────────────────────────────────
-  let resizing = false, rStartX = 0, rStartY = 0, rStartW = 0, rStartH = 0;
-  grip.addEventListener('mousedown', e => {
-    if(_joinFsMode) return;
-    resizing = true;
-    rStartX = e.clientX; rStartY = e.clientY;
-    rStartW = popup.offsetWidth; rStartH = popup.offsetHeight;
-    e.preventDefault(); e.stopPropagation();
-  });
-
-  document.addEventListener('mousemove', e => {
-    if(dragging) {
-      popup.style.transform = 'none';
-      popup.style.left = (e.clientX - ox) + 'px';
-      popup.style.top  = (e.clientY - oy) + 'px';
-    }
-    if(resizing) {
-      popup.style.width  = Math.max(220, rStartW + e.clientX - rStartX) + 'px';
-      popup.style.height = Math.max(180, rStartH + e.clientY - rStartY) + 'px';
-    }
-  });
-  document.addEventListener('mouseup', () => { dragging = false; resizing = false; });
-})();
 
 // ═══════════════════════════════════════════════════════
 //  INIT — read URL params, show round cards, wait for Launch click
