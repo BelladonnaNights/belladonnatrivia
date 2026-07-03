@@ -1530,6 +1530,18 @@ function renderMusicQuestion(container, round) {
       +   '<div class="music-reveal-text">'
       +     '<div class="music-reveal-song">' + q.question + '</div>'
       +     '<div class="music-reveal-artist">' + q.answer + '</div>'
+      +     (q.audioUrl ? (
+          '<button id="music-play-again-btn"'
+        + ' data-audio-src="' + (WORKER + '/audio?url=' + encodeURIComponent(q.audioUrl)) + '"'
+        + ' data-start="' + (q.startTime || 0) + '"'
+        + ' data-end="' + (q.endTime || 0) + '"'
+        + ' onclick="playMusicAudio(this)"'
+        + ' style="margin-top:1rem;padding:8px 24px;font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;'
+        + 'background:transparent;border:1px solid var(--gold-glow);border-radius:99px;color:var(--gold);cursor:pointer;transition:all .2s;"'
+        + ' onmouseover="this.style.background=\'var(--gold-dim)\'" onmouseout="this.style.background=\'transparent\'">'
+        + '▶ Play Again'
+        + '</button>'
+      ) : '')
       +   '</div>'
       + '</div>';
 
@@ -2117,7 +2129,8 @@ function toggleJoinPopup() {
   if(btn) btn.innerHTML = joinPopupOpen ? '📱 Hide Join QR Code' : '📱 Show Join QR Code';
   if(joinPopupOpen && joinUrlCached) {
     document.getElementById('join-url-display').textContent = joinUrlCached;
-    generateQR(joinUrlCached);
+    // Generate QR after popup is visible and has layout dimensions
+    requestAnimationFrame(() => generateQR(joinUrlCached));
   }
 }
 
