@@ -579,28 +579,15 @@ function toggleJoinPanel() {
   btn.textContent = showing ? '📱 Show Join QR Code' : '📱 Hide Join QR Code';
 }
 
-function generateQR(url) {
-  // Simple QR using a free API — no library needed
-  const canvas = document.getElementById('qr-canvas');
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  img.onload = () => {
-    canvas.width = img.width;
-    canvas.height = img.height;
-    canvas.getContext('2d').drawImage(img, 0, 0);
-  };
-  img.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
-  // Fallback: just show canvas as background if API fails
-  img.onerror = () => {
-    canvas.style.display = 'none';
-  };
-}
+
 
 function initLiveGame() {
+  const sessionId = 'session_' + Date.now();
   db.ref('liveGame').set({
     status: 'waiting',
     currentQuestion: null,
     leaderboardVisible: false,
+    sessionId,
     startedAt: Date.now(),
   });
 }
@@ -2151,30 +2138,24 @@ function generateQR(url) {
   const container = document.getElementById('join-qr');
   if(!container) return;
   container.innerHTML = '';
-  if(typeof QRCode !== 'undefined') {
-    new QRCode(container, {text:url, width:200, height:200, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
-  } else {
-    setTimeout(() => generateQR(url), 300);
-  }
+  if(typeof QRCode === 'undefined') { setTimeout(() => generateQR(url), 300); return; }
+  // Size the QR to fill available popup width
+  const popup = document.getElementById('join-popup');
+  const size = popup ? Math.max(160, popup.offsetWidth - 52) : 200;
+  new QRCode(container, {text:url, width:size, height:size, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
 }
 
-// Drag to move
+// Re-generate QR when popup is resized
 (function(){
-  let drag=false, ox=0, oy=0;
-  document.addEventListener('DOMContentLoaded', () => {
-    const h=document.getElementById('join-popup-handle');
-    const p=document.getElementById('join-popup');
-    if(!h||!p) return;
-    h.addEventListener('mousedown', e => {
-      drag=true;
-      const r=p.getBoundingClientRect();
-      p.style.left=r.left+'px'; p.style.top=r.top+'px'; p.style.transform='none';
-      ox=e.clientX-r.left; oy=e.clientY-r.top;
-      h.style.cursor='grabbing'; e.preventDefault();
-    });
-    document.addEventListener('mousemove', e => { if(drag){ p.style.left=(e.clientX-ox)+'px'; p.style.top=(e.clientY-oy)+'px'; }});
-    document.addEventListener('mouseup', () => { drag=false; if(h) h.style.cursor='grab'; });
-  });
+  const popup = document.getElementById('join-popup');
+  if(!popup || !window.ResizeObserver) return;
+  let resizeTimer;
+  new ResizeObserver(() => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if(popup.style.display !== 'none' && joinUrlCached) generateQR(joinUrlCached);
+    }, 120);
+  }).observe(popup);
 })();
 // ──────────────────────────────────────────────────────────────────────
 
