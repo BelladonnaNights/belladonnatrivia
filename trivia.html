@@ -405,8 +405,8 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   /* Put art first, then text — order enforced by DOM, not flex */
 }
 .music-reveal-art{
-  width:clamp(240px,40vw,480px);
-  height:clamp(240px,40vw,480px);
+  width:clamp(300px,48vw,580px);
+  height:clamp(300px,48vw,580px);
   border-radius:16px;
   object-fit:cover;
   box-shadow:0 12px 60px rgba(0,0,0,.75),0 0 0 1px rgba(255,255,255,.1);
@@ -415,8 +415,8 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   order:1;
 }
 .music-reveal-art-placeholder{
-  width:clamp(240px,40vw,480px);
-  height:clamp(240px,40vw,480px);
+  width:clamp(300px,48vw,580px);
+  height:clamp(300px,48vw,580px);
   border-radius:16px;
   background:rgba(201,168,76,.06);
   border:1px solid var(--gold-glow);
@@ -431,14 +431,14 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 }
 .music-reveal-song{
   font-family:var(--display);
-  font-size:clamp(40px,6.5vw,90px);
+  font-size:clamp(52px,8vw,110px);
   letter-spacing:.06em;line-height:1;
   background:var(--gold-shine);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
 }
 .music-reveal-artist{
   font-family:var(--cinzel);
-  font-size:clamp(16px,2.2vw,28px);
+  font-size:clamp(20px,2.8vw,36px);
   letter-spacing:.14em;text-transform:uppercase;
   color:var(--text2);
 }
@@ -816,16 +816,26 @@ function parseRow(r) {
 }
 
 // Music rounds: Col A = song title, Col B = artist, Col C = audio URL
-// Col D = start time (seconds), Col E = end time (seconds, optional), Col F = album art URL
+// Col D = start time (seconds or mm:ss), Col E = end time, Col F = album art URL
+// Parse mm:ss or plain seconds
+function parseMusicTime(val) {
+  if(!val) return 0;
+  const s = String(val).trim();
+  if(s.includes(':')) {
+    const parts = s.split(':');
+    return (parseFloat(parts[0]) || 0) * 60 + (parseFloat(parts[1]) || 0);
+  }
+  return parseFloat(s) || 0;
+}
+
 function parseMusicRow(r) {
   const song   = safe(r[0]).trim();
   const artist = safe(r[1]).trim();
   if(!song || !artist) return null;
   const audioUrl  = safe(r[2]).trim();
-  const startTime = parseFloat(safe(r[3])) || 0;
-  const endTime   = parseFloat(safe(r[4])) || 0;
+  const startTime = parseMusicTime(safe(r[3]));
+  const endTime   = parseMusicTime(safe(r[4]));
   const albumArt  = safe(r[5]).trim();
-  // question = song title (used on answer key), answer = artist
   return { question: song, answer: artist, difficulty: 1, imageUrl: '', audioUrl,
            startTime, endTime, albumArt, type: 'standard', mcOptions: [] };
 }
@@ -1577,8 +1587,8 @@ function renderMusicQuestion(container, round) {
 function playMusicAudio(btn) {
   if(!btn || btn.disabled) return;
   const src       = btn.dataset.audioSrc;
-  const startTime = parseFloat(btn.dataset.start) || 0;
-  const endTime   = parseFloat(btn.dataset.end)   || 0;
+  const startTime = parseMusicTime(btn.dataset.start);
+  const endTime   = parseMusicTime(btn.dataset.end);
   if(!src) return;
 
   const bars = document.getElementById('music-bars-' + questionInfo().qIndex);
@@ -1595,15 +1605,14 @@ function playMusicAudio(btn) {
   const audio = new Audio(src);
   window._musicAudio = audio;
 
-  // Seek to start time once enough is loaded
-  audio.addEventListener('loadedmetadata', () => {
-    if(startTime > 0) audio.currentTime = startTime;
-  });
-
-  audio.addEventListener('canplay', () => {
-    // Fallback seek in case loadedmetadata fired before we set the handler
-    if(startTime > 0 && audio.currentTime < startTime) audio.currentTime = startTime;
-  });
+  // Set start time as early as possible — both on metadata and right before play
+  const seekToStart = () => {
+    if(startTime > 0 && Math.abs(audio.currentTime - startTime) > 0.1) {
+      audio.currentTime = startTime;
+    }
+  };
+  audio.addEventListener('loadedmetadata', seekToStart);
+  audio.addEventListener('canplay', seekToStart);
 
   // Stop at end time if specified
   if(endTime > 0) {
@@ -1616,6 +1625,7 @@ function playMusicAudio(btn) {
   }
 
   audio.addEventListener('canplaythrough', () => {
+    seekToStart(); // one more seek right before bars animate
     btn.classList.add('playing');
     if(bars) bars.classList.add('playing');
     if(hint) hint.textContent = 'Playing…';
@@ -1638,11 +1648,24 @@ function playMusicAudio(btn) {
     window._musicAudio = null;
   });
 
-  audio.play().catch(err => {
-    console.error('play() rejected:', err);
-    btn.disabled = false;
-    if(hint) hint.textContent = 'Playback blocked — try again';
-  });
+  // Seek right before play — most reliable method
+  if(startTime > 0) {
+    audio.load();
+    audio.addEventListener('loadedmetadata', () => {
+      audio.currentTime = startTime;
+      audio.play().catch(err => {
+        console.error('play() rejected:', err);
+        btn.disabled = false;
+        if(hint) hint.textContent = 'Playback blocked — try again';
+      });
+    }, { once: true });
+  } else {
+    audio.play().catch(err => {
+      console.error('play() rejected:', err);
+      btn.disabled = false;
+      if(hint) hint.textContent = 'Playback blocked — try again';
+    });
+  }
 }
 
 function renderAnswerKey(container, round) {
