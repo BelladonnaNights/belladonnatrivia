@@ -744,26 +744,25 @@ function renderLeaderboard(teams) {
 // ═══════════════════════════════════════════════
 // If returning player, skip registration
 window.addEventListener('DOMContentLoaded', async () => {
-  if(teamId && teamName) {
-    document.getElementById('reg-input').value = teamName;
-    // Check if game exists and rejoin
-    const snap = await db.ref('liveGame/status').once('value');
-    if(snap.val()) {
-      // Rejoin silently
-      document.getElementById('reg-btn').disabled = true;
-      await db.ref(`liveGame/teams/${teamId}/name`).set(teamName);
-      const scoreSnap = await db.ref(`liveGame/teams/${teamId}/score`).once('value');
-      myScore = scoreSnap.val() || 0;
-      showWait();
-      startListening();
-      return;
-    }
-  }
-  // Fresh start — show register screen
-  document.getElementById('reg-status').textContent = 'Enter your name to join the game';
   document.getElementById('reg-input').addEventListener('keydown', e => {
     if(e.key === 'Enter') register();
   });
+
+  if(teamId && teamName) {
+    // Check if game is active before offering rejoin
+    const snap = await db.ref('liveGame/status').once('value');
+    if(snap.val()) {
+      // Show rejoin prompt — don't auto-sign-in
+      document.getElementById('reg-input').value = teamName;
+      document.getElementById('reg-status').innerHTML =
+        'Welcome back, <strong style="color:var(--gold)">' + teamName + '</strong>!<br>' +
+        '<span style="font-size:13px">Continue with this name or type a new one.</span>';
+      document.getElementById('reg-btn').textContent = 'Join Game';
+      return;
+    }
+  }
+  // Fresh start
+  document.getElementById('reg-status').textContent = 'Enter your team name to join the game';
 });
 </script>
 
