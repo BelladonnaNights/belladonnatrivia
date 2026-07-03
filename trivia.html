@@ -6,7 +6,6 @@
 <title>Trivia</title>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -110,8 +109,8 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   padding:3rem 4rem;overflow:hidden;
   animation:slideIn .35s ease forwards;
 }
-.slide.active{display:flex;opacity:0}
-.slide.active.visible{opacity:1;transition:opacity .3s ease}
+.slide.active{display:flex;opacity:0;}
+.slide.active.visible{opacity:1;animation:slideIn .3s ease forwards;}
 @keyframes slideIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 
 /* INTRO SLIDE */
@@ -319,7 +318,84 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 }
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* ── TRANSITIONS ── */
+/* ── MUSIC ROUND SLIDE ── */
+.music-slide{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2rem;
+}
+.music-speaker-wrap{
+  position:relative;
+  display:flex;flex-direction:column;align-items:center;gap:1.5rem;
+  cursor:pointer;
+  user-select:none;
+}
+.music-speaker-btn{
+  width:clamp(140px,22vw,220px);height:clamp(140px,22vw,220px);
+  border-radius:50%;
+  border:2px solid rgba(180,175,165,.2);
+  background:rgba(180,175,165,.06);
+  display:flex;align-items:center;justify-content:center;
+  transition:all .25s;
+  position:relative;
+  cursor:pointer;
+}
+.music-speaker-btn:hover{
+  border-color:rgba(180,175,165,.4);
+  background:rgba(180,175,165,.12);
+  transform:scale(1.03);
+}
+.music-speaker-btn:disabled{
+  cursor:not-allowed;
+  opacity:.5;
+  transform:none;
+}
+.music-speaker-btn svg{
+  width:45%;height:45%;
+  fill:rgba(200,196,188,1);
+  transition:fill .2s;
+}
+.music-speaker-btn:hover svg{ fill:#fff; }
+/* Pulsing ring when playing */
+.music-speaker-btn.playing::before{
+  content:'';
+  position:absolute;inset:-8px;border-radius:50%;
+  border:2px solid rgba(180,175,165,.35);
+  animation:speakerRing 1.4s ease-out infinite;
+}
+.music-speaker-btn.playing::after{
+  content:'';
+  position:absolute;inset:-18px;border-radius:50%;
+  border:1.5px solid rgba(180,175,165,.18);
+  animation:speakerRing 1.4s ease-out .35s infinite;
+}
+@keyframes speakerRing{
+  0%{transform:scale(1);opacity:.7}
+  100%{transform:scale(1.18);opacity:0}
+}
+/* Waveform bars */
+.music-bars{
+  display:flex;align-items:flex-end;justify-content:center;
+  gap:4px;height:36px;
+}
+.music-bar{
+  width:4px;border-radius:2px;
+  background:rgba(180,175,165,.35);
+  height:4px;
+  transition:background .2s;
+}
+.music-bars.playing .music-bar{
+  background:rgba(200,196,188,.75);
+  animation:barBounce var(--dur) ease-in-out infinite alternate;
+}
+@keyframes barBounce{
+  0%{height:4px} 100%{height:var(--max-h)}
+}
+.music-play-hint{
+  font-family:var(--cinzel);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:rgba(180,175,165,.5);
+  margin-top:.25rem;
+}
 .fade-out{animation:fadeOut .25s ease forwards}
 @keyframes fadeOut{to{opacity:0}}
 
@@ -342,6 +418,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   color:var(--text3);text-align:right;margin-bottom:2px;
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 
@@ -356,6 +433,12 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <button class="setup-launch-btn" id="setup-launch-btn" onclick="launchFromSetup()" style="display:none">Launch Trivia Night →</button>
   <button class="setup-launch-btn" id="setup-preview-btn" onclick="startPreview()" style="display:none;margin-top:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:11px;padding:10px 32px">Preview Intro Slides</button>
   <button class="setup-launch-btn" id="setup-join-btn" onclick="toggleJoinPopup()" style="display:none;margin-top:8px;background:transparent;border:1px solid rgba(52,152,219,.5);color:#3498db;font-size:11px;padding:10px 32px">📱 Show Join QR Code</button>
+  <button class="setup-launch-btn" id="setup-join-btn" onclick="toggleJoinPanel()" style="display:none;margin-top:8px;background:transparent;border:1px solid rgba(52,152,219,.5);color:#3498db;font-size:11px;padding:10px 32px">📱 Show Join QR Code</button>
+  <div id="join-panel" style="display:none;text-align:center;margin-top:12px;padding:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;max-width:360px;width:100%">
+    <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#3498db;margin-bottom:8px">Players — scan or visit:</div>
+    <div id="join-url" style="font-family:var(--font);font-size:12px;color:var(--text2);word-break:break-all;margin-bottom:10px"></div>
+    <canvas id="qr-canvas" style="border-radius:8px;background:#fff;padding:8px;display:block;margin:0 auto"></canvas>
+  </div>
   <button id="setup-return-btn" onclick="returnToPresentation()" style="display:none;width:100%;max-width:420px;margin-top:8px;padding:14px;font-family:var(--cinzel);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);cursor:pointer">↩ Return to Presentation</button>
   <div class="setup-hint">Space to reveal · → next · ← back · A answer key · Esc exit</div>
 </div>
@@ -425,7 +508,6 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 
 <audio id="audio-player" style="display:none"></audio>
 
-
 <script>
 // ═══════════════════════════════════════════════════════
 //  CONFIG & STATE
@@ -438,14 +520,12 @@ const API_KEY = 'AIzaSyACMjXQCXjVo75hbMXtag_JctR4SoX70So';
 // Follow Us / Rules data — loaded from Firebase non-blocking
 var appSettings = {};
 var catTypes = [];
-var db;
+var db; // global Firebase database reference
 (function() {
   try {
     const cfg = {apiKey:"AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",authDomain:"belladonnatrivia.firebaseapp.com",databaseURL:"https://belladonnatrivia-default-rtdb.firebaseio.com",projectId:"belladonnatrivia"};
     if(!firebase.apps.length) firebase.initializeApp(cfg);
     db = firebase.database();
-    db.ref('appSettings').once('value', s => { appSettings = s.val()||{}; });
-    db.ref('categoryTypes').once('value', s => { const d=s.val()||{}; catTypes=Object.entries(d).map(([id,v])=>({id,...v})); });
   } catch(e) {}
 })();
 
@@ -454,8 +534,32 @@ var db;
 // ═══════════════════════════════════════════════════════
 let leaderboardVisible = false;
 
+function toggleJoinPanel() {
+  const panel = document.getElementById('join-panel');
+  const btn = document.getElementById('setup-join-btn');
+  const showing = panel.style.display !== 'none';
+  panel.style.display = showing ? 'none' : 'block';
+  btn.textContent = showing ? '📱 Show Join QR Code' : '📱 Hide Join QR Code';
+}
+
+function generateQR(url) {
+  // Simple QR using a free API — no library needed
+  const canvas = document.getElementById('qr-canvas');
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+  };
+  img.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+  // Fallback: just show canvas as background if API fails
+  img.onerror = () => {
+    canvas.style.display = 'none';
+  };
+}
+
 function initLiveGame() {
-  if(!db) return;
   db.ref('liveGame').set({
     status: 'waiting',
     currentQuestion: null,
@@ -468,10 +572,10 @@ function toggleLeaderboard() {
   leaderboardVisible = !leaderboardVisible;
   const overlay = document.getElementById('lb-overlay');
   overlay.style.display = leaderboardVisible ? 'flex' : 'none';
-  if(db) db.ref('liveGame/leaderboardVisible').set(leaderboardVisible);
+  db.ref('liveGame/leaderboardVisible').set(leaderboardVisible);
   const btn = document.getElementById('lb-toggle-btn');
   if(btn) btn.textContent = leaderboardVisible ? 'Hide Leaderboard' : 'Show Leaderboard';
-  if(leaderboardVisible && db) {
+  if(leaderboardVisible) {
     db.ref('liveGame/teams').once('value', snap => renderLeaderboardOverlay(snap.val()||{}));
   }
 }
@@ -491,7 +595,7 @@ function renderLeaderboardOverlay(teams) {
 }
 
 // ─── Per-question timed override ─────────────────────────────────────
-let nextQuestionTimedOverride = null;
+let nextQuestionTimedOverride = null; // null = use round default, true/false = override
 
 function overrideNextTimed(val) {
   nextQuestionTimedOverride = val;
@@ -507,7 +611,8 @@ function updateHudTimedCheckbox(round) {
   const sep  = document.getElementById('hud-timed-sep');
   const chk  = document.getElementById('hud-timed-check');
   const type = slideType();
-  const show = type === S_QUESTION && round.type !== 'slideshow' && round.type !== 'canva';
+  // Only show on question slides for trivia rounds
+  const show = type === S_QUESTION && round.type !== 'slideshow' && round.type !== 'canva' && round.type !== 'music';
   wrap.style.display = show ? 'flex' : 'none';
   sep.style.display  = show ? 'block' : 'none';
   if(chk) {
@@ -519,11 +624,11 @@ function updateHudTimedCheckbox(round) {
 // ─── END timed override ───────────────────────────────────────────────
 
 function pushLiveQuestion(q, qIndex, round) {
-  if(!db) return;
   const choices = q.type==='mc' ? (q._choices||[]).map(c=>c.text) :
                   q.type==='tf' ? ['True','False'] : null;
   const qId = `q_${state.roundIndex}_${qIndex}`;
   const timed = getEffectiveTimed(round);
+  // Reset override after use — applies to this question only
   nextQuestionTimedOverride = null;
   const chk = document.getElementById('hud-timed-check');
   if(chk) chk.checked = round.timed || false;
@@ -565,6 +670,11 @@ function fuzzyConfidence(submitted,correct) {
   if(a.length>3&&b.includes(a)) return 'needs_review';
   return 'wrong';
 }
+
+
+    db.ref('appSettings').once('value', s => { appSettings = s.val()||{}; });
+    db.ref('categoryTypes').once('value', s => { const d=s.val()||{}; catTypes=Object.entries(d).map(([id,v])=>({id,...v})); });
+
 
 // Only show Follow Us + Rules on round 1
 const isFirstRound = () => state.roundIndex === 0;
@@ -658,6 +768,35 @@ function parseRow(r) {
              : 'standard';
 
   return {question:q, answer:a, difficulty:diff, imageUrl:img, audioUrl:audio, type, mcOptions};
+}
+
+// Music rounds: Col A = song title/clue, Col B = answer, Col C = audio URL
+// No difficulty, no image, no MC — just shuffle and pick count
+function parseMusicRow(r) {
+  const q = safe(r[0]).trim();
+  const a = safe(r[1]).trim();
+  if(!q || !a) return null;
+  const audioUrl = safe(r[2]).trim();
+  return { question: q, answer: a, difficulty: 1, imageUrl: '', audioUrl, type: 'standard', mcOptions: [] };
+}
+
+async function loadMusicQuestions(sheetUrl, tabName, count) {
+  const sheetId = extractSheetId(sheetUrl);
+  if(!sheetId) throw new Error('Could not extract Sheet ID from URL.');
+
+  const range = encodeURIComponent(`${tabName}!A2:C`);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${API_KEY}&_=${Date.now()}`;
+
+  const res = await fetch(url);
+  if(!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  const rows = (data.values || []).map(parseMusicRow).filter(Boolean);
+  if(!rows.length) throw new Error('No valid rows found.');
+  // Shuffle and pick up to count — no difficulty sequencing for music
+  return shuffle(rows).slice(0, count);
 }
 
 function pickByDifficultySequence(rows, n) {
@@ -782,8 +921,10 @@ function advanceSlide() {
   if(type === S_JUMP) return;
 
   // Close digital answers when leaving a question
-  if(type === S_QUESTION && db) {
+  if(type === S_QUESTION) {
     db.ref('liveGame/status').set('closed');
+    // Stop any music audio
+    if(window._musicAudio) { window._musicAudio.pause(); window._musicAudio = null; }
   }
 
   if(type === S_INTRO || type === S_INTERSTITIAL || type === S_THANKYOU || type === S_ANSWERKEY) {
@@ -939,6 +1080,7 @@ function renderCurrentSlide() {
   if(type !== S_SLIDE) { const sl = document.getElementById('slide-layer'); if(sl) sl.remove(); }
 
   if(type === S_INTRO) renderIntro(container, round);
+  else if(type === S_QUESTION && round.type === 'music') renderMusicQuestion(container, round);
   else if(type === S_QUESTION) renderQuestion(container, round);
   else if(type === S_INTERSTITIAL) renderInterstitial(container, round);
   else if(type === S_SLIDE) renderSlide(container, round);
@@ -1068,11 +1210,6 @@ function renderPreShow() {
   } else {
     renderRules(container, round);
   }
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      container.querySelectorAll('.slide.active').forEach(el => el.classList.add('visible'));
-    });
-  });
 }
 
 function renderIntro(container, round) {
@@ -1288,6 +1425,133 @@ function renderQuestion(container, round) {
   }
 }
 
+function renderMusicQuestion(container, round) {
+  const { qIndex, isPass2 } = questionInfo();
+  const q = round.questions[qIndex];
+  const n = round.questions.length;
+
+  // Progress dots
+  const dotsToShow = Math.min(n, 20);
+  let dots = '';
+  for(let i=0;i<dotsToShow;i++) {
+    const cls = i < qIndex ? 'done' : i === qIndex ? 'current' : '';
+    dots += `<div class="q-progress-dot ${cls}"></div>`;
+  }
+
+  const passLabel = round.twoPass && isPass2
+    ? `<span style="color:var(--gold);font-size:8px;letter-spacing:.12em;display:block;margin-top:2px">ANSWERS PASS</span>`
+    : '';
+
+  // Generate waveform bars with randomised heights and speeds
+  const barCount = 18;
+  const bars = Array.from({length: barCount}, (_, i) => {
+    const maxH = 10 + Math.round(Math.random() * 26);
+    const dur  = (0.45 + Math.random() * 0.55).toFixed(2);
+    const delay = (Math.random() * 0.4).toFixed(2);
+    return `<div class="music-bar" style="--max-h:${maxH}px;--dur:${dur}s;animation-delay:${delay}s"></div>`;
+  }).join('');
+
+  // Answer overlay (same as regular question)
+  const answerOverlay = state.answerVisible ? `
+    <div class="answer-overlay">
+      <div class="answer-label">Answer</div>
+      <div class="answer-text">${q.answer}</div>
+      <div class="answer-next-hint">Press → for next question</div>
+    </div>` : '';
+
+  const WORKER = 'https://canva-slides.belladonnaaudioalchemies.workers.dev';
+  const audioSrc = q.audioUrl ? `${WORKER}/audio?url=${encodeURIComponent(q.audioUrl)}` : '';
+
+  const el = document.createElement('div');
+  el.className = 'slide slide-question active';
+  el.style.cssText = 'position:absolute;inset:0;';
+  el.innerHTML = `
+    <div class="q-header">
+      <div class="q-num-badge">${String(qIndex+1).padStart(2,'0')}</div>
+      <div class="q-round-label">
+        ${round.tabName||round.title}${passLabel}
+        <div class="q-progress">${dots}</div>
+      </div>
+    </div>
+
+    <div class="music-slide">
+      <div class="music-speaker-wrap">
+        <button class="music-speaker-btn" id="music-play-btn"
+          ${!audioSrc ? 'disabled title="No audio URL for this question"' : ''}
+          data-audio-src="${audioSrc}"
+          onclick="playMusicAudio(this)">
+          <!-- Speaker icon -->
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+          </svg>
+        </button>
+        <div class="music-bars" id="music-bars-${qIndex}">${bars}</div>
+        <div class="music-play-hint" id="music-play-hint">
+          ${audioSrc ? 'Click to play' : 'No audio for this question'}
+        </div>
+      </div>
+    </div>
+
+    ${answerOverlay}
+  `;
+  container.appendChild(el);
+
+  // Push to Firebase for digital answering
+  if(!state.answerVisible && !questionInfo().isPass2) {
+    pushLiveQuestion(q, qIndex, round);
+  }
+}
+
+function playMusicAudio(btn) {
+  if(!btn || btn.disabled) return;
+  const src = btn.dataset.audioSrc;
+  if(!src) return;
+
+  // Find the bars and hint for this slide
+  const bars = document.getElementById('music-bars-' + questionInfo().qIndex);
+  const hint = document.getElementById('music-play-hint');
+
+  // Stop anything already playing
+  if(window._musicAudio) {
+    window._musicAudio.pause();
+    window._musicAudio = null;
+  }
+
+  btn.disabled = true;
+
+  const audio = new Audio(src);
+  window._musicAudio = audio;
+
+  audio.addEventListener('canplaythrough', () => {
+    btn.classList.add('playing');
+    if(bars) bars.classList.add('playing');
+    if(hint) hint.textContent = 'Playing…';
+  });
+
+  audio.addEventListener('ended', () => {
+    btn.classList.remove('playing');
+    btn.disabled = false;
+    if(bars) bars.classList.remove('playing');
+    if(hint) hint.textContent = 'Click to play again';
+    window._musicAudio = null;
+  });
+
+  audio.addEventListener('error', (e) => {
+    console.error('Music audio error:', e, audio.error);
+    btn.classList.remove('playing');
+    btn.disabled = false;
+    if(bars) bars.classList.remove('playing');
+    if(hint) hint.textContent = 'Audio error — check console';
+    window._musicAudio = null;
+  });
+
+  audio.play().catch(err => {
+    console.error('play() rejected:', err);
+    btn.disabled = false;
+    if(hint) hint.textContent = 'Playback blocked — try again';
+  });
+}
+
 function renderAnswerKey(container, round) {
   const n = round.questions.length;
   // Auto-size font so answers fill the full screen height
@@ -1373,11 +1637,6 @@ function renderJumpScreen() {
     <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem">Press J+${miniRounds.map((_,mi)=>mi+1).join(' or J+')} to jump</div>
   `;
   container.appendChild(el);
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      container.querySelectorAll('.slide.active').forEach(el => el.classList.add('visible'));
-    });
-  });
   document.getElementById('jump-panel').classList.remove('show');
 }
 
@@ -1508,73 +1767,6 @@ function toast(msg) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  JOIN WINDOW — opens as a separate OS window (can move to any screen)
-// ═══════════════════════════════════════════════════════
-let _joinWin = null;
-
-function toggleJoinPopup() {
-  // Close if already open
-  if(_joinWin && !_joinWin.closed) { _joinWin.close(); _joinWin = null; return; }
-
-  const playUrl = window.location.href.replace(/\/[^/]*$/, '/play.html');
-  const qrSize  = 400;
-  const winW    = qrSize + 80;
-  const winH    = qrSize + 160;
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Join Trivia</title>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=DM+Sans:wght@400&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:#080808;color:#f0ede8;font-family:'DM Sans',sans-serif;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  min-height:100vh;gap:18px;padding:28px;text-align:center;}
-.label{font-family:'Cinzel',serif;font-size:12px;letter-spacing:.2em;
-  text-transform:uppercase;color:#3498db;}
-.url{font-size:12px;color:#b0a898;word-break:break-all;max-width:420px;}
-#qr{background:#fff;padding:12px;border-radius:10px;display:inline-block;}
-.hint{font-family:'Cinzel',serif;font-size:10px;letter-spacing:.14em;
-  text-transform:uppercase;color:#3a3630;margin-top:6px;}
-</style>
-</head>
-<body>
-<div class="label">Scan to Join</div>
-<div id="qr"></div>
-<div class="url">${playUrl}</div>
-<div class="hint">You can resize or move this window to any screen</div>
-<script>
-(function(){
-  function render(){
-    var d=document.getElementById('qr');
-    d.innerHTML='';
-    var s=Math.round(Math.min(window.innerWidth,window.innerHeight)*0.72);
-    if(s<120)s=120;
-    new QRCode(d,{text:${JSON.stringify(playUrl)},width:s,height:s,
-      colorDark:'#000000',colorLight:'#ffffff',
-      correctLevel:QRCode.CorrectLevel.M});
-  }
-  render();
-  window.addEventListener('resize',function(){render();});
-})();
-<\/script>
-</body>
-</html>`;
-
-  _joinWin = window.open('', 'join-qr',
-    `width=${winW},height=${winH},resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no`);
-  if(!_joinWin) {
-    toast('Pop-up blocked — allow pop-ups for this page then try again');
-    return;
-  }
-  _joinWin.document.write(html);
-  _joinWin.document.close();
-}
-
-// ═══════════════════════════════════════════════════════
 //  INIT — read URL params, show round cards, wait for Launch click
 // ═══════════════════════════════════════════════════════
 let pendingRounds = [];
@@ -1638,6 +1830,12 @@ function checkUrlParams() {
   document.getElementById('setup-launch-btn').style.display = 'block';
   document.getElementById('setup-preview-btn').style.display = 'block';
   document.getElementById('setup-join-btn').style.display = 'block';
+  joinUrlCached = window.location.href.replace(/\/[^/?#]*([?#].*)?$/, '/play.html');
+  document.getElementById('setup-join-btn').style.display = 'block';
+  // Set join URL
+  const joinUrl = window.location.href.replace(/\/[^/]*$/, '/play.html');
+  document.getElementById('join-url').textContent = joinUrl;
+  generateQR(joinUrl);
   return true;
 }
 
@@ -1663,7 +1861,12 @@ async function launchFromSetup() {
       } else if(round.type === 'slideshow') {
         round.slides = loadSlidesheetManifest(round.folderUrl);
         round.questions = [];
+      } else if(round.type === 'music') {
+        round.questions = await loadMusicQuestions(
+          round.sheetUrl, round.tabName, round.questionCount
+        );
       } else {
+        // trivia
         round.questions = await loadSheetQuestions(
           round.sheetUrl, round.tabName, round.questionCount
         );
@@ -1745,6 +1948,67 @@ document.getElementById('setup-screen').addEventListener('dblclick', () => {
 });
 
 checkUrlParams();
+
+// ── JOIN QR POPUP ─────────────────────────────────────────────────────
+let joinPopupOpen = false;
+let joinUrlCached = '';
+
+function toggleJoinPopup() {
+  const popup = document.getElementById('join-popup');
+  const btn = document.getElementById('setup-join-btn');
+  joinPopupOpen = !joinPopupOpen;
+  popup.style.display = joinPopupOpen ? 'block' : 'none';
+  if(btn) btn.textContent = joinPopupOpen ? '📱 Hide Join QR Code' : '📱 Show Join QR Code';
+  if(joinPopupOpen && joinUrlCached) {
+    document.getElementById('join-url-display').textContent = joinUrlCached;
+    generateQR(joinUrlCached);
+  }
+}
+
+function generateQR(url) {
+  const container = document.getElementById('join-qr');
+  if(!container) return;
+  container.innerHTML = '';
+  if(typeof QRCode !== 'undefined') {
+    new QRCode(container, {text:url, width:200, height:200, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
+  } else {
+    setTimeout(() => generateQR(url), 300);
+  }
+}
+
+// Drag to move
+(function(){
+  let drag=false, ox=0, oy=0;
+  document.addEventListener('DOMContentLoaded', () => {
+    const h=document.getElementById('join-popup-handle');
+    const p=document.getElementById('join-popup');
+    if(!h||!p) return;
+    h.addEventListener('mousedown', e => {
+      drag=true;
+      const r=p.getBoundingClientRect();
+      p.style.left=r.left+'px'; p.style.top=r.top+'px'; p.style.transform='none';
+      ox=e.clientX-r.left; oy=e.clientY-r.top;
+      h.style.cursor='grabbing'; e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => { if(drag){ p.style.left=(e.clientX-ox)+'px'; p.style.top=(e.clientY-oy)+'px'; }});
+    document.addEventListener('mouseup', () => { drag=false; if(h) h.style.cursor='grab'; });
+  });
+})();
+// ──────────────────────────────────────────────────────────────────────
+
 </script>
+
+<!-- JOIN QR POPUP -->
+<div id="join-popup" style="display:none;position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:3000;background:#111;border:1px solid rgba(52,152,219,.4);border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.8);min-width:280px;user-select:none;">
+  <div id="join-popup-handle" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid rgba(255,255,255,.08);cursor:grab;font-family:'Cinzel',serif;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(52,152,219,.9);">
+    <span>📱 Join Game</span>
+    <button onclick="toggleJoinPopup()" style="background:none;border:none;color:rgba(255,255,255,.4);font-size:18px;cursor:pointer;line-height:1;padding:0 0 2px 8px;">×</button>
+  </div>
+  <div style="padding:16px;text-align:center;">
+    <div id="join-url-display" style="font-family:'DM Sans',sans-serif;font-size:11px;color:rgba(255,255,255,.5);word-break:break-all;margin-bottom:12px;line-height:1.4;"></div>
+    <div id="join-qr" style="display:inline-block;background:#fff;padding:10px;border-radius:8px;"></div>
+    <div style="margin-top:10px;font-family:'Cinzel',serif;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.3);">Drag to move · × to close</div>
+  </div>
+</div>
 </body>
 </html>
