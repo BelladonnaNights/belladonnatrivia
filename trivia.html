@@ -401,36 +401,46 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 .music-reveal{
   position:absolute;inset:0;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:1.5rem;padding:2rem;text-align:center;
+  gap:0;padding:1rem 2rem 2rem;text-align:center;
+  /* Put art first, then text — order enforced by DOM, not flex */
 }
 .music-reveal-art{
-  width:clamp(180px,32vw,360px);height:clamp(180px,32vw,360px);
-  border-radius:12px;
+  width:clamp(240px,40vw,480px);
+  height:clamp(240px,40vw,480px);
+  border-radius:16px;
   object-fit:cover;
-  box-shadow:0 8px 48px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.08);
+  box-shadow:0 12px 60px rgba(0,0,0,.75),0 0 0 1px rgba(255,255,255,.1);
   flex-shrink:0;
+  display:block;
+  order:1;
 }
 .music-reveal-art-placeholder{
-  width:clamp(180px,32vw,360px);height:clamp(180px,32vw,360px);
-  border-radius:12px;
+  width:clamp(240px,40vw,480px);
+  height:clamp(240px,40vw,480px);
+  border-radius:16px;
   background:rgba(201,168,76,.06);
   border:1px solid var(--gold-glow);
   display:flex;align-items:center;justify-content:center;
   flex-shrink:0;
+  order:1;
+}
+.music-reveal-text{
+  order:2;
+  display:flex;flex-direction:column;align-items:center;gap:.4rem;
+  margin-top:1.4rem;
 }
 .music-reveal-song{
   font-family:var(--display);
-  font-size:clamp(32px,5vw,72px);
-  letter-spacing:.06em;line-height:1.1;
+  font-size:clamp(40px,6.5vw,90px);
+  letter-spacing:.06em;line-height:1;
   background:var(--gold-shine);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
 }
 .music-reveal-artist{
   font-family:var(--cinzel);
-  font-size:clamp(13px,1.8vw,22px);
+  font-size:clamp(16px,2.2vw,28px);
   letter-spacing:.14em;text-transform:uppercase;
   color:var(--text2);
-  margin-top:-.5rem;
 }
 .fade-out{animation:fadeOut .25s ease forwards}
 @keyframes fadeOut{to{opacity:0}}
@@ -1102,7 +1112,7 @@ function renderCurrentSlide() {
   else bgUrl = round.bgQuestion || round.bgImage || '';
 
   if(bgUrl) {
-    bg.style.backgroundImage = `url('${bgUrl}')`;
+    bg.style.backgroundImage = `url("${bgUrl}")`;
     bg.classList.remove('no-img');
   } else if(type !== S_SLIDE && type !== S_THANKYOU) {
     bg.style.backgroundImage = '';
@@ -1185,7 +1195,7 @@ function ssShowNext() {
   const next    = document.getElementById(ssActive ? 'ss-slide-a' : 'ss-slide-b');
 
   // Load new image into next layer (hidden)
-  next.style.backgroundImage = `url('${url}')`;
+  next.style.backgroundImage = `url("${url}")`;
   next.style.opacity = '0';
 
   // Crossfade after a tick
@@ -1244,7 +1254,7 @@ function renderPreShow() {
   const round0 = state.rounds[0];
   const bgUrl = round0.bgPlain || round0.bgQuestion || round0.bgImage || '';
   if(bgUrl) {
-    bg.style.backgroundImage = `url('${bgUrl}')`;
+    bg.style.backgroundImage = `url("${bgUrl}")`;
     bg.classList.remove('no-img');
   } else {
     bg.style.backgroundImage = '';
@@ -1264,7 +1274,7 @@ function renderIntro(container, round) {
   const bgUrl = round.bgIntro || round.bgImage;
   if(bgUrl) {
     const bg = document.getElementById('pres-bg');
-    bg.style.backgroundImage = `url('${bgUrl}')`;
+    bg.style.backgroundImage = `url("${bgUrl}")`;
     bg.classList.remove('no-img');
     // Empty slide — just the background
     const el = document.createElement('div');
@@ -1342,7 +1352,7 @@ function renderThankyou(container, round) {
   bg.style.backgroundImage = '';
   bg.classList.remove('no-img');
   if(round.thankYouUrl) {
-    bg.style.backgroundImage = `url('${round.thankYouUrl}')`;
+    bg.style.backgroundImage = `url("${round.thankYouUrl}")`;
   }
   const el = document.createElement('div');
   el.style.cssText = 'position:absolute;inset:0;';
@@ -1363,7 +1373,7 @@ function renderSlide(container, round) {
   const el = document.createElement('div');
   el.id = 'slide-layer';
   el.style.cssText = 'position:fixed;inset:0;z-index:801;background-color:#000;background-size:contain !important;background-position:center;background-repeat:no-repeat;';
-  el.style.backgroundImage = `url('${slide.url}')`;
+  el.style.backgroundImage = `url("${slide.url}")`;
   presScreen.appendChild(el);
 }
 
@@ -1492,7 +1502,7 @@ function renderMusicQuestion(container, round) {
   // ── PASS 2: Album art reveal ──────────────────────────────────────────
   if(isPass2) {
     const artHtml = q.albumArt
-      ? '<img class="music-reveal-art" src="' + q.albumArt + '" onerror="this.outerHTML=\'<div class=music-reveal-art-placeholder><svg width=60 height=60 viewBox=\\\"0 0 24 24\\\" fill=\\\"rgba(201,168,76,.3)\\\"><path d=\\\"M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z\\\"/></svg></div>\'">'
+      ? '<img class="music-reveal-art" src="' + q.albumArt + '" onerror="this.className=\'music-reveal-art-placeholder\'">'
       : '<div class="music-reveal-art-placeholder"><svg width="60" height="60" viewBox="0 0 24 24" fill="rgba(201,168,76,.3)"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
 
     el.innerHTML = ''
@@ -1506,8 +1516,10 @@ function renderMusicQuestion(container, round) {
       + '</div>'
       + '<div class="music-reveal">'
       +   artHtml
-      +   '<div class="music-reveal-song">' + q.question + '</div>'
-      +   '<div class="music-reveal-artist">' + q.answer + '</div>'
+      +   '<div class="music-reveal-text">'
+      +     '<div class="music-reveal-song">' + q.question + '</div>'
+      +     '<div class="music-reveal-artist">' + q.answer + '</div>'
+      +   '</div>'
       + '</div>';
 
     container.appendChild(el);
