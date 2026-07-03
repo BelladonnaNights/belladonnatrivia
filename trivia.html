@@ -536,14 +536,6 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="hud-sep"></div>
   <div class="hud-item"><span class="hud-key">→</span> next</div>
   <div class="hud-sep"></div>
-  <div class="hud-item" id="hud-timed-wrap" style="display:none">
-    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none">
-      <input type="checkbox" id="hud-timed-check" onchange="overrideNextTimed(this.checked)"
-        style="accent-color:var(--gold);width:12px;height:12px;cursor:pointer"/>
-      <span style="font-size:10px;letter-spacing:.1em">⏱ next Q</span>
-    </label>
-  </div>
-  <div class="hud-sep" id="hud-timed-sep" style="display:none"></div>
   <div class="hud-item"><span class="hud-key">J+1</span> jump</div>
   <div class="hud-sep"></div>
   <div class="hud-item"><span class="hud-key">Esc</span> exit</div>
@@ -639,11 +631,15 @@ function renderLeaderboardOverlay(teams) {
     </div>`).join('');
 }
 
-// ─── Per-question timed override ─────────────────────────────────────
-let nextQuestionTimedOverride = null; // null = use round default, true/false = override
+// ─── Per-question timed — driven by host board via Firebase ──────────
+let nextQuestionTimedOverride = null;
 
-function overrideNextTimed(val) {
-  nextQuestionTimedOverride = val;
+// Listen for host board timed toggle
+if(db) {
+  db.ref('liveGame/timedOverride').on('value', snap => {
+    const val = snap.val();
+    if(val !== null && val !== undefined) nextQuestionTimedOverride = !!val;
+  });
 }
 
 function getEffectiveTimed(round) {
@@ -652,20 +648,8 @@ function getEffectiveTimed(round) {
 }
 
 function updateHudTimedCheckbox(round) {
-  const wrap = document.getElementById('hud-timed-wrap');
-  const sep  = document.getElementById('hud-timed-sep');
-  const chk  = document.getElementById('hud-timed-check');
-  const type = slideType();
-  // Only show on question slides for trivia rounds
-  const show = type === S_QUESTION && round.type !== 'slideshow' && round.type !== 'canva' && round.type !== 'music';
-  wrap.style.display = show ? 'flex' : 'none';
-  sep.style.display  = show ? 'block' : 'none';
-  if(chk) {
-    const effective = nextQuestionTimedOverride !== null ? nextQuestionTimedOverride : (round.timed || false);
-    chk.checked = effective;
-  }
+  // Timed toggle moved to host board — nothing to update in HUD
 }
-
 // ─── END timed override ───────────────────────────────────────────────
 
 function pushLiveQuestion(q, qIndex, round) {
@@ -673,10 +657,6 @@ function pushLiveQuestion(q, qIndex, round) {
                   q.type==='tf' ? ['True','False'] : null;
   const qId = `q_${state.roundIndex}_${qIndex}`;
   const timed = getEffectiveTimed(round);
-  // Reset override after use — applies to this question only
-  nextQuestionTimedOverride = null;
-  const chk = document.getElementById('hud-timed-check');
-  if(chk) chk.checked = round.timed || false;
 
   db.ref('liveGame').update({
     status: 'question',
@@ -690,7 +670,17 @@ function pushLiveQuestion(q, qIndex, round) {
   db.ref(`liveGame/answers/${qId}`).remove();
 }
 
-// Fuzzy grading
+function pushSlideState(label, text, qNum, bgUrl, answer) {
+  if(!db) return;
+  db.ref('liveGame/slideState').set({
+    label:  label  || '',
+    text:   text   || '',
+    qNum:   qNum   || '',
+    bgUrl:  bgUrl  || '',
+    answer: answer || '',
+    ts: Date.now(),
+  });
+}
 function normalizeAnswer(s) {
   return s.toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').replace(/\b(a|an|the)\b/g,'').trim();
 }
@@ -1155,6 +1145,31 @@ function renderCurrentSlide() {
   else if(type === S_ANSWERKEY) renderAnswerKey(container, round);
   else if(type === S_THANKYOU) renderThankyou(container, round);
   else renderEnd(container, round);
+
+  // Push slide state to Firebase for host board mini preview
+  (function() {
+    let label = '', text = '', qNum = '', answer = '';
+    if(type === S_INTRO) {
+      label = round.tabName || round.title || 'Intro';
+      text  = 'Intro Slide';
+    } else if(type === S_QUESTION) {
+      const { qIndex, isPass2 } = questionInfo();
+      const q = round.questions[qIndex];
+      label  = (round.tabName||round.title) + (isPass2 ? ' — ANSWERS' : '');
+      qNum   = 'Q' + (qIndex+1);
+      text   = q ? q.question : '';
+      answer = (state.answerVisible || state.bonusVisible) && q ? q.answer : '';
+    } else if(type === S_INTERSTITIAL) {
+      label = 'Interstitial'; text = 'Pass 1 Complete';
+    } else if(type === S_ANSWERKEY) {
+      label = 'Answer Key'; text = round.tabName || round.title || '';
+    } else if(type === S_THANKYOU) {
+      label = 'Thank You'; text = 'Round complete';
+    } else if(type === S_END) {
+      label = 'End'; text = 'Game over';
+    }
+    pushSlideState(label, text, qNum, bgUrl, answer);
+  })();
 
   // Make slides visible after layout settles
   requestAnimationFrame(() => {
