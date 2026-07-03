@@ -528,6 +528,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
           <button id="type-btn-trivia" onclick="setCatType('trivia')" class="btn btn-primary" style="flex:1">🎯 Trivia</button>
           <button id="type-btn-slideshow" onclick="setCatType('slideshow')" class="btn btn-ghost" style="flex:1">🖼 Slideshow</button>
           <button id="type-btn-canva" onclick="setCatType('canva')" class="btn btn-ghost" style="flex:1">🎨 Canva</button>
+          <button id="type-btn-music" onclick="setCatType('music')" class="btn btn-ghost" style="flex:1">🎵 Music</button>
         </div>
       </div>
 
@@ -569,6 +570,19 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
           <button class="btn btn-ghost" onclick="checkCanvaConnection()" style="font-size:10px">Check Connection</button>
           <button class="btn btn-primary" onclick="refreshCanvaSlides()" id="canva-refresh-btn" style="font-size:10px;display:none">🔄 Refresh Slides from Canva</button>
           <span id="canva-status" style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)"></span>
+        </div>
+      </div>
+
+      <!-- MUSIC FIELDS -->
+      <div id="music-fields" style="display:none">
+        <div class="field" style="margin-bottom:1rem">
+          <div class="field-label">Google Sheet URL</div>
+          <input class="field-input" id="f-music-sheet" placeholder="https://docs.google.com/spreadsheets/d/…"/>
+          <div class="field-hint">Col A: clue/question · Col B: answer · Col E: audio URL (R2 or direct link)</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Tab Name</div>
+          <input class="field-input" id="f-music-tab" placeholder="Exact tab name (case sensitive)"/>
         </div>
       </div>
 
@@ -922,6 +936,9 @@ function renderLibrary() {
         <div class="cat-body">
           <div class="cat-title">${cat.name||'Untitled'}</div>
           <div class="cat-meta">
+            ${cat.type === 'music' ? `<span class="cat-genre" style="background:rgba(46,204,113,.12);color:#2ecc71;border-color:rgba(46,204,113,.25)">🎵 Music</span>` : ''}
+            ${cat.type === 'slideshow' ? `<span class="cat-genre" style="background:rgba(201,168,76,.08);color:var(--gold)">🖼 Slideshow</span>` : ''}
+            ${cat.type === 'canva' ? `<span class="cat-genre" style="background:rgba(201,168,76,.08);color:var(--gold)">🎨 Canva</span>` : ''}
             ${tagPills}
           </div>
           ${cat.notes ? `<div style="font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;margin-top:4px">${cat.notes}</div>` : ''}
@@ -985,17 +1002,18 @@ function renderLineup() {
       const twoPassChecked = lineupTwoPass[i] ? 'checked' : '';
       const mainChecked = lineupMainRound[i] ? 'checked' : '';
       const isSlideshow = cat.type === 'slideshow';
+      const isMusic = cat.type === 'music';
       slot.innerHTML = `
         <div class="round-slot-label">Round ${i+1}</div>
         <div class="round-slot-card">
           ${thumb}
           <div class="round-slot-card-info">
             <div class="round-slot-card-name">${cat.name}</div>
-            <div class="round-slot-card-tab">${isSlideshow ? 'Slideshow' : cat.tabName||''}</div>
+            <div class="round-slot-card-tab">${isSlideshow ? 'Slideshow' : isMusic ? '🎵 Music Round' : cat.tabName||''}</div>
           </div>
           <button class="round-slot-remove" onclick="removeFromSlot(${i})">×</button>
         </div>
-        ${!isSlideshow ? `
+        ${(isSlideshow) ? '' : `
         <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
           <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Questions:</span>
           <input type="number" value="${lineupQCount[i]||20}" min="1" max="100"
@@ -1144,6 +1162,8 @@ function openModal(id) {
   document.getElementById('f-sheet').value   = cat?.sheetUrl || '';
   document.getElementById('f-tab').value     = cat?.tabName  || '';
   document.getElementById('f-folder').value  = cat?.folderUrl|| '';
+  document.getElementById('f-music-sheet').value = cat?.type === 'music' ? (cat?.sheetUrl || '') : '';
+  document.getElementById('f-music-tab').value   = cat?.type === 'music' ? (cat?.tabName  || '') : '';
   document.getElementById('f-bg').value      = cat?.bgImage  || '';
   document.getElementById('f-bg-intro').value    = cat?.bgIntro    || '';
   document.getElementById('f-bg-question').value = cat?.bgQuestion || '';
@@ -1212,11 +1232,14 @@ function setCatType(type) {
   document.getElementById('trivia-fields').style.display = type === 'trivia' ? 'block' : 'none';
   document.getElementById('slideshow-fields').style.display = type === 'slideshow' ? 'block' : 'none';
   document.getElementById('canva-fields').style.display = type === 'canva' ? 'block' : 'none';
-  document.getElementById('intro-bg-field').style.display = type === 'trivia' ? 'block' : 'none';
-  document.getElementById('question-bg-field').style.display = type === 'trivia' ? 'block' : 'none';
-  document.getElementById('type-btn-trivia').className = 'btn ' + (type==='trivia' ? 'btn-primary' : 'btn-ghost');
-  document.getElementById('type-btn-slideshow').className = 'btn ' + (type==='slideshow' ? 'btn-primary' : 'btn-ghost');
-  document.getElementById('type-btn-canva').className = 'btn ' + (type==='canva' ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('music-fields').style.display = type === 'music' ? 'block' : 'none';
+  document.getElementById('intro-bg-field').style.display = (type === 'trivia' || type === 'music') ? 'block' : 'none';
+  document.getElementById('question-bg-field').style.display = (type === 'trivia' || type === 'music') ? 'block' : 'none';
+
+  ['trivia','slideshow','canva','music'].forEach(t => {
+    const btn = document.getElementById(`type-btn-${t}`);
+    if(btn) btn.className = `btn ${t===type?'btn-primary':'btn-ghost'}`;
+  });
   // Check Canva connection status when switching to canva type
   if(type === 'canva') checkCanvaConnection();
 }
@@ -1242,8 +1265,12 @@ async function saveCategory() {
   const name       = document.getElementById('f-name').value.trim() || 'Untitled Category';
   const genre      = document.getElementById('f-genre').value.trim();
   const type       = currentCatType;
-  const sheetUrl   = document.getElementById('f-sheet').value.trim();
-  const tabName    = document.getElementById('f-tab').value.trim();
+  const sheetUrl   = type === 'music'
+    ? document.getElementById('f-music-sheet').value.trim()
+    : document.getElementById('f-sheet').value.trim();
+  const tabName    = type === 'music'
+    ? document.getElementById('f-music-tab').value.trim()
+    : document.getElementById('f-tab').value.trim();
   const folderUrl  = document.getElementById('f-folder').value.trim();
   const bgImage    = document.getElementById('f-bg').value.trim();
   const bgIntro    = document.getElementById('f-bg-intro').value.trim();
