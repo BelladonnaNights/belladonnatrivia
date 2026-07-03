@@ -1938,6 +1938,8 @@ function toast(msg) {
 //  INIT — read URL params, show round cards, wait for Launch click
 // ═══════════════════════════════════════════════════════
 let pendingRounds = [];
+let joinPopupOpen = false;
+let joinUrlCached = '';
 
 function checkUrlParams() {
   const p = new URLSearchParams(window.location.search);
@@ -2118,8 +2120,6 @@ document.getElementById('setup-screen').addEventListener('dblclick', () => {
 checkUrlParams();
 
 // ── JOIN QR POPUP ─────────────────────────────────────────────────────
-let joinPopupOpen = false;
-let joinUrlCached = '';
 
 function toggleJoinPopup() {
   const popup = document.getElementById('join-popup');
