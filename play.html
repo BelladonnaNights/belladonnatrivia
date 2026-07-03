@@ -358,6 +358,7 @@ const db = firebase.database();
 // ═══════════════════════════════════════════════
 let teamId = localStorage.getItem('bella_team_id') || null;
 let teamName = localStorage.getItem('bella_team_name') || null;
+let mySessionId = localStorage.getItem('bella_session_id') || null;
 let myScore = 0;
 let currentQ = null;
 let answered = false;
@@ -396,6 +397,13 @@ async function register() {
   }
   teamName = name;
   localStorage.setItem('bella_team_name', name);
+
+  // Store the current session ID so stale sessions are detected
+  const sessSnap = await db.ref('liveGame/sessionId').once('value');
+  if(sessSnap.val()) {
+    mySessionId = sessSnap.val();
+    localStorage.setItem('bella_session_id', mySessionId);
+  }
 
   // Register in Firebase
   await db.ref(`liveGame/teams/${teamId}`).set({
@@ -748,21 +756,26 @@ window.addEventListener('DOMContentLoaded', async () => {
     if(e.key === 'Enter') register();
   });
 
-  if(teamId && teamName) {
-    // Check if game is active before offering rejoin
-    const snap = await db.ref('liveGame/status').once('value');
-    if(snap.val()) {
-      // Show rejoin prompt — don't auto-sign-in
-      document.getElementById('reg-input').value = teamName;
-      document.getElementById('reg-status').innerHTML =
-        'Welcome back, <strong style="color:var(--gold)">' + teamName + '</strong>!<br>' +
-        '<span style="font-size:13px">Continue with this name or type a new one.</span>';
-      document.getElementById('reg-btn').textContent = 'Join Game';
-      return;
+  // Fetch current game state
+  const snap = await db.ref('liveGame').once('value');
+  const game = snap.val();
+  const currentSessionId = game?.sessionId || null;
+
+  if(teamId && teamName && currentSessionId && currentSessionId === mySessionId && game?.status) {
+    // Same active session — offer rejoin but don't auto-join
+    document.getElementById('reg-input').value = teamName;
+    document.getElementById('reg-status').innerHTML =
+      'Welcome back, <strong style="color:var(--gold)">' + teamName + '</strong>! ' +
+      'Continue with this name or type a new one.';
+  } else {
+    // New game or first time — clear stale team ID if session changed
+    if(currentSessionId && currentSessionId !== mySessionId) {
+      teamId = null;
+      localStorage.removeItem('bella_team_id');
     }
+    if(teamName) document.getElementById('reg-input').value = teamName;
+    document.getElementById('reg-status').textContent = 'Enter your team name to join the game';
   }
-  // Fresh start
-  document.getElementById('reg-status').textContent = 'Enter your team name to join the game';
 });
 </script>
 
