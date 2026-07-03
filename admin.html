@@ -57,7 +57,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .sync-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
 
 /* ── LAYOUT ── */
-.layout{display:grid;grid-template-columns:1fr 340px;gap:0;min-height:calc(100vh - 118px)}
+.layout{display:grid;grid-template-columns:1fr 340px;gap:0;min-height:calc(100vh - 120px)}
 
 /* ── LEFT: CATEGORY LIBRARY ── */
 .library{padding:2rem;border-right:1px solid var(--border)}
@@ -72,7 +72,21 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .add-btn:hover{opacity:.85}
 
 /* Filter pills */
-.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.25rem}
+.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.25rem;align-items:center}
+.filter-more-wrap{position:relative;display:inline-block;flex-shrink:0}
+.filter-more-btn{
+  background:transparent;border:1px solid var(--border2);border-radius:99px;
+  padding:5px 12px;font-size:10px;font-family:var(--cinzel);letter-spacing:.08em;
+  color:var(--text3);cursor:pointer;transition:all .2s;white-space:nowrap;
+}
+.filter-more-btn:hover,.filter-more-btn.open{border-color:var(--gold-glow);color:var(--gold2)}
+.filter-more-dropdown{
+  position:absolute;top:calc(100% + 6px);left:0;z-index:250;
+  background:#1a1a1a;border:1px solid var(--border2);border-radius:10px;
+  padding:8px;display:none;flex-wrap:wrap;gap:6px;min-width:200px;max-width:320px;
+  box-shadow:0 8px 32px rgba(0,0,0,.7);
+}
+.filter-more-dropdown.open{display:flex}
 .pill{
   background:transparent;border:1px solid var(--border2);border-radius:99px;
   padding:5px 14px;font-size:10px;font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;
@@ -254,12 +268,12 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 #host-board{
   position:sticky;top:64px;z-index:190;
   width:100%;
-  background:rgba(8,8,8,.97);
-  border-bottom:1px solid var(--gold-glow);
+  background:rgba(8,8,8,.98);
+  border-bottom:2px solid var(--gold-glow);
   backdrop-filter:blur(16px);
   display:flex;align-items:stretch;
-  min-height:54px;
-  box-shadow:0 4px 20px rgba(0,0,0,.5);
+  min-height:56px;
+  box-shadow:0 4px 24px rgba(0,0,0,.5);
 }
 /* Left: live indicator + preview */
 .hb-cell{
@@ -415,74 +429,6 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   </div>
 </nav>
 
-<!-- LAYOUT -->
-<div class="layout">
-
-  <!-- LEFT: LIBRARY -->
-  <div class="library">
-    <div class="section-header">
-      <div>
-        <div class="section-title">CATEGORY LIBRARY</div>
-        <div class="section-sub">Drag any category into a round slot →</div>
-      </div>
-      <button class="add-btn" onclick="openModal()" id="add-cat-btn" style="display:none">+ New Category</button>
-    </div>
-
-    <div style="position:relative;margin-bottom:10px">
-      <input id="search-input" class="field-input" placeholder="Search categories…" oninput="renderLibrary()"
-        style="width:100%;padding-left:34px;font-size:13px"/>
-      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;pointer-events:none">⌕</span>
-    </div>
-
-    <div class="filter-bar" id="filter-bar">
-      <div class="pill active" data-genre="all" onclick="filterGenre('all',this)">All</div>
-    </div>
-
-    <div class="cat-grid" id="cat-grid">
-      <div class="empty-library">
-        <div class="empty-icon">✦</div>
-        <div class="empty-text">No categories yet — add your first one</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- RIGHT: LINEUP -->
-  <div class="lineup">
-    <div class="lineup-header">
-      <div class="lineup-title">TONIGHT'S LINEUP</div>
-      <div class="lineup-sub">Drop categories into rounds below</div>
-    </div>
-
-    <div class="round-slots" id="round-slots">
-      <div class="round-slot" id="slot-0" data-slot="0" ondragover="onSlotDragOver(event,0)" ondrop="onSlotDrop(event,0)" ondragleave="onSlotDragLeave(0)">
-        <div class="round-slot-label">Round 1</div>
-        <div class="round-slot-empty">Drop a category here</div>
-      </div>
-      <div class="round-slot" id="slot-1" data-slot="1" ondragover="onSlotDragOver(event,1)" ondrop="onSlotDrop(event,1)" ondragleave="onSlotDragLeave(1)">
-        <div class="round-slot-label">Round 2</div>
-        <div class="round-slot-empty">Drop a category here</div>
-      </div>
-      <div class="round-slot" id="slot-2" data-slot="2" ondragover="onSlotDragOver(event,2)" ondrop="onSlotDrop(event,2)" ondragleave="onSlotDragLeave(2)">
-        <div class="round-slot-label">Round 3</div>
-        <div class="round-slot-empty">Drop a category here</div>
-      </div>
-      <div class="round-slot" id="slot-3" data-slot="3" ondragover="onSlotDragOver(event,3)" ondrop="onSlotDrop(event,3)" ondragleave="onSlotDragLeave(3)">
-        <div class="round-slot-label">Round 4</div>
-        <div class="round-slot-empty">Drop a category here</div>
-      </div>
-      <div class="round-slot" id="slot-4" data-slot="4" ondragover="onSlotDragOver(event,4)" ondrop="onSlotDrop(event,4)" ondragleave="onSlotDragLeave(4)">
-        <div class="round-slot-label">Round 5</div>
-        <div class="round-slot-empty">Drop a category here</div>
-      </div>
-    </div>
-
-    <div class="lineup-divider"></div>
-
-    <button class="launch-btn" id="launch-btn" onclick="launchTrivia()">Launch Trivia Night →</button>
-
-  </div>
-</div>
-
 <!-- HOST BOARD STRIP -->
 <div id="host-board">
 
@@ -547,6 +493,80 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   <div style="font-family:var(--cinzel);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Needs Review</div>
   <div id="hb-review-queue"></div>
 </div>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- LEFT: LIBRARY -->
+  <div class="library">
+    <div class="section-header">
+      <div>
+        <div class="section-title">CATEGORY LIBRARY</div>
+        <div class="section-sub">Drag any category into a round slot →</div>
+      </div>
+      <button class="add-btn" onclick="openModal()" id="add-cat-btn" style="display:none">+ New Category</button>
+    </div>
+
+    <div style="position:relative;margin-bottom:10px">
+      <input id="search-input" class="field-input" placeholder="Search categories…" oninput="renderLibrary()"
+        style="width:100%;padding-left:34px;font-size:13px"/>
+      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;pointer-events:none">⌕</span>
+    </div>
+
+    <div class="filter-bar" id="filter-bar">
+      <div class="pill active" id="pill-all" onclick="clearGenreFilter()">All</div>
+      <div id="filter-pinned" style="display:contents"></div>
+      <div class="filter-more-wrap" id="filter-more-wrap" style="display:none">
+        <button class="filter-more-btn" id="filter-more-btn" onclick="toggleMoreDropdown()">More ▾</button>
+        <div class="filter-more-dropdown" id="filter-more-dropdown"></div>
+      </div>
+    </div>
+
+    <div class="cat-grid" id="cat-grid">
+      <div class="empty-library">
+        <div class="empty-icon">✦</div>
+        <div class="empty-text">No categories yet — add your first one</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: LINEUP -->
+  <div class="lineup">
+    <div class="lineup-header">
+      <div class="lineup-title">TONIGHT'S LINEUP</div>
+      <div class="lineup-sub">Drop categories into rounds below</div>
+    </div>
+
+    <div class="round-slots" id="round-slots">
+      <div class="round-slot" id="slot-0" data-slot="0" ondragover="onSlotDragOver(event,0)" ondrop="onSlotDrop(event,0)" ondragleave="onSlotDragLeave(0)">
+        <div class="round-slot-label">Round 1</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+      <div class="round-slot" id="slot-1" data-slot="1" ondragover="onSlotDragOver(event,1)" ondrop="onSlotDrop(event,1)" ondragleave="onSlotDragLeave(1)">
+        <div class="round-slot-label">Round 2</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+      <div class="round-slot" id="slot-2" data-slot="2" ondragover="onSlotDragOver(event,2)" ondrop="onSlotDrop(event,2)" ondragleave="onSlotDragLeave(2)">
+        <div class="round-slot-label">Round 3</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+      <div class="round-slot" id="slot-3" data-slot="3" ondragover="onSlotDragOver(event,3)" ondrop="onSlotDrop(event,3)" ondragleave="onSlotDragLeave(3)">
+        <div class="round-slot-label">Round 4</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+      <div class="round-slot" id="slot-4" data-slot="4" ondragover="onSlotDragOver(event,4)" ondrop="onSlotDrop(event,4)" ondragleave="onSlotDragLeave(4)">
+        <div class="round-slot-label">Round 5</div>
+        <div class="round-slot-empty">Drop a category here</div>
+      </div>
+    </div>
+
+    <div class="lineup-divider"></div>
+
+    <button class="launch-btn" id="launch-btn" onclick="launchTrivia()">Launch Trivia Night →</button>
+
+  </div>
+</div>
+
 
 <!-- CONFIRM MODAL -->
 <div id="hb-confirm">
@@ -1166,13 +1186,50 @@ function parseTags(genreStr) {
   return genreStr.split(',').map(t=>t.trim()).filter(Boolean);
 }
 
+const PINNED_GENRES = ['Full Trivia', 'Book Trivia', 'Mini Trivia', 'Sing-Alongs', 'Music Trivia'];
+let moreDropdownOpen = false;
+
 function renderFilterBar() {
   const allTags = [...new Set(categories.flatMap(c => parseTags(c.genre)))].sort();
-  const bar = document.getElementById('filter-bar');
-  const allActive = activeGenres.size === 0;
-  bar.innerHTML = `<div class="pill ${allActive?'active':''}" onclick="clearGenreFilter()">All</div>`
-    + allTags.map(t => `<div class="pill ${activeGenres.has(t)?'active':''}" onclick="toggleGenre('${t}')">${t}</div>`).join('');
+  const pinned  = PINNED_GENRES.filter(t => allTags.includes(t));
+  const more    = allTags.filter(t => !PINNED_GENRES.includes(t));
+
+  // All pill
+  const allPill = document.getElementById('pill-all');
+  if(allPill) allPill.className = 'pill' + (activeGenres.size === 0 ? ' active' : '');
+
+  // Pinned pills
+  const pinnedWrap = document.getElementById('filter-pinned');
+  if(pinnedWrap) {
+    pinnedWrap.innerHTML = pinned.map(t =>
+      '<div class="pill ' + (activeGenres.has(t) ? 'active' : '') + '" onclick="toggleGenre(\'' + t.replace(/'/g,"\\'") + '\')">' + t + '</div>'
+    ).join('');
+  }
+
+  // More dropdown
+  const moreWrap = document.getElementById('filter-more-wrap');
+  const moreDrop = document.getElementById('filter-more-dropdown');
+  if(moreDrop) {
+    moreDrop.innerHTML = more.map(t =>
+      '<div class="pill ' + (activeGenres.has(t) ? 'active' : '') + '" onclick="toggleGenre(\'' + t.replace(/'/g,"\\'") + '\');toggleMoreDropdown()">' + t + '</div>'
+    ).join('');
+  }
+  if(moreWrap) moreWrap.style.display = more.length ? 'inline-block' : 'none';
 }
+
+function toggleMoreDropdown() {
+  moreDropdownOpen = !moreDropdownOpen;
+  document.getElementById('filter-more-dropdown')?.classList.toggle('open', moreDropdownOpen);
+  document.getElementById('filter-more-btn')?.classList.toggle('open', moreDropdownOpen);
+}
+
+document.addEventListener('click', e => {
+  if(moreDropdownOpen && !document.getElementById('filter-more-wrap')?.contains(e.target)) {
+    moreDropdownOpen = false;
+    document.getElementById('filter-more-dropdown')?.classList.remove('open');
+    document.getElementById('filter-more-btn')?.classList.remove('open');
+  }
+});
 
 function toggleGenre(tag) {
   if(activeGenres.has(tag)) {
