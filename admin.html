@@ -72,22 +72,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .add-btn:hover{opacity:.85}
 
 /* Filter pills */
-.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.25rem;align-items:center}
-.filter-more-wrap{position:relative;display:inline-block}
-.filter-more-btn{
-  background:transparent;border:1px solid var(--border2);border-radius:99px;
-  padding:5px 12px;font-size:10px;font-family:var(--cinzel);letter-spacing:.08em;
-  color:var(--text3);cursor:pointer;transition:all .2s;white-space:nowrap;
-}
-.filter-more-btn:hover{border-color:var(--gold-glow);color:var(--gold2)}
-.filter-more-btn.open{border-color:var(--gold-glow);color:var(--gold2)}
-.filter-more-dropdown{
-  position:absolute;top:calc(100% + 6px);left:0;z-index:200;
-  background:#1a1a1a;border:1px solid var(--border2);border-radius:10px;
-  padding:8px;display:none;flex-wrap:wrap;gap:6px;min-width:220px;max-width:320px;
-  box-shadow:0 8px 32px rgba(0,0,0,.6);
-}
-.filter-more-dropdown.open{display:flex}
+.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.25rem}
 .pill{
   background:transparent;border:1px solid var(--border2);border-radius:99px;
   padding:5px 14px;font-size:10px;font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;
@@ -313,14 +298,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     </div>
 
     <div class="filter-bar" id="filter-bar">
-      <div class="pill active" id="pill-all" onclick="clearGenreFilter()">All</div>
-      <!-- Pinned pills — always visible -->
-      <div id="filter-pinned"></div>
-      <!-- More dropdown for everything else -->
-      <div class="filter-more-wrap" id="filter-more-wrap" style="display:none">
-        <button class="filter-more-btn" id="filter-more-btn" onclick="toggleMoreDropdown()">More ▾</button>
-        <div class="filter-more-dropdown" id="filter-more-dropdown"></div>
-      </div>
+      <div class="pill active" data-genre="all" onclick="filterGenre('all',this)">All</div>
     </div>
 
     <div class="cat-grid" id="cat-grid">
@@ -600,18 +578,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="field" style="margin-bottom:1rem">
           <div class="field-label">Google Sheet URL</div>
           <input class="field-input" id="f-music-sheet" placeholder="https://docs.google.com/spreadsheets/d/…"/>
-          <div class="field-hint">Col A: song · Col B: artist · Col C: audio URL · Col D: start · Col E: end · Col F: album art</div>
-        </div>
-        <div class="field" style="margin-bottom:1rem">
-          <div class="field-label">Tab Name</div>
-          <input class="field-input" id="f-music-tab" placeholder="Exact tab name (case sensitive)"/>
+          <div class="field-hint">Col A: clue/question · Col B: answer · Col E: audio URL (R2 or direct link)</div>
         </div>
         <div class="field">
-          <div class="field-label">Linked Trivia Category <span style="color:var(--text3);font-weight:400">(optional)</span></div>
-          <select class="field-input" id="f-music-linked" style="background:var(--surface);color:var(--text)">
-            <option value="">— None —</option>
-          </select>
-          <div class="field-hint">Links this music round to a matching trivia category — shown as a badge in the lineup</div>
+          <div class="field-label">Tab Name</div>
+          <input class="field-input" id="f-music-tab" placeholder="Exact tab name (case sensitive)"/>
         </div>
       </div>
 
@@ -653,6 +624,29 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
       <div class="field">
         <div class="field-label">Notes (optional)</div>
         <input class="field-input" id="f-notes" placeholder="Any notes about this category…"/>
+      </div>
+
+      <!-- DEFAULT ROUND SETTINGS -->
+      <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--border)">
+        <div class="field-label" style="margin-bottom:.75rem;font-size:10px;letter-spacing:.15em;color:var(--gold)">DEFAULT ROUND SETTINGS</div>
+        <div class="field-hint" style="margin-bottom:.75rem">These are auto-applied when this category is dragged into a round slot.</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:.6rem">
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Questions:</span>
+          <input type="number" id="f-default-qcount" value="20" min="1" max="100"
+            style="width:52px;background:rgba(255,255,255,.05);border:.5px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;font-family:var(--font);color:var(--text);text-align:center"/>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem;cursor:pointer">
+          <input type="checkbox" id="f-default-showanswers" style="accent-color:var(--gold);width:13px;height:13px"/>
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Show answers after each question</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem;cursor:pointer">
+          <input type="checkbox" id="f-default-twopass" style="accent-color:var(--gold);width:13px;height:13px"/>
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Two-pass mode</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer" id="f-default-timed-row">
+          <input type="checkbox" id="f-default-timed" style="accent-color:#3498db;width:13px;height:13px"/>
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">⏱ Timed answers</span>
+        </label>
       </div>
 
     </div>
@@ -978,48 +972,13 @@ function parseTags(genreStr) {
   return genreStr.split(',').map(t=>t.trim()).filter(Boolean);
 }
 
-const PINNED_GENRES = ['Book Trivia', 'Full Trivia', 'Sing-Alongs', 'Music Trivia', 'Mini Trivia'];
-
 function renderFilterBar() {
   const allTags = [...new Set(categories.flatMap(c => parseTags(c.genre)))].sort();
-  const pinned  = PINNED_GENRES.filter(t => allTags.includes(t));
-  const more    = allTags.filter(t => !PINNED_GENRES.includes(t));
-
+  const bar = document.getElementById('filter-bar');
   const allActive = activeGenres.size === 0;
-  const allPill = document.getElementById('pill-all');
-  if(allPill) allPill.className = 'pill' + (allActive ? ' active' : '');
-
-  const pinnedWrap = document.getElementById('filter-pinned');
-  if(pinnedWrap) {
-    pinnedWrap.innerHTML = pinned.map(t =>
-      '<div class="pill ' + (activeGenres.has(t)?'active':'') + '" onclick="toggleGenre(\'' + t + '\')" style="display:inline-flex">' + t + '</div>'
-    ).join('');
-  }
-
-  const moreWrap = document.getElementById('filter-more-wrap');
-  const moreDrop = document.getElementById('filter-more-dropdown');
-  if(moreDrop) {
-    moreDrop.innerHTML = more.map(t =>
-      '<div class="pill ' + (activeGenres.has(t)?'active':'') + '" onclick="toggleGenre(\'' + t + '\')">' + t + '</div>'
-    ).join('');
-  }
-  if(moreWrap) moreWrap.style.display = more.length ? 'inline-block' : 'none';
+  bar.innerHTML = `<div class="pill ${allActive?'active':''}" onclick="clearGenreFilter()">All</div>`
+    + allTags.map(t => `<div class="pill ${activeGenres.has(t)?'active':''}" onclick="toggleGenre('${t}')">${t}</div>`).join('');
 }
-
-let moreDropdownOpen = false;
-function toggleMoreDropdown() {
-  moreDropdownOpen = !moreDropdownOpen;
-  document.getElementById('filter-more-dropdown').classList.toggle('open', moreDropdownOpen);
-  document.getElementById('filter-more-btn').classList.toggle('open', moreDropdownOpen);
-}
-
-document.addEventListener('click', e => {
-  if(moreDropdownOpen && !document.getElementById('filter-more-wrap')?.contains(e.target)) {
-    moreDropdownOpen = false;
-    document.getElementById('filter-more-dropdown')?.classList.remove('open');
-    document.getElementById('filter-more-btn')?.classList.remove('open');
-  }
-});
 
 function toggleGenre(tag) {
   if(activeGenres.has(tag)) {
@@ -1062,10 +1021,6 @@ function renderLineup() {
       const isMusic = cat.type === 'music';
       const isTrivia = !isSlideshow && !isMusic;
       const tabLabel = isSlideshow ? 'Slideshow' : isMusic ? '🎵 Music Round' : (cat.tabName || '');
-      const linkedCat = isMusic && cat.linkedCatId ? categories.find(c => c.id === cat.linkedCatId) : null;
-      const linkedBadge = linkedCat
-        ? '<div style="margin-top:6px;font-family:var(--cinzel);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);opacity:.7">🔗 Pairs with: ' + linkedCat.name + '</div>'
-        : '';
       const qCount = lineupQCount[i] || 20;
 
       var triviaControls = '';
@@ -1127,7 +1082,6 @@ function renderLineup() {
         +   '</div>'
         +   '<button class="round-slot-remove" onclick="removeFromSlot(' + i + ')">×</button>'
         + '</div>'
-        + linkedBadge
         + triviaControls
         + musicControls
         + sharedControls;
@@ -1224,14 +1178,34 @@ function onSlotDragLeave(i) {
   document.getElementById(`slot-${i}`).classList.remove('drag-target');
 }
 
+function applyDefaults(catId, slotIndex) {
+  const cat = categories.find(c => c.id === catId);
+  if(!cat) return;
+  lineupQCount[slotIndex]  = cat.defaultQCount || 20;
+  lineupAnswers[slotIndex] = !!cat.defaultShowAnswers;
+  lineupTwoPass[slotIndex] = !!cat.defaultTwoPass;
+  lineupTimed[slotIndex]   = !!cat.defaultTimed;
+}
+
 function onSlotDrop(e, i) {
   e.preventDefault();
-  document.getElementById(`slot-${i}`).classList.remove('drag-target');
+  document.getElementById('slot-' + i).classList.remove('drag-target');
   if(!dragCardId) return;
   lineup[i] = dragCardId;
+  applyDefaults(dragCardId, i);
   saveLineup();
   renderLineup();
-  toast(`Added to Round ${i+1}`);
+  toast('Added to Round ' + (i+1));
+}
+
+function addToNextRound(catId) {
+  const nextOpen = lineup.findIndex(id => id === null);
+  if(nextOpen === -1) return toast('All rounds are full!', true);
+  lineup[nextOpen] = catId;
+  applyDefaults(catId, nextOpen);
+  saveLineup();
+  renderLineup();
+  toast('Added to Round ' + (nextOpen + 1));
 }
 
 // ═══════════════════════════════════════════════
@@ -1255,12 +1229,6 @@ function openModal(id) {
   document.getElementById('f-folder').value  = cat?.folderUrl|| '';
   document.getElementById('f-music-sheet').value = cat?.type === 'music' ? (cat?.sheetUrl || '') : '';
   document.getElementById('f-music-tab').value   = cat?.type === 'music' ? (cat?.tabName  || '') : '';
-  // Populate linked category dropdown with trivia categories
-  const linkedSel = document.getElementById('f-music-linked');
-  const trivCats = categories.filter(c => c.type === 'trivia' && c.id !== (cat?.id || ''));
-  linkedSel.innerHTML = '<option value="">— None —</option>'
-    + trivCats.map(c => `<option value="${c.id}" ${(cat?.linkedCatId === c.id) ? 'selected' : ''}>${c.name}</option>`).join('');
-  linkedSel.value = (cat?.type === 'music' ? (cat?.linkedCatId || '') : '');
   document.getElementById('f-bg').value      = cat?.bgImage  || '';
   document.getElementById('f-bg-intro').value    = cat?.bgIntro    || '';
   document.getElementById('f-bg-question').value = cat?.bgQuestion || '';
@@ -1270,6 +1238,13 @@ function openModal(id) {
   document.getElementById('f-notes').value       = cat?.notes      || '';
   renderCatTypeDropdown();
   document.getElementById('f-cattype').value     = cat?.catType    || '';
+  // Default round settings
+  document.getElementById('f-default-qcount').value       = cat?.defaultQCount ?? 20;
+  document.getElementById('f-default-showanswers').checked = !!cat?.defaultShowAnswers;
+  document.getElementById('f-default-twopass').checked    = !!cat?.defaultTwoPass;
+  document.getElementById('f-default-timed').checked      = !!cat?.defaultTimed;
+  const timedRow = document.getElementById('f-default-timed-row');
+  if(timedRow) timedRow.style.display = (cat?.type === 'music' || cat?.type === 'slideshow') ? 'none' : 'flex';
 
   previewBanner('f-bg','banner-preview-wrap');
   previewBanner('f-bg-intro','intro-preview-wrap');
@@ -1339,6 +1314,9 @@ function setCatType(type) {
   });
   // Check Canva connection status when switching to canva type
   if(type === 'canva') checkCanvaConnection();
+  // Hide timed default for non-trivia types
+  const timedRow = document.getElementById('f-default-timed-row');
+  if(timedRow) timedRow.style.display = (type === 'trivia') ? 'flex' : 'none';
 }
 
 function closeModal() {
@@ -1368,9 +1346,6 @@ async function saveCategory() {
   const tabName    = type === 'music'
     ? document.getElementById('f-music-tab').value.trim()
     : document.getElementById('f-tab').value.trim();
-  const linkedCatId = type === 'music'
-    ? document.getElementById('f-music-linked').value
-    : '';
   const folderUrl  = document.getElementById('f-folder').value.trim();
   const bgImage    = document.getElementById('f-bg').value.trim();
   const bgIntro    = document.getElementById('f-bg-intro').value.trim();
@@ -1381,9 +1356,13 @@ async function saveCategory() {
   const canvaDesignId = document.getElementById('f-canva-id').value.trim();
   const canvaBgUrl    = document.getElementById('f-canva-bg').value.trim();
   const notes       = document.getElementById('f-notes').value.trim();
+  const defaultQCount      = parseInt(document.getElementById('f-default-qcount').value) || 20;
+  const defaultShowAnswers = document.getElementById('f-default-showanswers').checked;
+  const defaultTwoPass     = document.getElementById('f-default-twopass').checked;
+  const defaultTimed       = document.getElementById('f-default-timed').checked;
 
   setSyncStatus('syncing');
-  const data = {name, genre, type, sheetUrl, tabName, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, updatedAt: Date.now()};
+  const data = {name, genre, type, sheetUrl, tabName, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, updatedAt: Date.now()};
 
   try {
     if(editingId) {
@@ -1449,7 +1428,6 @@ function launchTrivia() {
     params.set(`r${i}_thankYou`, cat.thankYouUrl||'');
     params.set(`r${i}_catType`, cat.catType||'');
     params.set(`r${i}_name`, cat.name||'');
-    params.set(`r${i}_linkedCatId`, cat.linkedCatId||'');
     params.set(`r${i}_qcount`, lineupQCount[slotIndex]||20);
     params.set(`r${i}_showAnswers`, lineupAnswers[slotIndex] === true ? '1' : '0');
     params.set(`r${i}_twoPass`, lineupTwoPass[slotIndex] ? '1' : '0');
