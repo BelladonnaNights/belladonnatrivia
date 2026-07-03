@@ -97,7 +97,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 }
 #pres-bg::after{
   content:'';position:absolute;inset:0;
-  background:linear-gradient(to bottom, rgba(0,0,0,.45) 0%, rgba(0,0,0,.2) 40%, rgba(0,0,0,.7) 100%);
+  background:linear-gradient(to bottom, rgba(0,0,0,.08) 0%, rgba(0,0,0,.03) 40%, rgba(0,0,0,.12) 100%);
 }
 /* fallback solid when no bg image */
 #pres-bg.no-img{background:radial-gradient(ellipse at 30% 20%, #1a1200 0%, #080808 70%)}
@@ -432,8 +432,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="setup-rounds-grid" id="setup-rounds-grid"></div>
   <button class="setup-launch-btn" id="setup-launch-btn" onclick="launchFromSetup()" style="display:none">Launch Trivia Night →</button>
   <button class="setup-launch-btn" id="setup-preview-btn" onclick="startPreview()" style="display:none;margin-top:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:11px;padding:10px 32px">Preview Intro Slides</button>
-  <button class="setup-launch-btn" id="setup-join-btn" onclick="toggleJoinPopup()" style="display:none;margin-top:8px;background:transparent;border:1px solid rgba(52,152,219,.5);color:#3498db;font-size:11px;padding:10px 32px">📱 Show Join QR Code</button>
-  <button class="setup-launch-btn" id="setup-join-btn" onclick="toggleJoinPanel()" style="display:none;margin-top:8px;background:transparent;border:1px solid rgba(52,152,219,.5);color:#3498db;font-size:11px;padding:10px 32px">📱 Show Join QR Code</button>
+  <button class="setup-launch-btn" id="setup-join-btn" onclick="toggleJoinPopup()" style="display:none;margin-top:8px;background:transparent;border:1px solid var(--gold-glow);color:var(--gold);font-size:11px;padding:10px 32px">📱 Show Join QR Code</button>
   <div id="join-panel" style="display:none;text-align:center;margin-top:12px;padding:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;max-width:360px;width:100%">
     <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#3498db;margin-bottom:8px">Players — scan or visit:</div>
     <div id="join-url" style="font-family:var(--font);font-size:12px;color:var(--text2);word-break:break-all;margin-bottom:10px"></div>
@@ -1554,23 +1553,26 @@ function playMusicAudio(btn) {
 
 function renderAnswerKey(container, round) {
   const n = round.questions.length;
+  const isMusic = round.type === 'music';
   // Auto-size font so answers fill the full screen height
   const perCol = Math.ceil(n / 2);
   const fontSize = Math.min(32, Math.max(14, Math.floor(72 / perCol)));
 
-  const items = round.questions.map((q,i)=>`
-    <div class="ak-item">
-      <div class="ak-num">${i+1}</div>
-      <div class="ak-a">${q.answer}</div>
-    </div>`).join('');
+  const items = round.questions.map((q,i) => {
+    const label = isMusic
+      ? (q.question + ' <span style="color:var(--text3);font-size:.8em">—</span> ' + q.answer)
+      : q.answer;
+    return '<div class="ak-item">'
+      + '<div class="ak-num">' + (i+1) + '</div>'
+      + '<div class="ak-a">' + label + '</div>'
+      + '</div>';
+  }).join('');
 
   const el = document.createElement('div');
   el.className = 'slide slide-answerkey active';
   el.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;';
-  el.innerHTML = `
-    <div class="ak-title">Answer Key</div>
-    <div class="ak-grid" style="font-size:${fontSize}px;flex:1;min-height:0;">${items}</div>
-  `;
+  el.innerHTML = '<div class="ak-title">Answer Key</div>'
+    + '<div class="ak-grid" style="font-size:' + fontSize + 'px;flex:1;min-height:0;">' + items + '</div>';
   container.appendChild(el);
 }
 
@@ -1958,7 +1960,7 @@ function toggleJoinPopup() {
   const btn = document.getElementById('setup-join-btn');
   joinPopupOpen = !joinPopupOpen;
   popup.style.display = joinPopupOpen ? 'block' : 'none';
-  if(btn) btn.textContent = joinPopupOpen ? '📱 Hide Join QR Code' : '📱 Show Join QR Code';
+  if(btn) btn.innerHTML = joinPopupOpen ? '📱 Hide Join QR Code' : '📱 Show Join QR Code';
   if(joinPopupOpen && joinUrlCached) {
     document.getElementById('join-url-display').textContent = joinUrlCached;
     generateQR(joinUrlCached);
@@ -1999,8 +2001,8 @@ function generateQR(url) {
 </script>
 
 <!-- JOIN QR POPUP -->
-<div id="join-popup" style="display:none;position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:3000;background:#111;border:1px solid rgba(52,152,219,.4);border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.8);min-width:280px;user-select:none;">
-  <div id="join-popup-handle" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid rgba(255,255,255,.08);cursor:grab;font-family:'Cinzel',serif;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(52,152,219,.9);">
+<div id="join-popup" style="display:none;position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:3000;background:#111;border:1px solid rgba(201,168,76,.4);border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.8);min-width:280px;user-select:none;">
+  <div id="join-popup-handle" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid rgba(255,255,255,.08);cursor:grab;font-family:'Cinzel',serif;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);">
     <span>📱 Join Game</span>
     <button onclick="toggleJoinPopup()" style="background:none;border:none;color:rgba(255,255,255,.4);font-size:18px;cursor:pointer;line-height:1;padding:0 0 2px 8px;">×</button>
   </div>
