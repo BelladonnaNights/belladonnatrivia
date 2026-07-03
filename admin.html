@@ -250,6 +250,144 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 }
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #toast.error{background:rgba(231,76,60,.15);border-color:rgba(231,76,60,.4);color:var(--red)}
+/* ── HOST BOARD ── */
+#host-board{
+  position:fixed;bottom:0;right:0;z-index:300;
+  width:380px;
+  background:rgba(10,10,10,.97);
+  border:1px solid var(--gold-glow);
+  border-bottom:none;border-right:none;
+  border-radius:14px 0 0 0;
+  backdrop-filter:blur(20px);
+  box-shadow:-4px -4px 40px rgba(0,0,0,.6);
+  display:flex;flex-direction:column;
+  max-height:calc(100vh - 80px);
+  transition:transform .3s ease;
+}
+#host-board.collapsed{
+  transform:translateY(calc(100% - 46px));
+}
+#host-board-tab{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;cursor:pointer;flex-shrink:0;
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+#host-board-tab:hover{background:rgba(201,168,76,.05)}
+.hb-tab-title{
+  font-family:var(--cinzel);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--gold);
+  display:flex;align-items:center;gap:8px;
+}
+.hb-live-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--text3);
+  transition:background .3s;
+}
+.hb-live-dot.active{background:var(--green);animation:pulse .9s ease-in-out infinite}
+.hb-chevron{color:var(--text3);font-size:11px;transition:transform .3s}
+#host-board.collapsed .hb-chevron{transform:rotate(180deg)}
+#host-board-body{overflow-y:auto;flex:1}
+
+/* Mini preview */
+.hb-preview{
+  margin:12px 12px 0;border-radius:10px;overflow:hidden;
+  aspect-ratio:16/9;position:relative;background:#000;border:1px solid var(--border);
+  flex-shrink:0;
+}
+.hb-preview-bg{
+  position:absolute;inset:0;background-size:cover;background-position:center;
+  opacity:.45;
+}
+.hb-preview-content{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:10px;text-align:center;gap:4px;
+}
+.hb-preview-type{
+  font-family:var(--cinzel);font-size:7px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:2px;
+}
+.hb-preview-num{
+  font-family:var(--display);font-size:22px;letter-spacing:.06em;
+  background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  line-height:1;
+}
+.hb-preview-q{
+  font-family:var(--serif);font-size:10px;color:var(--text);line-height:1.35;
+  max-height:54px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+}
+.hb-preview-answer{
+  font-family:var(--cinzel);font-size:9px;color:var(--green);letter-spacing:.08em;
+  margin-top:2px;
+}
+.hb-preview-status{
+  font-family:var(--cinzel);font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);
+}
+
+/* Sections */
+.hb-section{padding:10px 12px}
+.hb-section+.hb-section{border-top:1px solid rgba(255,255,255,.05)}
+.hb-section-label{
+  font-family:var(--cinzel);font-size:8px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--text3);margin-bottom:7px;
+}
+/* Scores */
+.hb-score-row{
+  display:flex;align-items:center;gap:8px;padding:5px 8px;
+  border-radius:6px;background:rgba(255,255,255,.03);margin-bottom:3px;
+}
+.hb-score-rank{font-family:var(--display);font-size:16px;color:var(--text3);min-width:18px}
+.hb-score-rank.top{color:var(--gold)}
+.hb-score-name{flex:1;font-family:var(--cinzel);font-size:10px;letter-spacing:.05em;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb-score-pts{font-family:var(--display);font-size:18px;color:var(--gold)}
+.hb-submit-count{
+  font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text2);text-align:center;padding:5px 0;
+}
+/* Controls */
+.hb-controls{display:flex;flex-direction:column;gap:6px;padding:10px 12px 14px}
+.hb-btn{
+  width:100%;padding:8px 12px;border-radius:7px;border:none;cursor:pointer;
+  font-family:var(--cinzel);font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.hb-btn-ghost{background:rgba(255,255,255,.04);color:var(--text2);border:1px solid var(--border2)}
+.hb-btn-ghost:hover{background:rgba(255,255,255,.08);color:var(--text)}
+.hb-btn-gold{background:var(--gold-dim);color:var(--gold);border:1px solid var(--gold-glow)}
+.hb-btn-gold:hover{background:rgba(201,168,76,.2)}
+.hb-btn-gold.active{background:rgba(201,168,76,.25);color:var(--gold3)}
+.hb-btn-red{background:var(--red-dim);color:var(--red);border:1px solid rgba(231,76,60,.3)}
+.hb-btn-red:hover{background:rgba(231,76,60,.2)}
+/* Timed toggle */
+.hb-timed-row{
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(255,255,255,.03);border:1px solid var(--border2);
+  border-radius:7px;padding:8px 12px;
+}
+.hb-timed-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text2)}
+.hb-toggle{
+  width:36px;height:20px;border-radius:99px;background:var(--surface3);
+  border:1px solid var(--border2);cursor:pointer;position:relative;transition:background .2s;flex-shrink:0;
+}
+.hb-toggle.on{background:var(--gold-dim);border-color:var(--gold-glow)}
+.hb-toggle::after{
+  content:'';position:absolute;top:2px;left:2px;
+  width:14px;height:14px;border-radius:50%;background:var(--text3);
+  transition:transform .2s,background .2s;
+}
+.hb-toggle.on::after{transform:translateX(16px);background:var(--gold)}
+/* Confirm modal */
+#hb-confirm{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999;
+  align-items:center;justify-content:center;backdrop-filter:blur(4px);
+}
+#hb-confirm.show{display:flex}
+.hb-confirm-box{
+  background:var(--surface);border:1px solid var(--border2);border-radius:14px;
+  padding:1.5rem;max-width:320px;width:90%;text-align:center;
+}
+.hb-confirm-title{font-family:var(--display);font-size:22px;letter-spacing:.06em;color:var(--gold);margin-bottom:.5rem}
+.hb-confirm-msg{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--text2);margin-bottom:1.25rem;line-height:1.5}
+.hb-confirm-btns{display:flex;gap:8px}
+.hb-confirm-btns button{flex:1}
 </style>
 </head>
 <body>
@@ -343,25 +481,82 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 
     <button class="launch-btn" id="launch-btn" onclick="launchTrivia()">Launch Trivia Night →</button>
 
-    <!-- LIVE GAME PANEL -->
-    <div id="live-game-panel" style="margin-top:1.5rem;display:none">
-      <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:10px">⚡ Live Game</div>
+  </div>
+</div>
 
-      <!-- Controls row -->
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button class="btn btn-ghost" onclick="clearScores()" style="font-size:10px;color:var(--red);border-color:rgba(231,76,60,.3)">🗑 Clear Scores</button>
-        <button class="btn btn-ghost" onclick="toggleLbAdmin()" id="lb-admin-btn" style="font-size:10px">📊 Show Leaderboard</button>
+<!-- HOST BOARD -->
+<div id="host-board" class="collapsed">
+  <div id="host-board-tab" onclick="toggleHostBoard()">
+    <div class="hb-tab-title">
+      <div class="hb-live-dot" id="hb-live-dot"></div>
+      HOST BOARD
+    </div>
+    <span class="hb-chevron">▲</span>
+  </div>
+
+  <div id="host-board-body">
+    <!-- Mini preview -->
+    <div class="hb-preview" id="hb-preview">
+      <div class="hb-preview-bg" id="hb-preview-bg"></div>
+      <div class="hb-preview-content">
+        <div class="hb-preview-type" id="hb-preview-type">Waiting for game…</div>
+        <div class="hb-preview-num" id="hb-preview-num"></div>
+        <div class="hb-preview-q" id="hb-preview-q"></div>
+        <div class="hb-preview-answer" id="hb-preview-answer"></div>
       </div>
+    </div>
 
-      <!-- Review queue -->
-      <div style="font-family:var(--cinzel);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Answers Needing Review</div>
-      <div id="review-queue" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto">
-        <div style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3);padding:8px 0">No answers need review right now.</div>
+    <!-- Submission count -->
+    <div class="hb-section">
+      <div class="hb-submit-count" id="hb-submit-count">— Waiting for question —</div>
+    </div>
+
+    <!-- Timed toggle -->
+    <div class="hb-section">
+      <div class="hb-section-label">Next Question</div>
+      <div class="hb-timed-row">
+        <span class="hb-timed-label">⏱ Timed (10s)</span>
+        <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()"></div>
       </div>
+    </div>
 
-      <!-- Scores summary -->
-      <div style="font-family:var(--cinzel);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--text3);margin-top:12px;margin-bottom:6px">Current Scores</div>
-      <div id="scores-list" style="display:flex;flex-direction:column;gap:4px"></div>
+    <!-- Live scores -->
+    <div class="hb-section">
+      <div class="hb-section-label">Live Scores</div>
+      <div id="hb-scores">
+        <div style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet.</div>
+      </div>
+    </div>
+
+    <!-- Review queue -->
+    <div class="hb-section" id="hb-review-section" style="display:none">
+      <div class="hb-section-label">Needs Review</div>
+      <div id="hb-review-queue" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="hb-controls">
+      <button class="hb-btn hb-btn-gold" id="hb-lb-btn" onclick="toggleLbAdmin()">
+        📊 Show Leaderboard
+      </button>
+      <button class="hb-btn hb-btn-ghost" onclick="confirmAction('clear')">
+        🗑 Clear Scores
+      </button>
+      <button class="hb-btn hb-btn-ghost" onclick="confirmAction('reset')">
+        ↺ Reset Game
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div id="hb-confirm">
+  <div class="hb-confirm-box">
+    <div class="hb-confirm-title" id="hb-confirm-title">Are you sure?</div>
+    <div class="hb-confirm-msg" id="hb-confirm-msg"></div>
+    <div class="hb-confirm-btns">
+      <button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button>
+      <button class="btn btn-danger" id="hb-confirm-ok" onclick="runConfirmedAction()">Confirm</button>
     </div>
   </div>
 </div>
@@ -1356,10 +1551,13 @@ async function saveCategory() {
   const canvaDesignId = document.getElementById('f-canva-id').value.trim();
   const canvaBgUrl    = document.getElementById('f-canva-bg').value.trim();
   const notes       = document.getElementById('f-notes').value.trim();
-  const defaultQCount      = parseInt(document.getElementById('f-default-qcount').value) || 20;
-  const defaultShowAnswers = document.getElementById('f-default-showanswers').checked;
-  const defaultTwoPass     = document.getElementById('f-default-twopass').checked;
-  const defaultTimed       = document.getElementById('f-default-timed').checked;
+  const linkedCatId = (type === 'music' && document.getElementById('f-music-linked'))
+    ? document.getElementById('f-music-linked').value
+    : (document.getElementById('f-linked-cat') ? document.getElementById('f-linked-cat').value : '');
+  const defaultQCount      = parseInt(document.getElementById('f-default-qcount')?.value) || 20;
+  const defaultShowAnswers = document.getElementById('f-default-showanswers')?.checked || false;
+  const defaultTwoPass     = document.getElementById('f-default-twopass')?.checked || false;
+  const defaultTimed       = document.getElementById('f-default-timed')?.checked || false;
 
   setSyncStatus('syncing');
   const data = {name, genre, type, sheetUrl, tabName, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, updatedAt: Date.now()};
@@ -1440,113 +1638,187 @@ function launchTrivia() {
 }
 
 // ═══════════════════════════════════════════════
-//  LIVE GAME — Admin Controls
+//  HOST BOARD
 // ═══════════════════════════════════════════════
+let hostBoardOpen = false;
 let lbAdminVisible = false;
-let reviewItems = {}; // qId+teamId → item data
+let hostTimedOn = false;
+let pendingConfirmAction = null;
+let currentSubmitCount = 0;
+let currentTeamCount = 0;
 
-// Show live game panel and start listening when a game is active
+function toggleHostBoard() {
+  hostBoardOpen = !hostBoardOpen;
+  document.getElementById('host-board').classList.toggle('collapsed', !hostBoardOpen);
+}
+
+function toggleHostTimed() {
+  hostTimedOn = !hostTimedOn;
+  document.getElementById('hb-timed-toggle').classList.toggle('on', hostTimedOn);
+  db.ref('liveGame/timedOverride').set(hostTimedOn);
+}
+
+function toggleLbAdmin() {
+  lbAdminVisible = !lbAdminVisible;
+  db.ref('liveGame/leaderboardVisible').set(lbAdminVisible);
+  const btn = document.getElementById('hb-lb-btn');
+  if(btn) {
+    btn.textContent = lbAdminVisible ? '📊 Hide Leaderboard' : '📊 Show Leaderboard';
+    btn.classList.toggle('active', lbAdminVisible);
+  }
+}
+
+function confirmAction(action) {
+  pendingConfirmAction = action;
+  const titles = { clear: 'Clear Scores?', reset: 'Reset Game?' };
+  const msgs = {
+    clear: 'This will wipe all team scores and submitted answers. This cannot be undone.',
+    reset: 'This will reset the entire game — all teams, scores, and answers will be cleared. Players will need to re-register.'
+  };
+  document.getElementById('hb-confirm-title').textContent = titles[action];
+  document.getElementById('hb-confirm-msg').textContent = msgs[action];
+  document.getElementById('hb-confirm').classList.add('show');
+}
+function closeConfirm() {
+  document.getElementById('hb-confirm').classList.remove('show');
+  pendingConfirmAction = null;
+}
+async function runConfirmedAction() {
+  closeConfirm();
+  if(pendingConfirmAction === 'clear') {
+    await db.ref('liveGame/teams').remove();
+    await db.ref('liveGame/answers').remove();
+    await db.ref('liveGame/status').set('waiting');
+    toast('Scores cleared');
+  } else if(pendingConfirmAction === 'reset') {
+    await db.ref('liveGame').set({ status: null, currentQuestion: null, teams: null, answers: null, leaderboardVisible: false, timedOverride: false });
+    lbAdminVisible = false;
+    hostTimedOn = false;
+    document.getElementById('hb-timed-toggle').classList.remove('on');
+    const btn = document.getElementById('hb-lb-btn');
+    if(btn) { btn.textContent = '📊 Show Leaderboard'; btn.classList.remove('active'); }
+    toast('Game reset');
+  }
+}
+
+// ── Firebase listeners ───────────────────────────────
+// Live game status → show/hide live dot
 db.ref('liveGame/status').on('value', snap => {
   const status = snap.val();
-  const panel = document.getElementById('live-game-panel');
-  if(panel) panel.style.display = status ? 'block' : 'none';
+  const dot = document.getElementById('hb-live-dot');
+  if(dot) dot.classList.toggle('active', !!status && status !== null);
 });
 
-// Listen for answers needing review
-db.ref('liveGame/answers').on('value', snap => {
-  const allAnswers = snap.val() || {};
-  const queue = [];
-  for(const [qId, answers] of Object.entries(allAnswers)) {
-    for(const [teamId, ans] of Object.entries(answers)) {
-      if(ans.status === 'needs_review') {
-        queue.push({qId, teamId, ...ans});
-      }
-    }
+// Slide state → mini preview
+db.ref('liveGame/slideState').on('value', snap => {
+  const s = snap.val();
+  const typeEl   = document.getElementById('hb-preview-type');
+  const numEl    = document.getElementById('hb-preview-num');
+  const qEl      = document.getElementById('hb-preview-q');
+  const ansEl    = document.getElementById('hb-preview-answer');
+  const bgEl     = document.getElementById('hb-preview-bg');
+  if(!s) {
+    if(typeEl) typeEl.textContent = 'Waiting for game…';
+    if(numEl)  numEl.textContent  = '';
+    if(qEl)    qEl.textContent    = '';
+    if(ansEl)  ansEl.textContent  = '';
+    if(bgEl)   bgEl.style.backgroundImage = '';
+    return;
   }
-  renderReviewQueue(queue);
+  if(bgEl)   bgEl.style.backgroundImage = s.bgUrl ? `url("${s.bgUrl}")` : '';
+  if(typeEl) typeEl.textContent = s.label || s.slideType || '';
+  if(numEl)  numEl.textContent  = s.qNum  || '';
+  if(qEl)    qEl.textContent    = s.text  || '';
+  if(ansEl)  { ansEl.textContent = s.answer || ''; ansEl.style.display = s.answer ? 'block' : 'none'; }
 });
 
-// Listen for scores
+// Teams → scores + submit count
 db.ref('liveGame/teams').on('value', snap => {
   const teams = snap.val() || {};
   const sorted = Object.entries(teams)
-    .map(([id,t]) => ({id, name:t.name, score:t.score||0}))
+    .map(([id,t]) => ({id, name:t.name||'?', score:t.score||0}))
     .sort((a,b) => b.score-a.score);
 
-  const list = document.getElementById('scores-list');
-  if(!list) return;
-  list.innerHTML = sorted.length ? sorted.map((t,i) => `
-    <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;
-      background:rgba(255,255,255,.03);border-radius:6px">
-      <span style="font-family:var(--display);font-size:18px;color:${i<3?'var(--gold)':'var(--text3)'};min-width:22px">${i+1}</span>
-      <span style="flex:1;font-family:var(--cinzel);font-size:11px;letter-spacing:.06em">${t.name}</span>
-      <span style="font-family:var(--display);font-size:20px;color:var(--gold)">${t.score}</span>
-    </div>`).join('')
+  currentTeamCount = sorted.length;
+  updateSubmitCount();
+
+  const el = document.getElementById('hb-scores');
+  if(!el) return;
+  el.innerHTML = sorted.length ? sorted.map((t,i) =>
+    '<div class="hb-score-row">'
+    + '<div class="hb-score-rank' + (i<3?' top':'') + '">' + (i+1) + '</div>'
+    + '<div class="hb-score-name">' + t.name + '</div>'
+    + '<div class="hb-score-pts">' + t.score + '</div>'
+    + '</div>'
+  ).join('')
   : '<div style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet.</div>';
 });
 
-function renderReviewQueue(queue) {
-  const el = document.getElementById('review-queue');
-  if(!el) return;
-  if(!queue.length) {
-    el.innerHTML = '<div style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3);padding:8px 0">No answers need review right now.</div>';
-    return;
+// Answers → submission count + review queue
+db.ref('liveGame/answers').on('value', snap => {
+  const allAnswers = snap.val() || {};
+  const queue = [];
+  let submitCount = 0;
+  for(const [qId, answers] of Object.entries(allAnswers)) {
+    for(const [teamId, ans] of Object.entries(answers)) {
+      submitCount++;
+      if(ans.status === 'needs_review') queue.push({qId, teamId, ...ans});
+    }
   }
-  el.innerHTML = queue.map(item => `
-    <div style="background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:8px;padding:10px 12px">
-      <div style="font-size:10px;color:var(--text3);font-family:var(--cinzel);letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${item.teamName||'Unknown team'}</div>
-      <div style="font-size:13px;color:var(--text);margin-bottom:6px">
-        Submitted: <strong>"${item.answer}"</strong>
-      </div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-primary" onclick="resolveAnswer('${item.qId}','${item.teamId}',true)"
-          style="font-size:10px;padding:5px 12px;flex:1">✓ Correct</button>
-        <button class="btn btn-ghost" onclick="resolveAnswer('${item.qId}','${item.teamId}',false)"
-          style="font-size:10px;padding:5px 12px;flex:1;color:var(--red);border-color:rgba(231,76,60,.3)">✗ Wrong</button>
-      </div>
-    </div>`).join('');
+  currentSubmitCount = submitCount;
+  updateSubmitCount();
+  renderHbReviewQueue(queue);
+});
+
+function updateSubmitCount() {
+  const el = document.getElementById('hb-submit-count');
+  if(!el) return;
+  if(currentTeamCount === 0) { el.textContent = '— Waiting for question —'; return; }
+  el.textContent = currentSubmitCount + ' / ' + currentTeamCount + ' teams answered';
+}
+
+function renderHbReviewQueue(queue) {
+  const section = document.getElementById('hb-review-section');
+  const el = document.getElementById('hb-review-queue');
+  if(!el || !section) return;
+  section.style.display = queue.length ? 'block' : 'none';
+  el.innerHTML = queue.map(item =>
+    '<div style="background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;margin-bottom:4px">'
+    + '<div style="font-size:9px;color:var(--text3);font-family:var(--cinzel);letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px">' + (item.teamName||'Unknown team') + '</div>'
+    + '<div style="font-size:12px;color:var(--text);margin-bottom:5px">\"' + item.answer + '\"</div>'
+    + '<div style="display:flex;gap:5px">'
+    + '<button class="hb-btn hb-btn-gold" onclick="resolveAnswer(\'' + item.qId + '\',\'' + item.teamId + '\',true)" style="flex:1;padding:5px;font-size:9px">✓ Correct</button>'
+    + '<button class="hb-btn hb-btn-ghost" onclick="resolveAnswer(\'' + item.qId + '\',\'' + item.teamId + '\',false)" style="flex:1;padding:5px;font-size:9px;color:var(--red)">✗ Wrong</button>'
+    + '</div>'
+    + '</div>'
+  ).join('');
 }
 
 async function resolveAnswer(qId, teamId, isCorrect) {
-  const snap = await db.ref(`liveGame/answers/${qId}/${teamId}`).once('value');
+  const snap = await db.ref('liveGame/answers/' + qId + '/' + teamId).once('value');
   const ans = snap.val();
   if(!ans) return;
-
   const updates = {};
-  updates[`liveGame/answers/${qId}/${teamId}/status`] = isCorrect ? 'correct' : 'wrong';
-
+  updates['liveGame/answers/' + qId + '/' + teamId + '/status'] = isCorrect ? 'correct' : 'wrong';
   if(isCorrect) {
     const timed = ans.elapsed !== null;
     let pts = 1;
     if(timed && ans.elapsed !== undefined) {
       pts = ans.elapsed <= 3 ? 3 : ans.elapsed <= 6 ? 2 : 1;
     }
-    updates[`liveGame/answers/${qId}/${teamId}/points`] = pts;
-    const scoreSnap = await db.ref(`liveGame/teams/${teamId}/score`).once('value');
-    updates[`liveGame/teams/${teamId}/score`] = (scoreSnap.val()||0) + pts;
+    updates['liveGame/answers/' + qId + '/' + teamId + '/points'] = pts;
+    const scoreSnap = await db.ref('liveGame/teams/' + teamId + '/score').once('value');
+    updates['liveGame/teams/' + teamId + '/score'] = (scoreSnap.val()||0) + pts;
   } else {
-    updates[`liveGame/answers/${qId}/${teamId}/points`] = 0;
+    updates['liveGame/answers/' + qId + '/' + teamId + '/points'] = 0;
   }
-
   await db.ref().update(updates);
   toast(isCorrect ? 'Marked correct!' : 'Marked wrong');
 }
 
-async function clearScores() {
-  if(!confirm('Clear all scores and teams? This cannot be undone.')) return;
-  await db.ref('liveGame/teams').remove();
-  await db.ref('liveGame/answers').remove();
-  await db.ref('liveGame/status').set('waiting');
-  toast('Scores cleared');
-}
-
-function toggleLbAdmin() {
-  lbAdminVisible = !lbAdminVisible;
-  db.ref('liveGame/leaderboardVisible').set(lbAdminVisible);
-  const btn = document.getElementById('lb-admin-btn');
-  if(btn) btn.textContent = lbAdminVisible ? '📊 Hide Leaderboard' : '📊 Show Leaderboard';
-  toast(lbAdminVisible ? 'Leaderboard visible to players' : 'Leaderboard hidden');
-}
+// ── Remove old stub functions that are now replaced ──
+function clearScores() { confirmAction('clear'); }
+function renderReviewQueue() {}  // replaced by renderHbReviewQueue
 
 // ═══════════════════════════════════════════════
 // ═══════════════════════════════════════════════
