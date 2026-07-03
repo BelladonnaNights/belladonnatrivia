@@ -995,17 +995,19 @@ function renderLineup() {
       const mainChecked = lineupMainRound[i] ? 'checked' : '';
       const isSlideshow = cat.type === 'slideshow';
       const isMusic = cat.type === 'music';
+      const isTrivia = !isSlideshow && !isMusic;
+      const tabLabel = isSlideshow ? 'Slideshow' : isMusic ? '🎵 Music Round' : (cat.tabName || '');
       slot.innerHTML = `
         <div class="round-slot-label">Round ${i+1}</div>
         <div class="round-slot-card">
           ${thumb}
           <div class="round-slot-card-info">
             <div class="round-slot-card-name">${cat.name}</div>
-            <div class="round-slot-card-tab">${isSlideshow ? 'Slideshow' : isMusic ? '🎵 Music Round' : cat.tabName||''}</div>
+            <div class="round-slot-card-tab">${tabLabel}</div>
           </div>
           <button class="round-slot-remove" onclick="removeFromSlot(${i})">×</button>
         </div>
-        ${(isSlideshow) ? '' : `
+        ${isTrivia ? `
         <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
           <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Questions:</span>
           <input type="number" value="${lineupQCount[i]||20}" min="1" max="100"
@@ -1022,6 +1024,13 @@ function renderLineup() {
             style="accent-color:var(--gold);width:13px;height:13px;cursor:pointer"/>
           <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Two-pass mode (questions twice, answers on 2nd pass)</span>
         </label>` : ''}
+        ${isMusic ? `
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Songs:</span>
+          <input type="number" value="${lineupQCount[i]||20}" min="1" max="100"
+            onchange="lineupQCount[${i}]=parseInt(this.value)||20"
+            style="width:52px;background:rgba(255,255,255,.05);border:.5px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;font-family:var(--font);color:var(--text);text-align:center"/>
+        </div>` : ''}
         <label style="display:flex;align-items:center;gap:7px;margin-top:5px;cursor:pointer;user-select:none">
           <input type="checkbox" ${lineupTimed[i] ? 'checked' : ''} onchange="lineupTimed[${i}]=this.checked"
             style="accent-color:var(--blue,#3498db);width:13px;height:13px;cursor:pointer"/>
