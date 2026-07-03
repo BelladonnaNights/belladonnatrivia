@@ -771,6 +771,9 @@ let dragCardId = null;
 // ═══════════════════════════════════════════════
 //  FIREBASE LISTENERS
 // ═══════════════════════════════════════════════
+let categoryTypes = [];
+let appSettings = {};
+
 db.ref('categoryTypes').on('value', snap => {
   const data = snap.val()||{};
   categoryTypes = Object.entries(data).map(([id,v])=>({id,...v}));
@@ -782,8 +785,6 @@ db.ref('appSettings').on('value', snap => {
 // ═══════════════════════════════════════════════
 //  SETTINGS — Follow Us + Category Types
 // ═══════════════════════════════════════════════
-let categoryTypes = [];
-let appSettings = {};
 
 function openSettings() {
   document.getElementById('s-instagram').value = appSettings.instagram||'';
@@ -857,15 +858,6 @@ function renderCatTypeDropdown() {
   sel.innerHTML = '<option value="">— None —</option>' +
     categoryTypes.map(t=>`<option value="${t.id}" ${t.id===cur?'selected':''}>${t.name}</option>`).join('');
 }
-
-db.ref('categoryTypes').on('value', snap => {
-  const d = snap.val()||{};
-  categoryTypes = Object.entries(d).map(([id,v])=>({id,...v}));
-  renderCatTypeDropdown();
-});
-db.ref('appSettings').on('value', snap => {
-  appSettings = snap.val()||{};
-});
 
 db.ref('categories').on('value', snap => {
   const data = snap.val() || {};
