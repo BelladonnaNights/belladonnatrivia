@@ -1018,6 +1018,11 @@ function renderLineup() {
           +   '<input type="checkbox" ' + twoPassChecked + ' onchange="lineupTwoPass[' + i + ']=this.checked"'
           +     ' style="accent-color:var(--gold);width:13px;height:13px;cursor:pointer"/>'
           +   '<span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Two-pass mode (questions twice, answers on 2nd pass)</span>'
+          + '</label>'
+          + '<label style="display:flex;align-items:center;gap:7px;margin-top:5px;cursor:pointer;user-select:none">'
+          +   '<input type="checkbox" ' + timedChecked + ' onchange="lineupTimed[' + i + ']=this.checked"'
+          +     ' style="accent-color:#3498db;width:13px;height:13px;cursor:pointer"/>'
+          +   '<span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">⏱ Timed answers (10s per question)</span>'
           + '</label>';
       }
 
@@ -1029,15 +1034,15 @@ function renderLineup() {
           +   '<input type="number" value="' + qCount + '" min="1" max="100"'
           +     ' onchange="lineupQCount[' + i + ']=parseInt(this.value)||20"'
           +     ' style="width:52px;background:rgba(255,255,255,.05);border:.5px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;font-family:var(--font);color:var(--text);text-align:center"/>'
-          + '</div>';
+          + '</div>'
+          + '<label style="display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer;user-select:none">'
+          +   '<input type="checkbox" ' + twoPassChecked + ' onchange="lineupTwoPass[' + i + ']=this.checked"'
+          +     ' style="accent-color:var(--gold);width:13px;height:13px;cursor:pointer"/>'
+          +   '<span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Two-pass (play clip → reveal album art &amp; answer)</span>'
+          + '</label>';
       }
 
       var sharedControls = ''
-        + '<label style="display:flex;align-items:center;gap:7px;margin-top:5px;cursor:pointer;user-select:none">'
-        +   '<input type="checkbox" ' + timedChecked + ' onchange="lineupTimed[' + i + ']=this.checked"'
-        +     ' style="accent-color:#3498db;width:13px;height:13px;cursor:pointer"/>'
-        +   '<span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">⏱ Timed answers (10s per question)</span>'
-        + '</label>'
         + '<label style="display:flex;align-items:center;gap:7px;margin-top:5px;cursor:pointer;user-select:none">'
         +   '<input type="checkbox" ' + mainChecked + ' onchange="setMainRound(' + i + ',this.checked)"'
         +     ' style="accent-color:var(--gold2);width:13px;height:13px;cursor:pointer"/>'
