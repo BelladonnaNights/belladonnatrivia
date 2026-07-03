@@ -396,6 +396,42 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   text-transform:uppercase;color:rgba(180,175,165,.5);
   margin-top:.25rem;
 }
+
+/* ── MUSIC REVEAL SLIDE (Pass 2) ── */
+.music-reveal{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:1.5rem;padding:2rem;text-align:center;
+}
+.music-reveal-art{
+  width:clamp(180px,32vw,360px);height:clamp(180px,32vw,360px);
+  border-radius:12px;
+  object-fit:cover;
+  box-shadow:0 8px 48px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.08);
+  flex-shrink:0;
+}
+.music-reveal-art-placeholder{
+  width:clamp(180px,32vw,360px);height:clamp(180px,32vw,360px);
+  border-radius:12px;
+  background:rgba(201,168,76,.06);
+  border:1px solid var(--gold-glow);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.music-reveal-song{
+  font-family:var(--display);
+  font-size:clamp(32px,5vw,72px);
+  letter-spacing:.06em;line-height:1.1;
+  background:var(--gold-shine);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.music-reveal-artist{
+  font-family:var(--cinzel);
+  font-size:clamp(13px,1.8vw,22px);
+  letter-spacing:.14em;text-transform:uppercase;
+  color:var(--text2);
+  margin-top:-.5rem;
+}
 .fade-out{animation:fadeOut .25s ease forwards}
 @keyframes fadeOut{to{opacity:0}}
 
@@ -769,21 +805,26 @@ function parseRow(r) {
   return {question:q, answer:a, difficulty:diff, imageUrl:img, audioUrl:audio, type, mcOptions};
 }
 
-// Music rounds: Col A = song title/clue, Col B = answer, Col C = audio URL
-// No difficulty, no image, no MC — just shuffle and pick count
+// Music rounds: Col A = song title, Col B = artist, Col C = audio URL
+// Col D = start time (seconds), Col E = end time (seconds, optional), Col F = album art URL
 function parseMusicRow(r) {
-  const q = safe(r[0]).trim();
-  const a = safe(r[1]).trim();
-  if(!q || !a) return null;
-  const audioUrl = safe(r[2]).trim();
-  return { question: q, answer: a, difficulty: 1, imageUrl: '', audioUrl, type: 'standard', mcOptions: [] };
+  const song   = safe(r[0]).trim();
+  const artist = safe(r[1]).trim();
+  if(!song || !artist) return null;
+  const audioUrl  = safe(r[2]).trim();
+  const startTime = parseFloat(safe(r[3])) || 0;
+  const endTime   = parseFloat(safe(r[4])) || 0;
+  const albumArt  = safe(r[5]).trim();
+  // question = song title (used on answer key), answer = artist
+  return { question: song, answer: artist, difficulty: 1, imageUrl: '', audioUrl,
+           startTime, endTime, albumArt, type: 'standard', mcOptions: [] };
 }
 
 async function loadMusicQuestions(sheetUrl, tabName, count) {
   const sheetId = extractSheetId(sheetUrl);
   if(!sheetId) throw new Error('Could not extract Sheet ID from URL.');
 
-  const range = encodeURIComponent(`${tabName}!A2:C`);
+  const range = encodeURIComponent(`${tabName}!A2:F`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${API_KEY}&_=${Date.now()}`;
 
   const res = await fetch(url);
@@ -943,6 +984,13 @@ function advanceSlide() {
   if(type === S_QUESTION) {
     const round = currentRound();
     const { isPass2 } = questionInfo();
+    // Music twoPass: Pass 1 just advances (no reveal overlay), Pass 2 shows the reveal slide directly
+    if(round.type === 'music') {
+      state.answerVisible = false;
+      const max = slideCount() - 1;
+      if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
+      return;
+    }
     const shouldReveal = (round.twoPass && isPass2) || (!round.twoPass && round.showAnswers !== false);
     if(shouldReveal && !state.answerVisible) {
       state.answerVisible = true; renderCurrentSlide();
@@ -1434,65 +1482,78 @@ function renderMusicQuestion(container, round) {
   let dots = '';
   for(let i=0;i<dotsToShow;i++) {
     const cls = i < qIndex ? 'done' : i === qIndex ? 'current' : '';
-    dots += `<div class="q-progress-dot ${cls}"></div>`;
+    dots += '<div class="q-progress-dot ' + cls + '"></div>';
   }
-
-  const passLabel = round.twoPass && isPass2
-    ? `<span style="color:var(--gold);font-size:8px;letter-spacing:.12em;display:block;margin-top:2px">ANSWERS PASS</span>`
-    : '';
-
-  // Generate waveform bars with randomised heights and speeds
-  const barCount = 18;
-  const bars = Array.from({length: barCount}, (_, i) => {
-    const maxH = 10 + Math.round(Math.random() * 26);
-    const dur  = (0.45 + Math.random() * 0.55).toFixed(2);
-    const delay = (Math.random() * 0.4).toFixed(2);
-    return `<div class="music-bar" style="--max-h:${maxH}px;--dur:${dur}s;animation-delay:${delay}s"></div>`;
-  }).join('');
-
-  // Answer overlay (same as regular question)
-  const answerOverlay = state.answerVisible ? `
-    <div class="answer-overlay">
-      <div class="answer-label">Answer</div>
-      <div class="answer-text">${q.answer}</div>
-      <div class="answer-next-hint">Press → for next question</div>
-    </div>` : '';
-
-  const WORKER = 'https://canva-slides.belladonnaaudioalchemies.workers.dev';
-  const audioSrc = q.audioUrl ? `${WORKER}/audio?url=${encodeURIComponent(q.audioUrl)}` : '';
 
   const el = document.createElement('div');
   el.className = 'slide slide-question active';
   el.style.cssText = 'position:absolute;inset:0;';
-  el.innerHTML = `
-    <div class="q-header">
-      <div class="q-num-badge">${String(qIndex+1).padStart(2,'0')}</div>
-      <div class="q-round-label">
-        ${round.tabName||round.title}${passLabel}
-        <div class="q-progress">${dots}</div>
-      </div>
-    </div>
 
-    <div class="music-slide">
-      <div class="music-speaker-wrap">
-        <button class="music-speaker-btn" id="music-play-btn"
-          ${!audioSrc ? 'disabled title="No audio URL for this question"' : ''}
-          data-audio-src="${audioSrc}"
-          onclick="playMusicAudio(this)">
-          <!-- Speaker icon -->
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-          </svg>
-        </button>
-        <div class="music-bars" id="music-bars-${qIndex}">${bars}</div>
-        <div class="music-play-hint" id="music-play-hint">
-          ${audioSrc ? 'Click to play' : 'No audio for this question'}
-        </div>
-      </div>
-    </div>
+  // ── PASS 2: Album art reveal ──────────────────────────────────────────
+  if(isPass2) {
+    const artHtml = q.albumArt
+      ? '<img class="music-reveal-art" src="' + q.albumArt + '" onerror="this.outerHTML=\'<div class=music-reveal-art-placeholder><svg width=60 height=60 viewBox=\\\"0 0 24 24\\\" fill=\\\"rgba(201,168,76,.3)\\\"><path d=\\\"M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z\\\"/></svg></div>\'">'
+      : '<div class="music-reveal-art-placeholder"><svg width="60" height="60" viewBox="0 0 24 24" fill="rgba(201,168,76,.3)"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
 
-    ${answerOverlay}
-  `;
+    el.innerHTML = ''
+      + '<div class="q-header">'
+      +   '<div class="q-num-badge">' + String(qIndex+1).padStart(2,'0') + '</div>'
+      +   '<div class="q-round-label">'
+      +     (round.tabName||round.title)
+      +     '<span style="color:var(--gold);font-size:8px;letter-spacing:.12em;display:block;margin-top:2px">ANSWERS PASS</span>'
+      +     '<div class="q-progress">' + dots + '</div>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="music-reveal">'
+      +   artHtml
+      +   '<div class="music-reveal-song">' + q.question + '</div>'
+      +   '<div class="music-reveal-artist">' + q.answer + '</div>'
+      + '</div>';
+
+    container.appendChild(el);
+    return;
+  }
+
+  // ── PASS 1: Speaker / play UI ─────────────────────────────────────────
+  // Generate waveform bars
+  const barCount = 18;
+  const bars = Array.from({length: barCount}, () => {
+    const maxH  = 10 + Math.round(Math.random() * 26);
+    const dur   = (0.45 + Math.random() * 0.55).toFixed(2);
+    const delay = (Math.random() * 0.4).toFixed(2);
+    return '<div class="music-bar" style="--max-h:' + maxH + 'px;--dur:' + dur + 's;animation-delay:' + delay + 's"></div>';
+  }).join('');
+
+  const WORKER = 'https://canva-slides.belladonnaaudioalchemies.workers.dev';
+  const audioSrc = q.audioUrl ? (WORKER + '/audio?url=' + encodeURIComponent(q.audioUrl)) : '';
+
+  el.innerHTML = ''
+    + '<div class="q-header">'
+    +   '<div class="q-num-badge">' + String(qIndex+1).padStart(2,'0') + '</div>'
+    +   '<div class="q-round-label">'
+    +     (round.tabName||round.title)
+    +     '<div class="q-progress">' + dots + '</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="music-slide">'
+    +   '<div class="music-speaker-wrap">'
+    +     '<button class="music-speaker-btn" id="music-play-btn"'
+    +       (audioSrc ? '' : ' disabled title="No audio URL for this question"')
+    +       ' data-audio-src="' + audioSrc + '"'
+    +       ' data-start="' + (q.startTime || 0) + '"'
+    +       ' data-end="' + (q.endTime || 0) + '"'
+    +       ' onclick="playMusicAudio(this)">'
+    +       '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">'
+    +         '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>'
+    +       '</svg>'
+    +     '</button>'
+    +     '<div class="music-bars" id="music-bars-' + qIndex + '">' + bars + '</div>'
+    +     '<div class="music-play-hint" id="music-play-hint">'
+    +       (audioSrc ? 'Click to play' : 'No audio for this question')
+    +     '</div>'
+    +   '</div>'
+    + '</div>';
+
   container.appendChild(el);
 
   // Push to Firebase for digital answering
@@ -1503,10 +1564,11 @@ function renderMusicQuestion(container, round) {
 
 function playMusicAudio(btn) {
   if(!btn || btn.disabled) return;
-  const src = btn.dataset.audioSrc;
+  const src       = btn.dataset.audioSrc;
+  const startTime = parseFloat(btn.dataset.start) || 0;
+  const endTime   = parseFloat(btn.dataset.end)   || 0;
   if(!src) return;
 
-  // Find the bars and hint for this slide
   const bars = document.getElementById('music-bars-' + questionInfo().qIndex);
   const hint = document.getElementById('music-play-hint');
 
@@ -1520,6 +1582,26 @@ function playMusicAudio(btn) {
 
   const audio = new Audio(src);
   window._musicAudio = audio;
+
+  // Seek to start time once enough is loaded
+  audio.addEventListener('loadedmetadata', () => {
+    if(startTime > 0) audio.currentTime = startTime;
+  });
+
+  audio.addEventListener('canplay', () => {
+    // Fallback seek in case loadedmetadata fired before we set the handler
+    if(startTime > 0 && audio.currentTime < startTime) audio.currentTime = startTime;
+  });
+
+  // Stop at end time if specified
+  if(endTime > 0) {
+    audio.addEventListener('timeupdate', () => {
+      if(audio.currentTime >= endTime) {
+        audio.pause();
+        audio.dispatchEvent(new Event('ended'));
+      }
+    });
+  }
 
   audio.addEventListener('canplaythrough', () => {
     btn.classList.add('playing');
