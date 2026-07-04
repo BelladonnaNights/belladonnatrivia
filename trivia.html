@@ -672,11 +672,16 @@ if(db) {
     switch(cmd.cmd) {
       case 'next':    advanceSlide(); break;
       case 'back':    retreatSlide(); break;
-      case 'reveal':  advanceSlide(); break; // same key as Space
+      case 'reveal':  advanceSlide(); break;
       case 'audio':
-        // Play audio for current question if available
-        const btn = document.getElementById('music-play-btn') || document.querySelector('[data-audio-src]');
-        if(btn && !btn.disabled) btn.click();
+        // Try music play button first, then regular audio button
+        const musicBtn = document.getElementById('music-play-btn');
+        if(musicBtn && !musicBtn.disabled) { playMusicAudio(musicBtn); break; }
+        const audioBtn = document.querySelector('.audio-btn:not([disabled])');
+        if(audioBtn) { audioBtn.click(); break; }
+        // Try data-audio-src buttons
+        const anyAudioBtn = document.querySelector('[data-audio-src]');
+        if(anyAudioBtn && !anyAudioBtn.disabled) { anyAudioBtn.click(); }
         break;
     }
   });
