@@ -312,9 +312,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 }
 .hb-live-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--text3)}
 .hb-preview-thumb{
-  flex:1;margin:10px 12px;border-radius:8px;overflow:hidden;
+  margin:8px 12px;border-radius:8px;overflow:hidden;
   position:relative;background:#0a0a0a;border:1px solid var(--border);
   aspect-ratio:16/9;
+  width:calc(100% - 24px);
+  flex-shrink:0;
 }
 .hb-preview-thumb-bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.55}
 .hb-preview-thumb-overlay{
@@ -385,6 +387,24 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-btn-gold.active{background:rgba(201,168,76,.22);color:var(--gold3)}
 .hb-btn-ghost{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border2)}
 .hb-btn-ghost:hover{background:rgba(255,255,255,.08);color:var(--text)}
+.hb-btn-ghost.active{background:var(--gold-dim);color:var(--gold);border-color:var(--gold-glow)}
+
+/* Grade answers button */
+.hb-grade-btn-trigger{
+  background:rgba(255,255,255,.04);border:1px solid var(--border2);
+  border-radius:6px;padding:4px 10px;font-family:var(--cinzel);font-size:8px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--text2);cursor:pointer;transition:all .15s;
+}
+.hb-grade-btn-trigger:hover{background:rgba(255,255,255,.08);color:var(--text)}
+.hb-grade-btn-trigger.has-pending{background:rgba(201,168,76,.1);border-color:var(--gold-glow);color:var(--gold)}
+
+/* Review badge (keep for compat) */
+.hb-review-badge{
+  background:rgba(255,255,255,.04);border:1px solid var(--border2);
+  border-radius:6px;padding:4px 10px;font-family:var(--cinzel);font-size:8px;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--text2);cursor:pointer;
+}
+.hb-review-badge:hover{background:rgba(255,255,255,.08)}
 
 /* Host nav controls in middle-top */
 .hb-nav-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px}
@@ -443,11 +463,6 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-grade-btn-correct:hover{background:rgba(46,204,113,.3)}
 .hb-grade-btn-wrong{background:var(--red-dim);color:var(--red);border:1px solid rgba(231,76,60,.3)}
 .hb-grade-btn-wrong:hover{background:rgba(231,76,60,.2)}
-  background:var(--red-dim);border:1px solid rgba(231,76,60,.4);color:var(--red);
-  border-radius:6px;padding:4px 10px;font-family:var(--cinzel);font-size:9px;
-  letter-spacing:.08em;cursor:pointer;width:100%;text-align:left;
-}
-.hb-review-badge:hover{background:rgba(231,76,60,.2)}
 .hb-review-popup{
   position:fixed;top:270px;right:16px;z-index:400;
   background:var(--surface);border:1px solid var(--border2);border-radius:12px;
@@ -546,8 +561,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 4px;flex-shrink:0">
       <div class="hb-section-label" style="margin:0">Live Scores</div>
-      <button class="hb-review-badge" id="hb-grade-btn" onclick="openGradingPanel()" style="display:none">
-        📝 Grade Answers (<span id="hb-pending-count">0</span> pending)
+      <button class="hb-grade-btn-trigger" id="hb-grade-btn" onclick="openGradingPanel()" style="display:none">
+        Grade Answers <span id="hb-pending-count">0</span> pending
       </button>
     </div>
     <div class="hb-scores-grid" id="hb-scores">
@@ -565,7 +580,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
       <span class="hb-timed-label">⏱ Timed (10s)</span>
       <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()"></div>
     </div>
-    <button class="hb-btn hb-btn-gold" id="hb-lb-btn" onclick="toggleLbAdmin()">Show Leaderboard</button>
+    <button class="hb-btn hb-btn-ghost" id="hb-lb-btn" onclick="toggleLbAdmin()">Show Leaderboard</button>
+    <button class="hb-btn hb-btn-gold" id="hb-give-scores-btn" onclick="giveScores()" style="display:none">Give Scores →</button>
     <button class="hb-btn hb-btn-ghost" onclick="confirmAction('clear')">Clear Scores</button>
     <button class="hb-btn hb-btn-ghost" onclick="confirmAction('reset')">Reset Game</button>
   </div>
@@ -580,8 +596,20 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
       <button class="hb-grading-close" onclick="closeGradingPanel()">×</button>
     </div>
   </div>
+  <!-- Answer ref banner -->
+  <div id="hb-grading-answer-ref" style="display:none;padding:10px 18px;border-bottom:1px solid var(--border);background:rgba(46,204,113,.06);flex-shrink:0">
+    <div style="font-family:var(--cinzel);font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--green);margin-bottom:3px">Correct Answer</div>
+    <div id="hb-grading-correct-text" style="font-family:var(--serif);font-size:15px;color:var(--text);font-style:italic"></div>
+    <div id="hb-grading-q-text" style="font-family:var(--cinzel);font-size:9px;color:var(--text3);margin-top:3px;letter-spacing:.05em"></div>
+  </div>
   <div class="hb-grading-body" id="hb-grading-body">
     <div style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);text-align:center;padding:2rem">No answers to grade yet.</div>
+  </div>
+  <!-- Navigation footer -->
+  <div id="hb-grading-footer" style="display:none;padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <button class="hb-nav-btn" onclick="gradingNav(-1)" id="hb-grade-prev">← Prev Question</button>
+    <span id="hb-grade-nav-label" style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)"></span>
+    <button class="hb-nav-btn" onclick="gradingNav(1)" id="hb-grade-next">Next Question →</button>
   </div>
 </div>
 
@@ -1854,7 +1882,11 @@ function toggleLbAdmin() {
   lbAdminVisible = !lbAdminVisible;
   db.ref('liveGame/leaderboardVisible').set(lbAdminVisible);
   const btn = document.getElementById('hb-lb-btn');
-  if(btn) btn.classList.toggle('active', lbAdminVisible);
+  if(btn) {
+    btn.classList.toggle('hb-btn-ghost', !lbAdminVisible);
+    btn.classList.toggle('hb-btn-gold', lbAdminVisible);
+    btn.textContent = lbAdminVisible ? 'Hide Leaderboard' : 'Show Leaderboard';
+  }
 }
 
 function confirmAction(action) {
@@ -1873,8 +1905,9 @@ function closeConfirm() {
   pendingConfirmAction = null;
 }
 async function runConfirmedAction() {
+  const action = pendingConfirmAction; // save before closeConfirm nulls it
   closeConfirm();
-  if(pendingConfirmAction === 'clear') {
+  if(action === 'clear') {
     await db.ref('liveGame/teams').remove();
     await db.ref('liveGame/answers').remove();
     await db.ref('liveGame/status').set('waiting');
@@ -1882,7 +1915,7 @@ async function runConfirmedAction() {
     currentTeamCount = 0; currentSubmitCount = 0; updateSubmitCount();
     allAnswersCache = {};
     toast('Scores cleared');
-  } else if(pendingConfirmAction === 'reset') {
+  } else if(action === 'reset') {
     await db.ref('liveGame').remove();
     lbAdminVisible = false; hostTimedOn = false;
     allAnswersCache = {};
@@ -1903,78 +1936,119 @@ async function runConfirmedAction() {
   }
 }
 
+// ── Fix runConfirmedAction — store action before closing ─────────────
+// (closeConfirm was nulling pendingConfirmAction before it was read)
+
 // ── Grading panel ─────────────────────────────────────────────────────
 function normalizeForGrade(s) {
   return (s||'').toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim();
 }
 
+// Per-question grading state
+let gradingQuestions = []; // array of {qId, qText, correctAnswer, answers: [{teamId, teamName, answer, elapsed, status}]}
+let gradingIndex = 0;      // current question index
+let pendingScoresMap = {}; // teamId -> pts to add (held until Give Scores)
+
+function buildGradingQuestions() {
+  gradingQuestions = [];
+  for(const [qId, answers] of Object.entries(allAnswersCache)) {
+    const ansEntries = Object.entries(answers);
+    if(!ansEntries.length) continue;
+    // Only open-answer questions — skip MC and TF (they're auto-graded)
+    const hasOpen = ansEntries.some(([,a]) => a.type === 'open' || (!a.type && a.answer && typeof a.answer === 'string' && !['true','false','True','False'].includes(a.answer) && a.answer.length > 1));
+    if(!hasOpen) continue;
+    const first = ansEntries[0][1];
+    gradingQuestions.push({
+      qId,
+      qText: first.questionText || qId,
+      correctAnswer: first.correctAnswer || '',
+      answers: ansEntries.map(([teamId, a]) => ({teamId, ...a})),
+    });
+  }
+}
+
 function openGradingPanel() {
+  buildGradingQuestions();
+  if(!gradingQuestions.length) { toast('No open answers to grade yet'); return; }
+  gradingIndex = 0;
   document.getElementById('hb-grading-popup').classList.add('show');
-  renderGradingPanel();
+  renderGradingQuestion();
 }
 function closeGradingPanel() {
   document.getElementById('hb-grading-popup').classList.remove('show');
 }
+function gradingNav(dir) {
+  gradingIndex = Math.max(0, Math.min(gradingQuestions.length - 1, gradingIndex + dir));
+  renderGradingQuestion();
+}
 
-function renderGradingPanel() {
+function renderGradingQuestion() {
   const body = document.getElementById('hb-grading-body');
+  const footer = document.getElementById('hb-grading-footer');
+  const answerRef = document.getElementById('hb-grading-answer-ref');
+  const correctText = document.getElementById('hb-grading-correct-text');
+  const qTextEl = document.getElementById('hb-grading-q-text');
   const statusEl = document.getElementById('hb-grading-status');
-  if(!body) return;
+  const navLabel = document.getElementById('hb-grade-nav-label');
+  const prevBtn = document.getElementById('hb-grade-prev');
+  const nextBtn = document.getElementById('hb-grade-next');
 
-  const allQuestions = Object.entries(allAnswersCache);
-  if(!allQuestions.length) {
-    body.innerHTML = '<div style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);text-align:center;padding:2rem">No answers yet.</div>';
+  buildGradingQuestions(); // refresh
+  if(!gradingQuestions.length) {
+    body.innerHTML = '<div style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);text-align:center;padding:2rem">No open answers to grade.</div>';
+    if(answerRef) answerRef.style.display = 'none';
+    if(footer) footer.style.display = 'none';
     return;
   }
+  gradingIndex = Math.min(gradingIndex, gradingQuestions.length - 1);
+  const q = gradingQuestions[gradingIndex];
 
-  let totalPending = 0;
-  body.innerHTML = allQuestions.map(([qId, answers]) => {
-    const ansEntries = Object.entries(answers);
-    if(!ansEntries.length) return '';
-    const firstAns = ansEntries[0][1];
-    const correctAnswer = firstAns.correctAnswer || '';
-    const qText = firstAns.questionText || qId;
+  // Answer reference banner
+  if(answerRef) answerRef.style.display = 'block';
+  if(correctText) correctText.textContent = q.correctAnswer || '(no answer key set)';
+  if(qTextEl) qTextEl.textContent = q.qText;
 
-    const rows = ansEntries.map(([teamId, ans]) => {
-      const norm = normalizeForGrade(ans.answer);
-      const normCorrect = normalizeForGrade(correctAnswer);
-      let statusIcon = '?';
-      if(ans.status === 'correct') statusIcon = '✅';
-      else if(ans.status === 'wrong') statusIcon = '❌';
-      else {
-        // Auto-grade exact match
-        if(normCorrect && norm === normCorrect) {
-          statusIcon = '✅';
-          // Auto-approve
-          scheduleAutoGrade(qId, teamId, ans, true);
-        } else {
-          statusIcon = '?';
-          totalPending++;
-        }
+  // Nav
+  if(footer) footer.style.display = 'flex';
+  if(navLabel) navLabel.textContent = (gradingIndex + 1) + ' of ' + gradingQuestions.length;
+  if(prevBtn) prevBtn.disabled = gradingIndex === 0;
+  if(nextBtn) nextBtn.disabled = gradingIndex === gradingQuestions.length - 1;
+
+  // Count pending for this question
+  let pending = 0;
+  const rows = q.answers.map(ans => {
+    const norm = normalizeForGrade(ans.answer);
+    const normCorrect = normalizeForGrade(q.correctAnswer);
+    let statusIcon = '?';
+    let graded = false;
+    if(ans.status === 'correct') { statusIcon = '&#10003;'; graded = true; }
+    else if(ans.status === 'wrong')   { statusIcon = '&#10007;'; graded = true; }
+    else {
+      if(normCorrect && norm === normCorrect) {
+        statusIcon = '&#10003; auto';
+        scheduleAutoGrade(q.qId, ans.teamId, ans, true);
+      } else {
+        pending++;
       }
-
-      const needsReview = ans.status !== 'correct' && ans.status !== 'wrong';
-      return '<div class="hb-grade-answer-row">'
-        + '<div class="hb-grade-team">' + (ans.teamName||'?') + '</div>'
-        + '<div class="hb-grade-submitted">' + (ans.answer||'(blank)') + '</div>'
-        + '<div class="hb-grade-status">' + statusIcon + '</div>'
-        + (needsReview ? '<div class="hb-grade-btns">'
-            + '<button class="hb-grade-btn hb-grade-btn-correct" data-qid="' + qId + '" data-tid="' + teamId + '" data-correct="1" onclick="resolveFromBtn(this)">&#10003;</button>'
-            + '<button class="hb-grade-btn hb-grade-btn-wrong" data-qid="' + qId + '" data-tid="' + teamId + '" data-correct="0" onclick="resolveFromBtn(this)">&#10007;</button>'
-          + '</div>' : '')
-        + '</div>';
-    }).join('');
-
-    return '<div class="hb-grade-group">'
-      + '<div class="hb-grade-group-header">'
-      + '<span class="hb-grade-q-text">' + qText + '</span>'
-      + (correctAnswer ? '<span class="hb-grade-correct-ans">Answer: ' + correctAnswer + '</span>' : '')
-      + '</div>'
-      + rows
+    }
+    const statusColor = (ans.status === 'correct') ? 'var(--green)' : (ans.status === 'wrong') ? 'var(--red)' : 'var(--text3)';
+    const changeLink = graded
+      ? '<button style="background:none;border:none;color:var(--text3);font-size:10px;cursor:pointer;text-decoration:underline;padding:0;font-family:var(--cinzel);" data-qid="' + q.qId + '" data-tid="' + ans.teamId + '" onclick="ungradeAnswer(this)">change</button>'
+      : '';
+    const gradeBtns = (!graded) ? '<div class="hb-grade-btns">'
+        + '<button class="hb-grade-btn hb-grade-btn-correct" data-qid="' + q.qId + '" data-tid="' + ans.teamId + '" data-correct="1" onclick="resolveFromBtn(this)">&#10003;</button>'
+        + '<button class="hb-grade-btn hb-grade-btn-wrong" data-qid="' + q.qId + '" data-tid="' + ans.teamId + '" data-correct="0" onclick="resolveFromBtn(this)">&#10007;</button>'
+      + '</div>' : changeLink;
+    return '<div class="hb-grade-answer-row">'
+      + '<div class="hb-grade-team">' + (ans.teamName||'?') + '</div>'
+      + '<div class="hb-grade-submitted">' + (ans.answer||'(blank)') + '</div>'
+      + '<div class="hb-grade-status" style="color:' + statusColor + '">' + statusIcon + '</div>'
+      + gradeBtns
       + '</div>';
   }).join('');
 
-  if(statusEl) statusEl.textContent = totalPending + ' pending';
+  body.innerHTML = '<div class="hb-grade-group"><div class="hb-grade-answer-row" style="background:rgba(255,255,255,.02);padding:5px 14px;border-bottom:1px solid var(--border)"><strong style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Team</strong><strong style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);flex:1">Answer</strong></div>' + rows + '</div>';
+  if(statusEl) statusEl.textContent = pending + ' need review';
 }
 
 const _autoGradeScheduled = new Set();
@@ -1982,138 +2056,71 @@ function scheduleAutoGrade(qId, teamId, ans, isCorrect) {
   const key = qId + '/' + teamId;
   if(_autoGradeScheduled.has(key)) return;
   _autoGradeScheduled.add(key);
-  setTimeout(() => resolveAnswer(qId, teamId, isCorrect), 100);
+  // Auto-grade immediately — these are exact matches, no score held
+  setTimeout(() => db.ref('liveGame/answers/' + qId + '/' + teamId + '/status').set(isCorrect ? 'correct' : 'wrong'), 100);
 }
 
 function updateGradeButton() {
   const btn = document.getElementById('hb-grade-btn');
   const countEl = document.getElementById('hb-pending-count');
+  const giveBtn = document.getElementById('hb-give-scores-btn');
   let pending = 0;
+  let hasPending = false;
   for(const answers of Object.values(allAnswersCache)) {
     for(const ans of Object.values(answers)) {
-      if(ans.status !== 'correct' && ans.status !== 'wrong') {
-        const norm = normalizeForGrade(ans.answer);
-        const normCorrect = normalizeForGrade(ans.correctAnswer||'');
-        if(!normCorrect || norm !== normCorrect) pending++;
+      if(ans.type === 'open' || (!ans.type && ans.answer && !['true','false','True','False'].includes(ans.answer) && ans.answer.length > 1)) {
+        if(ans.status !== 'correct' && ans.status !== 'wrong') {
+          const norm = normalizeForGrade(ans.answer);
+          const normCorrect = normalizeForGrade(ans.correctAnswer||'');
+          if(!normCorrect || norm !== normCorrect) pending++;
+        }
+        hasPending = true;
       }
     }
   }
-  if(btn) btn.style.display = Object.keys(allAnswersCache).length ? 'inline-block' : 'none';
-  if(countEl) countEl.textContent = pending;
+  const hasAnswers = Object.keys(allAnswersCache).length > 0;
+  if(btn) {
+    btn.style.display = hasAnswers ? 'inline-block' : 'none';
+    btn.classList.toggle('has-pending', pending > 0);
+    if(countEl) countEl.textContent = pending > 0 ? '(' + pending + ' pending)' : '(all graded)';
+  }
+  if(giveBtn) giveBtn.style.display = hasAnswers ? 'block' : 'none';
 }
 
-// ── Firebase listeners ───────────────────────────────
-db.ref('liveGame/status').on('value', snap => {
-  const status = snap.val();
-  const isLive = status === 'question' || status === 'waiting' || status === 'closed';
-  document.getElementById('hb-live-dot')?.classList.toggle('active', isLive);
-  const label = document.getElementById('hb-live-label');
-  if(label) label.textContent = isLive ? 'Game Live' : 'No game active';
-});
-
-db.ref('liveGame/slideState').on('value', snap => {
-  const s = snap.val();
-  currentSlideState = s;
-  const typeEl  = document.getElementById('hb-preview-type');
-  const numEl   = document.getElementById('hb-preview-num');
-  const qEl     = document.getElementById('hb-preview-q');
-  const ansEl   = document.getElementById('hb-preview-answer');
-  const bgEl    = document.getElementById('hb-preview-bg');
-  const audioBtn = document.getElementById('hb-audio-btn');
-  const watermark = document.getElementById('hb-idle-watermark');
-  if(!s) {
-    if(typeEl) typeEl.textContent = '';
-    if(numEl)  numEl.textContent  = '';
-    if(qEl)    qEl.textContent    = '';
-    if(ansEl)  ansEl.textContent  = '';
-    if(bgEl)   bgEl.style.backgroundImage = '';
-    if(audioBtn) audioBtn.style.display = 'none';
-    if(watermark) watermark.style.display = 'flex';
-    return;
-  }
-  if(watermark) watermark.style.display = 'none';
-  if(bgEl)   bgEl.style.backgroundImage = s.bgUrl ? 'url("' + s.bgUrl + '")' : '';
-  if(typeEl) typeEl.textContent = s.label || '';
-  if(numEl)  numEl.textContent  = s.qNum  || '';
-  if(qEl)    qEl.textContent    = s.text  || '';
-  if(ansEl)  { ansEl.textContent = s.answer || ''; ansEl.style.display = s.answer ? 'block' : 'none'; }
-  if(audioBtn) audioBtn.style.display = s.hasAudio ? 'inline-flex' : 'none';
-});
-
-db.ref('liveGame/teams').on('value', snap => {
-  const teams = snap.val() || {};
-  const sorted = Object.entries(teams)
-    .map(([id,t]) => ({id, name:t.name||'?', score:t.score||0}))
-    .sort((a,b) => b.score-a.score);
-  currentTeamCount = sorted.length;
-  updateSubmitCount();
-  const el = document.getElementById('hb-scores');
-  if(!el) return;
-  el.innerHTML = sorted.length
-    ? sorted.map((t,i) =>
-        '<div class="hb-score-row">'
-        + '<div class="hb-score-rank' + (i<3?' top':'') + '">' + (i+1) + '</div>'
-        + '<div class="hb-score-name">' + t.name + '</div>'
-        + '<div class="hb-score-pts">' + t.score + '</div>'
-        + '</div>'
-      ).join('')
-    : '<span style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet</span>';
-});
-
-db.ref('liveGame/answers').on('value', snap => {
-  const allAnswers = snap.val() || {};
-  allAnswersCache = allAnswers;
-  let submitCount = 0;
-  for(const answers of Object.values(allAnswers)) {
-    for(const ans of Object.values(answers)) {
-      if(ans.answer) submitCount++;
+// Give Scores — push all graded scores to players at once
+async function giveScores() {
+  // Collect all graded answers and push results to liveGame/results/{teamId}
+  const results = {}; // teamId -> [{qText, answer, status, pts}]
+  const scoreUpdates = {};
+  for(const [qId, answers] of Object.entries(allAnswersCache)) {
+    for(const [teamId, ans] of Object.entries(answers)) {
+      if(!results[teamId]) results[teamId] = [];
+      const pts = ans.points || 0;
+      results[teamId].push({
+        qText: ans.questionText || '',
+        answer: ans.answer || '',
+        status: ans.status || 'pending',
+        pts,
+      });
+      if(ans.status === 'correct' && pts > 0) {
+        scoreUpdates['liveGame/teams/' + teamId + '/score'] = (scoreUpdates['liveGame/teams/' + teamId + '/score'] || 0) + pts;
+      }
     }
   }
-  currentSubmitCount = submitCount;
-  updateSubmitCount();
-  updateGradeButton();
-  // Re-render grading panel if open
-  if(document.getElementById('hb-grading-popup')?.classList.contains('show')) {
-    renderGradingPanel();
-  }
-});
-
-function updateSubmitCount() {
-  const el = document.getElementById('hb-submit-count');
-  if(!el) return;
-  el.textContent = currentTeamCount === 0 ? '— / —' : currentSubmitCount + ' / ' + currentTeamCount + ' answered';
-}
-
-function resolveFromBtn(btn) {
-  const qId = btn.dataset.qid;
-  const teamId = btn.dataset.tid;
-  const isCorrect = btn.dataset.correct === '1';
-  resolveAnswer(qId, teamId, isCorrect);
-}
-
-async function resolveAnswer(qId, teamId, isCorrect) {
-  const answers = allAnswersCache[qId] || {};
-  const ans = answers[teamId];
-  if(!ans) return;
-  const updates = {};
-  updates['liveGame/answers/' + qId + '/' + teamId + '/status'] = isCorrect ? 'correct' : 'wrong';
-  if(isCorrect) {
-    let pts = 1;
-    if(ans.elapsed !== undefined && ans.elapsed !== null) {
-      pts = ans.elapsed <= 3 ? 3 : ans.elapsed <= 6 ? 2 : 1;
-    }
-    updates['liveGame/answers/' + qId + '/' + teamId + '/points'] = pts;
-    const scoreSnap = await db.ref('liveGame/teams/' + teamId + '/score').once('value');
-    updates['liveGame/teams/' + teamId + '/score'] = (scoreSnap.val()||0) + pts;
-  } else {
-    updates['liveGame/answers/' + qId + '/' + teamId + '/points'] = 0;
+  const updates = { 'liveGame/resultsVisible': true, ...scoreUpdates };
+  for(const [teamId, res] of Object.entries(results)) {
+    updates['liveGame/results/' + teamId] = res;
   }
   await db.ref().update(updates);
-  toast(isCorrect ? 'Marked correct!' : 'Marked wrong');
+  toast('Scores given to players!');
 }
 
-function clearScores() { confirmAction('clear'); }
-function renderReviewQueue() {}
+async function ungradeAnswer(btn) {
+  const qId = btn.dataset.qid;
+  const teamId = btn.dataset.tid;
+  await db.ref('liveGame/answers/' + qId + '/' + teamId + '/status').set('pending');
+  toast('Marked as pending');
+}
 
 // ═══════════════════════════════════════════════
 // ═══════════════════════════════════════════════
