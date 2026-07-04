@@ -2210,7 +2210,7 @@ function toggleJoinPopup() {
   const popup = document.getElementById('join-popup');
   const btn = document.getElementById('setup-join-btn');
   joinPopupOpen = !joinPopupOpen;
-  popup.style.display = joinPopupOpen ? 'block' : 'none';
+  popup.style.display = joinPopupOpen ? 'flex' : 'none';
   if(btn) btn.innerHTML = joinPopupOpen ? '📱 Hide Join QR Code' : '📱 Show Join QR Code';
   if(joinPopupOpen && joinUrlCached) {
     requestAnimationFrame(() => generateQR(joinUrlCached));
@@ -2223,15 +2223,15 @@ function generateQR(url) {
   container.innerHTML = '';
   if(typeof QRCode === 'undefined') { setTimeout(() => generateQR(url), 300); return; }
   const popup = document.getElementById('join-popup');
-  const availW = popup ? popup.clientWidth - 32 : 260;
-  const availH = popup ? popup.clientHeight - 60 : 260;
-  const size = Math.max(120, Math.min(availW, availH));
+  // Size to fill the popup inner area minus header and padding
+  const availW = popup ? Math.max(120, popup.clientWidth - 48) : 240;
+  const availH = popup ? Math.max(120, popup.clientHeight - 80) : 240;
+  const size = Math.min(availW, availH);
   new QRCode(container, {text:url, width:size, height:size, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
+  // Force the canvas/img to the right size
   requestAnimationFrame(() => {
     const el = container.querySelector('img, canvas');
-    if(el) { el.style.width = size + 'px'; el.style.height = size + 'px'; el.style.display = 'block'; el.style.maxWidth = '100%'; }
-    container.style.width = size + 'px';
-    container.style.height = size + 'px';
+    if(el) { el.style.cssText = 'width:' + size + 'px;height:' + size + 'px;display:block;'; }
   });
 }
 
@@ -2243,7 +2243,7 @@ function generateQR(url) {
   new ResizeObserver(() => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      if(popup.style.display !== 'none' && joinUrlCached) generateQR(joinUrlCached);
+      if(popup.style.display === 'flex' && joinUrlCached) generateQR(joinUrlCached);
     }, 120);
   }).observe(popup);
 })();
@@ -2252,16 +2252,16 @@ function generateQR(url) {
 </script>
 
 <!-- JOIN QR POPUP -->
-<div id="join-popup" style="display:none;position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:3000;background:#111;border:1px solid rgba(201,168,76,.4);border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.8);min-width:240px;min-height:280px;resize:both;overflow:auto;user-select:none;">
-  <div id="join-popup-handle" style="padding:18px 16px 6px;cursor:grab;text-align:center;">
-    <div style="font-family:'Cinzel',serif;font-size:15px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);display:flex;align-items:center;justify-content:center;gap:10px;">
+<div id="join-popup" style="display:none;position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:3000;background:#111;border:1px solid rgba(201,168,76,.4);border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.8);min-width:240px;min-height:280px;resize:both;overflow:hidden;flex-direction:column;">
+  <div id="join-popup-handle" style="padding:14px 16px 6px;cursor:grab;text-align:center;flex-shrink:0;position:relative;">
+    <div style="font-family:Cinzel,serif;font-size:15px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);display:flex;align-items:center;justify-content:center;gap:10px;">
       <div style="width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;" id="join-popup-dot"></div>
       JOIN GAME
     </div>
-    <button onclick="event.stopPropagation();toggleJoinPopup()" style="position:absolute;top:10px;right:12px;background:none;border:none;color:rgba(255,255,255,.3);font-size:18px;cursor:pointer;line-height:1;padding:4px 6px;">×</button>
+    <button onclick="event.stopPropagation();toggleJoinPopup()" style="position:absolute;top:8px;right:12px;background:none;border:none;color:rgba(255,255,255,.3);font-size:18px;cursor:pointer;line-height:1;padding:4px 6px;">&#215;</button>
   </div>
-  <div style="padding:8px 16px 18px;text-align:center;">
-    <div id="join-qr" style="display:flex;align-items:center;justify-content:center;background:#fff;padding:10px;border-radius:8px;"></div>
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:10px 16px 16px;min-height:0;">
+    <div id="join-qr" style="background:#fff;padding:8px;border-radius:8px;line-height:0;display:flex;align-items:center;justify-content:center;"></div>
   </div>
 </div>
 </body>
