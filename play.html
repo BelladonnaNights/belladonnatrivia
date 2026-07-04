@@ -436,7 +436,19 @@ function startListening() {
   // Listen for game state changes
   db.ref('liveGame').on('value', snap => {
     const game = snap.val();
-    if(!game) return;
+    if(!game || game.status === null || game.status === undefined) {
+      // Host closed the game — return to register screen
+      teamId = null; teamName = null; currentQ = null; answered = false;
+      localStorage.removeItem('bella_team_id');
+      localStorage.removeItem('bella_session_id');
+      clearTimer();
+      document.getElementById('reg-input').value = '';
+      document.getElementById('reg-btn').disabled = false;
+      document.getElementById('reg-btn').textContent = 'Join Game';
+      document.getElementById('reg-status').textContent = 'Game ended — enter your name to join next game';
+      showScreen('reg-screen');
+      return;
+    }
 
     // Update score from Firebase (source of truth)
     if(game.teams && game.teams[teamId]) {
@@ -673,11 +685,22 @@ async function submitAnswer(value, btn, type) {
 
   // Write to Firebase
   if(value !== null) {
+    // Fetch correct answer for grading panel
+    let correctAnswer = '';
+    let questionText = currentQ.text || '';
+    try {
+      const metaSnap = await db.ref('liveGame/questionMeta/' + currentQ.id).once('value');
+      const meta = metaSnap.val();
+      if(meta) { correctAnswer = meta.correctAnswer || ''; questionText = meta.questionText || questionText; }
+    } catch(e) {}
+
     await db.ref(`liveGame/answers/${currentQ.id}/${teamId}`).set({
       answer: value,
       timestamp: Date.now(),
       elapsed: elapsed,
       teamName: teamName,
+      questionText,
+      correctAnswer,
       status: 'pending',
     });
   }
