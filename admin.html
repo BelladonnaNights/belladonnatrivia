@@ -141,8 +141,17 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .cat-action-edit:hover{background:var(--gold);color:#000}
 .cat-action-del{background:rgba(10,10,10,.8);color:var(--text3)}
 .cat-action-del:hover{background:var(--red);color:#fff}
+.cat-action-add{
+  position:absolute;bottom:8px;left:8px;
+  width:26px;height:26px;border-radius:50%;border:1.5px solid rgba(46,204,113,.5);
+  background:rgba(10,10,10,.8);color:#2ecc71;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;cursor:pointer;transition:all .15s;
+  opacity:0;backdrop-filter:blur(8px);line-height:1;
+}
+.cat-card:hover .cat-action-add{opacity:1}
+.cat-action-add:hover{background:#2ecc71;color:#000;border-color:#2ecc71}
 .drag-hint{
-  position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
   font-family:var(--cinzel);font-size:8px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--text3);background:rgba(8,8,8,.7);border-radius:99px;padding:2px 8px;
   opacity:0;transition:opacity .15s;white-space:nowrap;
@@ -157,6 +166,12 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 
 /* ── RIGHT: TONIGHT'S LINEUP ── */
 .lineup{padding:2rem;display:flex;flex-direction:column;gap:0;background:var(--surface)}
+.lineup-launch-sticky{
+  position:sticky;top:254px;z-index:10;
+  background:var(--surface);
+  padding-bottom:1rem;
+  margin-bottom:.25rem;
+}
 .lineup-header{margin-bottom:1.5rem}
 .lineup-title{font-family:var(--display);font-size:28px;letter-spacing:.05em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .lineup-sub{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-top:3px}
@@ -191,6 +206,13 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .round-slot-card-tab{font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .round-slot-remove{background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:2px;transition:color .15s;flex-shrink:0}
 .round-slot-remove:hover{color:var(--red)}
+.round-slot-drag-handle{
+  cursor:grab;color:var(--text3);font-size:13px;padding:0 4px;
+  flex-shrink:0;transition:color .15s;user-select:none;
+}
+.round-slot-drag-handle:hover{color:var(--gold)}
+.round-slot.slot-dragging{opacity:.4}
+.round-slot.slot-drag-over{border-color:var(--gold)!important;background:var(--gold-dim)!important}
 
 .lineup-divider{height:1px;background:var(--border);margin:1.25rem 0}
 
@@ -364,8 +386,63 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-btn-ghost{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border2)}
 .hb-btn-ghost:hover{background:rgba(255,255,255,.08);color:var(--text)}
 
-/* Review badge */
-.hb-review-badge{
+/* Host nav controls in middle-top */
+.hb-nav-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px}
+.hb-nav-btn{
+  padding:4px 10px;border-radius:5px;border:none;cursor:pointer;
+  font-family:var(--cinzel);font-size:8px;letter-spacing:.1em;text-transform:uppercase;
+  transition:all .15s;background:rgba(255,255,255,.05);color:var(--text2);border:1px solid var(--border2);
+}
+.hb-nav-btn:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.hb-nav-btn-primary{background:var(--gold-dim);color:var(--gold);border-color:var(--gold-glow)}
+.hb-nav-btn-primary:hover{background:rgba(201,168,76,.2)}
+
+/* Answer grading panel */
+.hb-grading-popup{
+  position:fixed;top:260px;left:50%;transform:translateX(-50%);z-index:500;
+  background:var(--surface);border:1px solid var(--border2);border-radius:16px;
+  width:min(700px,95vw);max-height:65vh;
+  box-shadow:0 12px 48px rgba(0,0,0,.8);display:none;
+  flex-direction:column;overflow:hidden;
+}
+.hb-grading-popup.show{display:flex}
+.hb-grading-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.hb-grading-title{font-family:var(--display);font-size:20px;letter-spacing:.06em;
+  background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.hb-grading-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer}
+.hb-grading-body{overflow-y:auto;flex:1;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.hb-grade-group{
+  background:rgba(255,255,255,.03);border:1px solid var(--border);
+  border-radius:10px;overflow:hidden;
+}
+.hb-grade-group-header{
+  padding:8px 14px;background:rgba(255,255,255,.04);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.hb-grade-q-text{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text)}
+.hb-grade-correct-ans{font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;color:var(--green);text-transform:uppercase}
+.hb-grade-answer-row{
+  display:flex;align-items:center;gap:10px;padding:7px 14px;
+  border-bottom:1px solid rgba(255,255,255,.04);
+}
+.hb-grade-answer-row:last-child{border-bottom:none}
+.hb-grade-team{font-family:var(--cinzel);font-size:10px;letter-spacing:.06em;color:var(--text2);min-width:100px;flex-shrink:0}
+.hb-grade-submitted{flex:1;font-size:13px;color:var(--text)}
+.hb-grade-status{
+  font-size:16px;flex-shrink:0;width:24px;text-align:center;
+}
+.hb-grade-btns{display:flex;gap:4px;flex-shrink:0}
+.hb-grade-btn{
+  padding:3px 10px;border-radius:5px;border:none;cursor:pointer;
+  font-family:var(--cinzel);font-size:8px;letter-spacing:.08em;text-transform:uppercase;transition:all .15s;
+}
+.hb-grade-btn-correct{background:rgba(46,204,113,.15);color:var(--green);border:1px solid rgba(46,204,113,.3)}
+.hb-grade-btn-correct:hover{background:rgba(46,204,113,.3)}
+.hb-grade-btn-wrong{background:var(--red-dim);color:var(--red);border:1px solid rgba(231,76,60,.3)}
+.hb-grade-btn-wrong:hover{background:rgba(231,76,60,.2)}
   background:var(--red-dim);border:1px solid rgba(231,76,60,.4);color:var(--red);
   border-radius:6px;padding:4px 10px;font-family:var(--cinzel);font-size:9px;
   letter-spacing:.08em;cursor:pointer;width:100%;text-align:left;
@@ -436,6 +513,15 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="hb-preview-thumb-num" id="hb-preview-num"></div>
         <div class="hb-preview-q-text" id="hb-preview-q"></div>
         <div class="hb-preview-ans-text" id="hb-preview-answer"></div>
+        <!-- Belladonna watermark shown when idle -->
+        <div id="hb-idle-watermark" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.18;pointer-events:none">
+          <svg width="40" height="40" viewBox="0 0 100 100" fill="var(--gold)">
+            <circle cx="50" cy="30" r="18" fill="none" stroke="var(--gold)" stroke-width="4"/>
+            <path d="M28 55 Q50 80 72 55" fill="none" stroke="var(--gold)" stroke-width="4"/>
+            <path d="M36 70 Q50 90 64 70" fill="none" stroke="var(--gold)" stroke-width="3"/>
+            <circle cx="50" cy="30" r="6" fill="var(--gold)"/>
+          </svg>
+        </div>
       </div>
     </div>
     <div style="padding:6px 12px;flex-shrink:0">
@@ -444,19 +530,31 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     </div>
   </div>
 
-  <!-- MIDDLE: Live scores -->
+  <!-- MIDDLE: Live scores + nav controls -->
   <div class="hb-middle">
     <div class="hb-middle-top">
-      <div class="hb-section-label">Live Scores</div>
+      <div class="hb-section-label">Current Slide</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span id="hb-preview-q" style="font-size:11px;color:var(--text2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span>
+      </div>
+      <div class="hb-nav-controls">
+        <button class="hb-nav-btn" onclick="sendHostCommand('back')">← Back</button>
+        <button class="hb-nav-btn hb-nav-btn-primary" onclick="sendHostCommand('next')">Next →</button>
+        <button class="hb-nav-btn" onclick="sendHostCommand('reveal')" id="hb-reveal-btn">Space Reveal</button>
+        <button class="hb-nav-btn" id="hb-audio-btn" onclick="sendHostCommand('audio')" style="display:none">▶ Play Audio</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 4px;flex-shrink:0">
+      <div class="hb-section-label" style="margin:0">Live Scores</div>
+      <button class="hb-review-badge" id="hb-grade-btn" onclick="openGradingPanel()" style="display:none">
+        📝 Grade Answers (<span id="hb-pending-count">0</span> pending)
+      </button>
     </div>
     <div class="hb-scores-grid" id="hb-scores">
       <span style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet</span>
     </div>
-    <!-- Review section inside scores area -->
-    <div id="hb-review-cell" style="display:none;padding:6px 16px;border-top:1px solid rgba(255,255,255,.05);flex-shrink:0">
-      <button class="hb-review-badge" onclick="toggleReviewPopup()">
-        ⚠ Needs Review — <span id="hb-review-count">0</span> answer(s)
-      </button>
+    <div style="padding:6px 16px;flex-shrink:0">
+      <div class="hb-submit-count" id="hb-submit-count">— / —</div>
     </div>
   </div>
 
@@ -473,10 +571,18 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   </div>
 </div>
 
-<!-- Review popup -->
-<div class="hb-review-popup" id="hb-review-popup">
-  <div style="font-family:var(--cinzel);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Needs Review</div>
-  <div id="hb-review-queue"></div>
+<!-- GRADING PANEL -->
+<div class="hb-grading-popup" id="hb-grading-popup">
+  <div class="hb-grading-header">
+    <div class="hb-grading-title">ANSWER GRADING</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)" id="hb-grading-status"></span>
+      <button class="hb-grading-close" onclick="closeGradingPanel()">×</button>
+    </div>
+  </div>
+  <div class="hb-grading-body" id="hb-grading-body">
+    <div style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);text-align:center;padding:2rem">No answers to grade yet.</div>
+  </div>
 </div>
 
 <!-- LAYOUT -->
@@ -517,7 +623,9 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 
   <!-- RIGHT: LINEUP -->
   <div class="lineup">
-    <button class="launch-btn" id="launch-btn" onclick="launchTrivia()" style="margin-bottom:1.25rem">Launch Trivia Night →</button>
+    <div class="lineup-launch-sticky">
+      <button class="launch-btn" id="launch-btn" onclick="launchTrivia()">Launch Trivia Night →</button>
+    </div>
     <div class="lineup-header">
       <div class="lineup-title">TONIGHT'S LINEUP</div>
       <div class="lineup-sub">Drop categories into rounds below</div>
@@ -1160,6 +1268,7 @@ function renderLibrary() {
           ${adminMode ? `<button class="cat-action-btn cat-action-edit" onclick="event.stopPropagation();openModal('${cat.id}')">✎</button>
           <button class="cat-action-btn cat-action-del" onclick="event.stopPropagation();confirmDelete('${cat.id}')">×</button>` : ''}
         </div>
+        <button class="cat-action-add" onclick="event.stopPropagation();addToNextRound('${cat.id}')" title="Add to next open round">+</button>
         <div class="drag-hint">${adminMode ? 'drag to reorder or drop into round →' : 'drag to round →'}</div>
       </div>`;
   }).join('');
@@ -1310,6 +1419,10 @@ function renderLineup() {
       slot.innerHTML = ''
         + '<div class="round-slot-label">Round ' + (i+1) + '</div>'
         + '<div class="round-slot-card">'
+        +   '<div class="round-slot-drag-handle" draggable="true"'
+        +     ' ondragstart="onSlotDragStart(event,' + i + ')"'
+        +     ' ondragend="onSlotDragEnd(event,' + i + ')"'
+        +     ' title="Drag to reorder">⠿</div>'
         +   thumb
         +   '<div class="round-slot-card-info">'
         +     '<div class="round-slot-card-name">' + cat.name + '</div>'
@@ -1351,6 +1464,20 @@ function saveLineup() {
 //  DRAG & DROP
 // ═══════════════════════════════════════════════
 let dragReorderSourceId = null;
+let dragSlotIndex = null; // which slot is being dragged for reordering
+
+function onSlotDragStart(e, i) {
+  dragSlotIndex = i;
+  dragCardId = null;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', 'slot:' + i);
+  setTimeout(() => document.getElementById('slot-' + i)?.classList.add('slot-dragging'), 0);
+}
+function onSlotDragEnd(e, i) {
+  dragSlotIndex = null;
+  document.getElementById('slot-' + i)?.classList.remove('slot-dragging');
+  document.querySelectorAll('.round-slot').forEach(el => el.classList.remove('slot-drag-over'));
+}
 
 function onCardDragStart(e, id) {
   dragCardId = id;
@@ -1405,12 +1532,18 @@ async function onCardDrop(e, targetId) {
 
 function onSlotDragOver(e, i) {
   e.preventDefault();
-  e.dataTransfer.dropEffect = 'copy';
-  document.getElementById(`slot-${i}`).classList.add('drag-target');
+  if(dragSlotIndex !== null && dragSlotIndex !== i) {
+    e.dataTransfer.dropEffect = 'move';
+    document.getElementById('slot-' + i).classList.add('slot-drag-over');
+  } else if(dragCardId) {
+    e.dataTransfer.dropEffect = 'copy';
+    document.getElementById('slot-' + i).classList.add('drag-target');
+  }
 }
 
 function onSlotDragLeave(i) {
-  document.getElementById(`slot-${i}`).classList.remove('drag-target');
+  document.getElementById('slot-' + i).classList.remove('drag-target');
+  document.getElementById('slot-' + i).classList.remove('slot-drag-over');
 }
 
 function applyDefaults(catId, slotIndex) {
@@ -1425,6 +1558,26 @@ function applyDefaults(catId, slotIndex) {
 function onSlotDrop(e, i) {
   e.preventDefault();
   document.getElementById('slot-' + i).classList.remove('drag-target');
+  document.getElementById('slot-' + i).classList.remove('slot-drag-over');
+
+  // Slot-to-slot reorder
+  if(dragSlotIndex !== null && dragSlotIndex !== i) {
+    const from = dragSlotIndex;
+    const to = i;
+    dragSlotIndex = null;
+    [lineup[from], lineup[to]] = [lineup[to], lineup[from]];
+    [lineupAnswers[from], lineupAnswers[to]] = [lineupAnswers[to], lineupAnswers[from]];
+    [lineupTwoPass[from], lineupTwoPass[to]] = [lineupTwoPass[to], lineupTwoPass[from]];
+    [lineupMainRound[from], lineupMainRound[to]] = [lineupMainRound[to], lineupMainRound[from]];
+    [lineupQCount[from], lineupQCount[to]] = [lineupQCount[to], lineupQCount[from]];
+    [lineupSegmentSize[from], lineupSegmentSize[to]] = [lineupSegmentSize[to], lineupSegmentSize[from]];
+    [lineupTimed[from], lineupTimed[to]] = [lineupTimed[to], lineupTimed[from]];
+    saveLineup();
+    renderLineup();
+    return;
+  }
+
+  // Card-from-library drop
   if(!dragCardId) return;
   lineup[i] = dragCardId;
   applyDefaults(dragCardId, i);
@@ -1685,7 +1838,14 @@ let hostTimedOn = false;
 let pendingConfirmAction = null;
 let currentSubmitCount = 0;
 let currentTeamCount = 0;
-let reviewPopupOpen = false;
+let allAnswersCache = {}; // qId -> { teamId -> answerObj }
+let currentSlideState = null;
+
+// Send command to trivia.html via Firebase
+function sendHostCommand(cmd) {
+  if(!db) return;
+  db.ref('liveGame/hostCommand').set({ cmd, ts: Date.now() });
+}
 
 function toggleHostTimed() {
   hostTimedOn = !hostTimedOn;
@@ -1698,11 +1858,6 @@ function toggleLbAdmin() {
   db.ref('liveGame/leaderboardVisible').set(lbAdminVisible);
   const btn = document.getElementById('hb-lb-btn');
   if(btn) btn.classList.toggle('active', lbAdminVisible);
-}
-
-function toggleReviewPopup() {
-  reviewPopupOpen = !reviewPopupOpen;
-  document.getElementById('hb-review-popup').classList.toggle('show', reviewPopupOpen);
 }
 
 function confirmAction(action) {
@@ -1726,19 +1881,16 @@ async function runConfirmedAction() {
     await db.ref('liveGame/teams').remove();
     await db.ref('liveGame/answers').remove();
     await db.ref('liveGame/status').set('waiting');
-    // Clear UI immediately
     document.getElementById('hb-scores').innerHTML = '<span style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet</span>';
     currentTeamCount = 0; currentSubmitCount = 0; updateSubmitCount();
+    allAnswersCache = {};
     toast('Scores cleared');
   } else if(pendingConfirmAction === 'reset') {
-    // Wipe everything including slideState so host board shows no stale data
     await db.ref('liveGame').remove();
-    lbAdminVisible = false;
-    hostTimedOn = false;
+    lbAdminVisible = false; hostTimedOn = false;
+    allAnswersCache = {};
     document.getElementById('hb-timed-toggle').classList.remove('on');
     document.getElementById('hb-lb-btn')?.classList.remove('active');
-    document.getElementById('hb-lb-btn').textContent = 'Show Leaderboard';
-    // Clear UI immediately without waiting for Firebase
     document.getElementById('hb-live-dot').classList.remove('active');
     document.getElementById('hb-live-label').textContent = 'No game active';
     document.getElementById('hb-preview-type').textContent = '';
@@ -1747,10 +1899,110 @@ async function runConfirmedAction() {
     document.getElementById('hb-preview-answer').textContent = '';
     document.getElementById('hb-preview-bg').style.backgroundImage = '';
     document.getElementById('hb-scores').innerHTML = '<span style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet</span>';
-    document.getElementById('hb-review-cell').style.display = 'none';
     currentTeamCount = 0; currentSubmitCount = 0; updateSubmitCount();
+    updateGradeButton();
+    closeGradingPanel();
     toast('Game reset');
   }
+}
+
+// ── Grading panel ─────────────────────────────────────────────────────
+function normalizeForGrade(s) {
+  return (s||'').toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim();
+}
+
+function openGradingPanel() {
+  document.getElementById('hb-grading-popup').classList.add('show');
+  renderGradingPanel();
+}
+function closeGradingPanel() {
+  document.getElementById('hb-grading-popup').classList.remove('show');
+}
+
+function renderGradingPanel() {
+  const body = document.getElementById('hb-grading-body');
+  const statusEl = document.getElementById('hb-grading-status');
+  if(!body) return;
+
+  const allQuestions = Object.entries(allAnswersCache);
+  if(!allQuestions.length) {
+    body.innerHTML = '<div style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);text-align:center;padding:2rem">No answers yet.</div>';
+    return;
+  }
+
+  let totalPending = 0;
+  body.innerHTML = allQuestions.map(([qId, answers]) => {
+    const ansEntries = Object.entries(answers);
+    if(!ansEntries.length) return '';
+    const firstAns = ansEntries[0][1];
+    const correctAnswer = firstAns.correctAnswer || '';
+    const qText = firstAns.questionText || qId;
+
+    const rows = ansEntries.map(([teamId, ans]) => {
+      const norm = normalizeForGrade(ans.answer);
+      const normCorrect = normalizeForGrade(correctAnswer);
+      let statusIcon = '?';
+      if(ans.status === 'correct') statusIcon = '✅';
+      else if(ans.status === 'wrong') statusIcon = '❌';
+      else {
+        // Auto-grade exact match
+        if(normCorrect && norm === normCorrect) {
+          statusIcon = '✅';
+          // Auto-approve
+          scheduleAutoGrade(qId, teamId, ans, true);
+        } else {
+          statusIcon = '?';
+          totalPending++;
+        }
+      }
+
+      const needsReview = ans.status !== 'correct' && ans.status !== 'wrong';
+      return '<div class="hb-grade-answer-row">'
+        + '<div class="hb-grade-team">' + (ans.teamName||'?') + '</div>'
+        + '<div class="hb-grade-submitted">' + (ans.answer||'(blank)') + '</div>'
+        + '<div class="hb-grade-status">' + statusIcon + '</div>'
+        + (needsReview ? '<div class="hb-grade-btns">'
+            + '<button class="hb-grade-btn hb-grade-btn-correct" onclick="resolveAnswer('' + qId + '','' + teamId + '',true)">✓</button>'
+            + '<button class="hb-grade-btn hb-grade-btn-wrong" onclick="resolveAnswer('' + qId + '','' + teamId + '',false)">✗</button>'
+          + '</div>' : '')
+        + '</div>';
+    }).join('');
+
+    return '<div class="hb-grade-group">'
+      + '<div class="hb-grade-group-header">'
+      + '<span class="hb-grade-q-text">' + qText + '</span>'
+      + (correctAnswer ? '<span class="hb-grade-correct-ans">Answer: ' + correctAnswer + '</span>' : '')
+      + '</div>'
+      + rows
+      + '</div>';
+  }).join('');
+
+  if(statusEl) statusEl.textContent = totalPending + ' pending';
+}
+
+const _autoGradeScheduled = new Set();
+function scheduleAutoGrade(qId, teamId, ans, isCorrect) {
+  const key = qId + '/' + teamId;
+  if(_autoGradeScheduled.has(key)) return;
+  _autoGradeScheduled.add(key);
+  setTimeout(() => resolveAnswer(qId, teamId, isCorrect), 100);
+}
+
+function updateGradeButton() {
+  const btn = document.getElementById('hb-grade-btn');
+  const countEl = document.getElementById('hb-pending-count');
+  let pending = 0;
+  for(const answers of Object.values(allAnswersCache)) {
+    for(const ans of Object.values(answers)) {
+      if(ans.status !== 'correct' && ans.status !== 'wrong') {
+        const norm = normalizeForGrade(ans.answer);
+        const normCorrect = normalizeForGrade(ans.correctAnswer||'');
+        if(!normCorrect || norm !== normCorrect) pending++;
+      }
+    }
+  }
+  if(btn) btn.style.display = Object.keys(allAnswersCache).length ? 'inline-block' : 'none';
+  if(countEl) countEl.textContent = pending;
 }
 
 // ── Firebase listeners ───────────────────────────────
@@ -1764,24 +2016,31 @@ db.ref('liveGame/status').on('value', snap => {
 
 db.ref('liveGame/slideState').on('value', snap => {
   const s = snap.val();
+  currentSlideState = s;
   const typeEl  = document.getElementById('hb-preview-type');
   const numEl   = document.getElementById('hb-preview-num');
   const qEl     = document.getElementById('hb-preview-q');
   const ansEl   = document.getElementById('hb-preview-answer');
   const bgEl    = document.getElementById('hb-preview-bg');
+  const audioBtn = document.getElementById('hb-audio-btn');
+  const watermark = document.getElementById('hb-idle-watermark');
   if(!s) {
-    if(typeEl) typeEl.textContent = 'Waiting…';
+    if(typeEl) typeEl.textContent = '';
     if(numEl)  numEl.textContent  = '';
     if(qEl)    qEl.textContent    = '';
     if(ansEl)  ansEl.textContent  = '';
     if(bgEl)   bgEl.style.backgroundImage = '';
+    if(audioBtn) audioBtn.style.display = 'none';
+    if(watermark) watermark.style.display = 'flex';
     return;
   }
-  if(bgEl)   bgEl.style.backgroundImage = s.bgUrl ? `url("${s.bgUrl}")` : '';
+  if(watermark) watermark.style.display = 'none';
+  if(bgEl)   bgEl.style.backgroundImage = s.bgUrl ? 'url("' + s.bgUrl + '")' : '';
   if(typeEl) typeEl.textContent = s.label || '';
   if(numEl)  numEl.textContent  = s.qNum  || '';
   if(qEl)    qEl.textContent    = s.text  || '';
   if(ansEl)  { ansEl.textContent = s.answer || ''; ansEl.style.display = s.answer ? 'block' : 'none'; }
+  if(audioBtn) audioBtn.style.display = s.hasAudio ? 'inline-flex' : 'none';
 });
 
 db.ref('liveGame/teams').on('value', snap => {
@@ -1789,10 +2048,8 @@ db.ref('liveGame/teams').on('value', snap => {
   const sorted = Object.entries(teams)
     .map(([id,t]) => ({id, name:t.name||'?', score:t.score||0}))
     .sort((a,b) => b.score-a.score);
-
   currentTeamCount = sorted.length;
   updateSubmitCount();
-
   const el = document.getElementById('hb-scores');
   if(!el) return;
   el.innerHTML = sorted.length
@@ -1808,46 +2065,31 @@ db.ref('liveGame/teams').on('value', snap => {
 
 db.ref('liveGame/answers').on('value', snap => {
   const allAnswers = snap.val() || {};
-  const queue = [];
+  allAnswersCache = allAnswers;
   let submitCount = 0;
-  for(const [qId, answers] of Object.entries(allAnswers)) {
-    for(const [teamId, ans] of Object.entries(answers)) {
-      submitCount++;
-      if(ans.status === 'needs_review') queue.push({qId, teamId, ...ans});
+  for(const answers of Object.values(allAnswers)) {
+    for(const ans of Object.values(answers)) {
+      if(ans.answer) submitCount++;
     }
   }
   currentSubmitCount = submitCount;
   updateSubmitCount();
-  renderHbReviewQueue(queue);
+  updateGradeButton();
+  // Re-render grading panel if open
+  if(document.getElementById('hb-grading-popup')?.classList.contains('show')) {
+    renderGradingPanel();
+  }
 });
 
 function updateSubmitCount() {
   const el = document.getElementById('hb-submit-count');
   if(!el) return;
-  el.textContent = currentTeamCount === 0 ? '— / —' : currentSubmitCount + ' / ' + currentTeamCount;
-}
-
-function renderHbReviewQueue(queue) {
-  const cell = document.getElementById('hb-review-cell');
-  const countEl = document.getElementById('hb-review-count');
-  const queueEl = document.getElementById('hb-review-queue');
-  if(cell) cell.style.display = queue.length ? 'flex' : 'none';
-  if(countEl) countEl.textContent = queue.length;
-  if(!queueEl) return;
-  queueEl.innerHTML = queue.map(item =>
-    '<div style="background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;margin-bottom:6px">'
-    + '<div style="font-size:9px;color:var(--text3);font-family:var(--cinzel);letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px">' + (item.teamName||'Unknown') + '</div>'
-    + '<div style="font-size:12px;color:var(--text);margin-bottom:5px">"' + item.answer + '"</div>'
-    + '<div style="display:flex;gap:5px">'
-    + '<button class="hb-strip-btn hb-strip-btn-gold" onclick="resolveAnswer(\'' + item.qId + '\',\'' + item.teamId + '\',true);toggleReviewPopup()" style="flex:1;padding:4px">✓ Correct</button>'
-    + '<button class="hb-strip-btn hb-strip-btn-ghost" onclick="resolveAnswer(\'' + item.qId + '\',\'' + item.teamId + '\',false);toggleReviewPopup()" style="flex:1;padding:4px;color:var(--red)">✗ Wrong</button>'
-    + '</div></div>'
-  ).join('');
+  el.textContent = currentTeamCount === 0 ? '— / —' : currentSubmitCount + ' / ' + currentTeamCount + ' answered';
 }
 
 async function resolveAnswer(qId, teamId, isCorrect) {
-  const snap = await db.ref('liveGame/answers/' + qId + '/' + teamId).once('value');
-  const ans = snap.val();
+  const answers = allAnswersCache[qId] || {};
+  const ans = answers[teamId];
   if(!ans) return;
   const updates = {};
   updates['liveGame/answers/' + qId + '/' + teamId + '/status'] = isCorrect ? 'correct' : 'wrong';
