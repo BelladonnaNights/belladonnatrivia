@@ -1245,32 +1245,29 @@ function renderLibrary() {
     const bannerHtml = cat.bgImage
       ? `<img class="cat-banner" src="${cat.bgImage}" onerror="this.outerHTML='<div class=cat-banner-placeholder><span>${cat.name}</span></div>'">`
       : `<div class="cat-banner-placeholder"><span>${cat.name||'UNTITLED'}</span></div>`;
-    const tagPills = tags.map(t=>`<span class="cat-genre">${t}</span>`).join('');
-    return `
-      <div class="cat-card" draggable="true" data-id="${cat.id}"
-        ondragstart="onCardDragStart(event,'${cat.id}')"
-        ondragend="onCardDragEnd(event)"
-        ondragover="onCardDragOver(event,'${cat.id}')"
-        ondragleave="onCardDragLeave(event)"
-        ondrop="onCardDrop(event,'${cat.id}')">
-        ${bannerHtml}
-        <div class="cat-body">
-          <div class="cat-title">${cat.name||'Untitled'}</div>
-          <div class="cat-meta">
-            ${cat.type === 'music' ? `<span class="cat-genre" style="background:rgba(46,204,113,.12);color:#2ecc71;border-color:rgba(46,204,113,.25)">🎵 Music</span>` : ''}
-            ${cat.type === 'slideshow' ? `<span class="cat-genre" style="background:rgba(201,168,76,.08);color:var(--gold)">🖼 Slideshow</span>` : ''}
-            ${cat.type === 'canva' ? `<span class="cat-genre" style="background:rgba(201,168,76,.08);color:var(--gold)">🎨 Canva</span>` : ''}
-            ${tagPills}
-          </div>
-          ${cat.notes ? `<div style="font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;margin-top:4px">${cat.notes}</div>` : ''}
-        </div>
-        <div class="cat-actions">
-          ${adminMode ? `<button class="cat-action-btn cat-action-edit" onclick="event.stopPropagation();openModal('${cat.id}')">✎</button>
-          <button class="cat-action-btn cat-action-del" onclick="event.stopPropagation();confirmDelete('${cat.id}')">×</button>` : ''}
-        </div>
-        <button class="cat-action-add" onclick="event.stopPropagation();addToNextRound('${cat.id}')" title="Add to next open round">+</button>
-        <div class="drag-hint">${adminMode ? 'drag to reorder or drop into round →' : 'drag to round →'}</div>
-      </div>`;
+    const tagPills = tags.map(t => '<span class="cat-genre">' + t + '</span>').join('');
+    const musicBadge     = cat.type === 'music'     ? '<span class="cat-genre" style="background:rgba(46,204,113,.12);color:#2ecc71;border-color:rgba(46,204,113,.25)">&#127925; Music</span>' : '';
+    const slideshowBadge = cat.type === 'slideshow' ? '<span class="cat-genre" style="background:rgba(201,168,76,.08);color:var(--gold)">&#128444; Slideshow</span>' : '';
+    const canvaBadge     = cat.type === 'canva'     ? '<span class="cat-genre" style="background:rgba(201,168,76,.08);color:var(--gold)">&#127912; Canva</span>' : '';
+    const noteHtml       = cat.notes ? '<div style="font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;margin-top:4px">' + cat.notes + '</div>' : '';
+    const editBtn        = adminMode ? '<button class="cat-action-btn cat-action-edit" onclick="event.stopPropagation();openModal(\'' + cat.id + '\')">&#9998;</button>' : '';
+    const delBtn         = adminMode ? '<button class="cat-action-btn cat-action-del" onclick="event.stopPropagation();confirmDelete(\'' + cat.id + '\')">&#215;</button>' : '';
+    return '<div class="cat-card" draggable="true" data-id="' + cat.id + '"'
+      + ' ondragstart="onCardDragStart(event,\'' + cat.id + '\')"'
+      + ' ondragend="onCardDragEnd(event)"'
+      + ' ondragover="onCardDragOver(event,\'' + cat.id + '\')"'
+      + ' ondragleave="onCardDragLeave(event)"'
+      + ' ondrop="onCardDrop(event,\'' + cat.id + '\')">'
+      + bannerHtml
+      + '<div class="cat-body">'
+      + '<div class="cat-title">' + (cat.name||'Untitled') + '</div>'
+      + '<div class="cat-meta">' + musicBadge + slideshowBadge + canvaBadge + tagPills + '</div>'
+      + noteHtml
+      + '</div>'
+      + '<div class="cat-actions">' + editBtn + delBtn + '</div>'
+      + '<button class="cat-action-add" onclick="event.stopPropagation();addToNextRound(\'' + cat.id + '\')" title="Add to next open round">+</button>'
+      + '<div class="drag-hint">' + (adminMode ? 'drag to reorder or drop into round &rarr;' : 'drag to round &rarr;') + '</div>'
+      + '</div>';
   }).join('');
 }
 
