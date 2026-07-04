@@ -457,6 +457,12 @@ function startListening() {
       document.getElementById('q-score-badge').textContent = myScore + ' pts';
     }
 
+    // Results visible — show per-answer results with scores
+    if(game.resultsVisible && game.results && game.results[teamId]) {
+      showResults(game.results[teamId], game.teams || {});
+      return;
+    }
+
     // Leaderboard visibility
     if(game.leaderboardVisible && game.status !== 'question') {
       renderLeaderboard(game.teams || {});
@@ -728,6 +734,42 @@ function clearTimer() {
 }
 
 // ═══════════════════════════════════════════════
+//  RESULTS (after host gives scores)
+// ═══════════════════════════════════════════════
+function showResults(results, teams) {
+  showScreen('results-screen');
+  const list = document.getElementById('results-list');
+  const scoreEl = document.getElementById('results-score');
+  const rankEl = document.getElementById('results-rank');
+  if(!list) return;
+
+  // Calculate rank
+  const sorted = Object.entries(teams)
+    .map(([id,t]) => ({id, score:t.score||0}))
+    .sort((a,b) => b.score-a.score);
+  const rank = sorted.findIndex(t => t.id === teamId) + 1;
+  if(scoreEl) scoreEl.textContent = myScore + ' pts';
+  if(rankEl && sorted.length) rankEl.textContent = '#' + rank + ' of ' + sorted.length;
+
+  list.innerHTML = results.map(r => {
+    const isCorrect = r.status === 'correct';
+    const isPending = r.status === 'pending';
+    const icon = isCorrect ? '&#10003;' : (isPending ? '?' : '&#10007;');
+    const color = isCorrect ? 'var(--green)' : (isPending ? 'var(--text3)' : '#e74c3c');
+    const bg = isCorrect ? 'rgba(46,204,113,.08)' : (isPending ? 'rgba(255,255,255,.03)' : 'rgba(231,76,60,.08)');
+    const border = isCorrect ? 'rgba(46,204,113,.2)' : (isPending ? 'rgba(255,255,255,.08)' : 'rgba(231,76,60,.2)');
+    return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px">'
+      + '<div style="font-size:22px;color:' + color + ';flex-shrink:0;width:28px;text-align:center">' + icon + '</div>'
+      + '<div style="flex:1;min-width:0">'
+      + '<div style="font-size:11px;color:var(--text3);font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (r.qText||'') + '</div>'
+      + '<div style="font-size:14px;color:var(--text);font-family:var(--font)">' + (r.answer||'(no answer)') + '</div>'
+      + '</div>'
+      + (r.pts ? '<div style="font-family:var(--display);font-size:20px;color:var(--gold);flex-shrink:0">+' + r.pts + '</div>' : '')
+      + '</div>';
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════
 //  ANSWER REVIEW
 // ═══════════════════════════════════════════════
 function showAnswerReview() {
@@ -801,6 +843,16 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 });
 </script>
+
+<!-- ── RESULTS SCREEN ── -->
+<div class="screen hidden" id="results-screen" style="justify-content:flex-start;padding-top:1.5rem;overflow-y:auto">
+  <div style="text-align:center;margin-bottom:1.5rem;padding:0 1rem">
+    <div style="font-family:var(--display);font-size:clamp(28px,8vw,42px);letter-spacing:.06em;color:var(--gold);margin-bottom:.25rem">RESULTS</div>
+    <div id="results-score" style="font-family:var(--display);font-size:clamp(40px,12vw,60px);letter-spacing:.04em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1"></div>
+    <div id="results-rank" style="font-family:var(--cinzel);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);margin-top:4px"></div>
+  </div>
+  <div id="results-list" style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:8px;padding:0 1rem 3rem"></div>
+</div>
 
 <!-- ── ANSWER REVIEW ── -->
 <div class="screen hidden" id="review-screen" style="justify-content:flex-start;padding-top:2rem;overflow-y:auto">
