@@ -2219,8 +2219,61 @@ function getAdjDelta(teamId) {
   return input ? parseInt(input.value) || 0 : 0;
 }
 
+// ── Firebase listeners ───────────────────────────────────────────────
+db.ref('liveGame/status').on('value', snap => {
+  const status = snap.val();
+  const isLive = status === 'question' || status === 'waiting' || status === 'closed';
+  document.getElementById('hb-live-dot')?.classList.toggle('active', isLive);
+  const label = document.getElementById('hb-live-label');
+  if(label) label.textContent = isLive ? 'Game Live' : 'No game active';
+});
+
+db.ref('liveGame/slideState').on('value', snap => {
+  const s = snap.val();
+  const typeEl   = document.getElementById('hb-preview-type');
+  const numEl    = document.getElementById('hb-preview-num');
+  const qEl      = document.getElementById('hb-preview-q');
+  const ansEl    = document.getElementById('hb-preview-answer');
+  const bgEl     = document.getElementById('hb-preview-bg');
+  const audioBtn = document.getElementById('hb-audio-btn');
+  const watermark= document.getElementById('hb-idle-watermark');
+  if(!s) {
+    if(typeEl) typeEl.textContent = '';
+    if(numEl)  numEl.textContent  = '';
+    if(qEl)    qEl.textContent    = '';
+    if(ansEl)  ansEl.textContent  = '';
+    if(bgEl)   bgEl.style.backgroundImage = '';
+    if(audioBtn) audioBtn.style.display = 'none';
+    if(watermark) watermark.style.display = 'flex';
+    return;
+  }
+  if(watermark) watermark.style.display = 'none';
+  if(bgEl)   bgEl.style.backgroundImage = s.bgUrl ? 'url("' + s.bgUrl + '")' : '';
+  if(typeEl) typeEl.textContent = s.label || '';
+  if(numEl)  numEl.textContent  = s.qNum  || '';
+  if(qEl)    qEl.textContent    = s.text  || '';
+  if(ansEl)  { ansEl.textContent = s.answer || ''; ansEl.style.display = s.answer ? 'block' : 'none'; }
+  if(audioBtn) audioBtn.style.display = s.hasAudio ? 'inline-flex' : 'none';
+});
+
+db.ref('liveGame/answers').on('value', snap => {
+  const allAnswers = snap.val() || {};
+  allAnswersCache = allAnswers;
+  let submitCount = 0;
+  for(const answers of Object.values(allAnswers)) {
+    for(const ans of Object.values(answers)) {
+      if(ans.answer) submitCount++;
+    }
+  }
+  currentSubmitCount = submitCount;
+  updateSubmitCount();
+  updateGradeButton();
+  if(document.getElementById('hb-grading-popup')?.classList.contains('show')) {
+    renderGradingQuestion();
+  }
+});
+
 // ── Update scores renderer to include point adjustment ─────────────────
-// Overrides the inline teams listener to add adj controls
 db.ref('liveGame/teams').on('value', snap => {
   const teams = snap.val() || {};
   const sorted = Object.entries(teams)
