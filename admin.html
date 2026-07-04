@@ -1959,8 +1959,8 @@ function renderGradingPanel() {
         + '<div class="hb-grade-submitted">' + (ans.answer||'(blank)') + '</div>'
         + '<div class="hb-grade-status">' + statusIcon + '</div>'
         + (needsReview ? '<div class="hb-grade-btns">'
-            + '<button class="hb-grade-btn hb-grade-btn-correct" onclick="resolveAnswer('' + qId + '','' + teamId + '',true)">✓</button>'
-            + '<button class="hb-grade-btn hb-grade-btn-wrong" onclick="resolveAnswer('' + qId + '','' + teamId + '',false)">✗</button>'
+            + '<button class="hb-grade-btn hb-grade-btn-correct" data-qid="' + qId + '" data-tid="' + teamId + '" data-correct="1" onclick="resolveFromBtn(this)">&#10003;</button>'
+            + '<button class="hb-grade-btn hb-grade-btn-wrong" data-qid="' + qId + '" data-tid="' + teamId + '" data-correct="0" onclick="resolveFromBtn(this)">&#10007;</button>'
           + '</div>' : '')
         + '</div>';
     }).join('');
@@ -2082,6 +2082,13 @@ function updateSubmitCount() {
   const el = document.getElementById('hb-submit-count');
   if(!el) return;
   el.textContent = currentTeamCount === 0 ? '— / —' : currentSubmitCount + ' / ' + currentTeamCount + ' answered';
+}
+
+function resolveFromBtn(btn) {
+  const qId = btn.dataset.qid;
+  const teamId = btn.dataset.tid;
+  const isCorrect = btn.dataset.correct === '1';
+  resolveAnswer(qId, teamId, isCorrect);
 }
 
 async function resolveAnswer(qId, teamId, isCorrect) {
