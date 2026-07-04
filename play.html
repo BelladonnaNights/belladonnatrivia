@@ -433,11 +433,24 @@ function showWait() {
 //  FIREBASE LISTENERS
 // ═══════════════════════════════════════════════
 function startListening() {
-  // Listen for game state changes
   db.ref('liveGame').on('value', snap => {
     const game = snap.val();
-    if(!game || game.status === null || game.status === undefined) {
-      // Host closed the game — return to register screen
+
+    // Game was closed/reset by host — but only send back to register if truly no game
+    if(!game || (game.status === null && !game.teams)) {
+      // Only kick back if we have no record of joining (safety check)
+      if(!teamId) {
+        document.getElementById('reg-input').value = '';
+        document.getElementById('reg-btn').disabled = false;
+        document.getElementById('reg-btn').textContent = 'Join Game';
+        document.getElementById('reg-status').textContent = 'No game active — enter your name when the host launches';
+        showScreen('reg-screen');
+      }
+      return;
+    }
+
+    // Host explicitly removed liveGame entirely (full reset)
+    if(!game.status && !game.teams) {
       teamId = null; teamName = null; currentQ = null; answered = false;
       localStorage.removeItem('bella_team_id');
       localStorage.removeItem('bella_session_id');
