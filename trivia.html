@@ -602,7 +602,7 @@ function initLiveGame() {
     ts: startedAt,
   });
   // Save to game history (last 20 games kept via Firebase)
-  const categories = (state.rounds||[]).map(r => r.tabName || r.title || 'Unknown').join(', ');
+  const categories = (state.rounds||[]).map(r => r.title || r.tabName || 'Unknown').join(', ');
   db.ref('gameHistory/' + sessionId).set({
     sessionId,
     startedAt,
