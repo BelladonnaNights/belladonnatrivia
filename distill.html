@@ -32,7 +32,7 @@
 
   body {
     font-family: 'Cormorant Garamond', serif;
-    padding: 40px 20px 60px;
+    padding: 0;
   }
 
   button, input { font-family: inherit; border-radius: 3px; }
@@ -41,9 +41,27 @@
     outline-offset: 2px;
   }
 
+  .masthead {
+    border-bottom: 1px solid var(--border);
+  }
+  .masthead-inner {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 22px 20px;
+  }
+  .wordmark {
+    font-family: 'Playfair Display', serif;
+    font-weight: 800;
+    font-size: 1.7rem;
+    letter-spacing: 0.02em;
+  }
+  .wordmark .wm-gold { color: var(--amber); margin-left: 0.4em; }
+  .wordmark .wm-white { color: var(--bone); }
+
   .app {
     max-width: 880px;
     margin: 0 auto;
+    padding: 32px 20px 60px;
     display: flex;
     flex-direction: column;
     gap: 22px;
@@ -437,6 +455,11 @@
 </style>
 </head>
 <body>
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="wordmark"><span class="wm-white">BELLADONNA</span><span class="wm-gold">DISTILLATION</span></div>
+  </div>
+</header>
 <div class="app">
 
   <header class="transport">
@@ -488,7 +511,6 @@
       <canvas class="channel-canvas" data-stem="vocals"></canvas>
     </div>
   </section>
-  <div class="mono-hint" style="margin-top:-10px;">WHITE MARK ON EACH WAVEFORM = WHERE THAT PART ACTUALLY STARTS PLAYING</div>
 
   <section class="sequencer">
     <div class="sequencer-head">
@@ -572,7 +594,6 @@
     analysisCtx: null,
     currentSong: null,
     editingSongId: null,
-    hasLoadedInitial: false,
     sequence: {
       order: ['drums', 'bass', 'other', 'vocals'],
       step: 8,
@@ -661,7 +682,7 @@
       .then(function (audioBuffer) {
         state.audioBuffers[stem] = audioBuffer;
         var raw = audioBuffer.getChannelData(0);
-        var numBuckets = 260;
+        var numBuckets = 320;
         var bucketSize = Math.floor(raw.length / numBuckets) || 1;
         var peaks = new Array(numBuckets).fill(0);
         for (var i = 0; i < numBuckets; i++) {
@@ -674,23 +695,35 @@
           }
           peaks[i] = max;
         }
+
         var globalMax = 0.0001;
         for (var k = 0; k < peaks.length; k++) { if (peaks[k] > globalMax) globalMax = peaks[k]; }
-        for (var m = 0; m < peaks.length; m++) { peaks[m] = peaks[m] / globalMax; }
-        state.peaks[stem] = peaks;
+        var linear = new Array(peaks.length);
+        for (var m = 0; m < peaks.length; m++) { linear[m] = peaks[m] / globalMax; }
 
         var onsetIdx = 0;
-        for (var n = 0; n < peaks.length; n++) {
-          if (peaks[n] > 0.15) { onsetIdx = n; break; }
+        for (var n = 0; n < linear.length; n++) {
+          if (linear[n] > 0.15) { onsetIdx = n; break; }
         }
-        state.onsetFractions[stem] = onsetIdx / peaks.length;
+        state.onsetFractions[stem] = onsetIdx / linear.length;
+
+        var sorted = linear.slice().sort(function (a, b) { return a - b; });
+        var refMax = sorted[Math.floor(sorted.length * 0.97)] || sorted[sorted.length - 1] || 0.0001;
+        if (refMax < 0.05) refMax = 0.05;
+        var visual = new Array(linear.length);
+        for (var p = 0; p < linear.length; p++) {
+          var scaled = linear[p] / refMax;
+          if (scaled > 1) scaled = 1;
+          visual[p] = Math.pow(scaled, 0.6);
+        }
+        state.peaks[stem] = visual;
 
         drawChannel(stem);
         updateExportButtonState();
       })
       .catch(function (err) {
         console.error('peak analysis failed for', stem, err);
-        state.peaks[stem] = new Array(260).fill(0.15);
+        state.peaks[stem] = new Array(320).fill(0.15);
         drawChannel(stem);
       });
   }
@@ -1100,22 +1133,10 @@
         });
       });
       renderVault(cloudSongs);
-      if (!state.hasLoadedInitial) {
-        state.hasLoadedInitial = true;
-        if (cloudSongs.length) {
-          loadSong(cloudSongs[0]);
-        } else {
-          showEmptyPlayer();
-        }
-      }
     }, function (err) {
       console.error('Vault sync failed', err);
       setSyncState('error');
       renderVault([]);
-      if (!state.hasLoadedInitial) {
-        state.hasLoadedInitial = true;
-        showEmptyPlayer();
-      }
     });
   }
 
