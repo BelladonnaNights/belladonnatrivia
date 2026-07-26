@@ -359,6 +359,31 @@
   }
   .vault-card button:hover { border-color: var(--amber); color: var(--amber); }
 
+  .add-song-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .text-input {
+    background: var(--void);
+    border: 1px solid var(--bronze);
+    color: var(--bone);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    padding: 10px 11px;
+    flex: 1 1 160px;
+    min-width: 140px;
+  }
+  .text-input::placeholder { color: var(--bone-dim); opacity: 0.7; }
+  .mono-hint {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.05em;
+    color: var(--bronze);
+    margin-bottom: 16px;
+  }
+
   .foot-mark {
     text-align: center;
     font-family: 'Space Mono', monospace;
@@ -460,22 +485,46 @@
     <div class="vault-head">
       <div class="eyebrow">Vault</div>
       <div class="vault-actions">
-        <button id="loadSongBtn" class="ghost-btn" type="button">LOAD SONG</button>
-        <button id="saveSongBtn" class="ghost-btn" type="button">SAVE TO VAULT</button>
+        <button id="loadSongBtn" class="ghost-btn" type="button">LOAD SONG (LOCAL TEST)</button>
         <input id="fileInput" type="file" accept="audio/*" multiple hidden>
       </div>
     </div>
     <div id="vaultList" class="vault-list"></div>
+    <div class="eyebrow" style="margin:18px 0 8px;">Add Song to Vault</div>
+    <form id="addSongForm" class="add-song-form">
+      <input id="addName" class="text-input" type="text" placeholder="SONG NAME" required>
+      <input id="addArtist" class="text-input" type="text" placeholder="ARTIST (OPTIONAL)">
+      <input id="addDrums" class="text-input" type="url" placeholder="DRUMS URL" required>
+      <input id="addBass" class="text-input" type="url" placeholder="BASS URL" required>
+      <input id="addOther" class="text-input" type="url" placeholder="OTHER URL" required>
+      <input id="addVocals" class="text-input" type="url" placeholder="VOCALS URL" required>
+      <button type="submit" class="ghost-btn">SAVE TO VAULT</button>
+    </form>
+    <div class="mono-hint">PASTE THE 4 PUBLIC R2 LINKS AFTER UPLOADING THE STEMS TO YOUR BUCKET.</div>
   </section>
 
   <div class="foot-mark">BELLADONNA AUDIO ALCHEMIES</div>
 
 </div>
 
-<script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+  var firebaseConfig = {
+    apiKey: "AIzaSyAmTnP1SOVRwPP1NuSli-S27ionB7N8odw",
+    authDomain: "distill-music.firebaseapp.com",
+    projectId: "distill-music",
+    storageBucket: "distill-music.firebasestorage.app",
+    messagingSenderId: "780303563815",
+    appId: "1:780303563815:web:d33cc3fb09480ccc7ee202"
+  };
+  var firebaseApp = initializeApp(firebaseConfig);
+  var db = getFirestore(firebaseApp);
+  var songsCol = collection(db, "songs");
+
   var STEMS = ['drums', 'bass', 'other', 'vocals'];
   var STEM_LABELS = { drums: 'DRUMS', bass: 'BASS', other: 'OTHER', vocals: 'VOCALS' };
-  var VAULT_KEY = 'belladonna_stem_vault';
   var COLOR_PLAYED = '#e8c468';
   var COLOR_UNPLAYED = 'rgba(138,106,66,0.45)';
 
@@ -830,53 +879,54 @@
     clearSequenceHighlight();
   }
 
-  function getVaultEntries() {
-    var stored = [];
-    try {
-      stored = JSON.parse(localStorage.getItem(VAULT_KEY) || '[]');
-    } catch (e) {
-      stored = [];
+  function appendVaultCard(song) {
+    var card = document.createElement('div');
+    card.className = 'vault-card';
+
+    var name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = song.name.toUpperCase();
+    card.appendChild(name);
+
+    if (song.artist) {
+      var artist = document.createElement('div');
+      artist.className = 'tag';
+      artist.textContent = song.artist;
+      card.appendChild(artist);
     }
-    return stored;
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'LOAD';
+    btn.addEventListener('click', function () { loadSong(song); });
+    card.appendChild(btn);
+
+    dom.vaultList.appendChild(card);
   }
 
-  function saveVaultEntries(list) {
-    localStorage.setItem(VAULT_KEY, JSON.stringify(list));
-  }
-
-  function renderVault() {
+  function renderVault(cloudSongs) {
     dom.vaultList.innerHTML = '';
-    var entries = [DEFAULT_SONG].concat(getVaultEntries());
-    entries.forEach(function (song) {
-      var card = document.createElement('div');
-      card.className = 'vault-card';
+    appendVaultCard(DEFAULT_SONG);
+    cloudSongs.forEach(function (song) { appendVaultCard(song); });
+  }
 
-      var name = document.createElement('div');
-      name.className = 'name';
-      name.textContent = song.name.toUpperCase();
-      card.appendChild(name);
-
-      if (song.artist) {
-        var artist = document.createElement('div');
-        artist.className = 'tag';
-        artist.textContent = song.artist;
-        card.appendChild(artist);
-      }
-
-      if (song.source === 'blob') {
-        var tag = document.createElement('div');
-        tag.className = 'tag';
-        tag.textContent = 'SESSION ONLY';
-        card.appendChild(tag);
-      }
-
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = 'LOAD';
-      btn.addEventListener('click', function () { loadSong(song); });
-      card.appendChild(btn);
-
-      dom.vaultList.appendChild(card);
+  function subscribeVault() {
+    var vaultQuery = query(songsCol, orderBy('createdAt', 'desc'));
+    onSnapshot(vaultQuery, function (snapshot) {
+      var cloudSongs = [];
+      snapshot.forEach(function (docSnap) {
+        var data = docSnap.data();
+        cloudSongs.push({
+          name: data.name,
+          artist: data.artist || '',
+          source: 'cloud',
+          files: data.files
+        });
+      });
+      renderVault(cloudSongs);
+    }, function (err) {
+      console.error('Vault sync failed', err);
+      renderVault([]);
     });
   }
 
@@ -972,14 +1022,6 @@
     loadSong(newSong);
   }
 
-  function saveCurrentSongToVault() {
-    if (!state.currentSong || state.currentSong === DEFAULT_SONG) return;
-    var list = getVaultEntries().filter(function (e) { return e.name !== state.currentSong.name; });
-    list.push(state.currentSong);
-    saveVaultEntries(list);
-    renderVault();
-  }
-
   function resizeAllCanvases() {
     STEMS.forEach(function (stem) {
       var canvas = state.canvases[stem];
@@ -1005,9 +1047,15 @@
     dom.sequenceOrder = document.getElementById('sequenceOrder');
     dom.countdown = document.getElementById('countdown');
     dom.loadSongBtn = document.getElementById('loadSongBtn');
-    dom.saveSongBtn = document.getElementById('saveSongBtn');
     dom.fileInput = document.getElementById('fileInput');
     dom.vaultList = document.getElementById('vaultList');
+    dom.addSongForm = document.getElementById('addSongForm');
+    dom.addName = document.getElementById('addName');
+    dom.addArtist = document.getElementById('addArtist');
+    dom.addDrums = document.getElementById('addDrums');
+    dom.addBass = document.getElementById('addBass');
+    dom.addOther = document.getElementById('addOther');
+    dom.addVocals = document.getElementById('addVocals');
 
     STEMS.forEach(function (stem) {
       state.channelRows[stem] = document.querySelector('.channel[data-stem="' + stem + '"]');
@@ -1043,7 +1091,27 @@
       if (files.length) handleFileSelection(files);
       dom.fileInput.value = '';
     });
-    dom.saveSongBtn.addEventListener('click', saveCurrentSongToVault);
+    dom.addSongForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var name = dom.addName.value.trim();
+      var artist = dom.addArtist.value.trim();
+      var drums = dom.addDrums.value.trim();
+      var bass = dom.addBass.value.trim();
+      var other = dom.addOther.value.trim();
+      var vocals = dom.addVocals.value.trim();
+      if (!name || !drums || !bass || !other || !vocals) return;
+      addDoc(songsCol, {
+        name: name,
+        artist: artist,
+        files: { drums: drums, bass: bass, other: other, vocals: vocals },
+        createdAt: serverTimestamp()
+      }).then(function () {
+        dom.addSongForm.reset();
+      }).catch(function (err) {
+        console.error('Failed to save song', err);
+        alert('Could not save to the vault. Check the console for details.');
+      });
+    });
 
     var resizeTimer = null;
     window.addEventListener('resize', function () {
@@ -1052,11 +1120,11 @@
     });
 
     renderSequenceChips();
-    renderVault();
+    subscribeVault();
     loadSong(DEFAULT_SONG);
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  init();
 </script>
 </body>
 </html>
