@@ -295,10 +295,23 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   backdrop-filter:blur(16px);
   box-shadow:0 4px 24px rgba(0,0,0,.5);
   display:grid;
-  grid-template-columns:220px 1fr 200px;
+  grid-template-columns:var(--hb-left-w, 340px) 1fr 200px;
   grid-template-rows:auto auto;
   min-height:190px;
 }
+/* Draggable divider between mini-screen and live scores */
+.hb-col-divider{
+  grid-column:1;grid-row:1/3;
+  width:7px;margin-left:calc(var(--hb-left-w, 340px) - 3.5px);
+  position:absolute;top:0;bottom:0;
+  cursor:col-resize;z-index:5;
+  display:flex;align-items:center;justify-content:center;
+}
+.hb-col-divider::after{
+  content:'';width:3px;height:36px;border-radius:3px;
+  background:rgba(255,255,255,.12);transition:background .15s;
+}
+.hb-col-divider:hover::after, .hb-col-divider.dragging::after{background:var(--gold-glow)}
 /* Left column: live status + preview */
 .hb-left{
   grid-column:1;grid-row:1/3;
@@ -317,7 +330,16 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   aspect-ratio:16/9;
   width:calc(100% - 24px);
   flex-shrink:0;
+  min-width:140px;min-height:80px;
 }
+.hb-preview-thumb.manual-size{flex-shrink:0}
+.hb-preview-resize-handle{
+  position:absolute;right:0;bottom:0;width:20px;height:20px;
+  cursor:nwse-resize;z-index:6;
+  background:linear-gradient(135deg, transparent 50%, rgba(201,168,76,.35) 50%);
+  border-radius:0 0 8px 0;
+}
+.hb-preview-resize-handle:hover{background:linear-gradient(135deg, transparent 50%, var(--gold-glow) 50%)}
 .hb-preview-thumb-bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.55}
 .hb-preview-thumb-overlay{
   position:absolute;inset:0;display:flex;flex-direction:column;
@@ -463,6 +485,22 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-grade-btn-correct:hover{background:rgba(46,204,113,.3)}
 .hb-grade-btn-wrong{background:var(--red-dim);color:var(--red);border:1px solid rgba(231,76,60,.3)}
 .hb-grade-btn-wrong:hover{background:rgba(231,76,60,.2)}
+.hb-edit-answer-btn{
+  background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;
+  margin-left:8px;padding:2px 4px;opacity:.5;transition:opacity .15s;
+}
+.hb-edit-answer-btn:hover{opacity:1;color:var(--gold)}
+.hb-edit-answer-input{
+  background:rgba(255,255,255,.06);border:1px solid var(--gold-glow);border-radius:5px;
+  padding:4px 8px;font-size:13px;color:var(--text);font-family:var(--font);
+  width:60%;margin-right:6px;
+}
+.hb-edit-answer-save, .hb-edit-answer-cancel{
+  font-family:var(--cinzel);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  border-radius:5px;padding:4px 9px;cursor:pointer;border:none;margin-right:4px;
+}
+.hb-edit-answer-save{background:var(--gold-dim);color:var(--gold);border:1px solid var(--gold-glow)}
+.hb-edit-answer-cancel{background:rgba(255,255,255,.05);color:var(--text3);border:1px solid var(--border2)}
 .hb-review-popup{
   position:fixed;top:270px;right:16px;z-index:400;
   background:var(--surface);border:1px solid var(--border2);border-radius:12px;
@@ -528,7 +566,6 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 <nav class="nav">
   <div class="nav-left">
     <div class="nav-title">BELLADONNA <span>TRIVIA</span></div>
-    <div class="nav-subtitle">Category Manager</div>
   </div>
   <div class="nav-right">
     <div class="sync-dot" id="sync-dot"></div>
@@ -574,12 +611,16 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
           </svg>
         </div>
       </div>
+      <div class="hb-preview-resize-handle" id="hb-preview-resize-handle" title="Drag to resize"></div>
     </div>
     <div style="padding:6px 12px;flex-shrink:0">
       <div class="hb-section-label">Answers</div>
       <div class="hb-submit-count" id="hb-submit-count">— / —</div>
     </div>
   </div>
+
+  <!-- Draggable divider — resizes the mini-screen column -->
+  <div class="hb-col-divider" id="hb-col-divider" title="Drag to resize"></div>
 
   <!-- MIDDLE: Live scores + nav controls -->
   <div class="hb-middle">
@@ -1007,6 +1048,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="field-label">Notes (optional)</div>
         <input class="field-input" id="f-notes" placeholder="Any notes about this category…"/>
       </div>
+      <div class="field">
+        <div class="field-label">Attributions</div>
+        <textarea class="field-input" id="f-attributions" rows="3" style="resize:vertical;line-height:1.5;font-family:var(--font)"
+          placeholder="Credit sources, image/music licenses, etc. (not yet shown in the trivia player — for your records)"></textarea>
+      </div>
 
       <!-- DEFAULT ROUND SETTINGS -->
       <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--border)">
@@ -1267,6 +1313,7 @@ function renderCatTypeDropdown() {
 db.ref('categories').on('value', snap => {
   const data = snap.val() || {};
   categories = Object.entries(data).map(([id, v]) => ({id, ...v}));
+  migrateMiniGamesTag();
   renderLibrary();
   renderFilterBar();
   setSyncStatus('synced');
@@ -1352,8 +1399,27 @@ function parseTags(genreStr) {
   return genreStr.split(',').map(t=>t.trim()).filter(Boolean);
 }
 
-const PINNED_GENRES = ['Full Trivia', 'Book Trivia', 'Mini Trivia', 'Sing-Alongs', 'Music Trivia'];
+const PINNED_GENRES = ['Full Trivia', 'Book Trivia', 'Mini Games', 'Sing-Alongs', 'Music Trivia'];
 let moreDropdownOpen = false;
+let miniGamesMigrationDone = false;
+
+// One-time migration: rename any category tagged "Mini Trivia" to "Mini Games".
+// Idempotent — once no category has the old tag, this does nothing on future loads.
+function migrateMiniGamesTag() {
+  if(miniGamesMigrationDone) return;
+  const updates = {};
+  categories.forEach(cat => {
+    const tags = parseTags(cat.genre);
+    if(tags.includes('Mini Trivia')) {
+      const renamed = tags.map(t => t === 'Mini Trivia' ? 'Mini Games' : t);
+      updates[`categories/${cat.id}/genre`] = renamed.join(', ');
+    }
+  });
+  if(Object.keys(updates).length) {
+    db.ref().update(updates);
+  }
+  miniGamesMigrationDone = true;
+}
 
 function renderFilterBar() {
   const allTags = [...new Set(categories.flatMap(c => parseTags(c.genre)))].sort();
@@ -1697,6 +1763,7 @@ function openModal(id) {
   document.getElementById('f-canva-id').value    = cat?.canvaDesignId || '';
   document.getElementById('f-canva-bg').value     = cat?.canvaBgUrl     || '';
   document.getElementById('f-notes').value       = cat?.notes      || '';
+  document.getElementById('f-attributions').value = cat?.attributions || '';
   renderCatTypeDropdown();
   document.getElementById('f-cattype').value     = cat?.catType    || '';
   // Default round settings
@@ -1817,6 +1884,7 @@ async function saveCategory() {
   const canvaDesignId = document.getElementById('f-canva-id').value.trim();
   const canvaBgUrl    = document.getElementById('f-canva-bg').value.trim();
   const notes       = document.getElementById('f-notes').value.trim();
+  const attributions = document.getElementById('f-attributions').value.trim();
   const linkedCatId = (type === 'music' && document.getElementById('f-music-linked'))
     ? document.getElementById('f-music-linked').value
     : (document.getElementById('f-linked-cat') ? document.getElementById('f-linked-cat').value : '');
@@ -1826,7 +1894,7 @@ async function saveCategory() {
   const defaultTimed       = document.getElementById('f-default-timed')?.checked || false;
 
   setSyncStatus('syncing');
-  const data = {name, genre, type, sheetUrl, tabName, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, updatedAt: Date.now()};
+  const data = {name, genre, type, sheetUrl, tabName, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, attributions, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, updatedAt: Date.now()};
 
   try {
     if(editingId) {
@@ -2081,15 +2149,17 @@ function renderGradingQuestion() {
     }
     const statusColor = (ans.status === 'correct') ? 'var(--green)' : (ans.status === 'wrong') ? 'var(--red)' : 'var(--text3)';
     const changeLink = graded
-      ? '<button style="background:none;border:none;color:var(--text3);font-size:10px;cursor:pointer;text-decoration:underline;padding:0;font-family:var(--cinzel);" data-qid="' + q.qId + '" data-tid="' + ans.teamId + '" onclick="ungradeAnswer(this)">change</button>'
+      ? '<button style="background:none;border:none;color:var(--text3);font-size:10px;cursor:pointer;text-decoration:underline;padding:0;font-family:var(--cinzel);" data-qid="' + q.qId + '" data-tid="' + ans.teamId + '" onclick="ungradeAnswer(this)">change grade</button>'
       : '';
     const gradeBtns = (!graded) ? '<div class="hb-grade-btns">'
         + '<button class="hb-grade-btn hb-grade-btn-correct" data-qid="' + q.qId + '" data-tid="' + ans.teamId + '" data-correct="1" onclick="resolveFromBtn(this)">&#10003;</button>'
         + '<button class="hb-grade-btn hb-grade-btn-wrong" data-qid="' + q.qId + '" data-tid="' + ans.teamId + '" data-correct="0" onclick="resolveFromBtn(this)">&#10007;</button>'
       + '</div>' : changeLink;
-    return '<div class="hb-grade-answer-row">'
+    const rowId = 'grow_' + q.qId + '_' + ans.teamId;
+    const editBtn = '<button class="hb-edit-answer-btn" title="Retype this team\'s answer" data-qid="' + q.qId + '" data-tid="' + ans.teamId + '" onclick="startEditAnswer(this)">&#9998;</button>';
+    return '<div class="hb-grade-answer-row" id="' + rowId + '">'
       + '<div class="hb-grade-team">' + (ans.teamName||'?') + '</div>'
-      + '<div class="hb-grade-submitted">' + (ans.answer||'(blank)') + '</div>'
+      + '<div class="hb-grade-submitted" id="' + rowId + '_text">' + escHtml(ans.answer||'(blank)') + editBtn + '</div>'
       + '<div class="hb-grade-status" style="color:' + statusColor + '">' + statusIcon + '</div>'
       + gradeBtns
       + '</div>';
@@ -2168,6 +2238,45 @@ async function ungradeAnswer(btn) {
   const teamId = btn.dataset.tid;
   await db.ref('liveGame/answers/' + qId + '/' + teamId + '/status').set('pending');
   toast('Marked as pending');
+}
+
+// ── Escape helper ──────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Retype a team's submitted answer ───────────────────────────────────
+function startEditAnswer(btn) {
+  const qId = btn.dataset.qid;
+  const teamId = btn.dataset.tid;
+  const rowId = 'grow_' + qId + '_' + teamId;
+  const textEl = document.getElementById(rowId + '_text');
+  if(!textEl) return;
+  const currentAns = (allAnswersCache[qId] && allAnswersCache[qId][teamId] && allAnswersCache[qId][teamId].answer) || '';
+  textEl.innerHTML = '<input type="text" class="hb-edit-answer-input" id="' + rowId + '_input" value="' + escHtml(currentAns) + '"/>'
+    + '<button class="hb-edit-answer-save" data-qid="' + qId + '" data-tid="' + teamId + '" onclick="saveEditAnswer(this)">Save</button>'
+    + '<button class="hb-edit-answer-cancel" onclick="renderGradingQuestion()">Cancel</button>';
+  const input = document.getElementById(rowId + '_input');
+  if(input) {
+    input.focus();
+    input.select();
+    input.addEventListener('keydown', e => {
+      if(e.key === 'Enter') input.closest('.hb-grade-submitted').querySelector('.hb-edit-answer-save').click();
+      if(e.key === 'Escape') renderGradingQuestion();
+    });
+  }
+}
+
+async function saveEditAnswer(btn) {
+  const qId = btn.dataset.qid;
+  const teamId = btn.dataset.tid;
+  const rowId = 'grow_' + qId + '_' + teamId;
+  const input = document.getElementById(rowId + '_input');
+  if(!input) return;
+  const newVal = input.value.trim();
+  await db.ref('liveGame/answers/' + qId + '/' + teamId + '/answer').set(newVal);
+  toast('Answer updated');
+  renderGradingQuestion();
 }
 
 // ── Game History ──────────────────────────────────────────────────────
@@ -2389,10 +2498,92 @@ function renderCatTypeDropdown() {
 document.addEventListener('keydown', e => {
   if(e.key === 'Escape') closeModal();
 });
-// Keyboard
-document.addEventListener('keydown', e => {
-  if(e.key === 'Escape') closeModal();
-});
+
+// ═══════════════════════════════════════════════════════
+//  HOST BOARD RESIZING — mini-screen preview
+// ═══════════════════════════════════════════════════════
+(function() {
+  const hostBoard    = document.getElementById('host-board');
+  const divider      = document.getElementById('hb-col-divider');
+  const thumb        = document.getElementById('hb-preview-thumb');
+  const cornerHandle = document.getElementById('hb-preview-resize-handle');
+  if(!hostBoard || !divider || !thumb || !cornerHandle) return;
+
+  const MIN_COL = 220, MAX_COL = 900;
+  const MIN_THUMB_W = 140, MIN_THUMB_H = 80, MAX_THUMB_W = 900, MAX_THUMB_H = 600;
+
+  // Restore saved sizes
+  const savedCol = parseInt(localStorage.getItem('hbLeftColWidth'));
+  if(savedCol) hostBoard.style.setProperty('--hb-left-w', savedCol + 'px');
+
+  const savedThumbW = parseInt(localStorage.getItem('hbThumbWidth'));
+  const savedThumbH = parseInt(localStorage.getItem('hbThumbHeight'));
+  if(savedThumbW && savedThumbH) {
+    thumb.style.width  = savedThumbW + 'px';
+    thumb.style.height = savedThumbH + 'px';
+    thumb.classList.add('manual-size');
+  }
+
+  let draggingDivider = false, dividerStartX = 0, dividerStartWidth = 0;
+  let draggingCorner  = false, cornerStartX = 0, cornerStartY = 0, cornerStartWidth = 0, cornerStartHeight = 0;
+
+  // ── Divider drag: resizes the whole left column, mini-screen fits it ──
+  divider.addEventListener('mousedown', e => {
+    draggingDivider = true;
+    divider.classList.add('dragging');
+    dividerStartX = e.clientX;
+    const leftEl = document.querySelector('.hb-left');
+    dividerStartWidth = leftEl ? leftEl.getBoundingClientRect().width : 340;
+    e.preventDefault();
+  });
+
+  cornerHandle.addEventListener('mousedown', e => {
+    draggingCorner = true;
+    cornerStartX = e.clientX;
+    cornerStartY = e.clientY;
+    const rect = thumb.getBoundingClientRect();
+    cornerStartWidth  = rect.width;
+    cornerStartHeight = rect.height;
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  document.addEventListener('mousemove', e => {
+    if(draggingDivider) {
+      const delta = e.clientX - dividerStartX;
+      let newWidth = Math.round(dividerStartWidth + delta);
+      newWidth = Math.max(MIN_COL, Math.min(MAX_COL, newWidth));
+      hostBoard.style.setProperty('--hb-left-w', newWidth + 'px');
+      localStorage.setItem('hbLeftColWidth', newWidth);
+      // Mini-screen always fits the column when dragging the divider —
+      // clear any manual corner-resize override so it goes back to
+      // filling the column width with a 16/9 shape.
+      thumb.style.width = '';
+      thumb.style.height = '';
+      thumb.classList.remove('manual-size');
+      localStorage.removeItem('hbThumbWidth');
+      localStorage.removeItem('hbThumbHeight');
+    }
+    if(draggingCorner) {
+      const dW = e.clientX - cornerStartX;
+      const dH = e.clientY - cornerStartY;
+      let newW = Math.round(cornerStartWidth + dW);
+      let newH = Math.round(cornerStartHeight + dH);
+      newW = Math.max(MIN_THUMB_W, Math.min(MAX_THUMB_W, newW));
+      newH = Math.max(MIN_THUMB_H, Math.min(MAX_THUMB_H, newH));
+      thumb.style.width  = newW + 'px';
+      thumb.style.height = newH + 'px';
+      thumb.classList.add('manual-size');
+      localStorage.setItem('hbThumbWidth', newW);
+      localStorage.setItem('hbThumbHeight', newH);
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    if(draggingDivider) { draggingDivider = false; divider.classList.remove('dragging'); }
+    draggingCorner = false;
+  });
+})();
 </script>
 </body>
 </html>
