@@ -6,19 +6,20 @@
 <title>Distill — Belladonna Audio Alchemies</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --void: #0c0a10;
-    --void-2: #16111c;
-    --bone: #ece4d3;
-    --bone-dim: #a89e8c;
-    --amber: #c89b3c;
-    --gilt: #e8c468;
-    --plum: #4a1f4d;
-    --bronze: #8a6a42;
-    --bronze-dim: rgba(138,106,66,0.45);
-    --border: #4a3c30;
+    --void: #030302;
+    --void-2: #120f0c;
+    --bone: #f2ede1;
+    --bone-dim: #9a8f7e;
+    --amber: #c9a227;
+    --gilt: #e6c34a;
+    --bronze: #4a4038;
+    --bronze-dim: rgba(74,64,56,0.55);
+    --border: #2c2620;
+    --ok: #4caf6a;
+    --err: #b5453f;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -34,7 +35,7 @@
     padding: 40px 20px 60px;
   }
 
-  button, input { font-family: inherit; border-radius: 0; }
+  button, input { font-family: inherit; border-radius: 3px; }
   button:focus-visible, input:focus-visible {
     outline: 2px solid var(--gilt);
     outline-offset: 2px;
@@ -52,9 +53,51 @@
     font-family: 'Space Mono', monospace;
     font-size: 0.68rem;
     letter-spacing: 0.28em;
-    color: var(--bronze);
+    color: var(--bone-dim);
     text-transform: uppercase;
   }
+
+  .status-bar {
+    border: 1px solid var(--err);
+    background: rgba(181,69,63,0.08);
+    color: #e0a19c;
+    padding: 12px 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.03em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .status-bar button {
+    background: none;
+    border: 1px solid var(--err);
+    color: #e0a19c;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    padding: 5px 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .sync-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    color: var(--bone-dim);
+  }
+  .sync-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--bronze);
+    flex-shrink: 0;
+  }
+  .sync-indicator.synced .sync-dot { background: var(--ok); box-shadow: 0 0 6px rgba(76,175,106,0.7); }
+  .sync-indicator.error .sync-dot { background: var(--err); box-shadow: 0 0 6px rgba(181,69,63,0.7); }
 
   /* Transport */
   .transport {
@@ -70,9 +113,10 @@
     flex-wrap: wrap;
   }
   .song-title {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 2.6rem;
-    letter-spacing: 0.03em;
+    font-family: 'Playfair Display', serif;
+    font-weight: 800;
+    font-size: 2.5rem;
+    letter-spacing: 0.01em;
     color: var(--gilt);
     line-height: 1;
     margin-top: 6px;
@@ -84,6 +128,13 @@
     margin-top: 3px;
   }
 
+  .transport-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    flex-shrink: 0;
+  }
   .master-btn {
     width: 56px;
     height: 56px;
@@ -212,9 +263,10 @@
     flex-shrink: 0;
   }
   .channel-label {
-    font-family: 'Bebas Neue', sans-serif;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
     letter-spacing: 0.08em;
-    font-size: 1.15rem;
+    font-size: 0.95rem;
     color: var(--amber);
   }
   .channel.audible .channel-label { color: var(--gilt); }
@@ -289,15 +341,21 @@
     align-items: center;
     gap: 10px;
     border: 1px solid var(--border);
-    padding: 9px 12px;
+    border-radius: 999px;
+    padding: 9px 16px 9px 10px;
     font-family: 'Space Mono', monospace;
     font-size: 0.72rem;
     letter-spacing: 0.08em;
     color: var(--bone);
-    background: var(--void);
+    background: var(--void-2);
+    cursor: grab;
   }
-  .sequence-chip.active { border-color: var(--gilt); color: var(--gilt); }
+  .sequence-chip.dragging { opacity: 0.4; }
+  .sequence-chip.drag-over { border-color: var(--gilt); }
+  .sequence-chip.active { border-color: var(--gilt); color: var(--gilt); background: rgba(230,195,74,0.08); }
   .sequence-chip .order-num { color: var(--gilt); }
+  .grip { display: flex; flex-direction: column; gap: 2px; }
+  .grip span { width: 12px; height: 1px; background: var(--bronze); display: block; }
   .chip-arrows { display: flex; flex-direction: column; gap: 1px; }
   .chip-arrows button {
     background: none;
@@ -327,15 +385,16 @@
   .vault-card {
     border: 1px solid var(--border);
     padding: 13px 15px;
-    min-width: 160px;
+    min-width: 170px;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    background: var(--void);
+    background: var(--void-2);
   }
   .vault-card .name {
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.04em;
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    letter-spacing: 0.01em;
     color: var(--gilt);
     font-size: 1.1rem;
   }
@@ -343,21 +402,27 @@
     font-family: 'Space Mono', monospace;
     font-size: 0.6rem;
     letter-spacing: 0.08em;
-    color: var(--bronze);
+    color: var(--bone-dim);
   }
-  .vault-card button {
-    align-self: flex-start;
+  .card-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
     margin-top: 4px;
+  }
+  .vault-card .card-actions button {
+    border-radius: 999px;
     border: 1px solid var(--bronze);
     background: none;
     color: var(--bone-dim);
     font-family: 'Space Mono', monospace;
-    font-size: 0.65rem;
+    font-size: 0.62rem;
     letter-spacing: 0.06em;
-    padding: 6px 12px;
+    padding: 6px 13px;
     cursor: pointer;
   }
-  .vault-card button:hover { border-color: var(--amber); color: var(--amber); }
+  .vault-card .card-actions button:hover { border-color: var(--amber); color: var(--amber); }
+  .vault-card .card-actions button.danger:hover { border-color: var(--err); color: #e0a19c; }
 
   .add-song-form {
     display: flex;
@@ -407,6 +472,11 @@
 <body>
 <div class="app">
 
+  <div id="statusBar" class="status-bar" hidden>
+    <span id="statusText"></span>
+    <button type="button" id="statusDismiss">DISMISS</button>
+  </div>
+
   <header class="transport">
     <div class="transport-top">
       <div class="title-block">
@@ -414,10 +484,13 @@
         <h1 class="song-title" id="songTitle">HEATHENS</h1>
         <div class="song-artist" id="songArtist">twenty one pilots</div>
       </div>
-      <button id="masterPlay" class="master-btn" type="button" aria-label="Play">
-        <span class="icon-play" aria-hidden="true"></span>
-        <span class="icon-pause" aria-hidden="true"><i></i><i></i></span>
-      </button>
+      <div class="transport-side">
+        <div class="sync-indicator" id="syncIndicator"><span class="sync-dot" id="syncDot"></span><span id="syncLabel">CONNECTING</span></div>
+        <button id="masterPlay" class="master-btn" type="button" aria-label="Play">
+          <span class="icon-play" aria-hidden="true"></span>
+          <span class="icon-pause" aria-hidden="true"><i></i><i></i></span>
+        </button>
+      </div>
     </div>
     <div class="scrub-row">
       <span id="timeCurrent" class="time">0:00</span>
@@ -498,7 +571,8 @@
       <input id="addBass" class="text-input" type="url" placeholder="BASS URL" required>
       <input id="addOther" class="text-input" type="url" placeholder="OTHER URL" required>
       <input id="addVocals" class="text-input" type="url" placeholder="VOCALS URL" required>
-      <button type="submit" class="ghost-btn">SAVE TO VAULT</button>
+      <button type="submit" id="addSongSubmitBtn" class="ghost-btn">SAVE TO VAULT</button>
+      <button type="button" id="cancelEditBtn" class="ghost-btn" hidden>CANCEL EDIT</button>
     </form>
     <div class="mono-hint">PASTE THE 4 PUBLIC R2 LINKS AFTER UPLOADING THE STEMS TO YOUR BUCKET.</div>
   </section>
@@ -509,7 +583,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-  import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
   var firebaseConfig = {
     apiKey: "AIzaSyAmTnP1SOVRwPP1NuSli-S27ionB7N8odw",
@@ -552,6 +626,7 @@
     rafId: null,
     analysisCtx: null,
     currentSong: null,
+    editingSongId: null,
     sequence: {
       order: ['drums', 'bass', 'other', 'vocals'],
       step: 8,
@@ -563,6 +638,25 @@
   };
 
   var dom = {};
+
+  function showStatusError(message) {
+    if (!dom.statusBar) return;
+    dom.statusText.textContent = message;
+    dom.statusBar.hidden = false;
+  }
+
+  function clearStatus() {
+    if (!dom.statusBar) return;
+    dom.statusBar.hidden = true;
+  }
+
+  window.addEventListener('error', function (e) {
+    showStatusError('Script error: ' + e.message);
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var reason = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+    showStatusError('Error: ' + reason);
+  });
 
   function formatTime(sec) {
     sec = Math.max(0, sec || 0);
@@ -773,6 +867,14 @@
       var li = document.createElement('li');
       li.className = 'sequence-chip';
       li.dataset.stem = stem;
+      li.draggable = true;
+
+      var grip = document.createElement('span');
+      grip.className = 'grip';
+      grip.setAttribute('aria-hidden', 'true');
+      grip.appendChild(document.createElement('span'));
+      grip.appendChild(document.createElement('span'));
+      grip.appendChild(document.createElement('span'));
 
       var numSpan = document.createElement('span');
       numSpan.className = 'order-num';
@@ -796,6 +898,7 @@
 
       arrows.appendChild(up);
       arrows.appendChild(down);
+      li.appendChild(grip);
       li.appendChild(numSpan);
       li.appendChild(labelSpan);
       li.appendChild(arrows);
@@ -803,6 +906,29 @@
 
       up.addEventListener('click', function () { moveOrder(idx, -1); });
       down.addEventListener('click', function () { moveOrder(idx, 1); });
+
+      li.addEventListener('dragstart', function (e) {
+        e.dataTransfer.setData('text/plain', String(idx));
+        e.dataTransfer.effectAllowed = 'move';
+        li.classList.add('dragging');
+      });
+      li.addEventListener('dragend', function () { li.classList.remove('dragging'); });
+      li.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        li.classList.add('drag-over');
+      });
+      li.addEventListener('dragleave', function () { li.classList.remove('drag-over'); });
+      li.addEventListener('drop', function (e) {
+        e.preventDefault();
+        li.classList.remove('drag-over');
+        var fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
+        if (isNaN(fromIdx) || fromIdx === idx) return;
+        var order = state.sequence.order;
+        var moved = order.splice(fromIdx, 1)[0];
+        order.splice(idx, 0, moved);
+        renderSequenceChips();
+      });
     });
   }
 
@@ -895,13 +1021,59 @@
       card.appendChild(artist);
     }
 
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = 'LOAD';
-    btn.addEventListener('click', function () { loadSong(song); });
-    card.appendChild(btn);
+    var actions = document.createElement('div');
+    actions.className = 'card-actions';
 
+    var loadBtn = document.createElement('button');
+    loadBtn.type = 'button';
+    loadBtn.textContent = 'LOAD';
+    loadBtn.addEventListener('click', function () { loadSong(song); });
+    actions.appendChild(loadBtn);
+
+    if (song.source === 'cloud') {
+      var editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.textContent = 'EDIT';
+      editBtn.addEventListener('click', function () { enterEditMode(song); });
+      actions.appendChild(editBtn);
+
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'danger';
+      delBtn.textContent = 'DELETE';
+      delBtn.addEventListener('click', function () {
+        var ok = confirm('Delete ' + song.name + ' from the vault?');
+        if (!ok) return;
+        deleteDoc(doc(db, 'songs', song.id)).catch(function (err) {
+          console.error('Delete failed', err);
+          showStatusError('Could not delete: ' + err.message);
+        });
+      });
+      actions.appendChild(delBtn);
+    }
+
+    card.appendChild(actions);
     dom.vaultList.appendChild(card);
+  }
+
+  function enterEditMode(song) {
+    state.editingSongId = song.id;
+    dom.addName.value = song.name;
+    dom.addArtist.value = song.artist || '';
+    dom.addDrums.value = song.files.drums;
+    dom.addBass.value = song.files.bass;
+    dom.addOther.value = song.files.other;
+    dom.addVocals.value = song.files.vocals;
+    dom.addSongSubmitBtn.textContent = 'UPDATE SONG';
+    dom.cancelEditBtn.hidden = false;
+    dom.addSongForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function exitEditMode() {
+    state.editingSongId = null;
+    dom.addSongSubmitBtn.textContent = 'SAVE TO VAULT';
+    dom.cancelEditBtn.hidden = true;
+    dom.addSongForm.reset();
   }
 
   function renderVault(cloudSongs) {
@@ -910,13 +1082,28 @@
     cloudSongs.forEach(function (song) { appendVaultCard(song); });
   }
 
+  function setSyncState(mode) {
+    dom.syncIndicator.classList.remove('synced', 'error');
+    if (mode === 'synced') {
+      dom.syncIndicator.classList.add('synced');
+      dom.syncLabel.textContent = 'SYNCED';
+    } else if (mode === 'error') {
+      dom.syncIndicator.classList.add('error');
+      dom.syncLabel.textContent = 'OFFLINE';
+    } else {
+      dom.syncLabel.textContent = 'CONNECTING';
+    }
+  }
+
   function subscribeVault() {
     var vaultQuery = query(songsCol, orderBy('createdAt', 'desc'));
     onSnapshot(vaultQuery, function (snapshot) {
+      setSyncState('synced');
       var cloudSongs = [];
       snapshot.forEach(function (docSnap) {
         var data = docSnap.data();
         cloudSongs.push({
+          id: docSnap.id,
           name: data.name,
           artist: data.artist || '',
           source: 'cloud',
@@ -926,6 +1113,8 @@
       renderVault(cloudSongs);
     }, function (err) {
       console.error('Vault sync failed', err);
+      setSyncState('error');
+      showStatusError('Vault sync failed: ' + err.message + '. Check your Firestore rules.');
       renderVault([]);
     });
   }
@@ -1056,6 +1245,14 @@
     dom.addBass = document.getElementById('addBass');
     dom.addOther = document.getElementById('addOther');
     dom.addVocals = document.getElementById('addVocals');
+    dom.addSongSubmitBtn = document.getElementById('addSongSubmitBtn');
+    dom.cancelEditBtn = document.getElementById('cancelEditBtn');
+    dom.statusBar = document.getElementById('statusBar');
+    dom.statusText = document.getElementById('statusText');
+    dom.statusDismiss = document.getElementById('statusDismiss');
+    dom.syncIndicator = document.getElementById('syncIndicator');
+    dom.syncDot = document.getElementById('syncDot');
+    dom.syncLabel = document.getElementById('syncLabel');
 
     STEMS.forEach(function (stem) {
       state.channelRows[stem] = document.querySelector('.channel[data-stem="' + stem + '"]');
@@ -1100,18 +1297,31 @@
       var other = dom.addOther.value.trim();
       var vocals = dom.addVocals.value.trim();
       if (!name || !drums || !bass || !other || !vocals) return;
-      addDoc(songsCol, {
+
+      var payload = {
         name: name,
         artist: artist,
-        files: { drums: drums, bass: bass, other: other, vocals: vocals },
-        createdAt: serverTimestamp()
-      }).then(function () {
-        dom.addSongForm.reset();
+        files: { drums: drums, bass: bass, other: other, vocals: vocals }
+      };
+
+      var savePromise;
+      if (state.editingSongId) {
+        savePromise = updateDoc(doc(db, 'songs', state.editingSongId), payload);
+      } else {
+        payload.createdAt = serverTimestamp();
+        savePromise = addDoc(songsCol, payload);
+      }
+
+      savePromise.then(function () {
+        exitEditMode();
+        clearStatus();
       }).catch(function (err) {
         console.error('Failed to save song', err);
-        alert('Could not save to the vault. Check the console for details.');
+        showStatusError('Could not save to the vault: ' + err.message + '. Check your Firestore rules.');
       });
     });
+    dom.cancelEditBtn.addEventListener('click', exitEditMode);
+    dom.statusDismiss.addEventListener('click', clearStatus);
 
     var resizeTimer = null;
     window.addEventListener('resize', function () {
