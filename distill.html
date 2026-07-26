@@ -240,19 +240,21 @@
   .channel.playing .channel-toggle .tri { display: none; }
   .channel.playing .channel-toggle .ch-pause { display: flex; }
   .channel-meta {
-    width: 96px;
+    width: 118px;
     display: flex;
     align-items: center;
     padding-left: 14px;
+    padding-right: 6px;
     border-right: 1px solid var(--border);
     flex-shrink: 0;
   }
   .channel-label {
     font-family: 'Space Mono', monospace;
     font-weight: 700;
-    letter-spacing: 0.08em;
-    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+    font-size: 0.88rem;
     color: var(--amber);
+    white-space: nowrap;
   }
   .channel.audible .channel-label { color: var(--gilt); }
   .channel-canvas {
@@ -444,8 +446,8 @@
   }
 
   @media (max-width: 600px) {
-    .channel-meta { width: 72px; padding-left: 10px; }
-    .channel-label { font-size: 0.95rem; }
+    .channel-meta { width: 88px; padding-left: 8px; padding-right: 4px; }
+    .channel-label { font-size: 0.74rem; }
     .song-title { font-size: 2rem; }
   }
 
@@ -585,6 +587,7 @@
     audioBuffers: {},
     peaks: {},
     onsetFractions: {},
+    analysisFailed: {},
     canvases: {},
     channelRows: {},
     channelOn: { drums: true, bass: true, other: true, vocals: true },
@@ -723,13 +726,21 @@
       })
       .catch(function (err) {
         console.error('peak analysis failed for', stem, err);
+        state.analysisFailed[stem] = true;
         state.peaks[stem] = new Array(320).fill(0.15);
         drawChannel(stem);
+        updateExportButtonState();
       });
   }
 
   function updateExportButtonState() {
     if (!dom.exportMp3Btn) return;
+    var failed = STEMS.some(function (s) { return state.analysisFailed[s]; });
+    if (failed) {
+      dom.exportMp3Btn.disabled = true;
+      dom.exportMp3Btn.textContent = 'ANALYSIS FAILED';
+      return;
+    }
     var allReady = !!state.currentSong && STEMS.every(function (s) { return !!state.audioBuffers[s]; });
     dom.exportMp3Btn.disabled = !allReady;
     dom.exportMp3Btn.textContent = allReady ? 'DOWNLOAD MP3' : 'ANALYZING…';
@@ -815,6 +826,19 @@
     dom.playhead.style.left = (offsetLeft + frac * canvasRect.width) + 'px';
   }
 
+  function resyncStems() {
+    var ref = state.audioEls.drums;
+    if (!ref) return;
+    var refTime = ref.currentTime;
+    STEMS.forEach(function (stem) {
+      if (stem === 'drums') return;
+      var el = state.audioEls[stem];
+      if (el && Math.abs(el.currentTime - refTime) > 0.12) {
+        el.currentTime = refTime;
+      }
+    });
+  }
+
   function updateProgressUI() {
     var t = getCurrentTime();
     var d = state.duration || 0;
@@ -824,6 +848,7 @@
     dom.scrubber.value = Math.round(frac * 1000);
     updatePlayheadPosition(frac);
     STEMS.forEach(drawChannel);
+    if (state.isPlaying) resyncStems();
     if (state.isPlaying && d && t >= d - 0.05) {
       pauseAll();
       seekAll(0);
@@ -1146,6 +1171,7 @@
     state.currentSong = song;
     state.duration = 0;
     state.onsetFractions = {};
+    state.analysisFailed = {};
     state.audioBuffers = {};
     updateExportButtonState();
 
