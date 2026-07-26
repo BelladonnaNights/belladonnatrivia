@@ -702,6 +702,7 @@ if(db) {
       case 'next':    advanceSlide(); break;
       case 'back':    retreatSlide(); break;
       case 'reveal':  advanceSlide(); break;
+      case 'rerandomize-next': rerandomizeNextQuestion(); break;
       case 'audio':
         // Try music play button first, then regular audio button
         const musicBtn = document.getElementById('music-play-btn');
@@ -760,28 +761,76 @@ function pushNextQuestionPeek() {
   const round = currentRound();
   if(!round) { db.ref('liveGame/hostPeek').set(null); return; }
   const type = slideType();
-  let nextText = '', nextLabel = '';
+  let nextText = '', nextLabel = '', nextAnswer = '';
 
   if(type === S_QUESTION && round.questions && round.questions.length) {
     const { qIndex, isPass2 } = questionInfo();
     if(!isPass2 && qIndex + 1 < round.questions.length) {
       // Next question, same round
       const nq = round.questions[qIndex + 1];
-      nextText  = nq ? nq.question : '';
-      nextLabel = 'Next: Q' + (qIndex + 2);
+      nextText   = nq ? nq.question : '';
+      nextAnswer = nq ? nq.answer   : '';
+      nextLabel  = 'Next: Q' + (qIndex + 2);
     } else if(!isPass2 && qIndex + 1 >= round.questions.length) {
       // Last question of this round — peek the next round's first question
       const nextRound = state.rounds[state.roundIndex + 1];
       if(nextRound && nextRound.questions && nextRound.questions.length) {
-        nextText  = nextRound.questions[0].question;
-        nextLabel = 'Next round, Q1';
+        nextText   = nextRound.questions[0].question;
+        nextAnswer = nextRound.questions[0].answer;
+        nextLabel  = 'Next round, Q1';
       } else {
         nextLabel = 'End of round';
       }
     }
   }
 
-  db.ref('liveGame/hostPeek').set({ text: nextText, label: nextLabel, ts: Date.now() });
+  db.ref('liveGame/hostPeek').set({ text: nextText, answer: nextAnswer, label: nextLabel, ts: Date.now() });
+}
+
+// Host-triggered: swap the upcoming (not-yet-shown) question for a fresh
+// unused row pulled from the same round's spreadsheet pool. Never touches
+// the question currently on screen — only the one the peek is showing.
+function rerandomizeNextQuestion() {
+  if(!db) return;
+  const round = currentRound();
+  if(!round || slideType() !== S_QUESTION || !round.questions || !round.questions.length) {
+    toast('Nothing to re-randomize right now.');
+    return;
+  }
+  const { qIndex, isPass2 } = questionInfo();
+
+  let targetRound = null, targetIndex = -1;
+  if(!isPass2 && qIndex + 1 < round.questions.length) {
+    targetRound = round;
+    targetIndex = qIndex + 1;
+  } else if(!isPass2 && qIndex + 1 >= round.questions.length) {
+    const nextRound = state.rounds[state.roundIndex + 1];
+    if(nextRound && nextRound.questions && nextRound.questions.length) {
+      targetRound = nextRound;
+      targetIndex = 0;
+    }
+  }
+
+  if(!targetRound) { toast('No upcoming question to re-randomize.'); return; }
+  const pool = targetRound.pool;
+  if(!pool || !pool.length) { toast('No spreadsheet pool saved for that round.'); return; }
+
+  const oldRow = targetRound.questions[targetIndex];
+  const usedIds = new Set(targetRound.questions.map(rowId));
+
+  // Prefer a replacement at the same difficulty (keeps the round's
+  // easy/medium/hard sequencing intact); fall back to any unused row.
+  let candidates = shuffle(pool.filter(r => r.difficulty === oldRow.difficulty && !usedIds.has(rowId(r))));
+  if(!candidates.length) candidates = shuffle(pool.filter(r => !usedIds.has(rowId(r))));
+
+  if(!candidates.length) {
+    toast('No unused questions left in the spreadsheet to swap in.');
+    return;
+  }
+
+  targetRound.questions[targetIndex] = candidates[0];
+  pushNextQuestionPeek();
+  toast('Next question re-randomized.');
 }
 
 function normalizeAnswer(s) {
@@ -867,7 +916,7 @@ async function loadSheetQuestions(sheetUrl, tabName, count) {
   const data = await res.json();
   const rows = (data.values || []).map(parseRow).filter(Boolean);
   if(!rows.length) throw new Error('No valid rows found.');
-  return pickByDifficultySequence(rows, count);
+  return { questions: pickByDifficultySequence(rows, count), pool: rows };
 }
 
 // ═══════════════════════════════════════════════════════
@@ -949,7 +998,7 @@ async function loadMusicQuestions(sheetUrl, tabName, count) {
   const rows = (data.values || []).map(parseMusicRow).filter(Boolean);
   if(!rows.length) throw new Error('No valid rows found.');
   // Shuffle and pick up to count — no difficulty sequencing for music
-  return shuffle(rows).slice(0, count);
+  return { questions: shuffle(rows).slice(0, count), pool: rows };
 }
 
 function pickByDifficultySequence(rows, n) {
@@ -2184,14 +2233,18 @@ async function launchFromSetup() {
         round.slides = loadSlidesheetManifest(round.folderUrl);
         round.questions = [];
       } else if(round.type === 'music') {
-        round.questions = await loadMusicQuestions(
+        const loaded = await loadMusicQuestions(
           round.sheetUrl, round.tabName, round.questionCount
         );
+        round.questions = loaded.questions;
+        round.pool = loaded.pool;
       } else {
         // trivia
-        round.questions = await loadSheetQuestions(
+        const loaded = await loadSheetQuestions(
           round.sheetUrl, round.tabName, round.questionCount
         );
+        round.questions = loaded.questions;
+        round.pool = loaded.pool;
       }
     } catch(e) {
       console.error('Round load failed:', e);
@@ -2295,11 +2348,26 @@ function generateQR(url) {
   const availH = popup ? Math.max(120, popup.clientHeight - 80) : 240;
   const size = Math.min(availW, availH);
   new QRCode(container, {text:url, width:size, height:size, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
-  // Force the canvas/img to the right size
-  requestAnimationFrame(() => {
-    const el = container.querySelector('img, canvas');
-    if(el) { el.style.cssText = 'width:' + size + 'px;height:' + size + 'px;display:block;'; }
-  });
+  // qrcodejs draws to a <canvas> immediately, then — a beat later, once it
+  // confirms data-URI support — swaps to an <img> by hiding the canvas and
+  // showing the image (this lets iOS long-press-save the QR). Both elements
+  // sit in the container the whole time. The old code grabbed whichever one
+  // came first in the DOM and forced display:block on it; if that ran AFTER
+  // the library's own swap, it re-revealed the canvas it had just hidden,
+  // stacking it on top of the img and producing the "double" QR. Fix: size
+  // BOTH elements and never touch display — let the library's own show/hide
+  // stand as the only source of truth for visibility.
+  const sizeAll = () => {
+    container.querySelectorAll('img, canvas').forEach(el => {
+      el.style.width = size + 'px';
+      el.style.height = size + 'px';
+    });
+  };
+  requestAnimationFrame(sizeAll);
+  // The canvas→img swap can land a frame or two after our first pass, so
+  // re-apply sizing shortly after too (harmless no-op once settled).
+  setTimeout(sizeAll, 60);
+  setTimeout(sizeAll, 250);
 }
 
 // Re-generate QR when popup is resized
