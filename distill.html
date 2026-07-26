@@ -57,30 +57,6 @@
     text-transform: uppercase;
   }
 
-  .status-bar {
-    border: 1px solid var(--err);
-    background: rgba(181,69,63,0.08);
-    color: #e0a19c;
-    padding: 12px 16px;
-    font-family: 'Space Mono', monospace;
-    font-size: 0.72rem;
-    letter-spacing: 0.03em;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-  }
-  .status-bar button {
-    background: none;
-    border: 1px solid var(--err);
-    color: #e0a19c;
-    font-family: 'Space Mono', monospace;
-    font-size: 0.62rem;
-    padding: 5px 10px;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
   .sync-indicator {
     display: flex;
     align-items: center;
@@ -220,40 +196,27 @@
     background: var(--void-2);
   }
   .channel:last-child { border-bottom: none; }
-  .channel-controls {
-    display: flex;
-    flex-direction: column;
-    border-right: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .channel-toggle, .channel-mute {
+  .channel-toggle {
+    width: 52px;
+    height: 72px;
     border: none;
+    border-right: 1px solid var(--border);
     background: transparent;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--bone-dim);
+    flex-shrink: 0;
   }
-  .channel-toggle { width: 52px; height: 46px; }
   .channel-toggle:hover { background: rgba(200,155,60,0.1); }
   .channel-toggle .tri {
     width: 0; height: 0;
-    border-top: 8px solid transparent;
-    border-bottom: 8px solid transparent;
-    border-left: 13px solid var(--bone-dim);
+    border-top: 9px solid transparent;
+    border-bottom: 9px solid transparent;
+    border-left: 15px solid var(--bronze);
   }
-  .channel.solo .channel-toggle .tri { border-left-color: var(--gilt); }
+  .channel.audible .channel-toggle .tri { border-left-color: var(--gilt); }
   .channel-toggle:hover .tri { border-left-color: var(--amber); }
-  .channel-mute {
-    width: 52px; height: 24px;
-    font-family: 'Space Mono', monospace;
-    font-size: 0.6rem;
-    letter-spacing: 0.1em;
-    border-top: 1px solid var(--border);
-    color: var(--gilt);
-  }
-  .channel-mute.muted { color: var(--bronze); }
   .channel-meta {
     width: 96px;
     display: flex;
@@ -472,17 +435,12 @@
 <body>
 <div class="app">
 
-  <div id="statusBar" class="status-bar" hidden>
-    <span id="statusText"></span>
-    <button type="button" id="statusDismiss">DISMISS</button>
-  </div>
-
   <header class="transport">
     <div class="transport-top">
       <div class="title-block">
         <div class="eyebrow">Distillation</div>
-        <h1 class="song-title" id="songTitle">HEATHENS</h1>
-        <div class="song-artist" id="songArtist">twenty one pilots</div>
+        <h1 class="song-title" id="songTitle">NO SONG LOADED</h1>
+        <div class="song-artist" id="songArtist">Load one from the Vault below</div>
       </div>
       <div class="transport-side">
         <div class="sync-indicator" id="syncIndicator"><span class="sync-dot" id="syncDot"></span><span id="syncLabel">CONNECTING</span></div>
@@ -503,37 +461,25 @@
     <div class="playhead" id="playhead"></div>
 
     <div class="channel" data-stem="drums">
-      <div class="channel-controls">
-        <button class="channel-toggle" data-stem="drums" type="button" aria-label="Solo drums"><span class="tri" aria-hidden="true"></span></button>
-        <button class="channel-mute" data-stem="drums" type="button" aria-label="Toggle drums audibility">ON</button>
-      </div>
+      <button class="channel-toggle" data-stem="drums" type="button" aria-label="Toggle drums"><span class="tri" aria-hidden="true"></span></button>
       <div class="channel-meta"><span class="channel-label">DRUMS</span></div>
       <canvas class="channel-canvas" data-stem="drums"></canvas>
     </div>
 
     <div class="channel" data-stem="bass">
-      <div class="channel-controls">
-        <button class="channel-toggle" data-stem="bass" type="button" aria-label="Solo bass"><span class="tri" aria-hidden="true"></span></button>
-        <button class="channel-mute" data-stem="bass" type="button" aria-label="Toggle bass audibility">ON</button>
-      </div>
+      <button class="channel-toggle" data-stem="bass" type="button" aria-label="Toggle bass"><span class="tri" aria-hidden="true"></span></button>
       <div class="channel-meta"><span class="channel-label">BASS</span></div>
       <canvas class="channel-canvas" data-stem="bass"></canvas>
     </div>
 
     <div class="channel" data-stem="other">
-      <div class="channel-controls">
-        <button class="channel-toggle" data-stem="other" type="button" aria-label="Solo other"><span class="tri" aria-hidden="true"></span></button>
-        <button class="channel-mute" data-stem="other" type="button" aria-label="Toggle other audibility">ON</button>
-      </div>
+      <button class="channel-toggle" data-stem="other" type="button" aria-label="Toggle other"><span class="tri" aria-hidden="true"></span></button>
       <div class="channel-meta"><span class="channel-label">OTHER</span></div>
       <canvas class="channel-canvas" data-stem="other"></canvas>
     </div>
 
     <div class="channel" data-stem="vocals">
-      <div class="channel-controls">
-        <button class="channel-toggle" data-stem="vocals" type="button" aria-label="Solo vocals"><span class="tri" aria-hidden="true"></span></button>
-        <button class="channel-mute" data-stem="vocals" type="button" aria-label="Toggle vocals audibility">ON</button>
-      </div>
+      <button class="channel-toggle" data-stem="vocals" type="button" aria-label="Toggle vocals"><span class="tri" aria-hidden="true"></span></button>
       <div class="channel-meta"><span class="channel-label">VOCALS</span></div>
       <canvas class="channel-canvas" data-stem="vocals"></canvas>
     </div>
@@ -558,7 +504,7 @@
     <div class="vault-head">
       <div class="eyebrow">Vault</div>
       <div class="vault-actions">
-        <button id="loadSongBtn" class="ghost-btn" type="button">LOAD SONG (LOCAL TEST)</button>
+        <button id="loadSongBtn" class="ghost-btn" type="button">LOAD SONG</button>
         <input id="fileInput" type="file" accept="audio/*" multiple hidden>
       </div>
     </div>
@@ -602,24 +548,12 @@
   var COLOR_PLAYED = '#e8c468';
   var COLOR_UNPLAYED = 'rgba(138,106,66,0.45)';
 
-  var DEFAULT_SONG = {
-    name: 'Heathens',
-    artist: 'twenty one pilots',
-    source: 'relative',
-    files: {
-      drums: 'Heathens-Drums.mp3',
-      bass: 'Heathens-Bass.mp3',
-      other: 'Heathens-Backing.mp3',
-      vocals: 'Heathens-Vocals.mp3'
-    }
-  };
-
   var state = {
     audioEls: {},
     peaks: {},
+    onsetFractions: {},
     canvases: {},
     channelRows: {},
-    muteButtons: {},
     channelOn: { drums: true, bass: true, other: true, vocals: true },
     isPlaying: false,
     duration: 0,
@@ -627,6 +561,7 @@
     analysisCtx: null,
     currentSong: null,
     editingSongId: null,
+    hasLoadedInitial: false,
     sequence: {
       order: ['drums', 'bass', 'other', 'vocals'],
       step: 8,
@@ -639,23 +574,11 @@
 
   var dom = {};
 
-  function showStatusError(message) {
-    if (!dom.statusBar) return;
-    dom.statusText.textContent = message;
-    dom.statusBar.hidden = false;
-  }
-
-  function clearStatus() {
-    if (!dom.statusBar) return;
-    dom.statusBar.hidden = true;
-  }
-
   window.addEventListener('error', function (e) {
-    showStatusError('Script error: ' + e.message);
+    console.error('Script error:', e.message);
   });
   window.addEventListener('unhandledrejection', function (e) {
-    var reason = e.reason && e.reason.message ? e.reason.message : String(e.reason);
-    showStatusError('Error: ' + reason);
+    console.error('Unhandled rejection:', e.reason);
   });
 
   function formatTime(sec) {
@@ -699,7 +622,7 @@
     var progress = state.duration ? (getCurrentTime() / state.duration) : 0;
 
     for (var i = 0; i < peaks.length; i++) {
-      var barH = Math.max(2, peaks[i] * h * 0.86);
+      var barH = Math.max(1, peaks[i] * h * 0.92);
       var x = i * barW;
       var played = (i / peaks.length) <= progress;
       ctx.fillStyle = played ? COLOR_PLAYED : COLOR_UNPLAYED;
@@ -734,6 +657,13 @@
         for (var k = 0; k < peaks.length; k++) { if (peaks[k] > globalMax) globalMax = peaks[k]; }
         for (var m = 0; m < peaks.length; m++) { peaks[m] = peaks[m] / globalMax; }
         state.peaks[stem] = peaks;
+
+        var onsetIdx = 0;
+        for (var n = 0; n < peaks.length; n++) {
+          if (peaks[n] > 0.15) { onsetIdx = n; break; }
+        }
+        state.onsetFractions[stem] = onsetIdx / peaks.length;
+
         drawChannel(stem);
       })
       .catch(function (err) {
@@ -741,14 +671,6 @@
         state.peaks[stem] = new Array(260).fill(0.15);
         drawChannel(stem);
       });
-  }
-
-  function updateMuteButtonLabel(stem) {
-    var btn = state.muteButtons[stem];
-    if (!btn) return;
-    var on = state.channelOn[stem];
-    btn.textContent = on ? 'ON' : 'OFF';
-    btn.classList.toggle('muted', !on);
   }
 
   function updateChannelClasses() {
@@ -775,7 +697,12 @@
     var el = state.audioEls[stem];
     if (el) fadeVolume(el, on ? 1 : 0);
     updateChannelClasses();
-    updateMuteButtonLabel(stem);
+  }
+
+  function toggleChannel(stem) {
+    var newOn = !state.channelOn[stem];
+    setChannelVolume(stem, newOn);
+    if (newOn && !state.isPlaying) playAll();
   }
 
   function playAll() {
@@ -819,7 +746,15 @@
     dom.timeTotal.textContent = formatTime(d);
     var frac = d ? (t / d) : 0;
     dom.scrubber.value = Math.round(frac * 1000);
-    dom.playhead.style.left = (frac * dom.channelsWrap.clientWidth) + 'px';
+
+    var refCanvas = state.canvases.drums;
+    if (refCanvas) {
+      var wrapRect = dom.channelsWrap.getBoundingClientRect();
+      var canvasRect = refCanvas.getBoundingClientRect();
+      var offsetLeft = canvasRect.left - wrapRect.left;
+      dom.playhead.style.left = (offsetLeft + frac * canvasRect.width) + 'px';
+    }
+
     STEMS.forEach(drawChannel);
     if (state.isPlaying && d && t >= d - 0.05) {
       pauseAll();
@@ -839,26 +774,6 @@
     if (state.rafId) cancelAnimationFrame(state.rafId);
     state.rafId = null;
     updateProgressUI();
-  }
-
-  function soloChannel(stem) {
-    STEMS.forEach(function (s) { setChannelVolume(s, s === stem); });
-    if (!state.isPlaying) playAll();
-    STEMS.forEach(function (s) {
-      var row = state.channelRows[s];
-      if (row) row.classList.toggle('solo', s === stem);
-    });
-  }
-
-  function toggleMute(stem) {
-    var newOn = !state.channelOn[stem];
-    setChannelVolume(stem, newOn);
-    var row = state.channelRows[stem];
-    if (row) row.classList.remove('solo');
-    if (!state.isPlaying) {
-      var anyOn = STEMS.some(function (s) { return state.channelOn[s]; });
-      if (anyOn) playAll();
-    }
   }
 
   function renderSequenceChips() {
@@ -960,7 +875,7 @@
   function activateSequenceStep() {
     var order = state.sequence.order;
     var stem = order[state.sequence.index];
-    STEMS.forEach(function (s) { setChannelVolume(s, s === stem); });
+    setChannelVolume(stem, true);
     highlightSequenceChip(state.sequence.index);
     state.sequence.remaining = state.sequence.step;
     updateCountdownText();
@@ -974,25 +889,25 @@
         if (state.sequence.index < order.length) {
           activateSequenceStep();
         } else {
-          revealAll();
+          dom.countdown.textContent = 'FULL REVEAL';
+          endSequence();
         }
       }
     }, 1000);
   }
 
-  function revealAll() {
-    STEMS.forEach(function (s) { setChannelVolume(s, true); });
-    dom.countdown.textContent = 'FULL REVEAL';
-    endSequence();
-  }
-
   function startSequence() {
-    if (state.sequence.running) return;
+    if (state.sequence.running || !state.currentSong) return;
     state.sequence.running = true;
     state.sequence.index = 0;
     state.sequence.step = parseInt(dom.stepDuration.value, 10) || 8;
     dom.playAllBtn.disabled = true;
     dom.stopSeqBtn.disabled = false;
+
+    STEMS.forEach(function (s) { setChannelVolume(s, false); });
+    var startStem = state.sequence.order[0];
+    var onsetFrac = state.onsetFractions[startStem] || 0;
+    seekAll(onsetFrac * state.duration);
     if (!state.isPlaying) playAll();
     activateSequenceStep();
   }
@@ -1003,6 +918,12 @@
     dom.stopSeqBtn.disabled = true;
     clearInterval(state.sequence.timerId);
     clearSequenceHighlight();
+  }
+
+  function stopSequence() {
+    endSequence();
+    pauseAll();
+    dom.countdown.textContent = 'PRESS PLAY ALL TO BEGIN THE REVEAL';
   }
 
   function appendVaultCard(song) {
@@ -1046,7 +967,6 @@
         if (!ok) return;
         deleteDoc(doc(db, 'songs', song.id)).catch(function (err) {
           console.error('Delete failed', err);
-          showStatusError('Could not delete: ' + err.message);
         });
       });
       actions.appendChild(delBtn);
@@ -1078,8 +998,20 @@
 
   function renderVault(cloudSongs) {
     dom.vaultList.innerHTML = '';
-    appendVaultCard(DEFAULT_SONG);
+    if (!cloudSongs.length) {
+      var empty = document.createElement('div');
+      empty.className = 'mono-hint';
+      empty.textContent = 'NO SONGS SAVED YET — ADD ONE BELOW';
+      dom.vaultList.appendChild(empty);
+      return;
+    }
     cloudSongs.forEach(function (song) { appendVaultCard(song); });
+  }
+
+  function showEmptyPlayer() {
+    dom.songTitle.textContent = 'NO SONG LOADED';
+    dom.songArtist.textContent = 'Load one from the Vault below';
+    dom.countdown.textContent = 'LOAD A SONG TO BEGIN';
   }
 
   function setSyncState(mode) {
@@ -1111,11 +1043,22 @@
         });
       });
       renderVault(cloudSongs);
+      if (!state.hasLoadedInitial) {
+        state.hasLoadedInitial = true;
+        if (cloudSongs.length) {
+          loadSong(cloudSongs[0]);
+        } else {
+          showEmptyPlayer();
+        }
+      }
     }, function (err) {
       console.error('Vault sync failed', err);
       setSyncState('error');
-      showStatusError('Vault sync failed: ' + err.message + '. Check your Firestore rules.');
       renderVault([]);
+      if (!state.hasLoadedInitial) {
+        state.hasLoadedInitial = true;
+        showEmptyPlayer();
+      }
     });
   }
 
@@ -1124,6 +1067,7 @@
     endSequence();
     state.currentSong = song;
     state.duration = 0;
+    state.onsetFractions = {};
 
     STEMS.forEach(function (stem) {
       var el = state.audioEls[stem];
@@ -1140,11 +1084,6 @@
     });
 
     updateChannelClasses();
-    STEMS.forEach(function (stem) {
-      var row = state.channelRows[stem];
-      if (row) row.classList.remove('solo');
-      updateMuteButtonLabel(stem);
-    });
 
     dom.songTitle.textContent = song.name.toUpperCase();
     dom.songArtist.textContent = song.artist || '';
@@ -1247,9 +1186,6 @@
     dom.addVocals = document.getElementById('addVocals');
     dom.addSongSubmitBtn = document.getElementById('addSongSubmitBtn');
     dom.cancelEditBtn = document.getElementById('cancelEditBtn');
-    dom.statusBar = document.getElementById('statusBar');
-    dom.statusText = document.getElementById('statusText');
-    dom.statusDismiss = document.getElementById('statusDismiss');
     dom.syncIndicator = document.getElementById('syncIndicator');
     dom.syncDot = document.getElementById('syncDot');
     dom.syncLabel = document.getElementById('syncLabel');
@@ -1257,15 +1193,11 @@
     STEMS.forEach(function (stem) {
       state.channelRows[stem] = document.querySelector('.channel[data-stem="' + stem + '"]');
       state.canvases[stem] = document.querySelector('.channel-canvas[data-stem="' + stem + '"]');
-      state.muteButtons[stem] = document.querySelector('.channel-mute[data-stem="' + stem + '"]');
       sizeCanvas(state.canvases[stem]);
     });
 
     document.querySelectorAll('.channel-toggle').forEach(function (btn) {
-      btn.addEventListener('click', function () { soloChannel(btn.dataset.stem); });
-    });
-    document.querySelectorAll('.channel-mute').forEach(function (btn) {
-      btn.addEventListener('click', function () { toggleMute(btn.dataset.stem); });
+      btn.addEventListener('click', function () { toggleChannel(btn.dataset.stem); });
     });
 
     dom.masterPlay.addEventListener('click', function () {
@@ -1280,7 +1212,7 @@
     });
 
     dom.playAllBtn.addEventListener('click', startSequence);
-    dom.stopSeqBtn.addEventListener('click', endSequence);
+    dom.stopSeqBtn.addEventListener('click', stopSequence);
 
     dom.loadSongBtn.addEventListener('click', function () { dom.fileInput.click(); });
     dom.fileInput.addEventListener('change', function () {
@@ -1314,14 +1246,12 @@
 
       savePromise.then(function () {
         exitEditMode();
-        clearStatus();
       }).catch(function (err) {
         console.error('Failed to save song', err);
-        showStatusError('Could not save to the vault: ' + err.message + '. Check your Firestore rules.');
+        alert('Could not save to the vault: ' + err.message);
       });
     });
     dom.cancelEditBtn.addEventListener('click', exitEditMode);
-    dom.statusDismiss.addEventListener('click', clearStatus);
 
     var resizeTimer = null;
     window.addEventListener('resize', function () {
@@ -1330,8 +1260,8 @@
     });
 
     renderSequenceChips();
+    showEmptyPlayer();
     subscribeVault();
-    loadSong(DEFAULT_SONG);
   }
 
   init();
