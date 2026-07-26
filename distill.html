@@ -478,7 +478,7 @@
 
     <div class="channel" data-stem="other">
       <button class="channel-toggle" data-stem="other" type="button" aria-label="Toggle other"><span class="tri" aria-hidden="true"></span><span class="ch-pause" aria-hidden="true"><i></i><i></i></span></button>
-      <div class="channel-meta"><span class="channel-label">OTHER</span></div>
+      <div class="channel-meta"><span class="channel-label">BACKING</span></div>
       <canvas class="channel-canvas" data-stem="other"></canvas>
     </div>
 
@@ -488,6 +488,7 @@
       <canvas class="channel-canvas" data-stem="vocals"></canvas>
     </div>
   </section>
+  <div class="mono-hint" style="margin-top:-10px;">WHITE MARK ON EACH WAVEFORM = WHERE THAT PART ACTUALLY STARTS PLAYING</div>
 
   <section class="sequencer">
     <div class="sequencer-head">
@@ -499,10 +500,9 @@
         <label class="mono-label">SECONDS PER PART
           <input id="stepDuration" class="num-input" type="number" min="2" max="60" value="8">
         </label>
-        <button id="useWaveStartBtn" class="ghost-btn" type="button">USE WAVE START</button>
         <button id="playAllBtn" class="ghost-btn" type="button">PLAY ALL</button>
         <button id="stopSeqBtn" class="ghost-btn" type="button" disabled>STOP</button>
-        <button id="exportMp3Btn" class="ghost-btn" type="button">DOWNLOAD MP3</button>
+        <button id="exportMp3Btn" class="ghost-btn" type="button" disabled>DOWNLOAD MP3</button>
       </div>
     </div>
     <ol id="sequenceOrder" class="sequence-order"></ol>
@@ -524,7 +524,7 @@
       <input id="addArtist" class="text-input" type="text" placeholder="ARTIST (OPTIONAL)">
       <input id="addDrums" class="text-input" type="url" placeholder="DRUMS URL" required>
       <input id="addBass" class="text-input" type="url" placeholder="BASS URL" required>
-      <input id="addOther" class="text-input" type="url" placeholder="OTHER URL" required>
+      <input id="addOther" class="text-input" type="url" placeholder="BACKING URL" required>
       <input id="addVocals" class="text-input" type="url" placeholder="VOCALS URL" required>
       <button type="submit" id="addSongSubmitBtn" class="ghost-btn">SAVE TO VAULT</button>
       <button type="button" id="cancelEditBtn" class="ghost-btn" hidden>CANCEL EDIT</button>
@@ -554,7 +554,7 @@
   var songsCol = collection(db, "songs");
 
   var STEMS = ['drums', 'bass', 'other', 'vocals'];
-  var STEM_LABELS = { drums: 'DRUMS', bass: 'BASS', other: 'OTHER', vocals: 'VOCALS' };
+  var STEM_LABELS = { drums: 'DRUMS', bass: 'BASS', other: 'BACKING', vocals: 'VOCALS' };
   var COLOR_PLAYED = '#e8c468';
   var COLOR_UNPLAYED = 'rgba(138,106,66,0.45)';
 
@@ -640,6 +640,14 @@
       ctx.fillStyle = played ? COLOR_PLAYED : COLOR_UNPLAYED;
       ctx.fillRect(x, mid - barH / 2, Math.max(1, barW - 0.6), barH);
     }
+
+    var onsetFrac = state.onsetFractions[stem];
+    if (typeof onsetFrac === 'number') {
+      var onsetX = onsetFrac * w;
+      var markerW = Math.max(2, w * 0.0025);
+      ctx.fillStyle = '#f2ede1';
+      ctx.fillRect(onsetX, 0, markerW, h);
+    }
   }
 
   function analyzePeaks(stem, url) {
@@ -678,12 +686,20 @@
         state.onsetFractions[stem] = onsetIdx / peaks.length;
 
         drawChannel(stem);
+        updateExportButtonState();
       })
       .catch(function (err) {
         console.error('peak analysis failed for', stem, err);
         state.peaks[stem] = new Array(260).fill(0.15);
         drawChannel(stem);
       });
+  }
+
+  function updateExportButtonState() {
+    if (!dom.exportMp3Btn) return;
+    var allReady = !!state.currentSong && STEMS.every(function (s) { return !!state.audioBuffers[s]; });
+    dom.exportMp3Btn.disabled = !allReady;
+    dom.exportMp3Btn.textContent = allReady ? 'DOWNLOAD MP3' : 'ANALYZING…';
   }
 
   function fadeVolume(el, target) {
@@ -1049,6 +1065,7 @@
     dom.songTitle.textContent = 'NO SONG LOADED';
     dom.songArtist.textContent = 'Load one from the Vault below';
     dom.countdown.textContent = 'LOAD A SONG TO BEGIN';
+    updateExportButtonState();
   }
 
   function setSyncState(mode) {
@@ -1109,6 +1126,7 @@
     state.duration = 0;
     state.onsetFractions = {};
     state.audioBuffers = {};
+    updateExportButtonState();
 
     STEMS.forEach(function (stem) {
       var el = state.audioEls[stem];
@@ -1324,7 +1342,6 @@
     dom.songArtist = document.getElementById('songArtist');
     dom.stepDuration = document.getElementById('stepDuration');
     dom.startTime = document.getElementById('startTime');
-    dom.useWaveStartBtn = document.getElementById('useWaveStartBtn');
     dom.exportMp3Btn = document.getElementById('exportMp3Btn');
     dom.playAllBtn = document.getElementById('playAllBtn');
     dom.stopSeqBtn = document.getElementById('stopSeqBtn');
@@ -1378,15 +1395,6 @@
     dom.startTime.addEventListener('change', function () {
       var val = parseFloat(dom.startTime.value);
       state.sequence.startTime = isNaN(val) ? 0 : Math.max(0, val);
-      persistSequenceSettings();
-    });
-
-    dom.useWaveStartBtn.addEventListener('click', function () {
-      var startStem = state.sequence.order[0];
-      var frac = state.onsetFractions[startStem] || 0;
-      var t = Math.round(frac * state.duration * 10) / 10;
-      state.sequence.startTime = t;
-      dom.startTime.value = t;
       persistSequenceSettings();
     });
 
