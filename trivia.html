@@ -750,6 +750,40 @@ function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
     ts: Date.now(),
   });
 }
+
+// ── Host-only "next question" peek ──────────────────────────────────
+// Lets the host read what's coming up (on admin.html only — never shown
+// on the audience screen or the player phones) so they can decide whether
+// to flip the "timed" toggle before advancing.
+function pushNextQuestionPeek() {
+  if(!db) return;
+  const round = currentRound();
+  if(!round) { db.ref('liveGame/hostPeek').set(null); return; }
+  const type = slideType();
+  let nextText = '', nextLabel = '';
+
+  if(type === S_QUESTION && round.questions && round.questions.length) {
+    const { qIndex, isPass2 } = questionInfo();
+    if(!isPass2 && qIndex + 1 < round.questions.length) {
+      // Next question, same round
+      const nq = round.questions[qIndex + 1];
+      nextText  = nq ? nq.question : '';
+      nextLabel = 'Next: Q' + (qIndex + 2);
+    } else if(!isPass2 && qIndex + 1 >= round.questions.length) {
+      // Last question of this round — peek the next round's first question
+      const nextRound = state.rounds[state.roundIndex + 1];
+      if(nextRound && nextRound.questions && nextRound.questions.length) {
+        nextText  = nextRound.questions[0].question;
+        nextLabel = 'Next round, Q1';
+      } else {
+        nextLabel = 'End of round';
+      }
+    }
+  }
+
+  db.ref('liveGame/hostPeek').set({ text: nextText, label: nextLabel, ts: Date.now() });
+}
+
 function normalizeAnswer(s) {
   return s.toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').replace(/\b(a|an|the)\b/g,'').trim();
 }
@@ -1218,6 +1252,7 @@ function renderCurrentSlide() {
   // Push slide state to Firebase for host board mini preview
   (function() {
     let label = '', text = '', qNum = '', answer = '', hasAudio = false;
+    let previewBg = bgUrl; // default: round background, same as the audience screen
     if(type === S_INTRO) {
       label = round.tabName || round.title || 'Intro';
       text  = 'Intro Slide';
@@ -1229,6 +1264,11 @@ function renderCurrentSlide() {
       text   = q ? q.question : '';
       answer = (state.answerVisible || state.bonusVisible) && q ? q.answer : '';
       hasAudio = !!(q && q.audioUrl);
+      // Picture-round questions: show the actual question image in the
+      // host preview, not just the round's plain background.
+      if(q && q.imageUrl && q.imageUrl.startsWith('http')) {
+        previewBg = driveViewUrl(q.imageUrl);
+      }
     } else if(type === S_INTERSTITIAL) {
       label = 'Interstitial'; text = 'Pass 1 Complete';
     } else if(type === S_ANSWERKEY) {
@@ -1238,7 +1278,8 @@ function renderCurrentSlide() {
     } else if(type === S_END) {
       label = 'End'; text = 'Game over';
     }
-    pushSlideState(label, text, qNum, bgUrl, answer, {hasAudio});
+    pushSlideState(label, text, qNum, previewBg, answer, {hasAudio});
+    pushNextQuestionPeek();
   })();
 
   // Make slides visible after layout settles
@@ -1975,6 +2016,30 @@ function playAudio(src) {
   audio.play().catch(()=>toast('Audio blocked — click again'));
 }
 
+// ── Audio unlock ─────────────────────────────────────────────────────
+// Browsers block programmatic audio playback unless it happens inside a
+// genuine (trusted) user gesture. Host commands sent from admin.html arrive
+// over Firebase — they are NOT trusted gestures on this page, so the browser
+// blocks them by default ("Audio Blocked"). The fix: the moment the host
+// genuinely clicks something directly on THIS page (e.g. "Launch Trivia
+// Night"), we silently play+pause the shared #audio-player element once.
+// Browsers remember that this specific element was successfully played
+// during a real gesture, and allow it to keep playing programmatically
+// (via later Firebase-relayed commands) for the rest of the session.
+let audioUnlocked = false;
+function unlockAudioPlayback() {
+  if(audioUnlocked) return;
+  const audio = document.getElementById('audio-player');
+  if(!audio) return;
+  // Tiny silent WAV — plays instantly and inaudibly.
+  audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  const p = audio.play();
+  if(p && p.catch) p.catch(()=>{});
+  audio.pause();
+  audio.currentTime = 0;
+  audioUnlocked = true;
+}
+
 function exitPresentation() {
   document.getElementById('pres-screen').classList.remove('show');
   document.getElementById('hud').classList.remove('show');
@@ -1988,6 +2053,7 @@ function exitPresentation() {
 }
 
 function returnToPresentation() {
+  unlockAudioPlayback();
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
@@ -2096,6 +2162,7 @@ function checkUrlParams() {
 
 async function launchFromSetup() {
   if(!pendingRounds.length) return;
+  unlockAudioPlayback(); // must happen synchronously, inside this real click
 
   state.rounds = pendingRounds.map(r=>({...r, questions:[], slides:[]}));
   document.getElementById('setup-screen').style.display = 'none';
@@ -2236,16 +2303,26 @@ function generateQR(url) {
 }
 
 // Re-generate QR when popup is resized
+// NOTE: the #join-popup div is defined further down in the HTML, after this
+// script tag — so we must wait for the DOM to finish parsing before querying
+// it, otherwise getElementById returns null and the observer never attaches.
 (function(){
-  const popup = document.getElementById('join-popup');
-  if(!popup || !window.ResizeObserver) return;
-  let resizeTimer;
-  new ResizeObserver(() => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      if(popup.style.display === 'flex' && joinUrlCached) generateQR(joinUrlCached);
-    }, 120);
-  }).observe(popup);
+  function attachResizeObserver() {
+    const popup = document.getElementById('join-popup');
+    if(!popup || !window.ResizeObserver) return;
+    let resizeTimer;
+    new ResizeObserver(() => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if(popup.style.display === 'flex' && joinUrlCached) generateQR(joinUrlCached);
+      }, 120);
+    }).observe(popup);
+  }
+  if(document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachResizeObserver);
+  } else {
+    attachResizeObserver();
+  }
 })();
 // ──────────────────────────────────────────────────────────────────────
 
