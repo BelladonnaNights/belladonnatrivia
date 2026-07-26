@@ -266,7 +266,7 @@
   }
 
   /* Sequencer */
-  .sequencer, .vault {
+  .sequencer, .vault, .queue {
     border: 1px solid var(--border);
     background: var(--void-2);
     padding: 20px 22px;
@@ -411,6 +411,68 @@
   .vault-card .card-actions button:hover { border-color: var(--amber); color: var(--amber); }
   .vault-card .card-actions button.danger:hover { border-color: var(--err); color: #e0a19c; }
 
+  .queue-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .queue-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .queue-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid var(--border);
+    background: var(--void);
+    padding: 10px 14px;
+    cursor: grab;
+  }
+  .queue-item.dragging { opacity: 0.4; }
+  .queue-item.drag-over { border-color: var(--gilt); }
+  .queue-item .qi-num {
+    font-family: 'Space Mono', monospace;
+    color: var(--gilt);
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+  .queue-item .qi-name {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    color: var(--gilt);
+    font-size: 1rem;
+  }
+  .queue-item .qi-artist {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    color: var(--bone-dim);
+    font-size: 0.85rem;
+    margin-left: 8px;
+  }
+  .queue-item .qi-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .queue-item .qi-actions button {
+    border-radius: 999px;
+    border: 1px solid var(--bronze);
+    background: none;
+    color: var(--bone-dim);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    padding: 6px 13px;
+    cursor: pointer;
+  }
+  .queue-item .qi-actions button:hover { border-color: var(--amber); color: var(--amber); }
+  .queue-item .qi-actions button.danger:hover { border-color: var(--err); color: #e0a19c; }
+
   .add-song-form {
     display: flex;
     flex-wrap: wrap;
@@ -467,7 +529,6 @@
   <header class="transport">
     <div class="transport-top">
       <div class="title-block">
-        <div class="eyebrow">Distillation</div>
         <h1 class="song-title" id="songTitle">NO SONG LOADED</h1>
         <div class="song-artist" id="songArtist">Load one from the Vault below</div>
       </div>
@@ -533,10 +594,20 @@
     <div id="countdown" class="countdown">PRESS PLAY ALL TO BEGIN THE REVEAL</div>
   </section>
 
+  <section class="queue">
+    <div class="queue-head">
+      <div class="eyebrow">Queue</div>
+      <button id="clearQueueBtn" class="ghost-btn" type="button">CLEAR QUEUE</button>
+    </div>
+    <ol id="queueList" class="queue-list"></ol>
+    <div id="queueEmpty" class="mono-hint">QUEUE IS EMPTY — ADD SONGS FROM THE VAULT BELOW</div>
+  </section>
+
   <section class="vault">
     <div class="vault-head">
       <div class="eyebrow">Vault</div>
       <div class="vault-actions">
+        <input id="vaultSearch" class="text-input" type="text" placeholder="SEARCH VAULT…">
         <button id="loadSongBtn" class="ghost-btn" type="button">LOAD SONG</button>
         <input id="fileInput" type="file" accept="audio/*" multiple hidden>
       </div>
@@ -588,6 +659,8 @@
     peaks: {},
     onsetFractions: {},
     analysisFailed: {},
+    vaultSongs: [],
+    queue: [],
     canvases: {},
     channelRows: {},
     channelOn: { drums: true, bass: true, other: true, vocals: true },
@@ -826,19 +899,6 @@
     dom.playhead.style.left = (offsetLeft + frac * canvasRect.width) + 'px';
   }
 
-  function resyncStems() {
-    var ref = state.audioEls.drums;
-    if (!ref) return;
-    var refTime = ref.currentTime;
-    STEMS.forEach(function (stem) {
-      if (stem === 'drums') return;
-      var el = state.audioEls[stem];
-      if (el && Math.abs(el.currentTime - refTime) > 0.12) {
-        el.currentTime = refTime;
-      }
-    });
-  }
-
   function updateProgressUI() {
     var t = getCurrentTime();
     var d = state.duration || 0;
@@ -848,7 +908,6 @@
     dom.scrubber.value = Math.round(frac * 1000);
     updatePlayheadPosition(frac);
     STEMS.forEach(drawChannel);
-    if (state.isPlaying) resyncStems();
     if (state.isPlaying && d && t >= d - 0.05) {
       pauseAll();
       seekAll(0);
@@ -1062,6 +1121,12 @@
     loadBtn.addEventListener('click', function () { loadSong(song); });
     actions.appendChild(loadBtn);
 
+    var queueBtn = document.createElement('button');
+    queueBtn.type = 'button';
+    queueBtn.textContent = 'ADD TO QUEUE';
+    queueBtn.addEventListener('click', function () { addToQueue(song); });
+    actions.appendChild(queueBtn);
+
     if (song.source === 'cloud') {
       var editBtn = document.createElement('button');
       editBtn.type = 'button';
@@ -1107,16 +1172,146 @@
     dom.addSongForm.reset();
   }
 
+  var QUEUE_KEY = 'belladonna_stem_queue';
+
+  function loadQueueFromStorage() {
+    try {
+      state.queue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+    } catch (e) {
+      state.queue = [];
+    }
+  }
+
+  function saveQueueToStorage() {
+    try {
+      localStorage.setItem(QUEUE_KEY, JSON.stringify(state.queue));
+    } catch (e) {
+      console.error('Could not save queue', e);
+    }
+  }
+
+  function addToQueue(song) {
+    state.queue.push({
+      id: song.id || null,
+      name: song.name,
+      artist: song.artist || '',
+      source: song.source || 'cloud',
+      files: song.files,
+      sequenceOrder: song.sequenceOrder,
+      stepSeconds: song.stepSeconds,
+      startTime: song.startTime
+    });
+    saveQueueToStorage();
+    renderQueue();
+  }
+
+  function removeFromQueue(idx) {
+    state.queue.splice(idx, 1);
+    saveQueueToStorage();
+    renderQueue();
+  }
+
+  function moveQueueItem(fromIdx, toIdx) {
+    var moved = state.queue.splice(fromIdx, 1)[0];
+    state.queue.splice(toIdx, 0, moved);
+    saveQueueToStorage();
+    renderQueue();
+  }
+
+  function renderQueue() {
+    dom.queueList.innerHTML = '';
+    dom.queueEmpty.hidden = state.queue.length > 0;
+
+    state.queue.forEach(function (song, idx) {
+      var li = document.createElement('li');
+      li.className = 'queue-item';
+      li.draggable = true;
+
+      var grip = document.createElement('span');
+      grip.className = 'grip';
+      grip.setAttribute('aria-hidden', 'true');
+      grip.appendChild(document.createElement('span'));
+      grip.appendChild(document.createElement('span'));
+      grip.appendChild(document.createElement('span'));
+
+      var num = document.createElement('span');
+      num.className = 'qi-num';
+      num.textContent = (idx + 1) + '.';
+
+      var name = document.createElement('span');
+      name.className = 'qi-name';
+      name.textContent = song.name.toUpperCase();
+
+      li.appendChild(grip);
+      li.appendChild(num);
+      li.appendChild(name);
+
+      if (song.artist) {
+        var artist = document.createElement('span');
+        artist.className = 'qi-artist';
+        artist.textContent = song.artist;
+        li.appendChild(artist);
+      }
+
+      var actions = document.createElement('span');
+      actions.className = 'qi-actions';
+
+      var loadBtn = document.createElement('button');
+      loadBtn.type = 'button';
+      loadBtn.textContent = 'LOAD';
+      loadBtn.addEventListener('click', function () { loadSong(song); });
+      actions.appendChild(loadBtn);
+
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'danger';
+      removeBtn.textContent = 'REMOVE';
+      removeBtn.addEventListener('click', function () { removeFromQueue(idx); });
+      actions.appendChild(removeBtn);
+
+      li.appendChild(actions);
+      dom.queueList.appendChild(li);
+
+      li.addEventListener('dragstart', function (e) {
+        e.dataTransfer.setData('text/plain', String(idx));
+        e.dataTransfer.effectAllowed = 'move';
+        li.classList.add('dragging');
+      });
+      li.addEventListener('dragend', function () { li.classList.remove('dragging'); });
+      li.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        li.classList.add('drag-over');
+      });
+      li.addEventListener('dragleave', function () { li.classList.remove('drag-over'); });
+      li.addEventListener('drop', function (e) {
+        e.preventDefault();
+        li.classList.remove('drag-over');
+        var fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
+        if (isNaN(fromIdx) || fromIdx === idx) return;
+        moveQueueItem(fromIdx, idx);
+      });
+    });
+  }
+
   function renderVault(cloudSongs) {
     dom.vaultList.innerHTML = '';
     if (!cloudSongs.length) {
       var empty = document.createElement('div');
       empty.className = 'mono-hint';
-      empty.textContent = 'NO SONGS SAVED YET — ADD ONE BELOW';
+      empty.textContent = state.vaultSongs.length ? 'NO MATCHES' : 'NO SONGS SAVED YET — ADD ONE BELOW';
       dom.vaultList.appendChild(empty);
       return;
     }
     cloudSongs.forEach(function (song) { appendVaultCard(song); });
+  }
+
+  function applyVaultFilter() {
+    var q = (dom.vaultSearch.value || '').toLowerCase().trim();
+    var filtered = !q ? state.vaultSongs : state.vaultSongs.filter(function (s) {
+      return (s.name + ' ' + s.artist).toLowerCase().indexOf(q) !== -1;
+    });
+    renderVault(filtered);
   }
 
   function showEmptyPlayer() {
@@ -1157,10 +1352,12 @@
           startTime: (typeof data.startTime === 'number') ? data.startTime : null
         });
       });
-      renderVault(cloudSongs);
+      state.vaultSongs = cloudSongs;
+      applyVaultFilter();
     }, function (err) {
       console.error('Vault sync failed', err);
       setSyncState('error');
+      state.vaultSongs = [];
       renderVault([]);
     });
   }
@@ -1397,6 +1594,10 @@
     dom.loadSongBtn = document.getElementById('loadSongBtn');
     dom.fileInput = document.getElementById('fileInput');
     dom.vaultList = document.getElementById('vaultList');
+    dom.vaultSearch = document.getElementById('vaultSearch');
+    dom.queueList = document.getElementById('queueList');
+    dom.queueEmpty = document.getElementById('queueEmpty');
+    dom.clearQueueBtn = document.getElementById('clearQueueBtn');
     dom.addSongForm = document.getElementById('addSongForm');
     dom.addName = document.getElementById('addName');
     dom.addArtist = document.getElementById('addArtist');
@@ -1447,6 +1648,16 @@
 
     dom.exportMp3Btn.addEventListener('click', exportMp3);
 
+    dom.clearQueueBtn.addEventListener('click', function () {
+      if (!state.queue.length) return;
+      if (!confirm('Clear the whole queue?')) return;
+      state.queue = [];
+      saveQueueToStorage();
+      renderQueue();
+    });
+
+    dom.vaultSearch.addEventListener('input', applyVaultFilter);
+
     dom.loadSongBtn.addEventListener('click', function () { dom.fileInput.click(); });
     dom.fileInput.addEventListener('change', function () {
       var files = Array.prototype.slice.call(dom.fileInput.files);
@@ -1493,6 +1704,8 @@
     });
 
     renderSequenceChips();
+    loadQueueFromStorage();
+    renderQueue();
     showEmptyPlayer();
     subscribeVault();
   }
