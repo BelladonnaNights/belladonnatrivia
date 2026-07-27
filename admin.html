@@ -2002,6 +2002,15 @@ let currentTeamCount = 0;
 let allAnswersCache = {}; // qId -> { teamId -> answerObj }
 let currentSlideState = null;
 
+// Renders "submitted / total teams" into the submit-count readouts.
+// NOTE: two elements in the markup share id="hb-submit-count" (one by the
+// mini-preview, one under Live Scores) — querySelectorAll catches both;
+// getElementById would silently only ever update the first.
+function updateSubmitCount() {
+  const text = currentTeamCount > 0 ? (currentSubmitCount + ' / ' + currentTeamCount) : '— / —';
+  document.querySelectorAll('#hb-submit-count').forEach(el => el.textContent = text);
+}
+
 // Send command to trivia.html via Firebase
 function sendHostCommand(cmd) {
   if(!db) return;
