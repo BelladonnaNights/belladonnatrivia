@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Trivia Planner — Belladonna</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080808;--surface:#111111;--surface2:#181818;--surface3:#222222;
+  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.13);--border3:rgba(255,255,255,.22);
+  --text:#f0ede8;--text2:#b0a898;--text3:#5a5248;
+  --gold:#c9a84c;--gold2:#e8c96a;--gold3:#f5df90;
+  --gold-shine:linear-gradient(135deg,#c9a84c 0%,#f5df90 45%,#c9a84c 70%,#e2b84a 100%);
+  --gold-dim:rgba(201,168,76,.10);--gold-glow:rgba(201,168,76,.28);--gold-glow2:rgba(201,168,76,.5);
+  --red:#e74c3c;--red-dim:rgba(231,76,60,.12);
+  --green:#2ecc71;--green-dim:rgba(46,204,113,.12);
+  --blue:#3498db;--blue-dim:rgba(52,152,219,.12);
+  --purple:#9b59b6;--purple-dim:rgba(155,89,182,.12);
+  --radius:8px;--radius-lg:14px;
+  --display:'Bebas Neue',sans-serif;--cinzel:'Cinzel',serif;--serif:'EB Garamond',serif;--font:'DM Sans',sans-serif;
+}
+html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var(--text)}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-thumb{background:rgba(201,168,76,.2);border-radius:3px}
+a{color:inherit}
+
+/* NAV */
+.nav{position:sticky;top:0;z-index:200;background:rgba(8,8,8,.95);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);padding:0 2rem;height:64px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.nav-left{display:flex;align-items:center;gap:14px}
+.nav-title{font-family:var(--display);font-size:24px;letter-spacing:.06em;line-height:1}
+.nav-title span{background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.nav-subtitle{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-left:4px;padding-left:14px;border-left:1px solid var(--border2)}
+.nav-right{display:flex;align-items:center;gap:10px}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0;transition:background .3s}
+.sync-dot.synced{background:var(--green)}
+.sync-dot.syncing{background:var(--gold);animation:pulse .8s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+.sync-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
+
+/* TABS */
+.tabs{display:flex;gap:4px;padding:0 2rem;border-bottom:1px solid var(--border);background:var(--surface);overflow-x:auto}
+.tab-btn{font-family:var(--cinzel);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);
+  background:none;border:none;padding:14px 18px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .2s,border-color .2s}
+.tab-btn:hover{color:var(--text2)}
+.tab-btn.active{color:var(--gold2);border-bottom-color:var(--gold)}
+.tab-badge{display:inline-block;margin-left:6px;background:var(--red-dim);color:var(--red);border-radius:99px;padding:1px 7px;font-size:10px}
+
+.wrap{padding:2rem;max-width:1400px;margin:0 auto}
+.panel{display:none}
+.panel.active{display:block}
+
+.section-title{font-family:var(--display);font-size:30px;letter-spacing:.05em;background:var(--gold-shine);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:2px}
+.section-sub{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-bottom:1.5rem}
+
+/* BUTTONS */
+.btn{font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;border-radius:var(--radius);
+  padding:9px 16px;cursor:pointer;transition:all .2s;border:none;white-space:nowrap}
+.btn-ghost{background:transparent;color:var(--gold);border:1px solid var(--gold-glow)}
+.btn-ghost:hover{background:var(--gold-dim)}
+.btn-primary{background:var(--gold-shine);color:#000;font-weight:600}
+.btn-primary:hover{opacity:.88}
+.btn-primary:disabled{opacity:.35;cursor:not-allowed}
+.btn-sm{padding:5px 11px;font-size:9px}
+.btn-danger{background:transparent;color:var(--red);border:1px solid rgba(231,76,60,.4)}
+.btn-danger:hover{background:var(--red-dim)}
+
+/* WEEK NAV */
+.week-nav{display:flex;align-items:center;gap:14px;margin-bottom:1.5rem}
+.week-label{font-family:var(--cinzel);font-size:13px;letter-spacing:.08em;color:var(--gold2);min-width:220px;text-align:center}
+
+/* TABLE */
+.gtable{width:100%;border-collapse:collapse}
+.gtable th{text-align:left;font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border2)}
+.gtable td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+.gtable tr:hover td{background:rgba(255,255,255,.02)}
+.venue-name{font-weight:600;color:var(--text)}
+.venue-meta{font-family:var(--cinzel);font-size:9px;letter-spacing:.06em;color:var(--text3);text-transform:uppercase}
+
+.badge{display:inline-block;font-family:var(--cinzel);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  padding:3px 9px;border-radius:99px}
+.badge-planned{background:var(--blue-dim);color:var(--blue)}
+.badge-confirmed{background:var(--green-dim);color:var(--green)}
+.badge-none{background:var(--red-dim);color:var(--red)}
+.badge-empty{background:rgba(255,255,255,.05);color:var(--text3)}
+.badge-active{background:var(--green-dim);color:var(--green)}
+.badge-seasonal{background:var(--blue-dim);color:var(--blue)}
+.badge-finished{background:rgba(255,255,255,.05);color:var(--text3)}
+.badge-prospective{background:var(--purple-dim);color:var(--purple)}
+.badge-one-time{background:var(--gold-dim);color:var(--gold2)}
+.src-tag{font-size:10px;color:var(--text3)}
+
+.theme-link{color:var(--text2);cursor:pointer;text-decoration:none;border-bottom:1px dashed var(--border3)}
+.theme-link:hover{color:var(--gold2);border-color:var(--gold-glow)}
+.empty-cell{color:var(--text3);font-style:italic;font-family:var(--serif)}
+
+/* FILTER BAR */
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:1.25rem}
+.pill{background:transparent;border:1px solid var(--border2);border-radius:99px;padding:5px 14px;font-size:10px;
+  font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;color:var(--text3);cursor:pointer;transition:all .2s}
+.pill:hover{border-color:var(--gold-glow);color:var(--gold2)}
+.pill.active{background:var(--gold-dim);border-color:var(--gold-glow2);color:var(--gold2)}
+.search-input{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);
+  padding:8px 12px;color:var(--text);font-family:var(--font);font-size:13px;min-width:220px}
+.search-input:focus{outline:none;border-color:var(--gold-glow2)}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem}
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:1.5rem}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px}
+.stat-num{font-family:var(--display);font-size:32px;color:var(--gold2);letter-spacing:.03em}
+.stat-lbl{font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:1.75rem;
+  max-width:480px;width:100%;max-height:88vh;overflow-y:auto}
+.modal h3{font-family:var(--display);font-size:22px;letter-spacing:.05em;color:var(--gold2);margin-bottom:1rem}
+.form-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;display:block}
+.form-input,.form-select,.form-textarea{width:100%;background:var(--surface3);border:1px solid var(--border2);
+  border-radius:var(--radius);padding:9px 12px;color:var(--text);font-family:var(--font);font-size:13px;margin-bottom:14px}
+.form-input:focus,.form-select:focus,.form-textarea:focus{outline:none;border-color:var(--gold-glow2)}
+.form-row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form-row2 .form-input,.form-row2 .form-select{margin-bottom:14px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+.warn-chip{display:flex;align-items:center;gap:6px;background:rgba(201,168,76,.08);border:1px solid var(--gold-glow);
+  border-radius:var(--radius);padding:8px 10px;font-size:12px;color:var(--gold3);margin-bottom:8px}
+.theme-suggest{max-height:180px;overflow-y:auto;border:1px solid var(--border2);border-radius:var(--radius);margin-bottom:14px}
+.theme-opt{padding:8px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border)}
+.theme-opt:last-child{border-bottom:none}
+.theme-opt:hover{background:var(--gold-dim);color:var(--gold2)}
+.theme-opt small{display:block;color:var(--text3);font-size:10px;margin-top:2px}
+
+/* TIMELINE (venue detail) */
+.timeline{display:flex;flex-direction:column;gap:6px;max-height:520px;overflow-y:auto;margin-top:1rem}
+.tl-row{display:flex;align-items:center;gap:12px;padding:9px 12px;background:var(--surface3);border-radius:var(--radius);font-size:13px}
+.tl-date{font-family:var(--cinzel);font-size:10px;letter-spacing:.05em;color:var(--text3);min-width:88px}
+.tl-theme{flex:1}
+.tl-past{opacity:.65}
+
+/* IMPORT */
+.drop-zone{border:2px dashed var(--border2);border-radius:var(--radius-lg);padding:3rem 2rem;text-align:center;
+  cursor:pointer;transition:border-color .2s;margin-bottom:1.5rem}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--gold-glow2);background:var(--gold-dim)}
+.drop-zone .dz-title{font-family:var(--display);font-size:22px;color:var(--gold2);letter-spacing:.04em;margin-bottom:6px}
+.drop-zone .dz-sub{font-family:var(--serif);font-style:italic;color:var(--text3);font-size:13px}
+.import-table-wrap{max-height:520px;overflow-y:auto;border:1px solid var(--border2);border-radius:var(--radius-lg)}
+.import-table{width:100%;border-collapse:collapse}
+.import-table th{position:sticky;top:0;background:var(--surface2);text-align:left;font-family:var(--cinzel);
+  font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding:8px 10px;border-bottom:1px solid var(--border2)}
+.import-table td{padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px}
+.import-table input[type=text],.import-table select{width:100%;background:var(--surface3);border:1px solid var(--border);
+  border-radius:6px;padding:5px 7px;color:var(--text);font-size:12px;font-family:var(--font)}
+.import-log{font-family:monospace;font-size:11px;color:var(--text3);background:var(--surface3);border-radius:var(--radius);
+  padding:10px 14px;margin-bottom:1rem;max-height:140px;overflow-y:auto;white-space:pre-wrap}
+
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface2);
+  border:1px solid var(--gold-glow);color:var(--text);padding:12px 22px;border-radius:var(--radius);font-size:13px;
+  opacity:0;pointer-events:none;transition:all .3s;z-index:999}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.err{border-color:rgba(231,76,60,.5);color:#ff8a7a}
+
+.empty-state{text-align:center;padding:3rem 1rem;color:var(--text3);font-family:var(--serif);font-style:italic}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-left">
+    <div class="nav-title">BELLADONNA <span>PLANNER</span></div>
+    <div class="nav-subtitle">Trivia venues &amp; theme scheduling</div>
+  </div>
+  <div class="nav-right">
+    <span class="sync-dot" id="sync-dot"></span>
+    <span class="sync-label" id="sync-label">connecting…</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">This Week</button>
+  <button class="tab-btn" data-tab="needs" onclick="switchTab('needs')">Needs Planning <span class="tab-badge" id="needs-count" style="display:none">0</span></button>
+  <button class="tab-btn" data-tab="venues" onclick="switchTab('venues')">Venues</button>
+  <button class="tab-btn" data-tab="themes" onclick="switchTab('themes')">Theme Library</button>
+  <button class="tab-btn" data-tab="import" onclick="switchTab('import')">Import Spreadsheet</button>
+</div>
+
+<div class="wrap">
+
+  <!-- ═══════════════ OVERVIEW ═══════════════ -->
+  <div class="panel active" id="panel-overview">
+    <div class="section-title">This Week</div>
+    <div class="section-sub">Every scheduled venue, at a glance.</div>
+    <div class="week-nav">
+      <button class="btn btn-ghost btn-sm" onclick="shiftWeek(-1)">‹ Prev</button>
+      <div class="week-label" id="week-label"></div>
+      <button class="btn btn-ghost btn-sm" onclick="shiftWeek(1)">Next ›</button>
+      <button class="btn btn-ghost btn-sm" onclick="jumpToday()">Today</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-primary btn-sm" onclick="openVenueModal()">+ Add Venue</button>
+    </div>
+    <table class="gtable">
+      <thead><tr><th>Venue</th><th>Date</th><th>Theme</th><th>Status</th><th></th></tr></thead>
+      <tbody id="overview-rows"></tbody>
+    </table>
+    <div id="overview-empty" class="empty-state" style="display:none">No active venues yet — add one to get started.</div>
+  </div>
+
+  <!-- ═══════════════ NEEDS PLANNING ═══════════════ -->
+  <div class="panel" id="panel-needs">
+    <div class="section-title">Needs Planning</div>
+    <div class="section-sub">Upcoming weekly gigs (next 21 days) with no theme assigned yet.</div>
+    <table class="gtable">
+      <thead><tr><th>Date</th><th>Venue</th><th></th></tr></thead>
+      <tbody id="needs-rows"></tbody>
+    </table>
+    <div id="needs-empty" class="empty-state" style="display:none">Everything's planned for the next three weeks. Nicely done.</div>
+  </div>
+
+  <!-- ═══════════════ VENUES ═══════════════ -->
+  <div class="panel" id="panel-venues">
+    <div class="section-title">Venues</div>
+    <div class="section-sub">Every venue, current, seasonal, prospective, or finished.</div>
+    <div class="filter-bar">
+      <input class="search-input" id="venue-search" placeholder="Search venues…" oninput="renderVenues()">
+      <button class="pill active" data-vf="all" onclick="setVenueFilter('all')">All</button>
+      <button class="pill" data-vf="active" onclick="setVenueFilter('active')">Active</button>
+      <button class="pill" data-vf="seasonal" onclick="setVenueFilter('seasonal')">Seasonal</button>
+      <button class="pill" data-vf="prospective" onclick="setVenueFilter('prospective')">Trivia Time (prospective)</button>
+      <button class="pill" data-vf="finished" onclick="setVenueFilter('finished')">Finished</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-primary btn-sm" onclick="openVenueModal()">+ Add Venue</button>
+    </div>
+    <table class="gtable">
+      <thead><tr><th>Venue</th><th>Day / Time</th><th>Pay</th><th>Status</th><th>Source</th><th></th></tr></thead>
+      <tbody id="venues-rows"></tbody>
+    </table>
+    <div id="venues-empty" class="empty-state" style="display:none">No venues match that filter.</div>
+  </div>
+
+  <!-- ═══════════════ VENUE DETAIL ═══════════════ -->
+  <div class="panel" id="panel-venue-detail">
+    <button class="btn btn-ghost btn-sm" onclick="switchTab('venues')" style="margin-bottom:1rem">‹ Back to Venues</button>
+    <div class="section-title" id="vd-name"></div>
+    <div class="section-sub" id="vd-meta"></div>
+    <div style="display:flex;gap:8px;margin-bottom:1rem">
+      <button class="btn btn-ghost btn-sm" onclick="editVenueFromDetail()">Edit Venue</button>
+      <button class="btn btn-primary btn-sm" onclick="openGigModal(currentVenueDetailId)">+ Assign Theme</button>
+    </div>
+    <div class="timeline" id="vd-timeline"></div>
+  </div>
+
+  <!-- ═══════════════ THEMES ═══════════════ -->
+  <div class="panel" id="panel-themes">
+    <div class="section-title">Theme Library</div>
+    <div class="section-sub">Every theme you've run or brainstormed, searchable.</div>
+    <div class="stat-row" id="theme-stats"></div>
+    <div class="filter-bar">
+      <input class="search-input" id="theme-search" placeholder="Search themes…" oninput="renderThemes()">
+      <button class="btn btn-primary btn-sm" onclick="openThemeModal()">+ Add Theme</button>
+    </div>
+    <table class="gtable">
+      <thead><tr><th>Theme</th><th>Times Used</th><th>Last Used</th><th></th></tr></thead>
+      <tbody id="themes-rows"></tbody>
+    </table>
+  </div>
+
+  <!-- ═══════════════ IMPORT ═══════════════ -->
+  <div class="panel" id="panel-import">
+    <div class="section-title">Import Spreadsheet</div>
+    <div class="section-sub">Pull the existing venue/theme history in from an .xlsx export — you'll review everything before it's saved.</div>
+
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <div class="dz-title">Click to choose a file</div>
+      <div class="dz-sub">or drag your .xlsx here</div>
+      <input type="file" id="file-input" accept=".xlsx" style="display:none" onchange="handleFile(this.files[0])">
+    </div>
+    <div class="import-log" id="import-log" style="display:none"></div>
+
+    <div id="import-preview" style="display:none">
+      <div class="stat-row" id="import-stats"></div>
+      <div class="section-sub" style="margin-bottom:.75rem">Uncheck anything that looks wrong, or fix the name/day/time/pay inline. Nothing is saved until you click Import.</div>
+      <div class="import-table-wrap">
+        <table class="import-table">
+          <thead><tr><th style="width:30px"></th><th>Name</th><th>Day</th><th>Time</th><th>Pay $</th><th>Method</th><th>Status</th><th>Dated entries</th></tr></thead>
+          <tbody id="import-rows"></tbody>
+        </table>
+      </div>
+      <div style="margin-top:1rem;display:flex;gap:10px;align-items:center">
+        <button class="btn btn-primary" id="import-commit-btn" onclick="commitImport()">Import Selected to Planner</button>
+        <span class="section-sub" style="margin:0" id="import-idea-note"></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════ MODALS ═══════════════ -->
+<div class="modal-overlay" id="gig-modal-overlay">
+  <div class="modal">
+    <h3>Assign Theme</h3>
+    <label class="form-label">Venue</label>
+    <select class="form-select" id="gig-venue" onchange="onGigVenueChange()"></select>
+    <label class="form-label">Date</label>
+    <input type="date" class="form-input" id="gig-date" onchange="renderGigWarnings()">
+    <label class="form-label">Theme</label>
+    <input type="text" class="form-input" id="gig-theme-search" placeholder="Search or type a new theme…" oninput="renderThemeSuggest()">
+    <div class="theme-suggest" id="theme-suggest"></div>
+    <div id="gig-warnings"></div>
+    <label class="form-label">Status</label>
+    <select class="form-select" id="gig-status">
+      <option value="planned">Planned</option>
+      <option value="confirmed">Confirmed</option>
+      <option value="none">None / Closed this week</option>
+    </select>
+    <label class="form-label">Note (optional)</label>
+    <input type="text" class="form-input" id="gig-note" placeholder="e.g. cancelled — Mariners game">
+    <div class="modal-actions">
+      <button class="btn btn-danger btn-sm" id="gig-delete-btn" onclick="deleteGig()" style="display:none">Delete</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('gig-modal-overlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveGig()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="venue-modal-overlay">
+  <div class="modal">
+    <h3 id="venue-modal-title">Add Venue</h3>
+    <label class="form-label">Name</label>
+    <input type="text" class="form-input" id="v-name">
+    <div class="form-row2">
+      <div><label class="form-label">Day</label>
+        <select class="form-select" id="v-day">
+          <option value="">—</option><option>Mon</option><option>Tue</option><option>Wed</option>
+          <option>Thu</option><option>Fri</option><option>Sat</option><option>Sun</option>
+        </select></div>
+      <div><label class="form-label">Time</label><input type="text" class="form-input" id="v-time" placeholder="7:00pm"></div>
+    </div>
+    <div class="form-row2">
+      <div><label class="form-label">Pay Amount</label><input type="text" class="form-input" id="v-pay-amount" placeholder="175"></div>
+      <div><label class="form-label">Pay Method</label>
+        <select class="form-select" id="v-pay-method">
+          <option value="">—</option><option value="cash">Cash</option><option value="check">Check</option>
+          <option value="venmo">Venmo</option><option value="invoice">Invoice</option>
+        </select></div>
+    </div>
+    <div class="form-row2">
+      <div><label class="form-label">Status</label>
+        <select class="form-select" id="v-status">
+          <option value="active">Active</option><option value="seasonal">Seasonal</option>
+          <option value="one-time">One-time</option><option value="prospective">Prospective (Trivia Time)</option>
+          <option value="finished">Finished</option>
+        </select></div>
+      <div><label class="form-label">Source</label>
+        <select class="form-select" id="v-source">
+          <option value="belladonna">Belladonna</option><option value="trivia-time">Trivia Time</option>
+        </select></div>
+    </div>
+    <label class="form-label">Host</label>
+    <input type="text" class="form-input" id="v-host" placeholder="Eddy, Miguel…">
+    <label class="form-label">Notes</label>
+    <textarea class="form-textarea" id="v-notes" rows="2"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-danger btn-sm" id="venue-delete-btn" onclick="deleteVenue()" style="display:none">Delete</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('venue-modal-overlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveVenue()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="theme-modal-overlay">
+  <div class="modal">
+    <h3 id="theme-modal-title">Add Theme</h3>
+    <label class="form-label">Theme Name</label>
+    <input type="text" class="form-input" id="t-name" placeholder="Movie Villains / 90s Hits">
+    <label class="form-label">Category</label>
+    <input type="text" class="form-input" id="t-category" placeholder="holiday, pop-culture, sports…">
+    <div class="modal-actions">
+      <button class="btn btn-danger btn-sm" id="theme-delete-btn" onclick="deleteTheme()" style="display:none">Delete</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('theme-modal-overlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTheme()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  FIREBASE — same project as admin.html / trivia.html
+// ═══════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",
+  authDomain: "belladonnatrivia.firebaseapp.com",
+  databaseURL: "https://belladonnatrivia-default-rtdb.firebaseio.com",
+  projectId: "belladonnatrivia",
+  storageBucket: "belladonnatrivia.firebasestorage.app",
+  messagingSenderId: "658670195433",
+  appId: "1:658670195433:web:f66cbc32344f4d4d63d678"
+};
+if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+function setSyncStatus(status){
+  const dot=document.getElementById('sync-dot'), label=document.getElementById('sync-label');
+  dot.className='sync-dot '+status;
+  label.textContent = status==='synced' ? 'synced' : status==='syncing' ? 'saving…' : 'connecting…';
+}
+
+function toast(msg, isErr){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='show'+(isErr?' err':'');
+  setTimeout(()=>t.className='',2800);
+}
+
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+const state = { venues:{}, themes:{}, gigs:{} }; // gigs[venueId][dateKey] = {themeId, themeName, status, note}
+let loadedOnce = {venues:false, themes:false, gigs:false};
+
+db.ref('planner/venues').on('value', snap=>{
+  state.venues = snap.val() || {};
+  loadedOnce.venues = true;
+  onDataChange();
+});
+db.ref('planner/themes').on('value', snap=>{
+  state.themes = snap.val() || {};
+  loadedOnce.themes = true;
+  onDataChange();
+});
+db.ref('planner/gigs').on('value', snap=>{
+  state.gigs = snap.val() || {};
+  loadedOnce.gigs = true;
+  onDataChange();
+});
+
+function onDataChange(){
+  setSyncStatus('synced');
+  renderActiveTab();
+}
+
+// ═══════════════════════════════════════════════
+//  DATE HELPERS
+// ═══════════════════════════════════════════════
+function toKey(d){ const yy=d.getFullYear(),mm=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0'); return `${yy}-${mm}-${dd}`; }
+function fromKey(k){ const [y,m,d]=k.split('-').map(Number); return new Date(y,m-1,d); }
+function addDays(d,n){ const nd=new Date(d); nd.setDate(nd.getDate()+n); return nd; }
+function startOfWeek(d){ const nd=new Date(d); const day=(nd.getDay()+6)%7; nd.setDate(nd.getDate()-day); nd.setHours(0,0,0,0); return nd; }
+function fmtDisplay(d){ return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); }
+function fmtRange(a,b){ return `${a.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${b.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`; }
+const DAY_MAP = {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
+function nextDateForDay(dayAbbr, weekStart){
+  const target = DAY_MAP[dayAbbr];
+  if(target===undefined) return null;
+  const diff = (target - 1 + 7) % 7; // weekStart is Monday (index1 in JS getDay terms handled via DAY_MAP.Mon=1)
+  // weekStart is a Monday date object; compute offset from Monday(1) to target day
+  const offset = (target - DAY_MAP.Mon + 7) % 7;
+  return addDays(weekStart, offset);
+}
+function normalizeDay(raw){
+  if(!raw) return '';
+  const s = raw.toString().trim().toLowerCase();
+  if(s.startsWith('mon')) return 'Mon';
+  if(s.startsWith('tue')) return 'Tue';
+  if(s.startsWith('wed')) return 'Wed';
+  if(s.startsWith('thu')) return 'Thu';
+  if(s.startsWith('fri')) return 'Fri';
+  if(s.startsWith('sat')) return 'Sat';
+  if(s.startsWith('sun')) return 'Sun';
+  return raw;
+}
+
+// ═══════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════
+let activeTab = 'overview';
+function switchTab(tab){
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  const map = {overview:'panel-overview', needs:'panel-needs', venues:'panel-venues', themes:'panel-themes', import:'panel-import'};
+  if(map[tab]) document.getElementById(map[tab]).classList.add('active');
+  renderActiveTab();
+}
+function renderActiveTab(){
+  if(activeTab==='overview') renderOverview();
+  else if(activeTab==='needs') renderNeedsPlanning();
+  else if(activeTab==='venues') renderVenues();
+  else if(activeTab==='themes') renderThemes();
+  renderNeedsBadge();
+}
+
+// ═══════════════════════════════════════════════
+//  OVERVIEW (this week)
+// ═══════════════════════════════════════════════
+let weekStart = startOfWeek(new Date());
+function shiftWeek(n){ weekStart = addDays(weekStart, n*7); renderOverview(); }
+function jumpToday(){ weekStart = startOfWeek(new Date()); renderOverview(); }
+
+function renderOverview(){
+  document.getElementById('week-label').textContent = fmtRange(weekStart, addDays(weekStart,6));
+  const venues = Object.entries(state.venues||{})
+    .filter(([id,v])=>v.status==='active'||v.status==='seasonal')
+    .sort((a,b)=> (DAY_MAP[a[1].day]||9) - (DAY_MAP[b[1].day]||9) || (a[1].name||'').localeCompare(b[1].name||''));
+
+  const rows = venues.map(([id,v])=>{
+    const d = v.day ? nextDateForDay(v.day, weekStart) : null;
+    const dk = d ? toKey(d) : null;
+    const gig = dk ? (state.gigs[id]||{})[dk] : null;
+    const themeCell = gig && gig.themeName
+      ? `<span class="theme-link" onclick="openGigModal('${id}','${dk}')">${escapeHtml(gig.themeName)}</span>`
+      : gig && gig.status==='none'
+        ? `<span class="empty-cell">none${gig.note?' — '+escapeHtml(gig.note):''}</span>`
+        : `<span class="empty-cell">unplanned</span>`;
+    const statusBadge = gig
+      ? `<span class="badge badge-${gig.status||'planned'}">${gig.status||'planned'}</span>`
+      : `<span class="badge badge-empty">unplanned</span>`;
+    return `<tr>
+      <td><div class="venue-name">${escapeHtml(v.name||'')}</div><div class="venue-meta">${v.day||''} ${v.time||''}</div></td>
+      <td>${d?fmtDisplay(d):'—'}</td>
+      <td>${themeCell}</td>
+      <td>${statusBadge}</td>
+      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openGigModal('${id}'${dk?`,'${dk}'`:''})">${gig&&gig.themeName?'Edit':'Assign'}</button></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('overview-rows').innerHTML = rows;
+  document.getElementById('overview-empty').style.display = venues.length ? 'none' : 'block';
+}
+
+// ═══════════════════════════════════════════════
+//  NEEDS PLANNING (next 21 days, weekly-cadence venues)
+// ═══════════════════════════════════════════════
+function renderNeedsPlanning(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const horizon = addDays(today, 21);
+  const gaps = [];
+  Object.entries(state.venues||{}).forEach(([id,v])=>{
+    if(v.status!=='active' && v.status!=='seasonal') return;
+    if(!v.day || (v.cadence && v.cadence!=='weekly')) return; // only auto-check simple weekly cadence
+    let d = new Date(today);
+    const target = DAY_MAP[v.day];
+    if(target===undefined) return;
+    d = addDays(d, (target - d.getDay() + 7) % 7);
+    while(d <= horizon){
+      const dk = toKey(d);
+      const gig = (state.gigs[id]||{})[dk];
+      if(!gig || !gig.themeName){
+        if(!(gig && gig.status==='none')) gaps.push({venueId:id, venueName:v.name, date:new Date(d), dk});
+      }
+      d = addDays(d,7);
+    }
+  });
+  gaps.sort((a,b)=>a.date-b.date);
+  document.getElementById('needs-rows').innerHTML = gaps.map(g=>`
+    <tr><td>${fmtDisplay(g.date)}</td><td class="venue-name">${escapeHtml(g.venueName||'')}</td>
+    <td style="text-align:right"><button class="btn btn-primary btn-sm" onclick="openGigModal('${g.venueId}','${g.dk}')">Assign</button></td></tr>
+  `).join('');
+  document.getElementById('needs-empty').style.display = gaps.length ? 'none' : 'block';
+  window._needsCount = gaps.length;
+  renderNeedsBadge();
+}
+function renderNeedsBadge(){
+  const el = document.getElementById('needs-count');
+  const n = window._needsCount||0;
+  el.style.display = n>0 ? 'inline-block' : 'none';
+  el.textContent = n;
+}
+
+// ═══════════════════════════════════════════════
+//  VENUES TAB
+// ═══════════════════════════════════════════════
+let venueFilter = 'all';
+function setVenueFilter(f){
+  venueFilter = f;
+  document.querySelectorAll('[data-vf]').forEach(p=>p.classList.toggle('active', p.dataset.vf===f));
+  renderVenues();
+}
+function renderVenues(){
+  const q = (document.getElementById('venue-search')?.value||'').toLowerCase();
+  let list = Object.entries(state.venues||{});
+  if(venueFilter!=='all') list = list.filter(([id,v])=>v.status===venueFilter);
+  if(q) list = list.filter(([id,v])=>(v.name||'').toLowerCase().includes(q));
+  list.sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''));
+
+  document.getElementById('venues-rows').innerHTML = list.map(([id,v])=>{
+    const pay = v.pay && v.pay.amount ? `$${v.pay.amount} ${v.pay.method||''}` : '—';
+    return `<tr style="cursor:pointer" onclick="openVenueDetail('${id}')">
+      <td class="venue-name">${escapeHtml(v.name||'')}</td>
+      <td>${v.day||''} ${v.time||''}</td>
+      <td>${pay}</td>
+      <td><span class="badge badge-${v.status||'active'}">${(v.status||'active').replace('-',' ')}</span></td>
+      <td class="src-tag">${v.source==='trivia-time'?'Trivia Time':'Belladonna'}</td>
+      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openVenueModal('${id}')">Edit</button></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('venues-empty').style.display = list.length ? 'none' : 'block';
+}
+
+let currentVenueDetailId = null;
+function openVenueDetail(id){
+  currentVenueDetailId = id;
+  const v = state.venues[id]; if(!v) return;
+  document.getElementById('vd-name').textContent = v.name||'';
+  document.getElementById('vd-meta').textContent = `${v.day||''} ${v.time||''} · ${v.pay&&v.pay.amount?'$'+v.pay.amount+' '+(v.pay.method||''):'no pay set'} · ${(v.status||'').replace('-',' ')}`;
+  const gigs = Object.entries(state.gigs[id]||{}).sort((a,b)=> b[0].localeCompare(a[0]));
+  const today = toKey(new Date());
+  document.getElementById('vd-timeline').innerHTML = gigs.length ? gigs.map(([dk,g])=>`
+    <div class="tl-row ${dk<today?'tl-past':''}" onclick="openGigModal('${id}','${dk}')" style="cursor:pointer">
+      <div class="tl-date">${fmtDisplay(fromKey(dk))}</div>
+      <div class="tl-theme">${g.themeName?escapeHtml(g.themeName):`<span class="empty-cell">${g.status==='none'?'none'+(g.note?' — '+escapeHtml(g.note):''):'unplanned'}</span>`}</div>
+      <span class="badge badge-${g.status||'planned'}">${g.status||'planned'}</span>
+    </div>
+  `).join('') : '<div class="empty-state">No gigs logged yet for this venue.</div>';
+
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-venue-detail').classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+}
+function editVenueFromDetail(){ openVenueModal(currentVenueDetailId); }
+
+// ═══════════════════════════════════════════════
+//  VENUE MODAL
+// ═══════════════════════════════════════════════
+let editingVenueId = null;
+function openVenueModal(id){
+  editingVenueId = id || null;
+  const v = id ? state.venues[id] : {};
+  document.getElementById('venue-modal-title').textContent = id ? 'Edit Venue' : 'Add Venue';
+  document.getElementById('v-name').value = v.name||'';
+  document.getElementById('v-day').value = v.day||'';
+  document.getElementById('v-time').value = v.time||'';
+  document.getElementById('v-pay-amount').value = (v.pay&&v.pay.amount)||'';
+  document.getElementById('v-pay-method').value = (v.pay&&v.pay.method)||'';
+  document.getElementById('v-status').value = v.status||'active';
+  document.getElementById('v-source').value = v.source||'belladonna';
+  document.getElementById('v-host').value = v.host||'';
+  document.getElementById('v-notes').value = v.notes||'';
+  document.getElementById('venue-delete-btn').style.display = id ? 'inline-block' : 'none';
+  openModal('venue-modal-overlay');
+}
+function saveVenue(){
+  const name = document.getElementById('v-name').value.trim();
+  if(!name) return toast('Venue needs a name.', true);
+  const data = {
+    name,
+    day: document.getElementById('v-day').value,
+    time: document.getElementById('v-time').value.trim(),
+    pay: { amount: parseInt(document.getElementById('v-pay-amount').value)||null, method: document.getElementById('v-pay-method').value },
+    status: document.getElementById('v-status').value,
+    source: document.getElementById('v-source').value,
+    host: document.getElementById('v-host').value.trim(),
+    notes: document.getElementById('v-notes').value.trim(),
+    cadence: 'weekly'
+  };
+  const id = editingVenueId || db.ref('planner/venues').push().key;
+  setSyncStatus('syncing');
+  db.ref('planner/venues/'+id).update(data).then(()=>{ toast('Venue saved.'); closeModal('venue-modal-overlay'); });
+}
+function deleteVenue(){
+  if(!editingVenueId) return;
+  if(!confirm('Delete this venue and all its scheduled gigs? This cannot be undone.')) return;
+  setSyncStatus('syncing');
+  db.ref().update({['planner/venues/'+editingVenueId]:null, ['planner/gigs/'+editingVenueId]:null}).then(()=>{
+    toast('Venue deleted.'); closeModal('venue-modal-overlay'); switchTab('venues');
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  THEMES TAB
+// ═══════════════════════════════════════════════
+function renderThemes(){
+  const q = (document.getElementById('theme-search')?.value||'').toLowerCase();
+  let list = Object.entries(state.themes||{});
+  const total = list.length;
+  const unused = list.filter(([id,t])=>!t.timesUsed).length;
+  document.getElementById('theme-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">Total themes</div></div>
+    <div class="stat-card"><div class="stat-num">${unused}</div><div class="stat-lbl">Never used yet</div></div>
+  `;
+  if(q) list = list.filter(([id,t])=>(t.name||'').toLowerCase().includes(q));
+  list.sort((a,b)=>(b[1].lastUsedDate||'').localeCompare(a[1].lastUsedDate||''));
+  document.getElementById('themes-rows').innerHTML = list.map(([id,t])=>`
+    <tr><td>${escapeHtml(t.name||'')}</td><td>${t.timesUsed||0}</td><td>${t.lastUsedDate||'—'}</td>
+    <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openThemeModal('${id}')">Edit</button></td></tr>
+  `).join('');
+}
+let editingThemeId = null;
+function openThemeModal(id){
+  editingThemeId = id||null;
+  const t = id ? state.themes[id] : {};
+  document.getElementById('theme-modal-title').textContent = id ? 'Edit Theme' : 'Add Theme';
+  document.getElementById('t-name').value = t.name||'';
+  document.getElementById('t-category').value = t.category||'';
+  document.getElementById('theme-delete-btn').style.display = id ? 'inline-block' : 'none';
+  openModal('theme-modal-overlay');
+}
+function saveTheme(){
+  const name = document.getElementById('t-name').value.trim();
+  if(!name) return toast('Theme needs a name.', true);
+  const id = editingThemeId || db.ref('planner/themes').push().key;
+  const existing = editingThemeId ? state.themes[editingThemeId] : {};
+  setSyncStatus('syncing');
+  db.ref('planner/themes/'+id).update({
+    name, category: document.getElementById('t-category').value.trim()||'uncategorized',
+    timesUsed: existing.timesUsed||0, lastUsedDate: existing.lastUsedDate||null
+  }).then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); });
+}
+function deleteTheme(){
+  if(!editingThemeId) return;
+  if(!confirm('Delete this theme from the library?')) return;
+  setSyncStatus('syncing');
+  db.ref('planner/themes/'+editingThemeId).remove().then(()=>{ toast('Theme deleted.'); closeModal('theme-modal-overlay'); });
+}
+
+// ═══════════════════════════════════════════════
+//  GIG MODAL (assign/edit a theme for venue+date)
+// ═══════════════════════════════════════════════
+let gigCtx = { venueId:null, dateKey:null, selectedThemeId:null, selectedThemeName:null };
+function openGigModal(venueId, dateKey){
+  gigCtx = { venueId, dateKey: dateKey||null, selectedThemeId:null, selectedThemeName:null };
+  const sel = document.getElementById('gig-venue');
+  sel.innerHTML = Object.entries(state.venues||{})
+    .sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''))
+    .map(([id,v])=>`<option value="${id}" ${id===venueId?'selected':''}>${escapeHtml(v.name||'')}</option>`).join('');
+  document.getElementById('gig-date').value = dateKey || toKey(new Date());
+  const existing = (dateKey && state.gigs[venueId]) ? state.gigs[venueId][dateKey] : null;
+  document.getElementById('gig-theme-search').value = existing && existing.themeName ? existing.themeName : '';
+  if(existing && existing.themeId){ gigCtx.selectedThemeId = existing.themeId; gigCtx.selectedThemeName = existing.themeName; }
+  document.getElementById('gig-status').value = existing ? (existing.status||'planned') : 'planned';
+  document.getElementById('gig-note').value = existing ? (existing.note||'') : '';
+  document.getElementById('gig-delete-btn').style.display = existing ? 'inline-block' : 'none';
+  document.getElementById('theme-suggest').innerHTML = '';
+  renderGigWarnings();
+  openModal('gig-modal-overlay');
+}
+function onGigVenueChange(){ gigCtx.venueId = document.getElementById('gig-venue').value; renderGigWarnings(); }
+
+function renderThemeSuggest(){
+  const q = document.getElementById('gig-theme-search').value.trim().toLowerCase();
+  gigCtx.selectedThemeId = null; gigCtx.selectedThemeName = null;
+  if(!q){ document.getElementById('theme-suggest').innerHTML=''; return; }
+  const matches = Object.entries(state.themes||{}).filter(([id,t])=>(t.name||'').toLowerCase().includes(q)).slice(0,25);
+  document.getElementById('theme-suggest').innerHTML = matches.map(([id,t])=>`
+    <div class="theme-opt" onclick="pickTheme('${id}')">${escapeHtml(t.name)}<small>Used ${t.timesUsed||0}× · last ${t.lastUsedDate||'never'}</small></div>
+  `).join('') || `<div class="theme-opt" style="color:var(--text3)">No match — this will be saved as a new theme.</div>`;
+}
+function pickTheme(id){
+  const t = state.themes[id];
+  gigCtx.selectedThemeId = id; gigCtx.selectedThemeName = t.name;
+  document.getElementById('gig-theme-search').value = t.name;
+  document.getElementById('theme-suggest').innerHTML = '';
+  renderGigWarnings();
+}
+function renderGigWarnings(){
+  const box = document.getElementById('gig-warnings');
+  const venueId = document.getElementById('gig-venue').value;
+  const dateKey = document.getElementById('gig-date').value;
+  if(!gigCtx.selectedThemeId || !venueId || !dateKey){ box.innerHTML=''; return; }
+  const themeId = gigCtx.selectedThemeId;
+  const warnings = [];
+  const vGigs = state.gigs[venueId]||{};
+  let venueLast = null;
+  Object.entries(vGigs).forEach(([dk,g])=>{ if(g.themeId===themeId && dk!==dateKey && (!venueLast||dk>venueLast) && dk<dateKey) venueLast=dk; });
+  if(venueLast){
+    const weeks = Math.round((fromKey(dateKey)-fromKey(venueLast))/6048e5);
+    warnings.push(`Ran here ${weeks} week${weeks===1?'':'s'} ago (${venueLast})`);
+  }
+  let globalLast=null, globalVenueName=null;
+  Object.entries(state.gigs||{}).forEach(([vid,dates])=>{
+    if(vid===venueId) return;
+    Object.entries(dates||{}).forEach(([dk,g])=>{ if(g.themeId===themeId && dk<dateKey && (!globalLast||dk>globalLast)){ globalLast=dk; globalVenueName=(state.venues[vid]||{}).name; } });
+  });
+  if(globalLast){
+    const weeks = Math.round((fromKey(dateKey)-fromKey(globalLast))/6048e5);
+    if(weeks<6) warnings.push(`Also ran ${weeks}w ago at ${globalVenueName||'another venue'}`);
+  }
+  box.innerHTML = warnings.map(w=>`<div class="warn-chip">⚠ ${w}</div>`).join('');
+}
+function saveGig(){
+  const venueId = document.getElementById('gig-venue').value;
+  const dateKey = document.getElementById('gig-date').value;
+  const status = document.getElementById('gig-status').value;
+  const note = document.getElementById('gig-note').value.trim();
+  const typedName = document.getElementById('gig-theme-search').value.trim();
+  if(!venueId || !dateKey) return toast('Pick a venue and date.', true);
+
+  const finish = (themeId, themeName) => {
+    setSyncStatus('syncing');
+    db.ref('planner/gigs/'+venueId+'/'+dateKey).set({ themeId: themeId||null, themeName: themeName||null, status, note }).then(()=>{
+      if(themeId){
+        const t = state.themes[themeId]||{};
+        const newCount = (t.timesUsed||0) + (gigCtx._wasNewAssignment ? 1 : 0);
+        const updates = {};
+        updates['planner/themes/'+themeId+'/timesUsed'] = t.timesUsed ? t.timesUsed + (gigCtx._alreadyCounted?0:1) : 1;
+        if(!t.lastUsedDate || dateKey > t.lastUsedDate) updates['planner/themes/'+themeId+'/lastUsedDate'] = dateKey;
+        db.ref().update(updates);
+      }
+      toast('Saved.'); closeModal('gig-modal-overlay');
+    });
+  };
+
+  if(status==='none' || !typedName){
+    finish(null, null);
+    return;
+  }
+  if(gigCtx.selectedThemeId && gigCtx.selectedThemeName===typedName){
+    gigCtx._alreadyCounted = true; // don't double count if theme unchanged from existing gig — best effort
+    finish(gigCtx.selectedThemeId, typedName);
+  } else {
+    // new theme name typed — create it
+    const newId = db.ref('planner/themes').push().key;
+    db.ref('planner/themes/'+newId).set({ name: typedName, category:'uncategorized', timesUsed:0, lastUsedDate:null }).then(()=>{
+      finish(newId, typedName);
+    });
+  }
+}
+function deleteGig(){
+  const venueId = document.getElementById('gig-venue').value;
+  const dateKey = document.getElementById('gig-date').value;
+  if(!venueId||!dateKey) return;
+  setSyncStatus('syncing');
+  db.ref('planner/gigs/'+venueId+'/'+dateKey).remove().then(()=>{ toast('Removed.'); closeModal('gig-modal-overlay'); });
+}
+
+// ═══════════════════════════════════════════════
+//  MODAL HELPERS
+// ═══════════════════════════════════════════════
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); renderActiveTab(); }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+// ═══════════════════════════════════════════════
+//  IMPORT — XLSX PARSING
+// ═══════════════════════════════════════════════
+const SECTION_TITLES = ['Seasonal Places','One Time Events','Themed Round Ideas','Finished Places'];
+let importResult = null;
+
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e=>{ e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', ()=> dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e=>{ e.preventDefault(); dropZone.classList.remove('drag'); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+
+function importLog(msg){
+  const el = document.getElementById('import-log');
+  el.style.display='block';
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+function handleFile(file){
+  if(!file) return;
+  document.getElementById('import-log').textContent='';
+  document.getElementById('import-preview').style.display='none';
+  importLog('Reading ' + file.name + '…');
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+      const sheetName = wb.SheetNames.includes('Sheet1') ? 'Sheet1' : wb.SheetNames[0];
+      importLog('Using sheet: ' + sheetName);
+      const ws = wb.Sheets[sheetName];
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      importResult = parseSheet(ws, range);
+      importLog(`Found ${importResult.venueBlocks.length} venue blocks and ${importResult.themeIdeaNames.length} theme-library-only entries.`);
+      renderImportPreview();
+    }catch(err){
+      importLog('Error: ' + err.message);
+      toast('Could not read that file.', true);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function cellAt(ws,r,c){ const addr = XLSX.utils.encode_cell({r,c}); const cd = ws[addr]; return cd ? cd.v : null; }
+
+function parseVenueHeader(raw){
+  let s = String(raw).trim();
+  let day='', time='', payNote='', cadenceRaw='';
+  const m = s.match(/\(([^)]+)\)/);
+  let core;
+  if(m){
+    core = s.slice(0,m.index).trim().replace(/[-,]$/,'').trim();
+    const inner = m[1].trim();
+    const dm = inner.match(/(Mon|Tue|Tues|Wed|Thu|Thurs|Fri|Sat|Sun)[a-z]*\.?/i);
+    const tm = inner.match(/\d{1,2}(:\d{2})?\s*(am|pm)/i);
+    day = dm ? dm[0] : ''; time = tm ? tm[0] : '';
+    cadenceRaw = inner;
+    const after = s.slice(m.index + m[0].length).trim();
+    if(after) payNote = after.replace(/^-+\s*/,'');
+  } else {
+    core = s;
+    const dm = s.match(/(Mon|Tue|Tues|Wed|Thu|Thurs|Fri|Sat|Sun)[a-z]*\.?/i);
+    const tm = s.match(/\d{1,2}(:\d{2})?\s*(am|pm)/i);
+    day = dm?dm[0]:''; time = tm?tm[0]:'';
+    if(dm) core = core.replace(dm[0],'').trim();
+    if(tm) core = core.replace(tm[0],'').trim();
+    core = core.replace(/[-–,]\s*$/,'').trim();
+    cadenceRaw = (day+' '+time).trim();
+  }
+  return { name: core||s, day: normalizeDay(day), time, payNote, cadenceRaw };
+}
+function parsePayText(raw){
+  if(!raw) return {amount:null, method:''};
+  const s = String(raw);
+  const amtM = s.match(/\$?\s*(\d{2,4})/);
+  const amount = amtM ? parseInt(amtM[1]) : null;
+  let method = '';
+  if(/venmo/i.test(s)) method='venmo';
+  else if(/chk|check/i.test(s)) method='check';
+  else if(/cash/i.test(s)) method='cash';
+  else if(/w-?9|invoice/i.test(s)) method='invoice';
+  return {amount, method};
+}
+function sectionToStatus(section){
+  if(section==='Finished Places') return 'finished';
+  if(section==='Seasonal Places') return 'seasonal';
+  return 'active';
+}
+function slugify(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'').slice(0,40); }
+
+function parseSheet(ws, range){
+  const maxRow = range.e.r, maxCol = range.e.c, HEADSCAN = 6;
+  const venueBlocks = [];
+  const themeIdeaNames = [];
+  let section = 'Main';
+  let c = 0;
+  while(c <= maxCol){
+    for(let r=0;r<HEADSCAN;r++){
+      const v = cellAt(ws,r,c);
+      if(typeof v==='string' && SECTION_TITLES.includes(v.trim())) section = v.trim();
+    }
+    if(section==='Themed Round Ideas'){
+      for(let r=0;r<=maxRow;r++){
+        const v = cellAt(ws,r,c);
+        if(typeof v==='string' && v.trim() && !SECTION_TITLES.includes(v.trim()) && v.trim().toLowerCase()!=='date'){
+          themeIdeaNames.push(v.trim());
+        }
+      }
+      c+=1; continue;
+    }
+    if(section==='One Time Events'){ c+=1; continue; } // handled manually — structurally different (3-col)
+
+    let dateRow=-1;
+    for(let r=0;r<HEADSCAN;r++){
+      const v = cellAt(ws,r,c);
+      if(typeof v==='string' && v.trim().toLowerCase()==='date'){ dateRow=r; break; }
+    }
+    if(dateRow===-1){ c+=1; continue; }
+    const nameRaw = cellAt(ws, dateRow, c+1);
+    if(!nameRaw || typeof nameRaw!=='string' || !nameRaw.trim()){ c+=1; continue; }
+
+    let dataStart = dateRow+1, payNote='';
+    const probe = cellAt(ws, dateRow+1, c);
+    if(!(probe instanceof Date)){
+      const noteVal = cellAt(ws, dateRow+1, c+1);
+      if(typeof noteVal==='string' && noteVal.trim()) payNote = noteVal.trim();
+      dataStart = dateRow+2;
+    }
+    const parsed = parseVenueHeader(nameRaw.trim());
+    if(payNote && !parsed.payNote) parsed.payNote = payNote;
+
+    venueBlocks.push({ section, dateCol:c, nameCol:c+1, dataStart, rawName:nameRaw.trim(), ...parsed, entries:[] });
+    c += 2;
+  }
+
+  venueBlocks.forEach(block=>{
+    for(let r=block.dataStart; r<=maxRow; r++){
+      const dv = cellAt(ws, r, block.dateCol);
+      const tv = cellAt(ws, r, block.nameCol);
+      if(!dv && !tv) continue;
+      let dateObj = dv instanceof Date ? dv : null;
+      if(!dateObj && typeof dv==='string' && dv.trim()){
+        const d = new Date(dv);
+        if(!isNaN(d)) dateObj = d;
+      }
+      if(!dateObj || !tv || typeof tv!=='string' || !tv.trim()) continue;
+      block.entries.push({date:dateObj, text:tv.trim()});
+    }
+  });
+
+  return {venueBlocks, themeIdeaNames};
+}
+
+function renderImportPreview(){
+  document.getElementById('import-preview').style.display='block';
+  const totalEntries = importResult.venueBlocks.reduce((s,b)=>s+b.entries.length,0);
+  document.getElementById('import-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-num">${importResult.venueBlocks.length}</div><div class="stat-lbl">Venues detected</div></div>
+    <div class="stat-card"><div class="stat-num">${totalEntries}</div><div class="stat-lbl">Dated entries</div></div>
+    <div class="stat-card"><div class="stat-num">${importResult.themeIdeaNames.length}</div><div class="stat-lbl">Idea-list themes</div></div>
+  `;
+  document.getElementById('import-idea-note').textContent = importResult.themeIdeaNames.length
+    ? `Plus ${importResult.themeIdeaNames.length} unscheduled ideas from your "Themed Round Ideas" list.` : '';
+
+  document.getElementById('import-rows').innerHTML = importResult.venueBlocks.map((b,i)=>`
+    <tr>
+      <td><input type="checkbox" id="imp-inc-${i}" checked></td>
+      <td><input type="text" id="imp-name-${i}" value="${escapeHtml(b.name)}"></td>
+      <td><select id="imp-day-${i}">
+        ${['','Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<option ${b.day===d?'selected':''}>${d}</option>`).join('')}
+      </select></td>
+      <td><input type="text" id="imp-time-${i}" value="${escapeHtml(b.time||'')}"></td>
+      <td><input type="text" id="imp-pay-${i}" value="${parsePayText(b.payNote).amount||''}"></td>
+      <td><select id="imp-method-${i}">
+        ${['','cash','check','venmo','invoice'].map(m=>`<option value="${m}" ${parsePayText(b.payNote).method===m?'selected':''}>${m||'—'}</option>`).join('')}
+      </select></td>
+      <td><select id="imp-status-${i}">
+        ${['active','seasonal','finished','prospective'].map(s=>`<option value="${s}" ${sectionToStatus(b.section)===s?'selected':''}>${s}</option>`).join('')}
+      </select></td>
+      <td>${b.entries.length} <span style="color:var(--text3)">(${b.section})</span></td>
+    </tr>
+  `).join('');
+}
+
+async function commitImport(){
+  if(!importResult) return;
+  const btn = document.getElementById('import-commit-btn');
+  btn.disabled = true; btn.textContent = 'Importing…';
+  setSyncStatus('syncing');
+
+  const updates = {};
+  const themeIndex = {}; // lowercase name -> {id, timesUsed, lastUsedDate, name}
+  Object.entries(state.themes||{}).forEach(([id,t])=>{
+    themeIndex[(t.name||'').trim().toLowerCase()] = {id, timesUsed:t.timesUsed||0, lastUsedDate:t.lastUsedDate||null, name:t.name};
+  });
+  function themeIdFor(name){
+    const key = name.trim().toLowerCase();
+    if(themeIndex[key]) return themeIndex[key].id;
+    const id = 'th_'+slugify(name)+'_'+Math.random().toString(36).slice(2,7);
+    themeIndex[key] = {id, timesUsed:0, lastUsedDate:null, name:name.trim()};
+    return id;
+  }
+
+  const NONE_RE = /^none\b/i;
+  const SKIP_RE = /(closed|moved to|switched to|cancell?ed)/i;
+  const todayKey = toKey(new Date());
+  let venueCount=0, gigCount=0;
+
+  importResult.venueBlocks.forEach((b,i)=>{
+    const incEl = document.getElementById('imp-inc-'+i);
+    if(!incEl || !incEl.checked) return;
+    const name = document.getElementById('imp-name-'+i).value.trim();
+    if(!name) return;
+    const day = document.getElementById('imp-day-'+i).value;
+    const time = document.getElementById('imp-time-'+i).value.trim();
+    const payAmount = parseInt(document.getElementById('imp-pay-'+i).value)||null;
+    const payMethod = document.getElementById('imp-method-'+i).value;
+    const status = document.getElementById('imp-status-'+i).value;
+
+    const venueId = 'v_'+slugify(name)+'_'+(day||'x')+'_'+i;
+    updates['planner/venues/'+venueId] = {
+      name, day, time, pay:{amount:payAmount, method:payMethod}, status,
+      source:'belladonna', cadence:'weekly', cadenceRaw: b.cadenceRaw||'', notes:'', createdAt: Date.now()
+    };
+    venueCount++;
+
+    b.entries.forEach(e=>{
+      const dk = toKey(e.date);
+      const text = e.text.trim();
+      let gig;
+      if(NONE_RE.test(text)){
+        gig = {themeId:null, themeName:null, status:'none', note:''};
+      } else if(SKIP_RE.test(text)){
+        gig = {themeId:null, themeName:null, status:'none', note:text};
+      } else {
+        const tid = themeIdFor(text);
+        const idx = themeIndex[text.trim().toLowerCase()];
+        idx.timesUsed += 1;
+        if(!idx.lastUsedDate || dk > idx.lastUsedDate) idx.lastUsedDate = dk;
+        gig = {themeId:tid, themeName:text, status: dk<=todayKey?'confirmed':'planned', note:''};
+      }
+      updates['planner/gigs/'+venueId+'/'+dk] = gig;
+      gigCount++;
+    });
+  });
+
+  importResult.themeIdeaNames.forEach(name=>{
+    const key = name.trim().toLowerCase();
+    if(!key || themeIndex[key]) return;
+    themeIndex[key] = {id:'th_'+slugify(name)+'_'+Math.random().toString(36).slice(2,7), timesUsed:0, lastUsedDate:null, name:name.trim()};
+  });
+
+  Object.values(themeIndex).forEach(info=>{
+    updates['planner/themes/'+info.id] = { name: info.name, category:'uncategorized', timesUsed: info.timesUsed, lastUsedDate: info.lastUsedDate };
+  });
+
+  try{
+    await db.ref().update(updates);
+    importLog(`Imported ${venueCount} venues and ${gigCount} gig entries, ${Object.keys(themeIndex).length} themes in the library.`);
+    toast('Import complete.');
+    switchTab('overview');
+  }catch(err){
+    importLog('Import failed: '+err.message);
+    toast('Import failed — see log.', true);
+  }
+  btn.disabled=false; btn.textContent='Import Selected to Planner';
+}
+
+// init
+renderActiveTab();
+</script>
+</body>
+</html>
