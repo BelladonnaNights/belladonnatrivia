@@ -757,6 +757,14 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
       <div class="lineup-sub">Drop categories into rounds below</div>
     </div>
 
+    <div style="margin-bottom:1.25rem">
+      <div class="lineup-field-label">Venue (optional — pulls tonight's planned theme into the trivia screen)</div>
+      <select class="lineup-input" id="venue-select" onchange="onVenueSelectChange()">
+        <option value="">— No venue selected —</option>
+      </select>
+      <div id="venue-theme-preview" style="display:none;margin-top:8px;padding:8px 12px;background:var(--gold-dim);border:1px solid var(--gold-glow);border-radius:var(--radius);font-family:var(--serif);font-style:italic;font-size:12px;color:var(--gold3)"></div>
+    </div>
+
     <div class="round-slots" id="round-slots">
       <div class="round-slot" id="slot-0" data-slot="0" ondragover="onSlotDragOver(event,0)" ondrop="onSlotDrop(event,0)" ondragleave="onSlotDragLeave(0)">
         <div class="round-slot-label">Round 1</div>
@@ -1215,6 +1223,44 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+
+// ═══════════════════════════════════════════════
+//  PLANNER — venue picker (feeds trivia.html's pre-round theme screen)
+// ═══════════════════════════════════════════════
+let plannerVenues = {};
+let selectedVenueId = '';
+let selectedVenueGig = null;
+db.ref('planner/venues').on('value', snap=>{
+  plannerVenues = snap.val() || {};
+  const sel = document.getElementById('venue-select');
+  if(!sel) return;
+  const prev = sel.value;
+  const opts = Object.entries(plannerVenues)
+    .filter(([id,v])=>v.status==='active'||v.status==='seasonal')
+    .sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''));
+  sel.innerHTML = '<option value="">— No venue selected —</option>' +
+    opts.map(([id,v])=>`<option value="${id}">${v.name}${v.day?' ('+v.day+' '+(v.time||'')+')':''}</option>`).join('');
+  if(prev && plannerVenues[prev]) sel.value = prev;
+});
+function todayKeyLocal(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function onVenueSelectChange(){
+  selectedVenueId = document.getElementById('venue-select').value;
+  const preview = document.getElementById('venue-theme-preview');
+  selectedVenueGig = null;
+  if(!selectedVenueId){ preview.style.display='none'; return; }
+  const dk = todayKeyLocal();
+  db.ref('planner/gigs/'+selectedVenueId+'/'+dk).once('value').then(snap=>{
+    const gig = snap.val();
+    selectedVenueGig = gig;
+    if(gig && gig.themeName){
+      preview.textContent = `Tonight's planned theme: ${gig.themeName}`;
+      preview.style.display = 'block';
+    } else {
+      preview.textContent = `No theme scheduled for tonight at this venue in the Planner yet.`;
+      preview.style.display = 'block';
+    }
+  });
+}
 
 // Sync status
 function setSyncStatus(status) {
@@ -1965,6 +2011,11 @@ function launchTrivia() {
   if(!activeRounds.length) return toast('Add at least one category to the lineup.', true);
 
   const params = new URLSearchParams();
+  if(selectedVenueId){
+    params.set('venue', selectedVenueId);
+    params.set('venueName', plannerVenues[selectedVenueId]?.name || '');
+    params.set('gigDate', todayKeyLocal());
+  }
   params.set('rounds', activeRounds.length);
   activeRounds.forEach(({cat, slotIndex}, i) => {
     params.set(`r${i}_url`, cat.sheetUrl||'');
