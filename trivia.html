@@ -469,6 +469,18 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 <body>
 
 <!-- ══════════════════════════════════════════
+     VENUE INTRO SCREEN — shown before setup when a
+     ?venue= param is present. Pulls live from the Planner.
+══════════════════════════════════════════ -->
+<div id="venue-intro-screen" style="position:fixed;inset:0;z-index:1001;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;padding:2rem;text-align:center">
+  <div class="setup-eyebrow" id="vi-venue-name">Venue</div>
+  <div class="setup-title" style="font-size:clamp(40px,7vw,74px)">TONIGHT'S<br><span id="vi-theme-headline">THEME</span></div>
+  <div class="setup-sub" id="vi-theme-sub">Loading tonight's plan…</div>
+  <div style="width:100%;max-width:460px;margin-top:1rem" id="vi-upcoming"></div>
+  <button class="setup-launch-btn" onclick="dismissVenueIntro()" style="margin-top:1.75rem">Continue to Lineup →</button>
+</div>
+
+<!-- ══════════════════════════════════════════
      SETUP SCREEN
 ══════════════════════════════════════════ -->
 <div id="setup-screen">
@@ -2323,6 +2335,62 @@ document.getElementById('setup-screen').addEventListener('dblclick', () => {
 });
 
 checkUrlParams();
+
+// ═══════════════════════════════════════════════════════
+//  VENUE INTRO — pre-round screen pulling tonight's theme
+//  live from the Planner (planner.html), keyed off ?venue=
+// ═══════════════════════════════════════════════════════
+function initVenueIntro(){
+  const p = new URLSearchParams(window.location.search);
+  const venueId = p.get('venue');
+  if(!venueId) return; // no venue passed — behave exactly as before
+
+  document.getElementById('setup-screen').style.display = 'none';
+  const introEl = document.getElementById('venue-intro-screen');
+  introEl.style.display = 'flex';
+
+  const venueName = p.get('venueName') || "Tonight's Venue";
+  document.getElementById('vi-venue-name').textContent = venueName;
+
+  const today = new Date();
+  const gigDate = p.get('gigDate') || (today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0'));
+
+  if(!db){
+    document.getElementById('vi-theme-sub').textContent = "Couldn't reach the Planner.";
+    return;
+  }
+
+  db.ref('planner/gigs/'+venueId+'/'+gigDate).once('value').then(snap=>{
+    const gig = snap.val();
+    if(gig && gig.themeName){
+      document.getElementById('vi-theme-headline').textContent = gig.themeName.toUpperCase();
+      document.getElementById('vi-theme-sub').textContent = 'Scheduled for tonight in the Planner.';
+    } else {
+      document.getElementById('vi-theme-headline').textContent = 'NO THEME SET';
+      document.getElementById('vi-theme-sub').textContent = 'Nothing scheduled for tonight yet — check the Planner.';
+    }
+  }).catch(()=>{
+    document.getElementById('vi-theme-sub').textContent = "Couldn't reach the Planner.";
+  });
+
+  db.ref('planner/gigs/'+venueId).once('value').then(snap=>{
+    const all = snap.val() || {};
+    const upcoming = Object.entries(all)
+      .filter(([dk,g]) => dk > gigDate && g.themeName)
+      .sort((a,b) => a[0].localeCompare(b[0]))
+      .slice(0,3);
+    if(upcoming.length){
+      document.getElementById('vi-upcoming').innerHTML =
+        '<div style="font-family:var(--cinzel);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Coming up at this venue</div>' +
+        upcoming.map(([dk,g]) => `<div style="display:flex;justify-content:space-between;padding:7px 12px;background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:8px;margin-bottom:6px;font-size:12px"><span style="color:var(--text3);font-family:var(--cinzel);letter-spacing:.05em">${dk}</span><span>${g.themeName}</span></div>`).join('');
+    }
+  });
+}
+function dismissVenueIntro(){
+  document.getElementById('venue-intro-screen').style.display = 'none';
+  document.getElementById('setup-screen').style.display = 'flex';
+}
+initVenueIntro();
 
 // ── JOIN QR POPUP ─────────────────────────────────────────────────────
 
