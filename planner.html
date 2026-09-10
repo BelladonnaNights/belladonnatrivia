@@ -89,6 +89,7 @@ a{color:inherit}
 .badge-active{background:var(--green-dim);color:var(--green)}
 .badge-seasonal{background:var(--blue-dim);color:var(--blue)}
 .badge-finished{background:rgba(255,255,255,.05);color:var(--text3)}
+.badge-paused{background:rgba(52,152,219,.10);color:var(--text2)}
 .badge-prospective{background:var(--purple-dim);color:var(--purple)}
 .badge-one-time{background:var(--gold-dim);color:var(--gold2)}
 
@@ -165,7 +166,7 @@ a{color:inherit}
 .group-link.current{color:var(--gold2);border-color:var(--gold-glow2);background:var(--gold-dim)}
 
 /* CALENDAR VIEWS */
-.cal-grid-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-lg)}
+.cal-grid-wrap{overflow:auto;max-height:70vh;border:1px solid var(--border);border-radius:var(--radius-lg)}
 .cal-grid{border-collapse:collapse;table-layout:fixed}
 .cal-grid th{position:sticky;top:0;background:var(--surface2);font-family:var(--cinzel);font-size:9px;letter-spacing:.06em;
   text-transform:uppercase;color:var(--text3);padding:8px 10px;border-bottom:1px solid var(--border2);white-space:nowrap;text-align:left;
@@ -250,6 +251,7 @@ a{color:inherit}
     <div class="nav-subtitle">Trivia venues &amp; theme scheduling</div>
   </div>
   <div class="nav-right">
+    <button class="btn btn-ghost btn-sm" onclick="openModal('import-overlay')">Import Spreadsheet</button>
     <span class="sync-dot" id="sync-dot"></span>
     <span class="sync-label" id="sync-label">connecting…</span>
   </div>
@@ -260,7 +262,6 @@ a{color:inherit}
   <button class="tab-btn" data-tab="planning" onclick="switchTab('planning')">Planning <span class="tab-badge" id="needs-count" style="display:none">0</span></button>
   <button class="tab-btn" data-tab="venues" onclick="switchTab('venues')">Venues</button>
   <button class="tab-btn" data-tab="themes" onclick="switchTab('themes')">Theme Library</button>
-  <button class="tab-btn" data-tab="import" onclick="switchTab('import')">Import Spreadsheet</button>
 </div>
 
 <div class="wrap">
@@ -300,11 +301,17 @@ a{color:inherit}
       </div>
       <div class="spreadsheet-note" id="spreadsheet-format-note"></div>
       <div class="grid-hint">Click a cell to select, drag to select a range, double-click to edit. Right-click for more options — cut/copy/paste works with Ctrl+C / Ctrl+X / Ctrl+V too.</div>
-      <div class="week-nav">
+      <div class="week-nav" id="spreadsheet-paged-nav">
         <button class="btn btn-ghost btn-sm" onclick="shiftSpreadsheetRange(-4)">‹ 4 weeks</button>
         <div class="week-label" id="spreadsheet-range-label"></div>
         <button class="btn btn-ghost btn-sm" onclick="shiftSpreadsheetRange(4)">4 weeks ›</button>
         <button class="btn btn-ghost btn-sm" onclick="jumpSpreadsheetToday()">Today</button>
+      </div>
+      <div class="week-nav" id="spreadsheet-classic-nav" style="display:none">
+        <button class="btn btn-ghost btn-sm" onclick="classicLoadEarlier()">↑ Load Earlier Weeks</button>
+        <div class="week-label" id="classic-range-label"></div>
+        <button class="btn btn-ghost btn-sm" onclick="classicLoadLater()">Load Later Weeks ↓</button>
+        <button class="btn btn-ghost btn-sm" onclick="jumpClassicToday()">Jump to Today</button>
       </div>
       <div class="cal-grid-wrap"><table class="cal-grid" id="spreadsheet-grid-table"></table></div>
     </div>
@@ -340,6 +347,7 @@ a{color:inherit}
       <button class="pill" data-vf="active" onclick="setVenueFilter('active')">Active</button>
       <button class="pill" data-vf="seasonal" onclick="setVenueFilter('seasonal')">Seasonal</button>
       <button class="pill" data-vf="prospective" onclick="setVenueFilter('prospective')">Trivia Time (prospective)</button>
+      <button class="pill" data-vf="paused" onclick="setVenueFilter('paused')">Paused</button>
       <button class="pill" data-vf="finished" onclick="setVenueFilter('finished')">Finished</button>
       <span style="flex:1"></span>
       <button class="btn btn-primary btn-sm" onclick="openVenueModal()">+ Add Venue</button>
@@ -448,9 +456,12 @@ a{color:inherit}
   </div>
 
 
-  <!-- IMPORT -->
-  <div class="panel" id="panel-import">
-    <div class="section-title">Import Spreadsheet</div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="import-overlay">
+  <div class="modal wide">
+    <h3>Import Spreadsheet</h3>
     <div class="section-sub">Pull the existing venue/theme history in from an .xlsx export — you'll review everything before it's saved.</div>
     <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
       <div class="dz-title">Click to choose a file</div>
@@ -472,11 +483,10 @@ a{color:inherit}
         <span class="section-sub" style="margin:0" id="import-idea-note"></span>
       </div>
     </div>
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('import-overlay')">Close</button></div>
   </div>
-
 </div>
 
-<!-- MODALS -->
 <div class="modal-overlay" id="gig-modal-overlay">
   <div class="modal">
     <h3>Assign Theme</h3>
@@ -531,7 +541,7 @@ a{color:inherit}
     <div class="form-row2">
       <div><label class="form-label">Status</label>
         <select class="form-select" id="v-status">
-          <option value="active">Active</option><option value="seasonal">Seasonal</option>
+          <option value="active">Active</option><option value="paused">Paused</option><option value="seasonal">Seasonal</option>
           <option value="one-time">One-time</option><option value="prospective">Prospective (Trivia Time)</option>
           <option value="finished">Finished</option>
         </select></div>
@@ -769,7 +779,7 @@ function switchTab(tab){
   activeTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  const map = {dashboard:'panel-dashboard', planning:'panel-planning', venues:'panel-venues', themes:'panel-themes', import:'panel-import'};
+  const map = {dashboard:'panel-dashboard', planning:'panel-planning', venues:'panel-venues', themes:'panel-themes'};
   if(map[tab]) document.getElementById(map[tab]).classList.add('active');
   renderActiveTab();
 }
@@ -790,7 +800,7 @@ function jumpToday(){ weekStart = startOfWeek(new Date()); renderPlanning(); }
 function renderPlanning(){
   document.getElementById('week-label').textContent = fmtRange(weekStart, addDays(weekStart,6));
   const venues = Object.entries(state.venues||{})
-    .filter(([id,v])=>v.status==='active'||v.status==='seasonal')
+    .filter(([id,v])=>v.status==='active')
     .sort((a,b)=> (DAY_MAP[a[1].day]??9) - (DAY_MAP[b[1].day]??9) || (a[1].name||'').localeCompare(b[1].name||''));
   const unassigned = [];
   const rows = venues.map(([id,v])=>{
@@ -907,9 +917,24 @@ function setSpreadsheetFormat(f){
   document.querySelectorAll('[data-sformat]').forEach(p=>p.classList.toggle('active', p.dataset.sformat===f));
   gridSelection = null; clipboard = null;
   renderSpreadsheetView();
+  if(f==='classic') setTimeout(scrollSpreadsheetToToday, 0);
 }
 function shiftSpreadsheetRange(weeks){ spreadsheetRangeStart = addDays(spreadsheetRangeStart, weeks*7); renderSpreadsheetView(); }
 function jumpSpreadsheetToday(){ spreadsheetRangeStart = startOfWeek(new Date()); renderSpreadsheetView(); }
+let classicRangeStart = addDays(startOfWeek(new Date()), -8*7);
+let classicRangeEnd = addDays(startOfWeek(new Date()), 20*7);
+function classicLoadEarlier(){ classicRangeStart = addDays(classicRangeStart, -8*7); renderSpreadsheetView(); }
+function classicLoadLater(){ classicRangeEnd = addDays(classicRangeEnd, 8*7); renderSpreadsheetView(); }
+function jumpClassicToday(){
+  const t = startOfWeek(new Date());
+  classicRangeStart = addDays(t, -8*7); classicRangeEnd = addDays(t, 20*7);
+  renderSpreadsheetView();
+  setTimeout(scrollSpreadsheetToToday, 0);
+}
+function scrollSpreadsheetToToday(){
+  const row = document.querySelector(`#spreadsheet-grid-table tr[data-weekkey="${toKey(startOfWeek(new Date()))}"]`);
+  if(row) row.scrollIntoView({block:'center'});
+}
 function spreadsheetCell(id, v, w){
   const d = v.day ? nextDateForDay(v.day, w) : null;
   const dk = d ? toKey(d) : null;
@@ -948,10 +973,21 @@ function renderSpreadsheetView(){
   if(activeTab!=='dashboard') return;
   document.querySelectorAll('[data-sformat]').forEach(p=>p.classList.toggle('active', p.dataset.sformat===spreadsheetFormat));
   document.getElementById('spreadsheet-format-note').textContent = SPREADSHEET_NOTES[spreadsheetFormat] || '';
+  const isClassic = spreadsheetFormat==='classic';
+  document.getElementById('spreadsheet-paged-nav').style.display = isClassic ? 'none' : 'flex';
+  document.getElementById('spreadsheet-classic-nav').style.display = isClassic ? 'flex' : 'none';
 
-  const weeks = [];
-  for(let i=0;i<13;i++) weeks.push(addDays(spreadsheetRangeStart, i*7));
-  document.getElementById('spreadsheet-range-label').textContent = fmtRange(weeks[0], addDays(weeks[weeks.length-1],6));
+  let weeks;
+  if(isClassic){
+    weeks = [];
+    let d = new Date(classicRangeStart);
+    while(d <= classicRangeEnd){ weeks.push(new Date(d)); d = addDays(d,7); }
+    document.getElementById('classic-range-label').textContent = fmtRange(weeks[0], addDays(weeks[weeks.length-1],6));
+  } else {
+    weeks = [];
+    for(let i=0;i<13;i++) weeks.push(addDays(spreadsheetRangeStart, i*7));
+    document.getElementById('spreadsheet-range-label').textContent = fmtRange(weeks[0], addDays(weeks[weeks.length-1],6));
+  }
   const venues = Object.entries(state.venues||{}).filter(([id,v])=>v.status==='active'||v.status==='seasonal')
     .sort((a,b)=>(DAY_MAP[a[1].day]??9)-(DAY_MAP[b[1].day]??9)||(a[1].name||'').localeCompare(b[1].name||''));
 
@@ -981,12 +1017,12 @@ function renderSpreadsheetView(){
   } else if(spreadsheetFormat==='classic'){
     gridAddrMode = 'week-major'; gridRows = weeks.length; gridCols = venues.length;
     colgroup = '<col style="width:'+getColWidth(0,60)+'px">' + venues.map((v,i)=>
-      `<col style="width:${getColWidth(i*2+1,90)}px"><col style="width:${getColWidth(i*2+2,240)}px">`).join('');
+      `<col style="width:${getColWidth(i*2+1,110)}px"><col style="width:${getColWidth(i*2+2,420)}px">`).join('');
     thead = '<thead><tr><th></th>' + venues.map(([id,v])=>`<th colspan="2" style="text-align:center;border-left:2px solid var(--border2)">${escapeHtml(v.name)}</th>`).join('') + '</tr>'
       + '<tr><th>Week'+resizeHandle('col',0)+'</th>' + venues.map((v,i)=>`<th style="border-left:2px solid var(--border2)">Date${resizeHandle('col',i*2+1)}</th><th>Theme${resizeHandle('col',i*2+2)}</th>`).join('') + '</tr></thead>';
     tbody = '<tbody>' + weeks.map((w,r)=>{
       const h = getRowHeight(r);
-      let row = `<tr${h?` style="height:${h}px"`:''}><td class="venue-col">${r+1}${resizeHandle('row',r)}</td>`;
+      let row = `<tr data-weekkey="${toKey(w)}"${h?` style="height:${h}px"`:''}><td class="venue-col">${fmtDisplay(w)}${resizeHandle('row',r)}</td>`;
       venues.forEach(([id,v],c)=>{
         const { d } = spreadsheetCell(id, v, w);
         row += `<td style="border-left:2px solid var(--border2);cursor:default">${d?fmtDisplay(d):'—'}</td>` + cellHtml(r,c);
@@ -2149,11 +2185,13 @@ async function commitImport(){
     importLog(`Imported ${venueCount} venues and ${gigCount} gig entries, ${Object.keys(themeIndex).length} themes in the library.`);
     toast('Import complete.');
     switchTab('dashboard');
+    closeModal('import-overlay');
   }catch(err){ importLog('Import failed: '+err.message); toast('Import failed — see log.', true); }
   btn.disabled=false; btn.textContent='Import Selected to Planner';
 }
 
 renderActiveTab();
+if(spreadsheetFormat==='classic') setTimeout(scrollSpreadsheetToToday, 50);
 </script>
 </body>
 </html>
