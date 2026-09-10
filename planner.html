@@ -174,7 +174,7 @@ a{color:inherit}
 .cal-grid td:hover{background:var(--gold-dim)}
 .cal-grid td.venue-col{position:sticky;left:0;background:var(--surface2);font-weight:600;white-space:nowrap;cursor:default;z-index:5}
 .cal-grid td.venue-col:hover{background:var(--surface2)}
-.daybox-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.daybox-grid{display:grid;grid-template-columns:repeat(7,minmax(130px,1fr));gap:10px;overflow-x:auto;padding-bottom:6px}
 .daybox{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px}
 .daybox h4{font-family:var(--display);font-size:20px;letter-spacing:.05em;color:var(--gold2);margin-bottom:10px}
 .daybox-item{padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px}
@@ -203,6 +203,23 @@ a{color:inherit}
 #toast.err{border-color:rgba(231,76,60,.5);color:#ff8a7a}
 .empty-state{text-align:center;padding:3rem 1rem;color:var(--text3);font-family:var(--serif);font-style:italic}
 .dup-cluster{background:var(--surface);border:1px solid var(--gold-glow);border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:10px}
+
+/* MONTH CALENDAR */
+.monthcal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.monthcal-dow{background:var(--surface2);text-align:center;font-family:var(--cinzel);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding:8px 0}
+.monthcal-cell{background:var(--surface);min-height:88px;padding:6px 7px;cursor:default}
+.monthcal-cell[onclick]{cursor:pointer}
+.monthcal-cell[onclick]:hover{background:var(--gold-dim)}
+.monthcal-outside{opacity:.35}
+.monthcal-today{box-shadow:inset 0 0 0 1px var(--gold-glow2)}
+.monthcal-daynum{font-family:var(--cinzel);font-size:11px;color:var(--text2);margin-bottom:5px}
+.monthcal-dots{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
+.monthcal-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-planned{background:var(--gold)}
+.dot-cancelled{background:var(--red)}
+.dot-empty{background:var(--text3);opacity:.5}
+.monthcal-more{font-size:9px;color:var(--text3);font-family:var(--cinzel)}
+.spreadsheet-note{font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3);margin-bottom:10px}
 .dup-cluster-title{font-family:var(--cinzel);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold2);margin-bottom:6px}
 .hist-row{font-size:11px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border)}
 .hist-row:last-child{border-bottom:none}
@@ -234,11 +251,12 @@ a{color:inherit}
   <!-- DASHBOARD -->
   <div class="panel active" id="panel-dashboard">
     <div class="section-title">Dashboard</div>
-    <div class="section-sub">Everything scheduled, mapped out by day or by week.</div>
+    <div class="section-sub">Everything scheduled, mapped out by day, week, or month.</div>
     <div class="filter-bar">
       <div class="vd-view-toggle">
         <button class="pill active" data-dview="week" onclick="setDashboardView('week')">This Week</button>
         <button class="pill" data-dview="calendar" onclick="setDashboardView('calendar')">Calendar</button>
+        <button class="pill" data-dview="spreadsheet" onclick="setDashboardView('spreadsheet')">Spreadsheet</button>
       </div>
     </div>
 
@@ -246,14 +264,25 @@ a{color:inherit}
       <div class="daybox-grid" id="daybox-grid"></div>
     </div>
 
-    <div id="venue-calendar-view" style="display:none">
+    <div id="venue-monthcal-view" style="display:none">
       <div class="week-nav">
-        <button class="btn btn-ghost btn-sm" onclick="shiftCalRange(-4)">‹ 4 weeks</button>
-        <div class="week-label" id="cal-range-label"></div>
-        <button class="btn btn-ghost btn-sm" onclick="shiftCalRange(4)">4 weeks ›</button>
-        <button class="btn btn-ghost btn-sm" onclick="jumpCalToday()">Today</button>
+        <button class="btn btn-ghost btn-sm" onclick="shiftMonth(-1)">‹ Prev</button>
+        <div class="week-label" id="monthcal-label"></div>
+        <button class="btn btn-ghost btn-sm" onclick="shiftMonth(1)">Next ›</button>
+        <button class="btn btn-ghost btn-sm" onclick="jumpMonthToday()">Today</button>
       </div>
-      <div class="cal-grid-wrap"><table class="cal-grid" id="cal-grid-table"></table></div>
+      <div id="monthcal-body"></div>
+    </div>
+
+    <div id="venue-spreadsheet-view" style="display:none">
+      <div class="spreadsheet-note">Each column is one calendar week. The label is that week's Monday — click any cell to assign or edit that venue's theme for the week.</div>
+      <div class="week-nav">
+        <button class="btn btn-ghost btn-sm" onclick="shiftSpreadsheetRange(-4)">‹ 4 weeks</button>
+        <div class="week-label" id="spreadsheet-range-label"></div>
+        <button class="btn btn-ghost btn-sm" onclick="shiftSpreadsheetRange(4)">4 weeks ›</button>
+        <button class="btn btn-ghost btn-sm" onclick="jumpSpreadsheetToday()">Today</button>
+      </div>
+      <div class="cal-grid-wrap"><table class="cal-grid" id="spreadsheet-grid-table"></table></div>
     </div>
   </div>
 
@@ -352,29 +381,48 @@ a{color:inherit}
   <div class="panel" id="panel-themes">
     <div class="section-title">Theme Library</div>
     <div class="section-sub">Every theme you've run or brainstormed, searchable and tagged.</div>
-    <div class="stat-row" id="theme-stats"></div>
     <div class="filter-bar">
-      <input class="search-input" id="theme-search" placeholder="Search themes…" oninput="renderThemes()">
-      <button class="pill" id="dup-toggle" onclick="toggleDupView()">Possible Duplicates</button>
-      <span style="flex:1"></span>
-      <button class="btn btn-primary btn-sm" onclick="openThemeModal()">+ Add Theme</button>
+      <div class="vd-view-toggle">
+        <button class="pill active" data-tlview="library" onclick="setThemeTabView('library')">Theme Library</button>
+        <button class="pill" data-tlview="sequences" onclick="setThemeTabView('sequences')">Bulk Sequences</button>
+      </div>
     </div>
-    <div class="filter-bar" id="tag-filter-bar"></div>
 
-    <div id="dup-view" style="display:none"></div>
+    <div id="theme-library-view">
+      <div class="stat-row" id="theme-stats"></div>
+      <div class="filter-bar">
+        <input class="search-input" id="theme-search" placeholder="Search themes…" oninput="renderThemes()">
+        <button class="pill" id="dup-toggle" onclick="toggleDupView()">Possible Duplicates</button>
+        <span style="flex:1"></span>
+        <button class="btn btn-primary btn-sm" onclick="openThemeModal()">+ Add Theme</button>
+      </div>
+      <div class="filter-bar" id="tag-filter-bar"></div>
 
-    <table class="gtable" id="themes-table">
-      <thead><tr>
-        <th data-sort="name" onclick="setThemeSort('name')">Theme</th>
-        <th>Tags</th>
-        <th data-sort="timesUsed" onclick="setThemeSort('timesUsed')">Times Used</th>
-        <th data-sort="lastUsedDate" onclick="setThemeSort('lastUsedDate')">Last Used</th>
-        <th>Last Venue</th>
-        <th></th>
-      </tr></thead>
-      <tbody id="themes-rows"></tbody>
-    </table>
+      <div id="dup-view" style="display:none"></div>
+
+      <table class="gtable" id="themes-table">
+        <thead><tr>
+          <th data-sort="name" onclick="setThemeSort('name')">Theme</th>
+          <th>Tags</th>
+          <th data-sort="timesUsed" onclick="setThemeSort('timesUsed')">Times Used</th>
+          <th data-sort="lastUsedDate" onclick="setThemeSort('lastUsedDate')">Last Used</th>
+          <th>Last Venue</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="themes-rows"></tbody>
+      </table>
+    </div>
+
+    <div id="theme-sequences-view" style="display:none">
+      <div class="section-sub">Save a run of themes you like using together, then drop the whole sequence onto a venue's upcoming weeks — like copying a block of cells from one column to another.</div>
+      <div class="filter-bar">
+        <span style="flex:1"></span>
+        <button class="btn btn-primary btn-sm" onclick="openSequenceModal()">+ New Sequence</button>
+      </div>
+      <div id="sequences-list"></div>
+    </div>
   </div>
+
 
   <!-- IMPORT -->
   <div class="panel" id="panel-import">
@@ -505,6 +553,68 @@ a{color:inherit}
   </div>
 </div>
 
+<div class="modal-overlay" id="sequence-modal-overlay">
+  <div class="modal">
+    <h3 id="sequence-modal-title">New Sequence</h3>
+    <label class="form-label">Sequence Name</label>
+    <input type="text" class="form-input" id="seq-name" placeholder="Holiday Lineup">
+    <label class="form-label">Themes, in order — one per line</label>
+    <textarea class="form-textarea" id="seq-themes" rows="8" placeholder="Halloween&#10;Thanksgiving Prep&#10;Christmas&#10;New Year Review"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-danger btn-sm" id="sequence-delete-btn" onclick="deleteSequence()" style="display:none">Delete</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('sequence-modal-overlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSequence()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="apply-sequence-overlay">
+  <div class="modal">
+    <h3>Apply "<span id="apply-seq-name"></span>"</h3>
+    <label class="form-label">Venue</label>
+    <select class="form-select" id="apply-seq-venue" onchange="onApplySeqVenueChange()"></select>
+    <label class="form-label">Starting week of</label>
+    <input type="date" class="form-input" id="apply-seq-date">
+    <div class="section-sub">This will overwrite any themes already assigned on those dates for this venue.</div>
+    <div class="modal-actions">
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('apply-sequence-overlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitApplySequence()">Apply Sequence</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="quick-schedule-overlay">
+  <div class="modal wide">
+    <h3 id="qs-venue-name">Schedule</h3>
+    <div class="section-sub" id="qs-venue-meta" style="margin-bottom:1rem"></div>
+    <div class="form-row2" style="align-items:end">
+      <div><label class="form-label">Weeks to show</label>
+        <input type="number" class="form-input" id="qs-weeks-count" value="6" min="1" max="26" onchange="renderQuickScheduleRows()"></div>
+      <div></div>
+    </div>
+    <div class="section-sub" style="margin-bottom:8px">Type a theme (autocompletes against your library) or leave blank for unplanned. Saves as you go.</div>
+    <div class="tl-container" style="max-height:340px" id="qs-rows"></div>
+
+    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border2)">
+      <div class="form-label">Or paste a list — one theme per line, fills these same weeks in order</div>
+      <textarea class="form-textarea" id="qs-bulk-text" rows="4" placeholder="Halloween&#10;Disney Night&#10;Sports Trivia"></textarea>
+      <button class="btn btn-primary btn-sm" onclick="submitQuickBulk()">Fill In From List</button>
+    </div>
+
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('quick-schedule-overlay')">Close</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="day-agenda-overlay">
+  <div class="modal">
+    <h3 id="agenda-title">Day</h3>
+    <div id="agenda-body"></div>
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('day-agenda-overlay')">Close</button></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="history-modal-overlay">
   <div class="modal">
     <h3 id="hist-modal-title">Usage History</h3>
@@ -548,10 +658,11 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<
 // ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
-const state = { venues:{}, themes:{}, gigs:{} };
+const state = { venues:{}, themes:{}, gigs:{}, sequences:{} };
 db.ref('planner/venues').on('value', snap=>{ state.venues = snap.val()||{}; onDataChange(); });
 db.ref('planner/themes').on('value', snap=>{ state.themes = snap.val()||{}; onDataChange(); updateThemeDatalist(); });
 db.ref('planner/gigs').on('value', snap=>{ state.gigs = snap.val()||{}; onDataChange(); });
+db.ref('planner/sequences').on('value', snap=>{ state.sequences = snap.val()||{}; onDataChange(); });
 function onDataChange(){ setSyncStatus('synced'); renderActiveTab(); }
 function updateThemeDatalist(){
   document.getElementById('theme-name-list').innerHTML = Object.values(state.themes||{})
@@ -624,10 +735,10 @@ function switchTab(tab){
   renderActiveTab();
 }
 function renderActiveTab(){
-  if(activeTab==='dashboard') { renderDayBoxes(); renderCalendarView(); }
+  if(activeTab==='dashboard') { renderDayBoxes(); renderMonthCalendar(); renderSpreadsheetView(); }
   else if(activeTab==='planning') renderPlanning();
   else if(activeTab==='venues') renderVenues();
-  else if(activeTab==='themes') renderThemes();
+  else if(activeTab==='themes') { renderThemes(); renderSequences(); }
   renderNeedsBadge();
 }
 
@@ -689,7 +800,8 @@ function setDashboardView(v){
   dashboardView = v;
   document.querySelectorAll('[data-dview]').forEach(p=>p.classList.toggle('active', p.dataset.dview===v));
   document.getElementById('venue-boxes-view').style.display = v==='week' ? 'block' : 'none';
-  document.getElementById('venue-calendar-view').style.display = v==='calendar' ? 'block' : 'none';
+  document.getElementById('venue-monthcal-view').style.display = v==='calendar' ? 'block' : 'none';
+  document.getElementById('venue-spreadsheet-view').style.display = v==='spreadsheet' ? 'block' : 'none';
   renderActiveTab();
 }
 
@@ -730,24 +842,24 @@ function renderVenues(){
       <td>${pay}</td>
       <td><span class="badge badge-${v.status||'active'}">${(v.status||'active').replace('-',' ')}</span></td>
       <td>${escapeHtml(v.host||'—')}</td>
-      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openVenueModal('${id}')">Edit</button></td>
+      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openQuickSchedule('${id}')">Schedule</button> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openVenueModal('${id}')">Edit</button></td>
     </tr>`;
   }).join('');
   document.getElementById('venues-empty').style.display = list.length ? 'none' : 'block';
 }
 
-// -- Calendar (rolling weeks x venues) --
-let calRangeStart = startOfWeek(new Date());
-function shiftCalRange(weeks){ calRangeStart = addDays(calRangeStart, weeks*7); renderCalendarView(); }
-function jumpCalToday(){ calRangeStart = startOfWeek(new Date()); renderCalendarView(); }
-function renderCalendarView(){
+// -- Spreadsheet view (rolling weeks x venues — the old "Calendar" pill) --
+let spreadsheetRangeStart = startOfWeek(new Date());
+function shiftSpreadsheetRange(weeks){ spreadsheetRangeStart = addDays(spreadsheetRangeStart, weeks*7); renderSpreadsheetView(); }
+function jumpSpreadsheetToday(){ spreadsheetRangeStart = startOfWeek(new Date()); renderSpreadsheetView(); }
+function renderSpreadsheetView(){
   if(activeTab!=='dashboard') return;
   const weeks = [];
-  for(let i=0;i<13;i++) weeks.push(addDays(calRangeStart, i*7));
-  document.getElementById('cal-range-label').textContent = fmtRange(weeks[0], addDays(weeks[weeks.length-1],6));
+  for(let i=0;i<13;i++) weeks.push(addDays(spreadsheetRangeStart, i*7));
+  document.getElementById('spreadsheet-range-label').textContent = fmtRange(weeks[0], addDays(weeks[weeks.length-1],6));
   const venues = Object.entries(state.venues||{}).filter(([id,v])=>v.status==='active'||v.status==='seasonal')
     .sort((a,b)=>(DAY_MAP[a[1].day]??9)-(DAY_MAP[b[1].day]??9)||(a[1].name||'').localeCompare(b[1].name||''));
-  let html = '<thead><tr><th>Venue</th>' + weeks.map(w=>`<th>${w.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</th>`).join('') + '</tr></thead><tbody>';
+  let html = '<thead><tr><th>Venue</th>' + weeks.map(w=>`<th>Week of ${w.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</th>`).join('') + '</tr></thead><tbody>';
   venues.forEach(([id,v])=>{
     html += `<tr><td class="venue-col">${escapeHtml(v.name)}</td>`;
     weeks.forEach(w=>{
@@ -760,7 +872,61 @@ function renderCalendarView(){
     html += '</tr>';
   });
   html += '</tbody>';
-  document.getElementById('cal-grid-table').innerHTML = html;
+  document.getElementById('spreadsheet-grid-table').innerHTML = html;
+}
+
+// -- Month calendar — actual calendar grid, click a day to see/edit its gigs --
+let monthCalDate = (()=>{ const d=new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
+function shiftMonth(n){ monthCalDate = new Date(monthCalDate.getFullYear(), monthCalDate.getMonth()+n, 1); renderMonthCalendar(); }
+function jumpMonthToday(){ const d=new Date(); monthCalDate = new Date(d.getFullYear(), d.getMonth(), 1); renderMonthCalendar(); }
+function gigsForDate(dk){
+  const dow = fromKey(dk).getDay();
+  const out = [];
+  Object.entries(state.venues||{}).forEach(([id,v])=>{
+    if(v.status!=='active' && v.status!=='seasonal') return;
+    if(DAY_MAP[v.day]!==dow) return;
+    out.push({ venueId:id, venueName:v.name, gig: (state.gigs[id]||{})[dk] || null });
+  });
+  return out;
+}
+function renderMonthCalendar(){
+  if(activeTab!=='dashboard') return;
+  document.getElementById('monthcal-label').textContent = monthCalDate.toLocaleDateString('en-US',{month:'long', year:'numeric'});
+  const startDow = monthCalDate.getDay();
+  const gridStart = addDays(monthCalDate, -startDow);
+  const today = toKey(new Date());
+  let html = '<div class="monthcal-grid">' + ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="monthcal-dow">${d}</div>`).join('');
+  for(let i=0;i<42;i++){
+    const d = addDays(gridStart, i);
+    const dk = toKey(d);
+    const inMonth = d.getMonth()===monthCalDate.getMonth();
+    const items = gigsForDate(dk);
+    const dots = items.slice(0,8).map(it=>{
+      const cls = !it.gig ? 'dot-empty' : it.gig.status==='cancelled' ? 'dot-cancelled' : it.gig.themeName ? 'dot-planned' : 'dot-empty';
+      return `<span class="monthcal-dot ${cls}"></span>`;
+    }).join('');
+    const more = items.length>8 ? `<span class="monthcal-more">+${items.length-8}</span>` : '';
+    html += `<div class="monthcal-cell ${inMonth?'':'monthcal-outside'} ${dk===today?'monthcal-today':''}" ${items.length?`onclick="openDayAgenda('${dk}')"`:''}>
+      <div class="monthcal-daynum">${d.getDate()}</div>
+      <div class="monthcal-dots">${dots}${more}</div>
+    </div>`;
+  }
+  html += '</div>';
+  document.getElementById('monthcal-body').innerHTML = html;
+}
+function openDayAgenda(dk){
+  const items = gigsForDate(dk);
+  document.getElementById('agenda-title').textContent = fromKey(dk).toLocaleDateString('en-US',{weekday:'long', month:'long', day:'numeric', year:'numeric'});
+  document.getElementById('agenda-body').innerHTML = items.length ? items.map(it=>{
+    const g = it.gig;
+    const label = g && g.themeName ? escapeHtml(g.themeName) : g && g.status==='cancelled' ? 'Cancelled' : 'Unplanned';
+    return `<div class="tl-row" style="grid-template-columns:1fr 90px 64px">
+      <div style="font-size:12.5px">${escapeHtml(it.venueName)}<br><span class="empty-cell" style="font-style:normal;color:var(--text2)">${label}</span></div>
+      <span class="badge badge-${g?(g.status||'planned'):'empty'}">${g?(g.status||'planned'):'unplanned'}</span>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('day-agenda-overlay');openGigModal('${it.venueId}','${dk}')">Edit</button>
+    </div>`;
+  }).join('') : '<div class="empty-state">Nothing scheduled.</div>';
+  openModal('day-agenda-overlay');
 }
 
 // -- Day boxes --
@@ -828,11 +994,25 @@ function toggleVdFullRange(){
 function vdLoadEarlier(){ vdRangeStart = addDays(vdRangeStart, -8*7); renderVdTimeline(); }
 function vdLoadLater(){ vdRangeEnd = addDays(vdRangeEnd, 8*7); renderVdTimeline(); }
 
+function scheduleRowHtml(dk, gig){
+  const today = toKey(new Date());
+  gig = gig || {};
+  const isPast = dk < today, isToday = dk === today;
+  return `<div class="tl-row ${isPast?'tl-past':''} ${isToday?'tl-today':''}" data-dk="${dk}">
+    <div class="tl-date">${fmtDisplay(fromKey(dk))}</div>
+    <input class="tl-input" list="theme-name-list" value="${escapeHtml(gig.themeName||'')}" placeholder="unplanned"
+      onchange="vdInlineSave(this.closest('.tl-row'), '${dk}', this.value, null)">
+    <select class="tl-select" onchange="vdInlineSave(this.closest('.tl-row'), '${dk}', null, this.value)">
+      <option value="planned" ${(!gig.status||gig.status==='planned')?'selected':''}>Planned</option>
+      <option value="cancelled" ${gig.status==='cancelled'?'selected':''}>Cancelled</option>
+    </select>
+  </div>`;
+}
+
 function renderVdTimeline(){
   const id = currentVenueDetailId;
   const v = state.venues[id]; if(!v) return;
   const gigs = state.gigs[id]||{};
-  const today = toKey(new Date());
   // Build the list of dates to show: every occurrence of venue.day within range, plus any gig dates
   // that exist outside that pattern (irregular cadences, imported data).
   const dateSet = new Set();
@@ -852,33 +1032,20 @@ function renderVdTimeline(){
   dates.forEach(dk=>{
     const monthLabel = fromKey(dk).toLocaleDateString('en-US',{month:'long',year:'numeric'});
     if(monthLabel !== lastMonth){ html += `<div class="tl-month-label">${monthLabel}</div>`; lastMonth = monthLabel; }
-    const gig = gigs[dk] || {};
-    const isPast = dk < today, isToday = dk === today;
-    html += `<div class="tl-row ${isPast?'tl-past':''} ${isToday?'tl-today':''}" data-dk="${dk}">
-      <div class="tl-date">${fmtDisplay(fromKey(dk))}</div>
-      <input class="tl-input" list="theme-name-list" value="${escapeHtml(gig.themeName||'')}" placeholder="unplanned"
-        onchange="vdInlineSave('${dk}', this.value, null)">
-      <select class="tl-select" onchange="vdInlineSave('${dk}', null, this.value)">
-        <option value="planned" ${(!gig.status||gig.status==='planned')?'selected':''}>Planned</option>
-        <option value="cancelled" ${gig.status==='cancelled'?'selected':''}>Cancelled</option>
-      </select>
-    </div>`;
+    html += scheduleRowHtml(dk, gigs[dk]);
   });
   document.getElementById('vd-timeline').innerHTML = html || '<div class="empty-state">No dates in this range.</div>';
-  // scroll to today on first render
-  const todayRow = document.querySelector(`.tl-row.tl-today`);
+  const todayRow = document.querySelector(`#vd-timeline .tl-row.tl-today`);
   if(todayRow) todayRow.scrollIntoView({block:'center'});
 }
 
-function vdInlineSave(dk, themeNameOrNull, statusOrNull){
+function vdInlineSave(row, dk, themeNameOrNull, statusOrNull){
   const id = currentVenueDetailId;
-  const row = document.querySelector(`.tl-row[data-dk="${dk}"]`);
   const themeName = themeNameOrNull !== null ? themeNameOrNull.trim() : (row.querySelector('.tl-input').value||'').trim();
   const status = statusOrNull !== null ? statusOrNull : row.querySelector('.tl-select').value;
   const existing = (state.gigs[id]||{})[dk] || {};
 
   if(!themeName){
-    // no theme text -> clear the gig entirely (back to unplanned) unless marking cancelled
     if(status === 'cancelled'){
       db.ref('planner/gigs/'+id+'/'+dk).set({themeId:null, themeName:null, status:'cancelled', note:existing.note||''});
     } else {
@@ -905,7 +1072,7 @@ function resolveThemeIdByName(name){
   const found = Object.entries(state.themes||{}).find(([id,t])=>(t.name||'').trim().toLowerCase()===key);
   if(found) return Promise.resolve(found[0]);
   const newId = db.ref('planner/themes').push().key;
-  return db.ref('planner/themes/'+newId).set({name:name.trim(), tags:suggestTags(name), category:'', timesUsed:0, lastUsedDate:null, lastUsedVenueId:null}).then(()=>newId);
+  return db.ref('planner/themes/'+newId).set({name:name.trim(), tags:suggestTags(name), timesUsed:0, lastUsedDate:null, lastUsedVenueId:null}).then(()=>newId);
 }
 function bumpThemeUsage(themeId, dk){
   const t = state.themes[themeId] || {};
@@ -916,6 +1083,59 @@ function bumpThemeUsage(themeId, dk){
     updates['planner/themes/'+themeId+'/lastUsedVenueId'] = currentVenueDetailId;
   }
   db.ref().update(updates);
+}
+
+// ═══════════════════════════════════════════════
+//  QUICK SCHEDULE — popup version of the venue timeline,
+//  for scheduling the next few weeks without leaving where you are
+// ═══════════════════════════════════════════════
+function openQuickSchedule(venueId){
+  currentVenueDetailId = venueId; // reuse vdInlineSave / bulk-fill logic as-is
+  const v = state.venues[venueId]; if(!v) return;
+  document.getElementById('qs-venue-name').textContent = v.name;
+  document.getElementById('qs-venue-meta').textContent = `${v.day||''} ${v.time||''}`;
+  document.getElementById('qs-bulk-text').value = '';
+  renderQuickScheduleRows();
+  openModal('quick-schedule-overlay');
+}
+function renderQuickScheduleRows(){
+  const id = currentVenueDetailId;
+  const v = state.venues[id]; if(!v) return;
+  const weeksCount = parseInt(document.getElementById('qs-weeks-count').value)||6;
+  const gigs = state.gigs[id]||{};
+  const today = new Date(); today.setHours(0,0,0,0);
+  let dates = [];
+  if(v.day && DAY_MAP[v.day]!==undefined){
+    let d = addDays(today, (DAY_MAP[v.day]-today.getDay()+7)%7);
+    for(let i=0;i<weeksCount;i++) dates.push(addDays(d,i*7));
+  }
+  document.getElementById('qs-rows').innerHTML = dates.length
+    ? dates.map(d=>scheduleRowHtml(toKey(d), gigs[toKey(d)])).join('')
+    : '<div class="empty-state">This venue has no day set — add one in Edit Venue first.</div>';
+}
+function submitQuickBulk(){
+  const id = currentVenueDetailId;
+  const v = state.venues[id];
+  const themeNames = document.getElementById('qs-bulk-text').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!themeNames.length) return toast('Paste at least one theme, one per line.', true);
+  if(!v.day || DAY_MAP[v.day]===undefined) return toast('This venue has no day set.', true);
+  const today = new Date(); today.setHours(0,0,0,0);
+  let d = addDays(today, (DAY_MAP[v.day]-today.getDay()+7)%7);
+  setSyncStatus('syncing');
+  (async ()=>{
+    const updates = {};
+    for(const name of themeNames){
+      const dk = toKey(d);
+      const themeId = await resolveThemeIdByName(name);
+      updates['planner/gigs/'+id+'/'+dk] = {themeId, themeName:name, status:'planned', note:''};
+      bumpThemeUsage(themeId, dk);
+      d = addDays(d,7);
+    }
+    await db.ref().update(updates);
+    toast(`Filled in ${themeNames.length} week${themeNames.length===1?'':'s'}.`);
+    document.getElementById('qs-bulk-text').value = '';
+    renderQuickScheduleRows();
+  })();
 }
 
 // -- Bulk fill --
@@ -1178,6 +1398,97 @@ function deleteTheme(){
   if(!confirm('Delete this theme from the library?')) return;
   setSyncStatus('syncing');
   db.ref('planner/themes/'+editingThemeId).remove().then(()=>{ toast('Theme deleted.'); closeModal('theme-modal-overlay'); });
+}
+
+// ═══════════════════════════════════════════════
+//  BULK SEQUENCES — saved runs of themes you can drop onto a venue
+// ═══════════════════════════════════════════════
+let themeTabView = 'library';
+function setThemeTabView(v){
+  themeTabView = v;
+  document.querySelectorAll('[data-tlview]').forEach(p=>p.classList.toggle('active', p.dataset.tlview===v));
+  document.getElementById('theme-library-view').style.display = v==='library' ? 'block' : 'none';
+  document.getElementById('theme-sequences-view').style.display = v==='sequences' ? 'block' : 'none';
+  if(v==='sequences') renderSequences();
+}
+function renderSequences(){
+  if(activeTab!=='themes') return;
+  const list = Object.entries(state.sequences||{}).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''));
+  document.getElementById('sequences-list').innerHTML = list.length ? list.map(([id,s])=>`
+    <div class="card" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div><div class="venue-name">${escapeHtml(s.name)}</div><div class="venue-meta">${(s.themes||[]).length} themes</div></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-primary btn-sm" onclick="openApplySequence('${id}')">Apply to Venue</button>
+          <button class="btn btn-ghost btn-sm" onclick="openSequenceModal('${id}')">Edit</button>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text2)">${(s.themes||[]).slice(0,6).map(t=>escapeHtml(t)).join(' → ')}${(s.themes||[]).length>6?' → …':''}</div>
+    </div>
+  `).join('') : '<div class="empty-state">No sequences yet — save one from any run of themes you like using together.</div>';
+}
+let editingSequenceId = null;
+function openSequenceModal(id){
+  editingSequenceId = id||null;
+  const s = id ? state.sequences[id] : {};
+  document.getElementById('sequence-modal-title').textContent = id ? 'Edit Sequence' : 'New Sequence';
+  document.getElementById('seq-name').value = s.name||'';
+  document.getElementById('seq-themes').value = (s.themes||[]).join('\n');
+  document.getElementById('sequence-delete-btn').style.display = id ? 'inline-block' : 'none';
+  openModal('sequence-modal-overlay');
+}
+function saveSequence(){
+  const name = document.getElementById('seq-name').value.trim();
+  const themes = document.getElementById('seq-themes').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!name) return toast('Give the sequence a name.', true);
+  if(!themes.length) return toast('Add at least one theme.', true);
+  const id = editingSequenceId || db.ref('planner/sequences').push().key;
+  setSyncStatus('syncing');
+  db.ref('planner/sequences/'+id).set({name, themes}).then(()=>{ toast('Sequence saved.'); closeModal('sequence-modal-overlay'); renderSequences(); });
+}
+function deleteSequence(){
+  if(!editingSequenceId) return;
+  if(!confirm('Delete this sequence?')) return;
+  setSyncStatus('syncing');
+  db.ref('planner/sequences/'+editingSequenceId).remove().then(()=>{ toast('Sequence deleted.'); closeModal('sequence-modal-overlay'); renderSequences(); });
+}
+let applyingSequenceId = null;
+function openApplySequence(seqId){
+  applyingSequenceId = seqId;
+  const s = state.sequences[seqId];
+  document.getElementById('apply-seq-name').textContent = s.name;
+  const sel = document.getElementById('apply-seq-venue');
+  sel.innerHTML = Object.entries(state.venues||{}).filter(([id,v])=>v.status==='active'||v.status==='seasonal')
+    .sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''))
+    .map(([id,v])=>`<option value="${id}">${escapeHtml(v.name)}</option>`).join('');
+  onApplySeqVenueChange();
+  openModal('apply-sequence-overlay');
+}
+function onApplySeqVenueChange(){
+  const venueId = document.getElementById('apply-seq-venue').value;
+  const v = state.venues[venueId];
+  let start = new Date(); start.setHours(0,0,0,0);
+  if(v && v.day && DAY_MAP[v.day]!==undefined) start = addDays(start, (DAY_MAP[v.day]-start.getDay()+7)%7);
+  document.getElementById('apply-seq-date').value = toKey(start);
+}
+async function submitApplySequence(){
+  const venueId = document.getElementById('apply-seq-venue').value;
+  const startVal = document.getElementById('apply-seq-date').value;
+  const s = state.sequences[applyingSequenceId];
+  if(!venueId || !startVal || !s) return toast('Pick a venue and a start date.', true);
+  setSyncStatus('syncing');
+  const updates = {};
+  let d = fromKey(startVal);
+  for(const themeName of (s.themes||[])){
+    const dk = toKey(d);
+    const themeId = await resolveThemeIdByName(themeName);
+    updates['planner/gigs/'+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:''};
+    bumpThemeUsageForVenue(themeId, dk, venueId);
+    d = addDays(d,7);
+  }
+  await db.ref().update(updates);
+  toast(`Applied "${s.name}" starting ${fmtMDY(startVal)}.`);
+  closeModal('apply-sequence-overlay');
 }
 
 // ═══════════════════════════════════════════════
