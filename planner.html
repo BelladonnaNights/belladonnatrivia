@@ -222,8 +222,8 @@ a{color:inherit}
 </div>
 
 <div class="tabs">
-  <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">This Week</button>
-  <button class="tab-btn" data-tab="needs" onclick="switchTab('needs')">Needs Planning <span class="tab-badge" id="needs-count" style="display:none">0</span></button>
+  <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
+  <button class="tab-btn" data-tab="planning" onclick="switchTab('planning')">Planning <span class="tab-badge" id="needs-count" style="display:none">0</span></button>
   <button class="tab-btn" data-tab="venues" onclick="switchTab('venues')">Venues</button>
   <button class="tab-btn" data-tab="themes" onclick="switchTab('themes')">Theme Library</button>
   <button class="tab-btn" data-tab="import" onclick="switchTab('import')">Import Spreadsheet</button>
@@ -231,10 +231,37 @@ a{color:inherit}
 
 <div class="wrap">
 
-  <!-- OVERVIEW -->
-  <div class="panel active" id="panel-overview">
-    <div class="section-title">This Week</div>
-    <div class="section-sub">Every scheduled venue, at a glance.</div>
+  <!-- DASHBOARD -->
+  <div class="panel active" id="panel-dashboard">
+    <div class="section-title">Dashboard</div>
+    <div class="section-sub">Everything scheduled, mapped out by day or by week.</div>
+    <div class="filter-bar">
+      <div class="vd-view-toggle">
+        <button class="pill active" data-dview="week" onclick="setDashboardView('week')">This Week</button>
+        <button class="pill" data-dview="calendar" onclick="setDashboardView('calendar')">Calendar</button>
+      </div>
+    </div>
+
+    <div id="venue-boxes-view">
+      <div class="daybox-grid" id="daybox-grid"></div>
+    </div>
+
+    <div id="venue-calendar-view" style="display:none">
+      <div class="week-nav">
+        <button class="btn btn-ghost btn-sm" onclick="shiftCalRange(-4)">‹ 4 weeks</button>
+        <div class="week-label" id="cal-range-label"></div>
+        <button class="btn btn-ghost btn-sm" onclick="shiftCalRange(4)">4 weeks ›</button>
+        <button class="btn btn-ghost btn-sm" onclick="jumpCalToday()">Today</button>
+      </div>
+      <div class="cal-grid-wrap"><table class="cal-grid" id="cal-grid-table"></table></div>
+    </div>
+  </div>
+
+  <!-- PLANNING (this week + unassigned) -->
+  <div class="panel" id="panel-planning">
+    <div class="section-title">Planning</div>
+    <div class="section-sub">This week's lineup, with anything still unassigned called out up top.</div>
+    <div id="planning-banner"></div>
     <div class="week-nav">
       <button class="btn btn-ghost btn-sm" onclick="shiftWeek(-1)">‹ Prev</button>
       <div class="week-label" id="week-label"></div>
@@ -250,30 +277,10 @@ a{color:inherit}
     <div id="overview-empty" class="empty-state" style="display:none">No active venues yet — add one to get started.</div>
   </div>
 
-  <!-- NEEDS PLANNING -->
-  <div class="panel" id="panel-needs">
-    <div class="section-title">Needs Planning</div>
-    <div class="section-sub">Upcoming weekly gigs (next 21 days) with no theme assigned yet.</div>
-    <table class="gtable">
-      <thead><tr><th>Date</th><th>Venue</th><th></th></tr></thead>
-      <tbody id="needs-rows"></tbody>
-    </table>
-    <div id="needs-empty" class="empty-state" style="display:none">Everything's planned for the next three weeks. Nicely done.</div>
-  </div>
-
   <!-- VENUES -->
   <div class="panel" id="panel-venues">
     <div class="section-title">Venues</div>
     <div class="section-sub">Every venue, current, seasonal, prospective, or finished.</div>
-    <div class="filter-bar">
-      <div class="vd-view-toggle">
-        <button class="pill active" data-vview="list" onclick="setVenueView('list')">List</button>
-        <button class="pill" data-vview="calendar" onclick="setVenueView('calendar')">Calendar</button>
-        <button class="pill" data-vview="boxes" onclick="setVenueView('boxes')">Day Boxes</button>
-      </div>
-      <span style="flex:1"></span>
-      <button class="btn btn-primary btn-sm" onclick="openVenueModal()">+ Add Venue</button>
-    </div>
     <div class="filter-bar" id="venue-list-filters">
       <input class="search-input" id="venue-search" placeholder="Search venues…" oninput="renderVenues()">
       <button class="pill active" data-vf="all" onclick="setVenueFilter('all')">All</button>
@@ -281,6 +288,8 @@ a{color:inherit}
       <button class="pill" data-vf="seasonal" onclick="setVenueFilter('seasonal')">Seasonal</button>
       <button class="pill" data-vf="prospective" onclick="setVenueFilter('prospective')">Trivia Time (prospective)</button>
       <button class="pill" data-vf="finished" onclick="setVenueFilter('finished')">Finished</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-primary btn-sm" onclick="openVenueModal()">+ Add Venue</button>
     </div>
     <table class="gtable" id="venues-table">
       <thead><tr>
@@ -294,20 +303,6 @@ a{color:inherit}
       <tbody id="venues-rows"></tbody>
     </table>
     <div id="venues-empty" class="empty-state" style="display:none">No venues match that filter.</div>
-
-    <div id="venue-calendar-view" style="display:none">
-      <div class="week-nav">
-        <button class="btn btn-ghost btn-sm" onclick="shiftCalRange(-4)">‹ 4 weeks</button>
-        <div class="week-label" id="cal-range-label"></div>
-        <button class="btn btn-ghost btn-sm" onclick="shiftCalRange(4)">4 weeks ›</button>
-        <button class="btn btn-ghost btn-sm" onclick="jumpCalToday()">Today</button>
-      </div>
-      <div class="cal-grid-wrap"><table class="cal-grid" id="cal-grid-table"></table></div>
-    </div>
-
-    <div id="venue-boxes-view" style="display:none">
-      <div class="daybox-grid" id="daybox-grid"></div>
-    </div>
   </div>
 
   <!-- VENUE DETAIL -->
@@ -575,6 +570,7 @@ function addDays(d,n){ const nd=new Date(d); nd.setDate(nd.getDate()+n); return 
 function startOfWeek(d){ const nd=new Date(d); const day=(nd.getDay()+6)%7; nd.setDate(nd.getDate()-day); nd.setHours(0,0,0,0); return nd; }
 function fmtDisplay(d){ return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); }
 function fmtRange(a,b){ return `${a.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${b.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`; }
+function fmtMDY(dk){ if(!dk) return '—'; const [y,m,d]=dk.split('-'); return `${m}-${d}-${y}`; }
 const DAY_MAP = {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
 function nextDateForDay(dayAbbr, weekStart){
   const target = DAY_MAP[dayAbbr];
@@ -618,38 +614,41 @@ function suggestTags(name){ return TAG_RULES.filter(r=>r.re.test(name)).map(r=>r
 // ═══════════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════════
-let activeTab = 'overview';
+let activeTab = 'dashboard';
 function switchTab(tab){
   activeTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  const map = {overview:'panel-overview', needs:'panel-needs', venues:'panel-venues', themes:'panel-themes', import:'panel-import'};
+  const map = {dashboard:'panel-dashboard', planning:'panel-planning', venues:'panel-venues', themes:'panel-themes', import:'panel-import'};
   if(map[tab]) document.getElementById(map[tab]).classList.add('active');
   renderActiveTab();
 }
 function renderActiveTab(){
-  if(activeTab==='overview') renderOverview();
-  else if(activeTab==='needs') renderNeedsPlanning();
-  else if(activeTab==='venues') { renderVenues(); renderCalendarView(); renderDayBoxes(); }
+  if(activeTab==='dashboard') { renderDayBoxes(); renderCalendarView(); }
+  else if(activeTab==='planning') renderPlanning();
+  else if(activeTab==='venues') renderVenues();
   else if(activeTab==='themes') renderThemes();
   renderNeedsBadge();
 }
 
 // ═══════════════════════════════════════════════
-//  OVERVIEW
+//  PLANNING (This Week + unassigned banner)
 // ═══════════════════════════════════════════════
 let weekStart = startOfWeek(new Date());
-function shiftWeek(n){ weekStart = addDays(weekStart, n*7); renderOverview(); }
-function jumpToday(){ weekStart = startOfWeek(new Date()); renderOverview(); }
-function renderOverview(){
+function shiftWeek(n){ weekStart = addDays(weekStart, n*7); renderPlanning(); }
+function jumpToday(){ weekStart = startOfWeek(new Date()); renderPlanning(); }
+function renderPlanning(){
   document.getElementById('week-label').textContent = fmtRange(weekStart, addDays(weekStart,6));
   const venues = Object.entries(state.venues||{})
     .filter(([id,v])=>v.status==='active'||v.status==='seasonal')
     .sort((a,b)=> (DAY_MAP[a[1].day]??9) - (DAY_MAP[b[1].day]??9) || (a[1].name||'').localeCompare(b[1].name||''));
+  const unassigned = [];
   const rows = venues.map(([id,v])=>{
     const d = v.day ? nextDateForDay(v.day, weekStart) : null;
     const dk = d ? toKey(d) : null;
     const gig = dk ? (state.gigs[id]||{})[dk] : null;
+    const isUnassigned = !gig || (!gig.themeName && gig.status!=='cancelled');
+    if(isUnassigned && dk) unassigned.push({id, name:v.name, dk});
     const themeCell = gig && gig.themeName
       ? `<span class="theme-link" onclick="openGigModal('${id}','${dk}')">${escapeHtml(gig.themeName)}</span>`
       : gig && gig.status==='cancelled'
@@ -666,36 +665,13 @@ function renderOverview(){
   }).join('');
   document.getElementById('overview-rows').innerHTML = rows;
   document.getElementById('overview-empty').style.display = venues.length ? 'none' : 'block';
-}
 
-// ═══════════════════════════════════════════════
-//  NEEDS PLANNING
-// ═══════════════════════════════════════════════
-function renderNeedsPlanning(){
-  const today = new Date(); today.setHours(0,0,0,0);
-  const horizon = addDays(today, 21);
-  const gaps = [];
-  Object.entries(state.venues||{}).forEach(([id,v])=>{
-    if(v.status!=='active' && v.status!=='seasonal') return;
-    if(!v.day || (v.cadence && v.cadence!=='weekly')) return;
-    let d = new Date(today);
-    const target = DAY_MAP[v.day];
-    if(target===undefined) return;
-    d = addDays(d, (target - d.getDay() + 7) % 7);
-    while(d <= horizon){
-      const dk = toKey(d);
-      const gig = (state.gigs[id]||{})[dk];
-      if(!gig || !gig.themeName){ if(!(gig && gig.status==='cancelled')) gaps.push({venueId:id, venueName:v.name, date:new Date(d), dk}); }
-      d = addDays(d,7);
-    }
-  });
-  gaps.sort((a,b)=>a.date-b.date);
-  document.getElementById('needs-rows').innerHTML = gaps.map(g=>`
-    <tr><td>${fmtDisplay(g.date)}</td><td class="venue-name">${escapeHtml(g.venueName||'')}</td>
-    <td style="text-align:right"><button class="btn btn-primary btn-sm" onclick="openGigModal('${g.venueId}','${g.dk}')">Assign</button></td></tr>
-  `).join('');
-  document.getElementById('needs-empty').style.display = gaps.length ? 'none' : 'block';
-  window._needsCount = gaps.length;
+  const banner = document.getElementById('planning-banner');
+  banner.innerHTML = unassigned.length
+    ? `<div class="warn-chip" style="flex-wrap:wrap">⚠ ${unassigned.length} unassigned this week: ${unassigned.map(u=>`<span class="theme-link" style="margin-left:4px" onclick="openGigModal('${u.id}','${u.dk}')">${escapeHtml(u.name)}</span>`).join(', ')}</div>`
+    : `<div class="warn-chip" style="color:var(--green);border-color:rgba(46,204,113,.4)">✓ Everything's assigned this week</div>`;
+
+  window._needsCount = unassigned.length;
   renderNeedsBadge();
 }
 function renderNeedsBadge(){
@@ -706,22 +682,23 @@ function renderNeedsBadge(){
 }
 
 // ═══════════════════════════════════════════════
-//  VENUES TAB — list / calendar / boxes
+//  DASHBOARD — This Week (day boxes) / Calendar
 // ═══════════════════════════════════════════════
-let venueFilter = 'all';
-let venueView = 'list';
-let venueSort = {key:'name', dir:1};
-function setVenueFilter(f){ venueFilter=f; document.querySelectorAll('[data-vf]').forEach(p=>p.classList.toggle('active', p.dataset.vf===f)); renderVenues(); }
-function setVenueView(v){
-  venueView = v;
-  document.querySelectorAll('[data-vview]').forEach(p=>p.classList.toggle('active', p.dataset.vview===v));
-  document.getElementById('venue-list-filters').style.display = v==='list' ? 'flex' : 'none';
-  document.getElementById('venues-table').style.display = v==='list' ? 'table' : 'none';
+let dashboardView = 'week';
+function setDashboardView(v){
+  dashboardView = v;
+  document.querySelectorAll('[data-dview]').forEach(p=>p.classList.toggle('active', p.dataset.dview===v));
+  document.getElementById('venue-boxes-view').style.display = v==='week' ? 'block' : 'none';
   document.getElementById('venue-calendar-view').style.display = v==='calendar' ? 'block' : 'none';
-  document.getElementById('venue-boxes-view').style.display = v==='boxes' ? 'block' : 'none';
-  document.getElementById('venues-empty').style.display = 'none';
   renderActiveTab();
 }
+
+// ═══════════════════════════════════════════════
+//  VENUES TAB — list only (calendar/day-boxes live on Dashboard)
+// ═══════════════════════════════════════════════
+let venueFilter = 'all';
+let venueSort = {key:'name', dir:1};
+function setVenueFilter(f){ venueFilter=f; document.querySelectorAll('[data-vf]').forEach(p=>p.classList.toggle('active', p.dataset.vf===f)); renderVenues(); }
 function setVenueSort(key){ if(venueSort.key===key) venueSort.dir*=-1; else { venueSort={key,dir:1}; } renderVenues(); }
 function sortEntries(list, sortState, valueFn){
   return list.sort((a,b)=>{
@@ -764,7 +741,7 @@ let calRangeStart = startOfWeek(new Date());
 function shiftCalRange(weeks){ calRangeStart = addDays(calRangeStart, weeks*7); renderCalendarView(); }
 function jumpCalToday(){ calRangeStart = startOfWeek(new Date()); renderCalendarView(); }
 function renderCalendarView(){
-  if(venueView!=='calendar') return;
+  if(activeTab!=='dashboard') return;
   const weeks = [];
   for(let i=0;i<13;i++) weeks.push(addDays(calRangeStart, i*7));
   document.getElementById('cal-range-label').textContent = fmtRange(weeks[0], addDays(weeks[weeks.length-1],6));
@@ -788,7 +765,7 @@ function renderCalendarView(){
 
 // -- Day boxes --
 function renderDayBoxes(){
-  if(venueView!=='boxes') return;
+  if(activeTab!=='dashboard') return;
   const order = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   const byDay = {}; order.forEach(d=>byDay[d]=[]);
   Object.entries(state.venues||{}).forEach(([id,v])=>{
@@ -1129,7 +1106,7 @@ function renderThemes(){
       <td>${escapeHtml(t.name||'')}</td>
       <td>${(t.tags||[]).map(tag=>`<span class="tag-chip">${escapeHtml(tag)}</span>`).join('')||'<span style="color:var(--text3)">—</span>'}</td>
       <td>${t.timesUsed||0}</td>
-      <td>${t.lastUsedDate||'—'}</td>
+      <td>${fmtMDY(t.lastUsedDate)}</td>
       <td>${venueName!=='—' ? `<span class="theme-link" onclick="openHistoryModal('${id}')">${escapeHtml(venueName)}</span>` : '—'}</td>
       <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openThemeModal('${id}')">Edit</button></td>
     </tr>`;
@@ -1146,7 +1123,7 @@ function openHistoryModal(themeId){
   });
   rows.sort((a,b)=>b.dk.localeCompare(a.dk));
   document.getElementById('hist-modal-body').innerHTML = rows.length
-    ? rows.slice(0,40).map(r=>`<div class="hist-row">${r.dk} — ${escapeHtml(r.venueName)}</div>`).join('')
+    ? rows.slice(0,40).map(r=>`<div class="hist-row">${fmtMDY(r.dk)} — ${escapeHtml(r.venueName)}</div>`).join('')
     : '<div class="empty-state">No recorded uses yet.</div>';
   openModal('history-modal-overlay');
 }
@@ -1230,7 +1207,7 @@ function renderThemeSuggest(){
   if(!q){ document.getElementById('theme-suggest').innerHTML=''; return; }
   const matches = Object.entries(state.themes||{}).filter(([id,t])=>(t.name||'').toLowerCase().includes(q)).slice(0,25);
   document.getElementById('theme-suggest').innerHTML = matches.map(([id,t])=>`
-    <div class="theme-opt" onclick="pickTheme('${id}')">${escapeHtml(t.name)}<small>Used ${t.timesUsed||0}× · last ${t.lastUsedDate||'never'}</small></div>
+    <div class="theme-opt" onclick="pickTheme('${id}')">${escapeHtml(t.name)}<small>Used ${t.timesUsed||0}× · last ${t.lastUsedDate?fmtMDY(t.lastUsedDate):'never'}</small></div>
   `).join('') || `<div class="theme-opt" style="color:var(--text3)">No match — this will be saved as a new theme.</div>`;
 }
 function pickTheme(id){
@@ -1250,13 +1227,13 @@ function renderGigWarnings(){
   const vGigs = state.gigs[venueId]||{};
   let venueLast = null;
   Object.entries(vGigs).forEach(([dk,g])=>{ if(g.themeId===themeId && dk<dateKey && (!venueLast||dk>venueLast)) venueLast=dk; });
-  if(venueLast){ const weeks = Math.round((fromKey(dateKey)-fromKey(venueLast))/6048e5); warnings.push(`Ran here ${weeks} week${weeks===1?'':'s'} ago (${venueLast})`); }
+  if(venueLast){ const weeks = Math.round((fromKey(dateKey)-fromKey(venueLast))/6048e5); warnings.push(`Ran here ${weeks} week${weeks===1?'':'s'} ago (${fmtMDY(venueLast)})`); }
   let globalLast=null, globalVenueName=null;
   Object.entries(state.gigs||{}).forEach(([vid,dates])=>{
     if(vid===venueId) return;
     Object.entries(dates||{}).forEach(([dk,g])=>{ if(g.themeId===themeId && dk<dateKey && (!globalLast||dk>globalLast)){ globalLast=dk; globalVenueName=(state.venues[vid]||{}).name; } });
   });
-  if(globalLast){ const weeks = Math.round((fromKey(dateKey)-fromKey(globalLast))/6048e5); if(weeks<6) warnings.push(`Also ran ${weeks}w ago at ${globalVenueName||'another venue'}`); }
+  if(globalLast){ const weeks = Math.round((fromKey(dateKey)-fromKey(globalLast))/6048e5); if(weeks<6) warnings.push(`Also ran ${weeks}w ago at ${globalVenueName||'another venue'} (${fmtMDY(globalLast)})`); }
   box.innerHTML = warnings.map(w=>`<div class="warn-chip">⚠ ${w}</div>`).join('');
 }
 function saveGig(){
@@ -1508,7 +1485,7 @@ async function commitImport(){
     await db.ref().update(updates);
     importLog(`Imported ${venueCount} venues and ${gigCount} gig entries, ${Object.keys(themeIndex).length} themes in the library.`);
     toast('Import complete.');
-    switchTab('overview');
+    switchTab('dashboard');
   }catch(err){ importLog('Import failed: '+err.message); toast('Import failed — see log.', true); }
   btn.disabled=false; btn.textContent='Import Selected to Planner';
 }
