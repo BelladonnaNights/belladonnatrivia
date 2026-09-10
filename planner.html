@@ -166,14 +166,31 @@ a{color:inherit}
 
 /* CALENDAR VIEWS */
 .cal-grid-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-lg)}
-.cal-grid{border-collapse:collapse;width:100%}
+.cal-grid{border-collapse:collapse;table-layout:fixed}
 .cal-grid th{position:sticky;top:0;background:var(--surface2);font-family:var(--cinzel);font-size:9px;letter-spacing:.06em;
-  text-transform:uppercase;color:var(--text3);padding:8px 10px;border-bottom:1px solid var(--border2);white-space:nowrap;text-align:left}
+  text-transform:uppercase;color:var(--text3);padding:8px 10px;border-bottom:1px solid var(--border2);white-space:nowrap;text-align:left;
+  position:relative;overflow:hidden;text-overflow:ellipsis;z-index:7}
 .cal-grid td{padding:6px 10px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);font-size:11px;
-  white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  white-space:normal;word-break:break-word;overflow:hidden;cursor:pointer;vertical-align:top;position:relative;user-select:none}
 .cal-grid td:hover{background:var(--gold-dim)}
 .cal-grid td.venue-col{position:sticky;left:0;background:var(--surface2);font-weight:600;white-space:nowrap;cursor:default;z-index:5}
 .cal-grid td.venue-col:hover{background:var(--surface2)}
+.cal-grid td.cell-selected{background:rgba(201,168,76,.20);box-shadow:inset 0 0 0 2px var(--gold)}
+.cal-grid td.cell-cut{outline:1px dashed var(--red);outline-offset:-2px}
+.col-resize-handle{position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize;z-index:8}
+.col-resize-handle:hover,.col-resize-handle.active{background:var(--gold-glow2)}
+.row-resize-handle{position:absolute;left:0;bottom:0;width:100%;height:6px;cursor:row-resize;z-index:8}
+.row-resize-handle:hover,.row-resize-handle.active{background:var(--gold-glow2)}
+.grid-context-menu{position:fixed;z-index:600;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);
+  box-shadow:0 8px 32px rgba(0,0,0,.6);padding:6px;min-width:230px;display:none}
+.grid-context-menu.open{display:block}
+.gcm-item{padding:8px 12px;font-size:12.5px;color:var(--text);cursor:pointer;border-radius:6px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.gcm-item:hover{background:var(--gold-dim);color:var(--gold2)}
+.gcm-item.disabled{color:var(--text3);cursor:default;pointer-events:none}
+.gcm-item .kbd{font-size:10px;color:var(--text3);font-family:var(--cinzel)}
+.gcm-sep{height:1px;background:var(--border);margin:5px 2px}
+.grid-hint{font-family:var(--serif);font-style:italic;font-size:11px;color:var(--text3);margin:6px 0 2px}
+
 .daybox-grid{display:grid;grid-template-columns:repeat(7,minmax(130px,1fr));gap:10px;overflow-x:auto;padding-bottom:6px}
 .daybox{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px}
 .daybox h4{font-family:var(--display);font-size:20px;letter-spacing:.05em;color:var(--gold2);margin-bottom:10px}
@@ -282,6 +299,7 @@ a{color:inherit}
         <button class="pill" data-sformat="classic" onclick="setSpreadsheetFormat('classic')">Classic (Date | Theme)</button>
       </div>
       <div class="spreadsheet-note" id="spreadsheet-format-note"></div>
+      <div class="grid-hint">Click a cell to select, drag to select a range, double-click to edit. Right-click for more options — cut/copy/paste works with Ctrl+C / Ctrl+X / Ctrl+V too.</div>
       <div class="week-nav">
         <button class="btn btn-ghost btn-sm" onclick="shiftSpreadsheetRange(-4)">‹ 4 weeks</button>
         <div class="week-label" id="spreadsheet-range-label"></div>
@@ -575,6 +593,20 @@ a{color:inherit}
   </div>
 </div>
 
+<div class="modal-overlay" id="apply-sequence-at-overlay">
+  <div class="modal">
+    <h3>Apply a Sequence Here</h3>
+    <div class="section-sub" id="apply-at-target" style="margin-bottom:1rem"></div>
+    <label class="form-label">Sequence</label>
+    <select class="form-select" id="apply-at-seq"></select>
+    <div class="modal-actions">
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('apply-sequence-at-overlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitApplySequenceAt()">Apply</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="apply-sequence-overlay">
   <div class="modal">
     <h3>Apply "<span id="apply-seq-name"></span>"</h3>
@@ -632,6 +664,7 @@ a{color:inherit}
 <datalist id="theme-name-list"></datalist>
 
 <div id="toast"></div>
+<div class="grid-context-menu" id="grid-context-menu"></div>
 
 <script>
 // ═══════════════════════════════════════════════
@@ -864,14 +897,15 @@ function renderVenues(){
 let spreadsheetRangeStart = startOfWeek(new Date());
 let spreadsheetFormat = (function(){ try{ return localStorage.getItem('plannerSpreadsheetFormat')||'venue-rows'; }catch(e){ return 'venue-rows'; } })();
 const SPREADSHEET_NOTES = {
-  'venue-rows': "Each row is a venue, each column is one calendar week (labeled by that week's Monday). Click any cell to assign or edit.",
-  'week-rows': "Each row is one calendar week, each column is a venue. Click any cell to assign or edit.",
-  'classic': "Each venue gets its own Date + Theme columns, one row per week — closest to the original spreadsheet. Click a Theme cell to assign or edit."
+  'venue-rows': "Each row is a venue, each column is one calendar week (labeled by that week's Monday).",
+  'week-rows': "Each row is one calendar week, each column is a venue.",
+  'classic': "Each venue gets its own Date + Theme columns, one row per week — closest to the original spreadsheet."
 };
 function setSpreadsheetFormat(f){
   spreadsheetFormat = f;
   try{ localStorage.setItem('plannerSpreadsheetFormat', f); }catch(e){}
   document.querySelectorAll('[data-sformat]').forEach(p=>p.classList.toggle('active', p.dataset.sformat===f));
+  gridSelection = null; clipboard = null;
   renderSpreadsheetView();
 }
 function shiftSpreadsheetRange(weeks){ spreadsheetRangeStart = addDays(spreadsheetRangeStart, weeks*7); renderSpreadsheetView(); }
@@ -882,6 +916,34 @@ function spreadsheetCell(id, v, w){
   const gig = dk ? (state.gigs[id]||{})[dk] : null;
   return {d, dk, gig};
 }
+
+// Column width / row height preferences — persisted per layout format
+let spreadsheetColWidths = {}, spreadsheetRowHeights = {};
+(function loadGridPrefs(){
+  try{ spreadsheetColWidths = JSON.parse(localStorage.getItem('plannerColWidths')||'{}'); }catch(e){ spreadsheetColWidths = {}; }
+  try{ spreadsheetRowHeights = JSON.parse(localStorage.getItem('plannerRowHeights')||'{}'); }catch(e){ spreadsheetRowHeights = {}; }
+})();
+function saveGridPrefs(){
+  try{ localStorage.setItem('plannerColWidths', JSON.stringify(spreadsheetColWidths)); }catch(e){}
+  try{ localStorage.setItem('plannerRowHeights', JSON.stringify(spreadsheetRowHeights)); }catch(e){}
+}
+function getColWidth(idx, fallback){ const arr = spreadsheetColWidths[spreadsheetFormat]; return (arr && arr[idx]) ? arr[idx] : fallback; }
+function setColWidthPref(idx, px){ if(!spreadsheetColWidths[spreadsheetFormat]) spreadsheetColWidths[spreadsheetFormat]=[]; spreadsheetColWidths[spreadsheetFormat][idx]=px; saveGridPrefs(); }
+function getRowHeight(idx){ const o = spreadsheetRowHeights[spreadsheetFormat]; return (o && o[idx]) ? o[idx] : null; }
+function setRowHeightPref(idx, px){ if(!spreadsheetRowHeights[spreadsheetFormat]) spreadsheetRowHeights[spreadsheetFormat]={}; spreadsheetRowHeights[spreadsheetFormat][idx]=px; saveGridPrefs(); }
+
+// Cell addressing — every format reduces to a 2D grid of theme-bearing cells.
+// gridAddrMode tells us whether rows are venues (venue-major) or weeks (week-major/classic).
+let gridAddrMode = 'venue-major', gridVenueList = [], gridWeekList = [], gridRows = 0, gridCols = 0;
+function cellAddr(r, c){
+  const pair = gridAddrMode==='venue-major' ? gridVenueList[r] : gridVenueList[c];
+  const w = gridAddrMode==='venue-major' ? gridWeekList[c] : gridWeekList[r];
+  if(!pair || !w) return null;
+  const [id, v] = pair;
+  const { dk } = spreadsheetCell(id, v, w);
+  return { venueId:id, dateKey:dk };
+}
+
 function renderSpreadsheetView(){
   if(activeTab!=='dashboard') return;
   document.querySelectorAll('[data-sformat]').forEach(p=>p.classList.toggle('active', p.dataset.sformat===spreadsheetFormat));
@@ -893,47 +955,271 @@ function renderSpreadsheetView(){
   const venues = Object.entries(state.venues||{}).filter(([id,v])=>v.status==='active'||v.status==='seasonal')
     .sort((a,b)=>(DAY_MAP[a[1].day]??9)-(DAY_MAP[b[1].day]??9)||(a[1].name||'').localeCompare(b[1].name||''));
 
-  let html;
+  gridWeekList = weeks;
+  gridVenueList = venues;
+
+  const cellHtml = (r,c) => {
+    const addr = cellAddr(r,c);
+    const gig = addr && addr.dateKey ? (state.gigs[addr.venueId]||{})[addr.dateKey] : null;
+    const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? '—' : '';
+    const empty = label ? '' : '<span style="color:var(--text3)">·</span>';
+    return `<td data-r="${r}" data-c="${c}" title="${label}"
+      onmousedown="gridMouseDown(event,${r},${c})" onmouseover="gridMouseOver(event,${r},${c})"
+      ondblclick="gridCellEdit(${r},${c})" oncontextmenu="gridContextMenu(event,${r},${c})">${label||empty}</td>`;
+  };
+
+  let colgroup, thead, tbody;
   if(spreadsheetFormat==='week-rows'){
-    html = '<thead><tr><th>Week</th>' + venues.map(([id,v])=>`<th>${escapeHtml(v.name)}</th>`).join('') + '</tr></thead><tbody>';
-    weeks.forEach(w=>{
-      html += `<tr><td class="venue-col">Week of ${w.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</td>`;
-      venues.forEach(([id,v])=>{
-        const {dk, gig} = spreadsheetCell(id, v, w);
-        const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? '—' : '';
-        html += `<td onclick="openGigModal('${id}'${dk?`,'${dk}'`:''})" title="${label}">${label||'<span style="color:var(--text3)">·</span>'}</td>`;
-      });
-      html += '</tr>';
-    });
-    html += '</tbody>';
+    gridAddrMode = 'week-major'; gridRows = weeks.length; gridCols = venues.length;
+    colgroup = '<col style="width:'+getColWidth(0,160)+'px">' + venues.map((v,i)=>`<col style="width:${getColWidth(i+1,240)}px">`).join('');
+    thead = '<thead><tr><th>Week'+resizeHandle('col',0)+'</th>' + venues.map(([id,v],i)=>`<th>${escapeHtml(v.name)}${resizeHandle('col',i+1)}</th>`).join('') + '</tr></thead>';
+    tbody = '<tbody>' + weeks.map((w,r)=>{
+      const h = getRowHeight(r);
+      return `<tr${h?` style="height:${h}px"`:''}><td class="venue-col">Week of ${w.toLocaleDateString('en-US',{month:'short',day:'numeric'})}${resizeHandle('row',r)}</td>`
+        + venues.map((v,c)=>cellHtml(r,c)).join('') + '</tr>';
+    }).join('') + '</tbody>';
   } else if(spreadsheetFormat==='classic'){
-    html = '<thead><tr><th></th>' + venues.map(([id,v])=>`<th colspan="2" style="text-align:center;border-left:2px solid var(--border2)">${escapeHtml(v.name)}</th>`).join('') + '</tr>';
-    html += '<tr><th>Week</th>' + venues.map(()=>`<th style="border-left:2px solid var(--border2)">Date</th><th>Theme</th>`).join('') + '</tr></thead><tbody>';
-    weeks.forEach((w,i)=>{
-      html += `<tr><td class="venue-col">${i+1}</td>`;
-      venues.forEach(([id,v])=>{
-        const {d, dk, gig} = spreadsheetCell(id, v, w);
-        const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? 'none' : '';
-        html += `<td style="border-left:2px solid var(--border2);cursor:default">${d?fmtDisplay(d):'—'}</td>`
-              + `<td onclick="${dk?`openGigModal('${id}','${dk}')`:''}" style="${dk?'cursor:pointer':'cursor:default'}" title="${label}">${label||'<span style="color:var(--text3)">·</span>'}</td>`;
+    gridAddrMode = 'week-major'; gridRows = weeks.length; gridCols = venues.length;
+    colgroup = '<col style="width:'+getColWidth(0,60)+'px">' + venues.map((v,i)=>
+      `<col style="width:${getColWidth(i*2+1,90)}px"><col style="width:${getColWidth(i*2+2,240)}px">`).join('');
+    thead = '<thead><tr><th></th>' + venues.map(([id,v])=>`<th colspan="2" style="text-align:center;border-left:2px solid var(--border2)">${escapeHtml(v.name)}</th>`).join('') + '</tr>'
+      + '<tr><th>Week'+resizeHandle('col',0)+'</th>' + venues.map((v,i)=>`<th style="border-left:2px solid var(--border2)">Date${resizeHandle('col',i*2+1)}</th><th>Theme${resizeHandle('col',i*2+2)}</th>`).join('') + '</tr></thead>';
+    tbody = '<tbody>' + weeks.map((w,r)=>{
+      const h = getRowHeight(r);
+      let row = `<tr${h?` style="height:${h}px"`:''}><td class="venue-col">${r+1}${resizeHandle('row',r)}</td>`;
+      venues.forEach(([id,v],c)=>{
+        const { d } = spreadsheetCell(id, v, w);
+        row += `<td style="border-left:2px solid var(--border2);cursor:default">${d?fmtDisplay(d):'—'}</td>` + cellHtml(r,c);
       });
-      html += '</tr>';
-    });
-    html += '</tbody>';
+      return row + '</tr>';
+    }).join('') + '</tbody>';
   } else { // venue-rows (default)
-    html = '<thead><tr><th>Venue</th>' + weeks.map(w=>`<th>Week of ${w.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</th>`).join('') + '</tr></thead><tbody>';
-    venues.forEach(([id,v])=>{
-      html += `<tr><td class="venue-col">${escapeHtml(v.name)}</td>`;
-      weeks.forEach(w=>{
-        const {dk, gig} = spreadsheetCell(id, v, w);
-        const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? '—' : '';
-        html += `<td onclick="openGigModal('${id}'${dk?`,'${dk}'`:''})" title="${label}">${label||'<span style="color:var(--text3)">·</span>'}</td>`;
-      });
-      html += '</tr>';
-    });
-    html += '</tbody>';
+    gridAddrMode = 'venue-major'; gridRows = venues.length; gridCols = weeks.length;
+    colgroup = '<col style="width:'+getColWidth(0,180)+'px">' + weeks.map((w,i)=>`<col style="width:${getColWidth(i+1,240)}px">`).join('');
+    thead = '<thead><tr><th>Venue'+resizeHandle('col',0)+'</th>' + weeks.map((w,i)=>`<th>Week of ${w.toLocaleDateString('en-US',{month:'short',day:'numeric'})}${resizeHandle('col',i+1)}</th>`).join('') + '</tr></thead>';
+    tbody = '<tbody>' + venues.map(([id,v],r)=>{
+      const h = getRowHeight(r);
+      return `<tr${h?` style="height:${h}px"`:''}><td class="venue-col">${escapeHtml(v.name)}${resizeHandle('row',r)}</td>`
+        + weeks.map((w,c)=>cellHtml(r,c)).join('') + '</tr>';
+    }).join('') + '</tbody>';
   }
-  document.getElementById('spreadsheet-grid-table').innerHTML = html;
+  document.getElementById('spreadsheet-grid-table').innerHTML = `<colgroup>${colgroup}</colgroup>${thead}${tbody}`;
+  attachResizeHandlers();
+  updateSelectionHighlight();
+}
+function resizeHandle(kind, idx){ return kind==='col' ? `<span class="col-resize-handle" data-colidx="${idx}"></span>` : `<span class="row-resize-handle" data-rowidx="${idx}"></span>`; }
+
+// -- Column/row resizing --
+function attachResizeHandlers(){
+  const table = document.getElementById('spreadsheet-grid-table');
+  table.querySelectorAll('.col-resize-handle').forEach(handle=>{
+    handle.addEventListener('mousedown', e=>{
+      e.preventDefault(); e.stopPropagation();
+      const idx = parseInt(handle.dataset.colidx);
+      const col = table.querySelectorAll('colgroup col')[idx];
+      const startX = e.clientX, startW = col.offsetWidth || parseInt(col.style.width)||100;
+      handle.classList.add('active');
+      function onMove(ev){ col.style.width = Math.max(40, startW + (ev.clientX-startX)) + 'px'; }
+      function onUp(){ handle.classList.remove('active'); setColWidthPref(idx, parseInt(col.style.width)); document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp); }
+      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    });
+  });
+  table.querySelectorAll('.row-resize-handle').forEach(handle=>{
+    handle.addEventListener('mousedown', e=>{
+      e.preventDefault(); e.stopPropagation();
+      const idx = parseInt(handle.dataset.rowidx);
+      const tr = handle.closest('tr');
+      const startY = e.clientY, startH = tr.offsetHeight;
+      handle.classList.add('active');
+      function onMove(ev){ tr.style.height = Math.max(24, startH + (ev.clientY-startY)) + 'px'; }
+      function onUp(){ handle.classList.remove('active'); setRowHeightPref(idx, parseInt(tr.style.height)); document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp); }
+      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    });
+  });
+}
+
+// -- Selection (click, shift-click drag range) --
+let gridSelection = null; // {r1,c1,r2,c2}
+let gridDragging = false;
+function gridMouseDown(e, r, c){
+  if(e.button!==0) return; // left click only
+  gridDragging = true;
+  gridSelection = {r1:r, c1:c, r2:r, c2:c};
+  updateSelectionHighlight();
+  const onUp = ()=>{ gridDragging=false; document.removeEventListener('mouseup', onUp); };
+  document.addEventListener('mouseup', onUp);
+}
+function gridMouseOver(e, r, c){
+  if(!gridDragging || !gridSelection) return;
+  gridSelection.r2 = r; gridSelection.c2 = c;
+  updateSelectionHighlight();
+}
+function selRect(){
+  if(!gridSelection) return null;
+  return { rMin:Math.min(gridSelection.r1,gridSelection.r2), rMax:Math.max(gridSelection.r1,gridSelection.r2),
+           cMin:Math.min(gridSelection.c1,gridSelection.c2), cMax:Math.max(gridSelection.c1,gridSelection.c2) };
+}
+function updateSelectionHighlight(){
+  const table = document.getElementById('spreadsheet-grid-table');
+  if(!table) return;
+  const rect = selRect();
+  table.querySelectorAll('td[data-r]').forEach(td=>{
+    const r = parseInt(td.dataset.r), c = parseInt(td.dataset.c);
+    const inSel = rect && r>=rect.rMin && r<=rect.rMax && c>=rect.cMin && c<=rect.cMax;
+    td.classList.toggle('cell-selected', !!inSel);
+    const inCut = clipboard && clipboard.mode==='cut' && clipboard.cells.some(cc=> cc.origR===r && cc.origC===c);
+    td.classList.toggle('cell-cut', !!inCut);
+  });
+}
+function gridCellEdit(r,c){
+  const addr = cellAddr(r,c);
+  if(!addr || !addr.dateKey) return toast("This venue doesn't have a day set for that slot.", true);
+  openGigModal(addr.venueId, addr.dateKey);
+}
+
+// -- Clipboard: copy / cut / paste / clear — scoped to the current selection --
+let clipboard = null; // {mode, cells:[{dr,dc,themeName,status,origR,origC}]}
+function gridCopy(){
+  const rect = selRect(); if(!rect) return;
+  const cells = [];
+  for(let r=rect.rMin;r<=rect.rMax;r++) for(let c=rect.cMin;c<=rect.cMax;c++){
+    const addr = cellAddr(r,c);
+    const gig = addr && addr.dateKey ? (state.gigs[addr.venueId]||{})[addr.dateKey] : null;
+    cells.push({ dr:r-rect.rMin, dc:c-rect.cMin, themeName: gig?gig.themeName||'':'' , status: gig?gig.status||'planned':'planned', origR:r, origC:c });
+  }
+  clipboard = { mode:'copy', cells };
+  updateSelectionHighlight();
+  toast('Copied.');
+}
+function gridCut(){ gridCopy(); if(clipboard) clipboard.mode='cut'; updateSelectionHighlight(); toast('Cut — paste somewhere to move it.'); }
+async function gridPaste(){
+  if(!clipboard){ return; }
+  const rect = selRect();
+  const anchorR = rect ? rect.rMin : 0, anchorC = rect ? rect.cMin : 0;
+  setSyncStatus('syncing');
+  const updates = {};
+  let skipped = 0;
+  for(const cell of clipboard.cells){
+    const r = anchorR+cell.dr, c = anchorC+cell.dc;
+    if(r<0||c<0||r>=gridRows||c>=gridCols){ skipped++; continue; }
+    const addr = cellAddr(r,c);
+    if(!addr || !addr.dateKey){ skipped++; continue; }
+    if(!cell.themeName){ updates['planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null; continue; }
+    const themeId = await resolveThemeIdByName(cell.themeName);
+    updates['planner/gigs/'+addr.venueId+'/'+addr.dateKey] = { themeId, themeName:cell.themeName, status:cell.status||'planned', note:'' };
+    bumpThemeUsageForVenue(themeId, addr.dateKey, addr.venueId);
+  }
+  if(clipboard.mode==='cut'){
+    for(const cell of clipboard.cells){
+      const addr = cellAddr(cell.origR, cell.origC);
+      if(addr && addr.dateKey) updates['planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null;
+    }
+  }
+  await db.ref().update(updates);
+  if(skipped) toast(`Pasted (${skipped} cell${skipped===1?'':'s'} fell outside the grid and were skipped).`);
+  else toast('Pasted.');
+  if(clipboard.mode==='cut') clipboard = null;
+}
+async function gridClearSelected(){
+  const rect = selRect(); if(!rect) return;
+  setSyncStatus('syncing');
+  const updates = {};
+  for(let r=rect.rMin;r<=rect.rMax;r++) for(let c=rect.cMin;c<=rect.cMax;c++){
+    const addr = cellAddr(r,c);
+    if(addr && addr.dateKey) updates['planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null;
+  }
+  await db.ref().update(updates);
+  toast('Cleared.');
+}
+document.addEventListener('keydown', e=>{
+  if(activeTab!=='dashboard' || dashboardView!=='spreadsheet' || !gridSelection) return;
+  const active = document.activeElement;
+  if(active && (active.tagName==='INPUT'||active.tagName==='TEXTAREA'||active.tagName==='SELECT')) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if(mod && e.key.toLowerCase()==='c'){ e.preventDefault(); gridCopy(); }
+  else if(mod && e.key.toLowerCase()==='x'){ e.preventDefault(); gridCut(); }
+  else if(mod && e.key.toLowerCase()==='v'){ e.preventDefault(); gridPaste(); }
+  else if(e.key==='Delete' || e.key==='Backspace'){ e.preventDefault(); gridClearSelected(); }
+  else if(e.key==='Escape'){ gridSelection=null; clipboard=null; updateSelectionHighlight(); }
+});
+
+// -- Right-click context menu --
+function gridContextMenu(e, r, c){
+  e.preventDefault();
+  const rect = selRect();
+  const inCurrentSelection = rect && r>=rect.rMin && r<=rect.rMax && c>=rect.cMin && c<=rect.cMax;
+  if(!inCurrentSelection){ gridSelection = {r1:r,c1:c,r2:r,c2:c}; updateSelectionHighlight(); }
+  const isMulti = (()=>{ const rc = selRect(); return rc && (rc.rMax>rc.rMin || rc.cMax>rc.cMin); })();
+  const addr = cellAddr(r,c);
+  const menu = document.getElementById('grid-context-menu');
+  const items = [];
+  if(!isMulti && addr && addr.dateKey){
+    items.push(`<div class="gcm-item" onclick="closeGridMenu();openGigModal('${addr.venueId}','${addr.dateKey}')">Add / Edit Theme…</div>`);
+    items.push(`<div class="gcm-item" onclick="closeGridMenu();openQuickSchedule('${addr.venueId}','${addr.dateKey}')">Fill Next Weeks Here…</div>`);
+    items.push(`<div class="gcm-item" onclick="closeGridMenu();openApplySequenceAt('${addr.venueId}','${addr.dateKey}')">Apply Saved Sequence Here…</div>`);
+    items.push('<div class="gcm-sep"></div>');
+  }
+  items.push(`<div class="gcm-item" onclick="closeGridMenu();gridCopy()">Copy <span class="kbd">Ctrl+C</span></div>`);
+  items.push(`<div class="gcm-item" onclick="closeGridMenu();gridCut()">Cut <span class="kbd">Ctrl+X</span></div>`);
+  items.push(`<div class="gcm-item ${clipboard?'':'disabled'}" onclick="closeGridMenu();gridPaste()">Paste <span class="kbd">Ctrl+V</span></div>`);
+  items.push(`<div class="gcm-item" onclick="closeGridMenu();gridClearSelected()">Clear ${isMulti?'Selected':'Cell'} <span class="kbd">Del</span></div>`);
+  if(isMulti){
+    items.push('<div class="gcm-sep"></div>');
+    items.push(`<div class="gcm-item" onclick="closeGridMenu();gridSaveSelectionAsSequence()">Save Selection as Bulk Sequence…</div>`);
+  }
+  menu.innerHTML = items.join('');
+  menu.style.left = e.clientX+'px';
+  menu.style.top = e.clientY+'px';
+  menu.classList.add('open');
+  setTimeout(()=>document.addEventListener('click', closeGridMenuOnce, {once:true}), 0);
+}
+function closeGridMenu(){ document.getElementById('grid-context-menu').classList.remove('open'); }
+function closeGridMenuOnce(){ closeGridMenu(); }
+function gridSaveSelectionAsSequence(){
+  const rect = selRect(); if(!rect) return;
+  const names = [];
+  // read in the grid's natural row-major order within the selection
+  for(let r=rect.rMin;r<=rect.rMax;r++) for(let c=rect.cMin;c<=rect.cMax;c++){
+    const addr = cellAddr(r,c);
+    const gig = addr && addr.dateKey ? (state.gigs[addr.venueId]||{})[addr.dateKey] : null;
+    if(gig && gig.themeName) names.push(gig.themeName);
+  }
+  if(!names.length) return toast('Nothing but empty cells in that selection.', true);
+  editingSequenceId = null;
+  document.getElementById('sequence-modal-title').textContent = 'New Sequence';
+  document.getElementById('seq-name').value = '';
+  document.getElementById('seq-themes').value = names.join('\n');
+  document.getElementById('sequence-delete-btn').style.display = 'none';
+  openModal('sequence-modal-overlay');
+}
+let applySequenceAtCtx = null;
+function openApplySequenceAt(venueId, dateKey){
+  applySequenceAtCtx = { venueId, dateKey };
+  const v = state.venues[venueId];
+  document.getElementById('apply-at-target').textContent = `${v?v.name:''} — starting ${fmtMDY(dateKey)}`;
+  const sel = document.getElementById('apply-at-seq');
+  const seqs = Object.entries(state.sequences||{}).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''));
+  sel.innerHTML = seqs.length ? seqs.map(([id,s])=>`<option value="${id}">${escapeHtml(s.name)}</option>`).join('') : '<option value="">No sequences saved yet</option>';
+  openModal('apply-sequence-at-overlay');
+}
+async function submitApplySequenceAt(){
+  const seqId = document.getElementById('apply-at-seq').value;
+  const s = state.sequences[seqId];
+  if(!s || !applySequenceAtCtx) return toast('Save a sequence first.', true);
+  const { venueId, dateKey } = applySequenceAtCtx;
+  setSyncStatus('syncing');
+  const updates = {};
+  let d = fromKey(dateKey);
+  for(const themeName of (s.themes||[])){
+    const dk = toKey(d);
+    const themeId = await resolveThemeIdByName(themeName);
+    updates['planner/gigs/'+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:''};
+    bumpThemeUsageForVenue(themeId, dk, venueId);
+    d = addDays(d,7);
+  }
+  await db.ref().update(updates);
+  toast(`Applied "${s.name}".`);
+  closeModal('apply-sequence-at-overlay');
 }
 
 // -- Month calendar — actual calendar grid, click a day to see/edit its gigs --
@@ -1150,8 +1436,10 @@ function bumpThemeUsage(themeId, dk){
 //  QUICK SCHEDULE — popup version of the venue timeline,
 //  for scheduling the next few weeks without leaving where you are
 // ═══════════════════════════════════════════════
-function openQuickSchedule(venueId){
+let qsStartOverride = null;
+function openQuickSchedule(venueId, startDateKey){
   currentVenueDetailId = venueId; // reuse vdInlineSave / bulk-fill logic as-is
+  qsStartOverride = startDateKey || null;
   const v = state.venues[venueId]; if(!v) return;
   document.getElementById('qs-venue-name').textContent = v.name;
   document.getElementById('qs-venue-meta').textContent = `${v.day||''} ${v.time||''}`;
@@ -1159,15 +1447,19 @@ function openQuickSchedule(venueId){
   renderQuickScheduleRows();
   openModal('quick-schedule-overlay');
 }
+function qsAnchorDate(v){
+  const base = qsStartOverride ? fromKey(qsStartOverride) : (()=>{ const d=new Date(); d.setHours(0,0,0,0); return d; })();
+  if(v.day && DAY_MAP[v.day]!==undefined) return addDays(base, (DAY_MAP[v.day]-base.getDay()+7)%7);
+  return base;
+}
 function renderQuickScheduleRows(){
   const id = currentVenueDetailId;
   const v = state.venues[id]; if(!v) return;
   const weeksCount = parseInt(document.getElementById('qs-weeks-count').value)||6;
   const gigs = state.gigs[id]||{};
-  const today = new Date(); today.setHours(0,0,0,0);
   let dates = [];
   if(v.day && DAY_MAP[v.day]!==undefined){
-    let d = addDays(today, (DAY_MAP[v.day]-today.getDay()+7)%7);
+    const d = qsAnchorDate(v);
     for(let i=0;i<weeksCount;i++) dates.push(addDays(d,i*7));
   }
   document.getElementById('qs-rows').innerHTML = dates.length
@@ -1180,8 +1472,7 @@ function submitQuickBulk(){
   const themeNames = document.getElementById('qs-bulk-text').value.split('\n').map(s=>s.trim()).filter(Boolean);
   if(!themeNames.length) return toast('Paste at least one theme, one per line.', true);
   if(!v.day || DAY_MAP[v.day]===undefined) return toast('This venue has no day set.', true);
-  const today = new Date(); today.setHours(0,0,0,0);
-  let d = addDays(today, (DAY_MAP[v.day]-today.getDay()+7)%7);
+  let d = qsAnchorDate(v);
   setSyncStatus('syncing');
   (async ()=>{
     const updates = {};
