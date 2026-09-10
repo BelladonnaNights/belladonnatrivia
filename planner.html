@@ -29,7 +29,6 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 ::-webkit-scrollbar-thumb{background:rgba(201,168,76,.2);border-radius:3px}
 a{color:inherit}
 
-/* NAV */
 .nav{position:sticky;top:0;z-index:200;background:rgba(8,8,8,.95);backdrop-filter:blur(16px);
   border-bottom:1px solid var(--border);padding:0 2rem;height:64px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
 .nav-left{display:flex;align-items:center;gap:14px}
@@ -43,7 +42,6 @@ a{color:inherit}
 @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
 .sync-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
 
-/* TABS */
 .tabs{display:flex;gap:4px;padding:0 2rem;border-bottom:1px solid var(--border);background:var(--surface);overflow-x:auto}
 .tab-btn{font-family:var(--cinzel);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);
   background:none;border:none;padding:14px 18px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .2s,border-color .2s}
@@ -51,7 +49,7 @@ a{color:inherit}
 .tab-btn.active{color:var(--gold2);border-bottom-color:var(--gold)}
 .tab-badge{display:inline-block;margin-left:6px;background:var(--red-dim);color:var(--red);border-radius:99px;padding:1px 7px;font-size:10px}
 
-.wrap{padding:2rem;max-width:1400px;margin:0 auto}
+.wrap{padding:2rem;max-width:1500px;margin:0 auto}
 .panel{display:none}
 .panel.active{display:block}
 
@@ -59,7 +57,6 @@ a{color:inherit}
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:2px}
 .section-sub{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-bottom:1.5rem}
 
-/* BUTTONS */
 .btn{font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;border-radius:var(--radius);
   padding:9px 16px;cursor:pointer;transition:all .2s;border:none;white-space:nowrap}
 .btn-ghost{background:transparent;color:var(--gold);border:1px solid var(--gold-glow)}
@@ -71,37 +68,34 @@ a{color:inherit}
 .btn-danger{background:transparent;color:var(--red);border:1px solid rgba(231,76,60,.4)}
 .btn-danger:hover{background:var(--red-dim)}
 
-/* WEEK NAV */
-.week-nav{display:flex;align-items:center;gap:14px;margin-bottom:1.5rem}
-.week-label{font-family:var(--cinzel);font-size:13px;letter-spacing:.08em;color:var(--gold2);min-width:220px;text-align:center}
+.week-nav{display:flex;align-items:center;gap:14px;margin-bottom:1.5rem;flex-wrap:wrap}
+.week-label{font-family:var(--cinzel);font-size:13px;letter-spacing:.08em;color:var(--gold2);min-width:200px;text-align:center}
 
-/* TABLE */
 .gtable{width:100%;border-collapse:collapse}
 .gtable th{text-align:left;font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border2)}
+  color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border2);cursor:pointer;user-select:none;white-space:nowrap}
+.gtable th:hover{color:var(--gold2)}
+.gtable th.sorted{color:var(--gold2)}
+.gtable th .arrow{opacity:.6;margin-left:3px;font-size:8px}
 .gtable td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
 .gtable tr:hover td{background:rgba(255,255,255,.02)}
 .venue-name{font-weight:600;color:var(--text)}
 .venue-meta{font-family:var(--cinzel);font-size:9px;letter-spacing:.06em;color:var(--text3);text-transform:uppercase}
 
-.badge{display:inline-block;font-family:var(--cinzel);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
-  padding:3px 9px;border-radius:99px}
+.badge{display:inline-block;font-family:var(--cinzel);font-size:9px;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:99px}
 .badge-planned{background:var(--blue-dim);color:var(--blue)}
-.badge-confirmed{background:var(--green-dim);color:var(--green)}
-.badge-none{background:var(--red-dim);color:var(--red)}
+.badge-cancelled{background:var(--red-dim);color:var(--red)}
 .badge-empty{background:rgba(255,255,255,.05);color:var(--text3)}
 .badge-active{background:var(--green-dim);color:var(--green)}
 .badge-seasonal{background:var(--blue-dim);color:var(--blue)}
 .badge-finished{background:rgba(255,255,255,.05);color:var(--text3)}
 .badge-prospective{background:var(--purple-dim);color:var(--purple)}
 .badge-one-time{background:var(--gold-dim);color:var(--gold2)}
-.src-tag{font-size:10px;color:var(--text3)}
 
 .theme-link{color:var(--text2);cursor:pointer;text-decoration:none;border-bottom:1px dashed var(--border3)}
 .theme-link:hover{color:var(--gold2);border-color:var(--gold-glow)}
 .empty-cell{color:var(--text3);font-style:italic;font-family:var(--serif)}
 
-/* FILTER BAR */
 .filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:1.25rem}
 .pill{background:transparent;border:1px solid var(--border2);border-radius:99px;padding:5px 14px;font-size:10px;
   font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;color:var(--text3);cursor:pointer;transition:all .2s}
@@ -111,18 +105,24 @@ a{color:inherit}
   padding:8px 12px;color:var(--text);font-family:var(--font);font-size:13px;min-width:220px}
 .search-input:focus{outline:none;border-color:var(--gold-glow2)}
 
-/* CARDS */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem}
-.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:1.5rem}
+.tag-chip{display:inline-flex;align-items:center;gap:4px;background:var(--purple-dim);color:var(--purple);
+  border-radius:99px;padding:2px 9px;font-size:10px;font-family:var(--cinzel);letter-spacing:.04em;margin:1px 3px 1px 0}
+.tag-chip .x{cursor:pointer;opacity:.6}
+.tag-chip .x:hover{opacity:1}
+.tag-pill{background:transparent;border:1px solid var(--purple);color:var(--purple);border-radius:99px;padding:4px 12px;
+  font-size:10px;font-family:var(--cinzel);letter-spacing:.06em;cursor:pointer;margin:2px}
+.tag-pill.active{background:var(--purple-dim)}
+
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:1.5rem}
 .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px}
 .stat-num{font-family:var(--display);font-size:32px;color:var(--gold2);letter-spacing:.03em}
 .stat-lbl{font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
 
-/* MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center;padding:20px}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
 .modal-overlay.open{display:flex}
 .modal{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:1.75rem;
-  max-width:480px;width:100%;max-height:88vh;overflow-y:auto}
+  max-width:480px;width:100%;max-height:88vh;overflow-y:auto;margin:auto}
+.modal.wide{max-width:900px}
 .modal h3{font-family:var(--display);font-size:22px;letter-spacing:.05em;color:var(--gold2);margin-bottom:1rem}
 .form-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;display:block}
 .form-input,.form-select,.form-textarea{width:100%;background:var(--surface3);border:1px solid var(--border2);
@@ -130,7 +130,7 @@ a{color:inherit}
 .form-input:focus,.form-select:focus,.form-textarea:focus{outline:none;border-color:var(--gold-glow2)}
 .form-row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .form-row2 .form-input,.form-row2 .form-select{margin-bottom:14px}
-.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap}
 .warn-chip{display:flex;align-items:center;gap:6px;background:rgba(201,168,76,.08);border:1px solid var(--gold-glow);
   border-radius:var(--radius);padding:8px 10px;font-size:12px;color:var(--gold3);margin-bottom:8px}
 .theme-suggest{max-height:180px;overflow-y:auto;border:1px solid var(--border2);border-radius:var(--radius);margin-bottom:14px}
@@ -139,14 +139,48 @@ a{color:inherit}
 .theme-opt:hover{background:var(--gold-dim);color:var(--gold2)}
 .theme-opt small{display:block;color:var(--text3);font-size:10px;margin-top:2px}
 
-/* TIMELINE (venue detail) */
-.timeline{display:flex;flex-direction:column;gap:6px;max-height:520px;overflow-y:auto;margin-top:1rem}
-.tl-row{display:flex;align-items:center;gap:12px;padding:9px 12px;background:var(--surface3);border-radius:var(--radius);font-size:13px}
-.tl-date{font-family:var(--cinzel);font-size:10px;letter-spacing:.05em;color:var(--text3);min-width:88px}
-.tl-theme{flex:1}
-.tl-past{opacity:.65}
+/* VENUE DETAIL */
+.vd-toolbar{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
+.vd-view-toggle{display:flex;gap:4px}
+.tl-row{display:grid;grid-template-columns:100px 1fr 130px;gap:10px;align-items:center;padding:7px 10px;
+  background:var(--surface3);border-radius:var(--radius);margin-bottom:5px}
+.tl-row.tl-today{border:1px solid var(--gold-glow2)}
+.tl-row.tl-past{opacity:.6}
+.tl-date{font-family:var(--cinzel);font-size:10px;letter-spacing:.04em;color:var(--text3)}
+.tl-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 9px;
+  color:var(--text);font-size:12.5px;font-family:var(--font)}
+.tl-input:focus{outline:none;border-color:var(--gold-glow2)}
+.tl-select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 9px;
+  color:var(--text);font-size:11px;font-family:var(--cinzel);text-transform:uppercase;letter-spacing:.04em}
+.tl-saved{color:var(--green);font-size:10px;margin-left:6px}
+.tl-container{max-height:640px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px;background:var(--surface)}
+.tl-month-label{font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold2);
+  margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border2)}
+.bulk-panel{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:1.25rem;display:none}
+.bulk-panel.open{display:block}
+.bulk-mode-row{display:flex;gap:8px;margin-bottom:12px}
+.group-links{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem}
+.group-link{font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:99px;padding:4px 11px;cursor:pointer}
+.group-link:hover{color:var(--gold2);border-color:var(--gold-glow)}
+.group-link.current{color:var(--gold2);border-color:var(--gold-glow2);background:var(--gold-dim)}
 
-/* IMPORT */
+/* CALENDAR VIEWS */
+.cal-grid-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-lg)}
+.cal-grid{border-collapse:collapse;width:100%}
+.cal-grid th{position:sticky;top:0;background:var(--surface2);font-family:var(--cinzel);font-size:9px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--text3);padding:8px 10px;border-bottom:1px solid var(--border2);white-space:nowrap;text-align:left}
+.cal-grid td{padding:6px 10px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);font-size:11px;
+  white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.cal-grid td:hover{background:var(--gold-dim)}
+.cal-grid td.venue-col{position:sticky;left:0;background:var(--surface2);font-weight:600;white-space:nowrap;cursor:default;z-index:5}
+.cal-grid td.venue-col:hover{background:var(--surface2)}
+.daybox-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.daybox{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px}
+.daybox h4{font-family:var(--display);font-size:20px;letter-spacing:.05em;color:var(--gold2);margin-bottom:10px}
+.daybox-item{padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px}
+.daybox-item:last-child{border-bottom:none}
+.daybox-item small{display:block;color:var(--text3);font-size:10px}
+
 .drop-zone{border:2px dashed var(--border2);border-radius:var(--radius-lg);padding:3rem 2rem;text-align:center;
   cursor:pointer;transition:border-color .2s;margin-bottom:1.5rem}
 .drop-zone:hover,.drop-zone.drag{border-color:var(--gold-glow2);background:var(--gold-dim)}
@@ -167,8 +201,11 @@ a{color:inherit}
   opacity:0;pointer-events:none;transition:all .3s;z-index:999}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #toast.err{border-color:rgba(231,76,60,.5);color:#ff8a7a}
-
 .empty-state{text-align:center;padding:3rem 1rem;color:var(--text3);font-family:var(--serif);font-style:italic}
+.dup-cluster{background:var(--surface);border:1px solid var(--gold-glow);border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:10px}
+.dup-cluster-title{font-family:var(--cinzel);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold2);margin-bottom:6px}
+.hist-row{font-size:11px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border)}
+.hist-row:last-child{border-bottom:none}
 </style>
 </head>
 <body>
@@ -194,7 +231,7 @@ a{color:inherit}
 
 <div class="wrap">
 
-  <!-- ═══════════════ OVERVIEW ═══════════════ -->
+  <!-- OVERVIEW -->
   <div class="panel active" id="panel-overview">
     <div class="section-title">This Week</div>
     <div class="section-sub">Every scheduled venue, at a glance.</div>
@@ -213,7 +250,7 @@ a{color:inherit}
     <div id="overview-empty" class="empty-state" style="display:none">No active venues yet — add one to get started.</div>
   </div>
 
-  <!-- ═══════════════ NEEDS PLANNING ═══════════════ -->
+  <!-- NEEDS PLANNING -->
   <div class="panel" id="panel-needs">
     <div class="section-title">Needs Planning</div>
     <div class="section-sub">Upcoming weekly gigs (next 21 days) with no theme assigned yet.</div>
@@ -224,66 +261,136 @@ a{color:inherit}
     <div id="needs-empty" class="empty-state" style="display:none">Everything's planned for the next three weeks. Nicely done.</div>
   </div>
 
-  <!-- ═══════════════ VENUES ═══════════════ -->
+  <!-- VENUES -->
   <div class="panel" id="panel-venues">
     <div class="section-title">Venues</div>
     <div class="section-sub">Every venue, current, seasonal, prospective, or finished.</div>
     <div class="filter-bar">
+      <div class="vd-view-toggle">
+        <button class="pill active" data-vview="list" onclick="setVenueView('list')">List</button>
+        <button class="pill" data-vview="calendar" onclick="setVenueView('calendar')">Calendar</button>
+        <button class="pill" data-vview="boxes" onclick="setVenueView('boxes')">Day Boxes</button>
+      </div>
+      <span style="flex:1"></span>
+      <button class="btn btn-primary btn-sm" onclick="openVenueModal()">+ Add Venue</button>
+    </div>
+    <div class="filter-bar" id="venue-list-filters">
       <input class="search-input" id="venue-search" placeholder="Search venues…" oninput="renderVenues()">
       <button class="pill active" data-vf="all" onclick="setVenueFilter('all')">All</button>
       <button class="pill" data-vf="active" onclick="setVenueFilter('active')">Active</button>
       <button class="pill" data-vf="seasonal" onclick="setVenueFilter('seasonal')">Seasonal</button>
       <button class="pill" data-vf="prospective" onclick="setVenueFilter('prospective')">Trivia Time (prospective)</button>
       <button class="pill" data-vf="finished" onclick="setVenueFilter('finished')">Finished</button>
-      <span style="flex:1"></span>
-      <button class="btn btn-primary btn-sm" onclick="openVenueModal()">+ Add Venue</button>
     </div>
-    <table class="gtable">
-      <thead><tr><th>Venue</th><th>Day / Time</th><th>Pay</th><th>Status</th><th>Source</th><th></th></tr></thead>
+    <table class="gtable" id="venues-table">
+      <thead><tr>
+        <th data-sort="name" onclick="setVenueSort('name')">Venue</th>
+        <th data-sort="day" onclick="setVenueSort('day')">Day / Time</th>
+        <th data-sort="pay" onclick="setVenueSort('pay')">Pay</th>
+        <th data-sort="status" onclick="setVenueSort('status')">Status</th>
+        <th data-sort="host" onclick="setVenueSort('host')">Host</th>
+        <th></th>
+      </tr></thead>
       <tbody id="venues-rows"></tbody>
     </table>
     <div id="venues-empty" class="empty-state" style="display:none">No venues match that filter.</div>
+
+    <div id="venue-calendar-view" style="display:none">
+      <div class="week-nav">
+        <button class="btn btn-ghost btn-sm" onclick="shiftCalRange(-4)">‹ 4 weeks</button>
+        <div class="week-label" id="cal-range-label"></div>
+        <button class="btn btn-ghost btn-sm" onclick="shiftCalRange(4)">4 weeks ›</button>
+        <button class="btn btn-ghost btn-sm" onclick="jumpCalToday()">Today</button>
+      </div>
+      <div class="cal-grid-wrap"><table class="cal-grid" id="cal-grid-table"></table></div>
+    </div>
+
+    <div id="venue-boxes-view" style="display:none">
+      <div class="daybox-grid" id="daybox-grid"></div>
+    </div>
   </div>
 
-  <!-- ═══════════════ VENUE DETAIL ═══════════════ -->
+  <!-- VENUE DETAIL -->
   <div class="panel" id="panel-venue-detail">
     <button class="btn btn-ghost btn-sm" onclick="switchTab('venues')" style="margin-bottom:1rem">‹ Back to Venues</button>
     <div class="section-title" id="vd-name"></div>
     <div class="section-sub" id="vd-meta"></div>
-    <div style="display:flex;gap:8px;margin-bottom:1rem">
+    <div class="group-links" id="vd-group-links"></div>
+    <div class="vd-toolbar">
       <button class="btn btn-ghost btn-sm" onclick="editVenueFromDetail()">Edit Venue</button>
-      <button class="btn btn-primary btn-sm" onclick="openGigModal(currentVenueDetailId)">+ Assign Theme</button>
+      <button class="btn btn-primary btn-sm" onclick="toggleBulkPanel()">Bulk Add / Fill</button>
+      <button class="btn btn-ghost btn-sm" id="vd-range-btn" onclick="toggleVdFullRange()">Show entire history</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost btn-sm" onclick="vdLoadEarlier()">↑ Load earlier</button>
+      <button class="btn btn-ghost btn-sm" onclick="vdLoadLater()">Load later ↓</button>
     </div>
-    <div class="timeline" id="vd-timeline"></div>
+
+    <div class="bulk-panel" id="bulk-panel">
+      <div class="form-label">Bulk fill starting from</div>
+      <div class="form-row2">
+        <div><input type="date" class="form-input" id="bulk-start-date"></div>
+        <div><select class="form-select" id="bulk-mode" onchange="renderBulkMode()">
+          <option value="repeat">Repeat one theme for N weeks</option>
+          <option value="list">Paste a list — one theme per line, one per week</option>
+        </select></div>
+      </div>
+      <div id="bulk-mode-repeat">
+        <label class="form-label">Theme</label>
+        <input type="text" class="form-input" id="bulk-repeat-theme" placeholder="Theme name">
+        <label class="form-label">Number of weeks</label>
+        <input type="number" class="form-input" id="bulk-repeat-weeks" value="4" min="1" max="52">
+      </div>
+      <div id="bulk-mode-list" style="display:none">
+        <label class="form-label">Themes (one per line — fills consecutive weeks in order)</label>
+        <textarea class="form-textarea" id="bulk-list-text" rows="8" placeholder="Halloween&#10;Disney Night&#10;Sports Trivia&#10;..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="toggleBulkPanel()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitBulkFill()">Fill In</button>
+      </div>
+    </div>
+
+    <div class="tl-container" id="vd-timeline"></div>
   </div>
 
-  <!-- ═══════════════ THEMES ═══════════════ -->
+  <!-- THEMES -->
   <div class="panel" id="panel-themes">
     <div class="section-title">Theme Library</div>
-    <div class="section-sub">Every theme you've run or brainstormed, searchable.</div>
+    <div class="section-sub">Every theme you've run or brainstormed, searchable and tagged.</div>
     <div class="stat-row" id="theme-stats"></div>
     <div class="filter-bar">
       <input class="search-input" id="theme-search" placeholder="Search themes…" oninput="renderThemes()">
+      <button class="pill" id="dup-toggle" onclick="toggleDupView()">Possible Duplicates</button>
+      <span style="flex:1"></span>
       <button class="btn btn-primary btn-sm" onclick="openThemeModal()">+ Add Theme</button>
     </div>
-    <table class="gtable">
-      <thead><tr><th>Theme</th><th>Times Used</th><th>Last Used</th><th></th></tr></thead>
+    <div class="filter-bar" id="tag-filter-bar"></div>
+
+    <div id="dup-view" style="display:none"></div>
+
+    <table class="gtable" id="themes-table">
+      <thead><tr>
+        <th data-sort="name" onclick="setThemeSort('name')">Theme</th>
+        <th>Tags</th>
+        <th data-sort="timesUsed" onclick="setThemeSort('timesUsed')">Times Used</th>
+        <th data-sort="lastUsedDate" onclick="setThemeSort('lastUsedDate')">Last Used</th>
+        <th>Last Venue</th>
+        <th></th>
+      </tr></thead>
       <tbody id="themes-rows"></tbody>
     </table>
   </div>
 
-  <!-- ═══════════════ IMPORT ═══════════════ -->
+  <!-- IMPORT -->
   <div class="panel" id="panel-import">
     <div class="section-title">Import Spreadsheet</div>
     <div class="section-sub">Pull the existing venue/theme history in from an .xlsx export — you'll review everything before it's saved.</div>
-
     <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
       <div class="dz-title">Click to choose a file</div>
       <div class="dz-sub">or drag your .xlsx here</div>
       <input type="file" id="file-input" accept=".xlsx" style="display:none" onchange="handleFile(this.files[0])">
     </div>
     <div class="import-log" id="import-log" style="display:none"></div>
-
     <div id="import-preview" style="display:none">
       <div class="stat-row" id="import-stats"></div>
       <div class="section-sub" style="margin-bottom:.75rem">Uncheck anything that looks wrong, or fix the name/day/time/pay inline. Nothing is saved until you click Import.</div>
@@ -302,7 +409,7 @@ a{color:inherit}
 
 </div>
 
-<!-- ═══════════════ MODALS ═══════════════ -->
+<!-- MODALS -->
 <div class="modal-overlay" id="gig-modal-overlay">
   <div class="modal">
     <h3>Assign Theme</h3>
@@ -317,13 +424,12 @@ a{color:inherit}
     <label class="form-label">Status</label>
     <select class="form-select" id="gig-status">
       <option value="planned">Planned</option>
-      <option value="confirmed">Confirmed</option>
-      <option value="none">None / Closed this week</option>
+      <option value="cancelled">Cancelled</option>
     </select>
     <label class="form-label">Note (optional)</label>
     <input type="text" class="form-input" id="gig-note" placeholder="e.g. cancelled — Mariners game">
     <div class="modal-actions">
-      <button class="btn btn-danger btn-sm" id="gig-delete-btn" onclick="deleteGig()" style="display:none">Delete</button>
+      <button class="btn btn-danger btn-sm" id="gig-clear-btn" onclick="clearGig()" style="display:none">Clear (reset to unplanned)</button>
       <span style="flex:1"></span>
       <button class="btn btn-ghost" onclick="closeModal('gig-modal-overlay')">Cancel</button>
       <button class="btn btn-primary" onclick="saveGig()">Save</button>
@@ -336,6 +442,9 @@ a{color:inherit}
     <h3 id="venue-modal-title">Add Venue</h3>
     <label class="form-label">Name</label>
     <input type="text" class="form-input" id="v-name">
+    <label class="form-label">Group under (same physical place, e.g. multiple nights) — leave blank to use the name above</label>
+    <input type="text" class="form-input" id="v-group" placeholder="Same as name" list="group-name-list">
+    <datalist id="group-name-list"></datalist>
     <div class="form-row2">
       <div><label class="form-label">Day</label>
         <select class="form-select" id="v-day">
@@ -381,9 +490,17 @@ a{color:inherit}
   <div class="modal">
     <h3 id="theme-modal-title">Add Theme</h3>
     <label class="form-label">Theme Name</label>
-    <input type="text" class="form-input" id="t-name" placeholder="Movie Villains / 90s Hits">
-    <label class="form-label">Category</label>
-    <input type="text" class="form-input" id="t-category" placeholder="holiday, pop-culture, sports…">
+    <input type="text" class="form-input" id="t-name">
+    <label class="form-label">Tags</label>
+    <div id="t-tag-chips"></div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <input type="text" class="form-input" id="t-tag-input" placeholder="Add a tag and press Enter" style="margin-bottom:0" onkeydown="if(event.key==='Enter'){event.preventDefault();addTagFromInput();}">
+      <button class="btn btn-ghost btn-sm" onclick="suggestTagsForModal()">Suggest</button>
+    </div>
+    <label class="form-label">Times Used</label>
+    <input type="number" class="form-input" id="t-times-used" min="0">
+    <label class="form-label">Last Used Date</label>
+    <input type="date" class="form-input" id="t-last-used">
     <div class="modal-actions">
       <button class="btn btn-danger btn-sm" id="theme-delete-btn" onclick="deleteTheme()" style="display:none">Delete</button>
       <span style="flex:1"></span>
@@ -393,11 +510,21 @@ a{color:inherit}
   </div>
 </div>
 
+<div class="modal-overlay" id="history-modal-overlay">
+  <div class="modal">
+    <h3 id="hist-modal-title">Usage History</h3>
+    <div id="hist-modal-body"></div>
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('history-modal-overlay')">Close</button></div>
+  </div>
+</div>
+
+<datalist id="theme-name-list"></datalist>
+
 <div id="toast"></div>
 
 <script>
 // ═══════════════════════════════════════════════
-//  FIREBASE — same project as admin.html / trivia.html
+//  FIREBASE
 // ═══════════════════════════════════════════════
 const firebaseConfig = {
   apiKey: "AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",
@@ -416,44 +543,33 @@ function setSyncStatus(status){
   dot.className='sync-dot '+status;
   label.textContent = status==='synced' ? 'synced' : status==='syncing' ? 'saving…' : 'connecting…';
 }
-
 function toast(msg, isErr){
   const t=document.getElementById('toast');
   t.textContent=msg; t.className='show'+(isErr?' err':'');
   setTimeout(()=>t.className='',2800);
 }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
 // ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
-const state = { venues:{}, themes:{}, gigs:{} }; // gigs[venueId][dateKey] = {themeId, themeName, status, note}
-let loadedOnce = {venues:false, themes:false, gigs:false};
-
-db.ref('planner/venues').on('value', snap=>{
-  state.venues = snap.val() || {};
-  loadedOnce.venues = true;
-  onDataChange();
-});
-db.ref('planner/themes').on('value', snap=>{
-  state.themes = snap.val() || {};
-  loadedOnce.themes = true;
-  onDataChange();
-});
-db.ref('planner/gigs').on('value', snap=>{
-  state.gigs = snap.val() || {};
-  loadedOnce.gigs = true;
-  onDataChange();
-});
-
-function onDataChange(){
-  setSyncStatus('synced');
-  renderActiveTab();
+const state = { venues:{}, themes:{}, gigs:{} };
+db.ref('planner/venues').on('value', snap=>{ state.venues = snap.val()||{}; onDataChange(); });
+db.ref('planner/themes').on('value', snap=>{ state.themes = snap.val()||{}; onDataChange(); updateThemeDatalist(); });
+db.ref('planner/gigs').on('value', snap=>{ state.gigs = snap.val()||{}; onDataChange(); });
+function onDataChange(){ setSyncStatus('synced'); renderActiveTab(); }
+function updateThemeDatalist(){
+  document.getElementById('theme-name-list').innerHTML = Object.values(state.themes||{})
+    .map(t=>`<option value="${escapeHtml(t.name)}">`).join('');
 }
 
 // ═══════════════════════════════════════════════
-//  DATE HELPERS
+//  DATE HELPERS — toKey is LOCAL (for user-entered dates via <input type=date>
+//  and internally-generated dates). toKeyUTC is for dates that came out of
+//  SheetJS's cellDates parser, which are anchored to UTC midnight.
 // ═══════════════════════════════════════════════
 function toKey(d){ const yy=d.getFullYear(),mm=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0'); return `${yy}-${mm}-${dd}`; }
+function toKeyUTC(d){ const yy=d.getUTCFullYear(),mm=String(d.getUTCMonth()+1).padStart(2,'0'),dd=String(d.getUTCDate()).padStart(2,'0'); return `${yy}-${mm}-${dd}`; }
 function fromKey(k){ const [y,m,d]=k.split('-').map(Number); return new Date(y,m-1,d); }
 function addDays(d,n){ const nd=new Date(d); nd.setDate(nd.getDate()+n); return nd; }
 function startOfWeek(d){ const nd=new Date(d); const day=(nd.getDay()+6)%7; nd.setDate(nd.getDate()-day); nd.setHours(0,0,0,0); return nd; }
@@ -463,8 +579,6 @@ const DAY_MAP = {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
 function nextDateForDay(dayAbbr, weekStart){
   const target = DAY_MAP[dayAbbr];
   if(target===undefined) return null;
-  const diff = (target - 1 + 7) % 7; // weekStart is Monday (index1 in JS getDay terms handled via DAY_MAP.Mon=1)
-  // weekStart is a Monday date object; compute offset from Monday(1) to target day
   const offset = (target - DAY_MAP.Mon + 7) % 7;
   return addDays(weekStart, offset);
 }
@@ -482,6 +596,26 @@ function normalizeDay(raw){
 }
 
 // ═══════════════════════════════════════════════
+//  TAG AUTO-SUGGEST
+// ═══════════════════════════════════════════════
+const TAG_RULES = [
+  {tag:'90s', re:/\b90'?s\b/i},{tag:'80s', re:/\b80'?s\b/i},{tag:'2000s', re:/\b(2000'?s|00'?s)\b/i},
+  {tag:'70s', re:/\b70'?s\b/i},{tag:'60s', re:/\b60'?s\b/i},
+  {tag:'holiday', re:/(christmas|halloween|thanksgiving|valentine|st\.?\s?patrick|easter|4th of july|new year)/i},
+  {tag:'disney', re:/disney/i},
+  {tag:'tv shows', re:/\b(tv|sitcom|show|series)\b/i},
+  {tag:'movies', re:/\b(movie|film|cinema)s?\b/i},
+  {tag:'music', re:/\b(song|music|album|band|jukebox|rock|hip[\s-]?hop|country|karaoke)\b/i},
+  {tag:'sports', re:/\b(sport|nfl|nba|superbowl|olympics|baseball|football)\b/i},
+  {tag:'pop culture', re:/pop cultur|celebrit|celeb\b/i},
+  {tag:'animation', re:/animat|cartoon|pixar|anime/i},
+  {tag:'game show', re:/jeopardy|game show/i},
+  {tag:'horror', re:/horror|scary|creature|zombie/i},
+  {tag:'video games', re:/video game/i},
+];
+function suggestTags(name){ return TAG_RULES.filter(r=>r.re.test(name)).map(r=>r.tag); }
+
+// ═══════════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════════
 let activeTab = 'overview';
@@ -496,36 +630,32 @@ function switchTab(tab){
 function renderActiveTab(){
   if(activeTab==='overview') renderOverview();
   else if(activeTab==='needs') renderNeedsPlanning();
-  else if(activeTab==='venues') renderVenues();
+  else if(activeTab==='venues') { renderVenues(); renderCalendarView(); renderDayBoxes(); }
   else if(activeTab==='themes') renderThemes();
   renderNeedsBadge();
 }
 
 // ═══════════════════════════════════════════════
-//  OVERVIEW (this week)
+//  OVERVIEW
 // ═══════════════════════════════════════════════
 let weekStart = startOfWeek(new Date());
 function shiftWeek(n){ weekStart = addDays(weekStart, n*7); renderOverview(); }
 function jumpToday(){ weekStart = startOfWeek(new Date()); renderOverview(); }
-
 function renderOverview(){
   document.getElementById('week-label').textContent = fmtRange(weekStart, addDays(weekStart,6));
   const venues = Object.entries(state.venues||{})
     .filter(([id,v])=>v.status==='active'||v.status==='seasonal')
-    .sort((a,b)=> (DAY_MAP[a[1].day]||9) - (DAY_MAP[b[1].day]||9) || (a[1].name||'').localeCompare(b[1].name||''));
-
+    .sort((a,b)=> (DAY_MAP[a[1].day]??9) - (DAY_MAP[b[1].day]??9) || (a[1].name||'').localeCompare(b[1].name||''));
   const rows = venues.map(([id,v])=>{
     const d = v.day ? nextDateForDay(v.day, weekStart) : null;
     const dk = d ? toKey(d) : null;
     const gig = dk ? (state.gigs[id]||{})[dk] : null;
     const themeCell = gig && gig.themeName
       ? `<span class="theme-link" onclick="openGigModal('${id}','${dk}')">${escapeHtml(gig.themeName)}</span>`
-      : gig && gig.status==='none'
-        ? `<span class="empty-cell">none${gig.note?' — '+escapeHtml(gig.note):''}</span>`
+      : gig && gig.status==='cancelled'
+        ? `<span class="empty-cell">cancelled${gig.note?' — '+escapeHtml(gig.note):''}</span>`
         : `<span class="empty-cell">unplanned</span>`;
-    const statusBadge = gig
-      ? `<span class="badge badge-${gig.status||'planned'}">${gig.status||'planned'}</span>`
-      : `<span class="badge badge-empty">unplanned</span>`;
+    const statusBadge = gig ? `<span class="badge badge-${gig.status||'planned'}">${gig.status||'planned'}</span>` : `<span class="badge badge-empty">unplanned</span>`;
     return `<tr>
       <td><div class="venue-name">${escapeHtml(v.name||'')}</div><div class="venue-meta">${v.day||''} ${v.time||''}</div></td>
       <td>${d?fmtDisplay(d):'—'}</td>
@@ -534,13 +664,12 @@ function renderOverview(){
       <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openGigModal('${id}'${dk?`,'${dk}'`:''})">${gig&&gig.themeName?'Edit':'Assign'}</button></td>
     </tr>`;
   }).join('');
-
   document.getElementById('overview-rows').innerHTML = rows;
   document.getElementById('overview-empty').style.display = venues.length ? 'none' : 'block';
 }
 
 // ═══════════════════════════════════════════════
-//  NEEDS PLANNING (next 21 days, weekly-cadence venues)
+//  NEEDS PLANNING
 // ═══════════════════════════════════════════════
 function renderNeedsPlanning(){
   const today = new Date(); today.setHours(0,0,0,0);
@@ -548,7 +677,7 @@ function renderNeedsPlanning(){
   const gaps = [];
   Object.entries(state.venues||{}).forEach(([id,v])=>{
     if(v.status!=='active' && v.status!=='seasonal') return;
-    if(!v.day || (v.cadence && v.cadence!=='weekly')) return; // only auto-check simple weekly cadence
+    if(!v.day || (v.cadence && v.cadence!=='weekly')) return;
     let d = new Date(today);
     const target = DAY_MAP[v.day];
     if(target===undefined) return;
@@ -556,9 +685,7 @@ function renderNeedsPlanning(){
     while(d <= horizon){
       const dk = toKey(d);
       const gig = (state.gigs[id]||{})[dk];
-      if(!gig || !gig.themeName){
-        if(!(gig && gig.status==='none')) gaps.push({venueId:id, venueName:v.name, date:new Date(d), dk});
-      }
+      if(!gig || !gig.themeName){ if(!(gig && gig.status==='cancelled')) gaps.push({venueId:id, venueName:v.name, date:new Date(d), dk}); }
       d = addDays(d,7);
     }
   });
@@ -579,21 +706,45 @@ function renderNeedsBadge(){
 }
 
 // ═══════════════════════════════════════════════
-//  VENUES TAB
+//  VENUES TAB — list / calendar / boxes
 // ═══════════════════════════════════════════════
 let venueFilter = 'all';
-function setVenueFilter(f){
-  venueFilter = f;
-  document.querySelectorAll('[data-vf]').forEach(p=>p.classList.toggle('active', p.dataset.vf===f));
-  renderVenues();
+let venueView = 'list';
+let venueSort = {key:'name', dir:1};
+function setVenueFilter(f){ venueFilter=f; document.querySelectorAll('[data-vf]').forEach(p=>p.classList.toggle('active', p.dataset.vf===f)); renderVenues(); }
+function setVenueView(v){
+  venueView = v;
+  document.querySelectorAll('[data-vview]').forEach(p=>p.classList.toggle('active', p.dataset.vview===v));
+  document.getElementById('venue-list-filters').style.display = v==='list' ? 'flex' : 'none';
+  document.getElementById('venues-table').style.display = v==='list' ? 'table' : 'none';
+  document.getElementById('venue-calendar-view').style.display = v==='calendar' ? 'block' : 'none';
+  document.getElementById('venue-boxes-view').style.display = v==='boxes' ? 'block' : 'none';
+  document.getElementById('venues-empty').style.display = 'none';
+  renderActiveTab();
+}
+function setVenueSort(key){ if(venueSort.key===key) venueSort.dir*=-1; else { venueSort={key,dir:1}; } renderVenues(); }
+function sortEntries(list, sortState, valueFn){
+  return list.sort((a,b)=>{
+    const av = valueFn(a), bv = valueFn(b);
+    if(typeof av==='number' && typeof bv==='number') return (av-bv)*sortState.dir;
+    return String(av||'').localeCompare(String(bv||''))*sortState.dir;
+  });
 }
 function renderVenues(){
+  document.querySelectorAll('#venues-table th[data-sort]').forEach(th=>{
+    th.classList.toggle('sorted', th.dataset.sort===venueSort.key);
+    th.querySelector('.arrow')?.remove();
+    if(th.dataset.sort===venueSort.key) th.insertAdjacentHTML('beforeend', `<span class="arrow">${venueSort.dir===1?'▲':'▼'}</span>`);
+  });
   const q = (document.getElementById('venue-search')?.value||'').toLowerCase();
   let list = Object.entries(state.venues||{});
   if(venueFilter!=='all') list = list.filter(([id,v])=>v.status===venueFilter);
   if(q) list = list.filter(([id,v])=>(v.name||'').toLowerCase().includes(q));
-  list.sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''));
-
+  list = sortEntries(list, venueSort, ([id,v])=>{
+    if(venueSort.key==='pay') return (v.pay&&v.pay.amount)||0;
+    if(venueSort.key==='day') return DAY_MAP[v.day]??9;
+    return v[venueSort.key];
+  });
   document.getElementById('venues-rows').innerHTML = list.map(([id,v])=>{
     const pay = v.pay && v.pay.amount ? `$${v.pay.amount} ${v.pay.method||''}` : '—';
     return `<tr style="cursor:pointer" onclick="openVenueDetail('${id}')">
@@ -601,34 +752,245 @@ function renderVenues(){
       <td>${v.day||''} ${v.time||''}</td>
       <td>${pay}</td>
       <td><span class="badge badge-${v.status||'active'}">${(v.status||'active').replace('-',' ')}</span></td>
-      <td class="src-tag">${v.source==='trivia-time'?'Trivia Time':'Belladonna'}</td>
+      <td>${escapeHtml(v.host||'—')}</td>
       <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openVenueModal('${id}')">Edit</button></td>
     </tr>`;
   }).join('');
   document.getElementById('venues-empty').style.display = list.length ? 'none' : 'block';
 }
 
+// -- Calendar (rolling weeks x venues) --
+let calRangeStart = startOfWeek(new Date());
+function shiftCalRange(weeks){ calRangeStart = addDays(calRangeStart, weeks*7); renderCalendarView(); }
+function jumpCalToday(){ calRangeStart = startOfWeek(new Date()); renderCalendarView(); }
+function renderCalendarView(){
+  if(venueView!=='calendar') return;
+  const weeks = [];
+  for(let i=0;i<13;i++) weeks.push(addDays(calRangeStart, i*7));
+  document.getElementById('cal-range-label').textContent = fmtRange(weeks[0], addDays(weeks[weeks.length-1],6));
+  const venues = Object.entries(state.venues||{}).filter(([id,v])=>v.status==='active'||v.status==='seasonal')
+    .sort((a,b)=>(DAY_MAP[a[1].day]??9)-(DAY_MAP[b[1].day]??9)||(a[1].name||'').localeCompare(b[1].name||''));
+  let html = '<thead><tr><th>Venue</th>' + weeks.map(w=>`<th>${w.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</th>`).join('') + '</tr></thead><tbody>';
+  venues.forEach(([id,v])=>{
+    html += `<tr><td class="venue-col">${escapeHtml(v.name)}</td>`;
+    weeks.forEach(w=>{
+      const d = v.day ? nextDateForDay(v.day, w) : null;
+      const dk = d ? toKey(d) : null;
+      const gig = dk ? (state.gigs[id]||{})[dk] : null;
+      const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? '—' : '';
+      html += `<td onclick="openGigModal('${id}'${dk?`,'${dk}'`:''})" title="${label}">${label||'<span style=\\'color:var(--text3)\\'>·</span>'}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  document.getElementById('cal-grid-table').innerHTML = html;
+}
+
+// -- Day boxes --
+function renderDayBoxes(){
+  if(venueView!=='boxes') return;
+  const order = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const byDay = {}; order.forEach(d=>byDay[d]=[]);
+  Object.entries(state.venues||{}).forEach(([id,v])=>{
+    if(v.status!=='active' && v.status!=='seasonal') return;
+    if(v.day && byDay[v.day]) byDay[v.day].push([id,v]);
+  });
+  document.getElementById('daybox-grid').innerHTML = order.map(d=>`
+    <div class="daybox"><h4>${d}</h4>
+      ${byDay[d].length ? byDay[d].sort((a,b)=>(a[1].time||'').localeCompare(b[1].time||'')).map(([id,v])=>`
+        <div class="daybox-item" style="cursor:pointer" onclick="openVenueDetail('${id}')">${escapeHtml(v.name)}<small>${v.time||''}${v.host?' · '+escapeHtml(v.host):''}</small></div>
+      `).join('') : '<div class="daybox-item" style="color:var(--text3)">Nothing scheduled</div>'}
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════════
+//  VENUE DETAIL — editable timeline + bulk fill
+// ═══════════════════════════════════════════════
 let currentVenueDetailId = null;
+let vdRangeStart = null, vdRangeEnd = null; // Date objects
+let vdFullRange = false;
+
 function openVenueDetail(id){
   currentVenueDetailId = id;
   const v = state.venues[id]; if(!v) return;
   document.getElementById('vd-name').textContent = v.name||'';
-  document.getElementById('vd-meta').textContent = `${v.day||''} ${v.time||''} · ${v.pay&&v.pay.amount?'$'+v.pay.amount+' '+(v.pay.method||''):'no pay set'} · ${(v.status||'').replace('-',' ')}`;
-  const gigs = Object.entries(state.gigs[id]||{}).sort((a,b)=> b[0].localeCompare(a[0]));
-  const today = toKey(new Date());
-  document.getElementById('vd-timeline').innerHTML = gigs.length ? gigs.map(([dk,g])=>`
-    <div class="tl-row ${dk<today?'tl-past':''}" onclick="openGigModal('${id}','${dk}')" style="cursor:pointer">
-      <div class="tl-date">${fmtDisplay(fromKey(dk))}</div>
-      <div class="tl-theme">${g.themeName?escapeHtml(g.themeName):`<span class="empty-cell">${g.status==='none'?'none'+(g.note?' — '+escapeHtml(g.note):''):'unplanned'}</span>`}</div>
-      <span class="badge badge-${g.status||'planned'}">${g.status||'planned'}</span>
-    </div>
-  `).join('') : '<div class="empty-state">No gigs logged yet for this venue.</div>';
+  document.getElementById('vd-meta').textContent = `${v.day||''} ${v.time||''} · ${v.pay&&v.pay.amount?'$'+v.pay.amount+' '+(v.pay.method||''):'no pay set'} · ${(v.status||'').replace('-',' ')}${v.host?' · '+v.host:''}`;
+
+  // group links — other venues sharing the same groupName (or name if no groupName set)
+  const groupKey = (v.groupName || v.name || '').toLowerCase();
+  const siblings = Object.entries(state.venues||{}).filter(([sid,sv])=> sid!==id && (sv.groupName||sv.name||'').toLowerCase()===groupKey);
+  document.getElementById('vd-group-links').innerHTML = siblings.length
+    ? '<span style="color:var(--text3);font-size:11px;align-self:center">Same location:</span>' + siblings.map(([sid,sv])=>`<span class="group-link" onclick="openVenueDetail('${sid}')">${escapeHtml(sv.name)} (${sv.day||'?'})</span>`).join('')
+    : '';
+
+  document.getElementById('bulk-panel').classList.remove('open');
+  vdFullRange = false;
+  document.getElementById('vd-range-btn').textContent = 'Show entire history';
+  const today = new Date(); today.setHours(0,0,0,0);
+  vdRangeStart = addDays(today, -8*7);
+  vdRangeEnd = addDays(today, 12*7);
 
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('panel-venue-detail').classList.add('active');
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  renderVdTimeline();
 }
 function editVenueFromDetail(){ openVenueModal(currentVenueDetailId); }
+function toggleVdFullRange(){
+  vdFullRange = !vdFullRange;
+  document.getElementById('vd-range-btn').textContent = vdFullRange ? 'Show recent range only' : 'Show entire history';
+  if(vdFullRange){
+    const all = Object.keys(state.gigs[currentVenueDetailId]||{});
+    const today = new Date(); today.setHours(0,0,0,0);
+    vdRangeStart = all.length ? fromKey(all.sort()[0]) : addDays(today,-8*7);
+    vdRangeEnd = addDays(today, 26*7);
+  }
+  renderVdTimeline();
+}
+function vdLoadEarlier(){ vdRangeStart = addDays(vdRangeStart, -8*7); renderVdTimeline(); }
+function vdLoadLater(){ vdRangeEnd = addDays(vdRangeEnd, 8*7); renderVdTimeline(); }
+
+function renderVdTimeline(){
+  const id = currentVenueDetailId;
+  const v = state.venues[id]; if(!v) return;
+  const gigs = state.gigs[id]||{};
+  const today = toKey(new Date());
+  // Build the list of dates to show: every occurrence of venue.day within range, plus any gig dates
+  // that exist outside that pattern (irregular cadences, imported data).
+  const dateSet = new Set();
+  if(v.day){
+    let d = new Date(vdRangeStart);
+    const target = DAY_MAP[v.day];
+    if(target!==undefined){
+      d = addDays(d, (target - d.getDay() + 7) % 7);
+      while(d <= vdRangeEnd){ dateSet.add(toKey(d)); d = addDays(d,7); }
+    }
+  }
+  Object.keys(gigs).forEach(dk=>{ if(dk>=toKey(vdRangeStart) && dk<=toKey(vdRangeEnd)) dateSet.add(dk); });
+  const dates = Array.from(dateSet).sort();
+
+  let html = '';
+  let lastMonth = '';
+  dates.forEach(dk=>{
+    const monthLabel = fromKey(dk).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    if(monthLabel !== lastMonth){ html += `<div class="tl-month-label">${monthLabel}</div>`; lastMonth = monthLabel; }
+    const gig = gigs[dk] || {};
+    const isPast = dk < today, isToday = dk === today;
+    html += `<div class="tl-row ${isPast?'tl-past':''} ${isToday?'tl-today':''}" data-dk="${dk}">
+      <div class="tl-date">${fmtDisplay(fromKey(dk))}</div>
+      <input class="tl-input" list="theme-name-list" value="${escapeHtml(gig.themeName||'')}" placeholder="unplanned"
+        onchange="vdInlineSave('${dk}', this.value, null)">
+      <select class="tl-select" onchange="vdInlineSave('${dk}', null, this.value)">
+        <option value="planned" ${(!gig.status||gig.status==='planned')?'selected':''}>Planned</option>
+        <option value="cancelled" ${gig.status==='cancelled'?'selected':''}>Cancelled</option>
+      </select>
+    </div>`;
+  });
+  document.getElementById('vd-timeline').innerHTML = html || '<div class="empty-state">No dates in this range.</div>';
+  // scroll to today on first render
+  const todayRow = document.querySelector(`.tl-row.tl-today`);
+  if(todayRow) todayRow.scrollIntoView({block:'center'});
+}
+
+function vdInlineSave(dk, themeNameOrNull, statusOrNull){
+  const id = currentVenueDetailId;
+  const row = document.querySelector(`.tl-row[data-dk="${dk}"]`);
+  const themeName = themeNameOrNull !== null ? themeNameOrNull.trim() : (row.querySelector('.tl-input').value||'').trim();
+  const status = statusOrNull !== null ? statusOrNull : row.querySelector('.tl-select').value;
+  const existing = (state.gigs[id]||{})[dk] || {};
+
+  if(!themeName){
+    // no theme text -> clear the gig entirely (back to unplanned) unless marking cancelled
+    if(status === 'cancelled'){
+      db.ref('planner/gigs/'+id+'/'+dk).set({themeId:null, themeName:null, status:'cancelled', note:existing.note||''});
+    } else {
+      db.ref('planner/gigs/'+id+'/'+dk).remove();
+    }
+    flashSaved(row);
+    return;
+  }
+  resolveThemeIdByName(themeName).then(themeId=>{
+    db.ref('planner/gigs/'+id+'/'+dk).set({themeId, themeName, status: status==='cancelled'?'planned':status, note:existing.note||''});
+    bumpThemeUsage(themeId, dk);
+    flashSaved(row);
+  });
+}
+function flashSaved(row){
+  setSyncStatus('syncing');
+  let tag = row.querySelector('.tl-saved');
+  if(!tag){ tag = document.createElement('span'); tag.className='tl-saved'; row.appendChild(tag); }
+  tag.textContent = '✓ saved';
+  setTimeout(()=>{ tag.textContent=''; setSyncStatus('synced'); }, 1200);
+}
+function resolveThemeIdByName(name){
+  const key = name.trim().toLowerCase();
+  const found = Object.entries(state.themes||{}).find(([id,t])=>(t.name||'').trim().toLowerCase()===key);
+  if(found) return Promise.resolve(found[0]);
+  const newId = db.ref('planner/themes').push().key;
+  return db.ref('planner/themes/'+newId).set({name:name.trim(), tags:suggestTags(name), category:'', timesUsed:0, lastUsedDate:null, lastUsedVenueId:null}).then(()=>newId);
+}
+function bumpThemeUsage(themeId, dk){
+  const t = state.themes[themeId] || {};
+  const updates = {};
+  updates['planner/themes/'+themeId+'/timesUsed'] = (t.timesUsed||0) + 1;
+  if(!t.lastUsedDate || dk > t.lastUsedDate){
+    updates['planner/themes/'+themeId+'/lastUsedDate'] = dk;
+    updates['planner/themes/'+themeId+'/lastUsedVenueId'] = currentVenueDetailId;
+  }
+  db.ref().update(updates);
+}
+
+// -- Bulk fill --
+function toggleBulkPanel(){
+  const p = document.getElementById('bulk-panel');
+  p.classList.toggle('open');
+  if(p.classList.contains('open')){
+    document.getElementById('bulk-start-date').value = toKey(new Date());
+    renderBulkMode();
+  }
+}
+function renderBulkMode(){
+  const mode = document.getElementById('bulk-mode').value;
+  document.getElementById('bulk-mode-repeat').style.display = mode==='repeat' ? 'block' : 'none';
+  document.getElementById('bulk-mode-list').style.display = mode==='list' ? 'block' : 'none';
+}
+async function submitBulkFill(){
+  const id = currentVenueDetailId;
+  const v = state.venues[id];
+  const startVal = document.getElementById('bulk-start-date').value;
+  if(!startVal) return toast('Pick a start date.', true);
+  let start = fromKey(startVal);
+  // snap to venue's weekday if set
+  if(v.day && DAY_MAP[v.day]!==undefined){
+    start = addDays(start, (DAY_MAP[v.day] - start.getDay() + 7) % 7);
+  }
+  const mode = document.getElementById('bulk-mode').value;
+  let themeNames = [];
+  if(mode==='repeat'){
+    const theme = document.getElementById('bulk-repeat-theme').value.trim();
+    const weeks = parseInt(document.getElementById('bulk-repeat-weeks').value)||1;
+    if(!theme) return toast('Enter a theme to repeat.', true);
+    themeNames = Array(weeks).fill(theme);
+  } else {
+    themeNames = document.getElementById('bulk-list-text').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  }
+  if(!themeNames.length) return toast('Nothing to fill in.', true);
+
+  setSyncStatus('syncing');
+  const updates = {};
+  for(let i=0;i<themeNames.length;i++){
+    const d = addDays(start, i*7);
+    const dk = toKey(d);
+    const themeId = await resolveThemeIdByName(themeNames[i]);
+    updates['planner/gigs/'+id+'/'+dk] = {themeId, themeName:themeNames[i], status:'planned', note:''};
+    bumpThemeUsage(themeId, dk);
+  }
+  await db.ref().update(updates);
+  toast(`Filled in ${themeNames.length} week${themeNames.length===1?'':'s'}.`);
+  document.getElementById('bulk-panel').classList.remove('open');
+  renderVdTimeline();
+}
 
 // ═══════════════════════════════════════════════
 //  VENUE MODAL
@@ -639,6 +1001,9 @@ function openVenueModal(id){
   const v = id ? state.venues[id] : {};
   document.getElementById('venue-modal-title').textContent = id ? 'Edit Venue' : 'Add Venue';
   document.getElementById('v-name').value = v.name||'';
+  document.getElementById('v-group').value = v.groupName||'';
+  document.getElementById('group-name-list').innerHTML = [...new Set(Object.values(state.venues||{}).map(x=>x.groupName||x.name).filter(Boolean))]
+    .map(n=>`<option value="${escapeHtml(n)}">`).join('');
   document.getElementById('v-day').value = v.day||'';
   document.getElementById('v-time').value = v.time||'';
   document.getElementById('v-pay-amount').value = (v.pay&&v.pay.amount)||'';
@@ -654,7 +1019,7 @@ function saveVenue(){
   const name = document.getElementById('v-name').value.trim();
   if(!name) return toast('Venue needs a name.', true);
   const data = {
-    name,
+    name, groupName: document.getElementById('v-group').value.trim() || name,
     day: document.getElementById('v-day').value,
     time: document.getElementById('v-time').value.trim(),
     pay: { amount: parseInt(document.getElementById('v-pay-amount').value)||null, method: document.getElementById('v-pay-method').value },
@@ -680,41 +1045,155 @@ function deleteVenue(){
 // ═══════════════════════════════════════════════
 //  THEMES TAB
 // ═══════════════════════════════════════════════
+let themeSort = {key:'lastUsedDate', dir:-1};
+let activeTagFilter = null;
+let dupViewOpen = false;
+function setThemeSort(key){ if(themeSort.key===key) themeSort.dir*=-1; else themeSort={key,dir:1}; renderThemes(); }
+function toggleDupView(){
+  dupViewOpen = !dupViewOpen;
+  document.getElementById('dup-toggle').classList.toggle('active', dupViewOpen);
+  document.getElementById('dup-view').style.display = dupViewOpen ? 'block' : 'none';
+  document.getElementById('themes-table').style.display = dupViewOpen ? 'none' : 'table';
+  if(dupViewOpen) renderDupView();
+}
+function normalizeThemeName(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' '); }
+function renderDupView(){
+  const entries = Object.entries(state.themes||{});
+  const buckets = {};
+  entries.forEach(([id,t])=>{
+    const norm = normalizeThemeName(t.name);
+    const key = norm.slice(0,8); // coarse bucket to limit comparisons
+    (buckets[key]=buckets[key]||[]).push([id,t,norm]);
+  });
+  const clusters = [];
+  const seen = new Set();
+  Object.values(buckets).forEach(group=>{
+    group.forEach(([id,t,norm], i)=>{
+      if(seen.has(id)) return;
+      const cluster = [[id,t]];
+      seen.add(id);
+      group.forEach(([id2,t2,norm2], j)=>{
+        if(i===j || seen.has(id2)) return;
+        if(levenshtein(norm, norm2) <= 3){ cluster.push([id2,t2]); seen.add(id2); }
+      });
+      if(cluster.length>1) clusters.push(cluster);
+    });
+  });
+  document.getElementById('dup-view').innerHTML = clusters.length
+    ? clusters.map(cl=>`<div class="dup-cluster"><div class="dup-cluster-title">Possibly the same theme</div>${
+        cl.map(([id,t])=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0"><span>${escapeHtml(t.name)}</span><span style="display:flex;gap:6px"><span style="color:var(--text3);font-size:11px">used ${t.timesUsed||0}×</span><button class="btn btn-ghost btn-sm" onclick="openThemeModal('${id}')">Edit</button></span></div>`).join('')
+      }</div>`).join('')
+    : '<div class="empty-state">No likely duplicates found by name similarity.</div>';
+}
+function levenshtein(a,b){
+  if(a===b) return 0;
+  const m=a.length,n=b.length;
+  if(!m) return n; if(!n) return m;
+  let prev = Array.from({length:n+1},(_,i)=>i);
+  for(let i=1;i<=m;i++){
+    const cur=[i];
+    for(let j=1;j<=n;j++) cur[j] = a[i-1]===b[j-1] ? prev[j-1] : 1+Math.min(prev[j-1],prev[j],cur[j-1]);
+    prev = cur;
+  }
+  return prev[n];
+}
+
 function renderThemes(){
-  const q = (document.getElementById('theme-search')?.value||'').toLowerCase();
-  let list = Object.entries(state.themes||{});
-  const total = list.length;
-  const unused = list.filter(([id,t])=>!t.timesUsed).length;
+  const list0 = Object.entries(state.themes||{});
+  const total = list0.length, unused = list0.filter(([id,t])=>!t.timesUsed).length;
+  const allTags = [...new Set(list0.flatMap(([id,t])=>t.tags||[]))].sort();
   document.getElementById('theme-stats').innerHTML = `
     <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">Total themes</div></div>
     <div class="stat-card"><div class="stat-num">${unused}</div><div class="stat-lbl">Never used yet</div></div>
+    <div class="stat-card"><div class="stat-num">${allTags.length}</div><div class="stat-lbl">Tags in use</div></div>
   `;
+  document.getElementById('tag-filter-bar').innerHTML = allTags.map(tag=>
+    `<button class="tag-pill ${activeTagFilter===tag?'active':''}" onclick="setTagFilter('${tag.replace(/'/g,"\\'")}')">${escapeHtml(tag)}</button>`
+  ).join('');
+
+  document.querySelectorAll('#themes-table th[data-sort]').forEach(th=>{
+    th.classList.toggle('sorted', th.dataset.sort===themeSort.key);
+    th.querySelector('.arrow')?.remove();
+    if(th.dataset.sort===themeSort.key) th.insertAdjacentHTML('beforeend', `<span class="arrow">${themeSort.dir===1?'▲':'▼'}</span>`);
+  });
+
+  const q = (document.getElementById('theme-search')?.value||'').toLowerCase();
+  let list = list0;
   if(q) list = list.filter(([id,t])=>(t.name||'').toLowerCase().includes(q));
-  list.sort((a,b)=>(b[1].lastUsedDate||'').localeCompare(a[1].lastUsedDate||''));
-  document.getElementById('themes-rows').innerHTML = list.map(([id,t])=>`
-    <tr><td>${escapeHtml(t.name||'')}</td><td>${t.timesUsed||0}</td><td>${t.lastUsedDate||'—'}</td>
-    <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openThemeModal('${id}')">Edit</button></td></tr>
-  `).join('');
+  if(activeTagFilter) list = list.filter(([id,t])=>(t.tags||[]).includes(activeTagFilter));
+  list = sortEntries(list, themeSort, ([id,t])=>themeSort.key==='timesUsed' ? (t.timesUsed||0) : t[themeSort.key]);
+
+  document.getElementById('themes-rows').innerHTML = list.map(([id,t])=>{
+    const venueName = t.lastUsedVenueId && state.venues[t.lastUsedVenueId] ? state.venues[t.lastUsedVenueId].name : '—';
+    return `<tr>
+      <td>${escapeHtml(t.name||'')}</td>
+      <td>${(t.tags||[]).map(tag=>`<span class="tag-chip">${escapeHtml(tag)}</span>`).join('')||'<span style="color:var(--text3)">—</span>'}</td>
+      <td>${t.timesUsed||0}</td>
+      <td>${t.lastUsedDate||'—'}</td>
+      <td>${venueName!=='—' ? `<span class="theme-link" onclick="openHistoryModal('${id}')">${escapeHtml(venueName)}</span>` : '—'}</td>
+      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openThemeModal('${id}')">Edit</button></td>
+    </tr>`;
+  }).join('');
 }
-let editingThemeId = null;
+function setTagFilter(tag){ activeTagFilter = activeTagFilter===tag ? null : tag; renderThemes(); }
+
+function openHistoryModal(themeId){
+  const t = state.themes[themeId]; if(!t) return;
+  document.getElementById('hist-modal-title').textContent = 'Usage History — ' + t.name;
+  const rows = [];
+  Object.entries(state.gigs||{}).forEach(([vid,dates])=>{
+    Object.entries(dates||{}).forEach(([dk,g])=>{ if(g.themeId===themeId) rows.push({dk, venueName:(state.venues[vid]||{}).name||'?'}); });
+  });
+  rows.sort((a,b)=>b.dk.localeCompare(a.dk));
+  document.getElementById('hist-modal-body').innerHTML = rows.length
+    ? rows.slice(0,40).map(r=>`<div class="hist-row">${r.dk} — ${escapeHtml(r.venueName)}</div>`).join('')
+    : '<div class="empty-state">No recorded uses yet.</div>';
+  openModal('history-modal-overlay');
+}
+
+// -- Theme modal --
+let editingThemeId = null, editingThemeTags = [];
 function openThemeModal(id){
   editingThemeId = id||null;
   const t = id ? state.themes[id] : {};
+  editingThemeTags = (t.tags||[]).slice();
   document.getElementById('theme-modal-title').textContent = id ? 'Edit Theme' : 'Add Theme';
   document.getElementById('t-name').value = t.name||'';
-  document.getElementById('t-category').value = t.category||'';
+  document.getElementById('t-times-used').value = t.timesUsed||0;
+  document.getElementById('t-last-used').value = t.lastUsedDate||'';
   document.getElementById('theme-delete-btn').style.display = id ? 'inline-block' : 'none';
+  renderTagChips();
   openModal('theme-modal-overlay');
+}
+function renderTagChips(){
+  document.getElementById('t-tag-chips').innerHTML = editingThemeTags.map((tag,i)=>
+    `<span class="tag-chip">${escapeHtml(tag)}<span class="x" onclick="removeTagChip(${i})">×</span></span>`).join('') || '<span style="color:var(--text3);font-size:12px">No tags yet</span>';
+}
+function addTagFromInput(){
+  const input = document.getElementById('t-tag-input');
+  const val = input.value.trim();
+  if(val && !editingThemeTags.includes(val)){ editingThemeTags.push(val); renderTagChips(); }
+  input.value='';
+}
+function removeTagChip(i){ editingThemeTags.splice(i,1); renderTagChips(); }
+function suggestTagsForModal(){
+  const name = document.getElementById('t-name').value;
+  const suggested = suggestTags(name);
+  suggested.forEach(tag=>{ if(!editingThemeTags.includes(tag)) editingThemeTags.push(tag); });
+  renderTagChips();
+  if(!suggested.length) toast('No keyword matches — add tags manually.');
 }
 function saveTheme(){
   const name = document.getElementById('t-name').value.trim();
   if(!name) return toast('Theme needs a name.', true);
-  const id = editingThemeId || db.ref('planner/themes').push().key;
+  const themeId = editingThemeId || db.ref('planner/themes').push().key;
   const existing = editingThemeId ? state.themes[editingThemeId] : {};
   setSyncStatus('syncing');
-  db.ref('planner/themes/'+id).update({
-    name, category: document.getElementById('t-category').value.trim()||'uncategorized',
-    timesUsed: existing.timesUsed||0, lastUsedDate: existing.lastUsedDate||null
+  db.ref('planner/themes/'+themeId).update({
+    name, tags: editingThemeTags,
+    timesUsed: parseInt(document.getElementById('t-times-used').value)||0,
+    lastUsedDate: document.getElementById('t-last-used').value || null,
+    lastUsedVenueId: existing.lastUsedVenueId || null
   }).then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); });
 }
 function deleteTheme(){
@@ -725,28 +1204,26 @@ function deleteTheme(){
 }
 
 // ═══════════════════════════════════════════════
-//  GIG MODAL (assign/edit a theme for venue+date)
+//  GIG MODAL (This Week / Needs Planning / Calendar quick-assign)
 // ═══════════════════════════════════════════════
 let gigCtx = { venueId:null, dateKey:null, selectedThemeId:null, selectedThemeName:null };
 function openGigModal(venueId, dateKey){
   gigCtx = { venueId, dateKey: dateKey||null, selectedThemeId:null, selectedThemeName:null };
   const sel = document.getElementById('gig-venue');
-  sel.innerHTML = Object.entries(state.venues||{})
-    .sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''))
+  sel.innerHTML = Object.entries(state.venues||{}).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''))
     .map(([id,v])=>`<option value="${id}" ${id===venueId?'selected':''}>${escapeHtml(v.name||'')}</option>`).join('');
   document.getElementById('gig-date').value = dateKey || toKey(new Date());
   const existing = (dateKey && state.gigs[venueId]) ? state.gigs[venueId][dateKey] : null;
   document.getElementById('gig-theme-search').value = existing && existing.themeName ? existing.themeName : '';
   if(existing && existing.themeId){ gigCtx.selectedThemeId = existing.themeId; gigCtx.selectedThemeName = existing.themeName; }
-  document.getElementById('gig-status').value = existing ? (existing.status||'planned') : 'planned';
+  document.getElementById('gig-status').value = existing && existing.status==='cancelled' ? 'cancelled' : 'planned';
   document.getElementById('gig-note').value = existing ? (existing.note||'') : '';
-  document.getElementById('gig-delete-btn').style.display = existing ? 'inline-block' : 'none';
+  document.getElementById('gig-clear-btn').style.display = existing ? 'inline-block' : 'none';
   document.getElementById('theme-suggest').innerHTML = '';
   renderGigWarnings();
   openModal('gig-modal-overlay');
 }
 function onGigVenueChange(){ gigCtx.venueId = document.getElementById('gig-venue').value; renderGigWarnings(); }
-
 function renderThemeSuggest(){
   const q = document.getElementById('gig-theme-search').value.trim().toLowerCase();
   gigCtx.selectedThemeId = null; gigCtx.selectedThemeName = null;
@@ -772,20 +1249,14 @@ function renderGigWarnings(){
   const warnings = [];
   const vGigs = state.gigs[venueId]||{};
   let venueLast = null;
-  Object.entries(vGigs).forEach(([dk,g])=>{ if(g.themeId===themeId && dk!==dateKey && (!venueLast||dk>venueLast) && dk<dateKey) venueLast=dk; });
-  if(venueLast){
-    const weeks = Math.round((fromKey(dateKey)-fromKey(venueLast))/6048e5);
-    warnings.push(`Ran here ${weeks} week${weeks===1?'':'s'} ago (${venueLast})`);
-  }
+  Object.entries(vGigs).forEach(([dk,g])=>{ if(g.themeId===themeId && dk<dateKey && (!venueLast||dk>venueLast)) venueLast=dk; });
+  if(venueLast){ const weeks = Math.round((fromKey(dateKey)-fromKey(venueLast))/6048e5); warnings.push(`Ran here ${weeks} week${weeks===1?'':'s'} ago (${venueLast})`); }
   let globalLast=null, globalVenueName=null;
   Object.entries(state.gigs||{}).forEach(([vid,dates])=>{
     if(vid===venueId) return;
     Object.entries(dates||{}).forEach(([dk,g])=>{ if(g.themeId===themeId && dk<dateKey && (!globalLast||dk>globalLast)){ globalLast=dk; globalVenueName=(state.venues[vid]||{}).name; } });
   });
-  if(globalLast){
-    const weeks = Math.round((fromKey(dateKey)-fromKey(globalLast))/6048e5);
-    if(weeks<6) warnings.push(`Also ran ${weeks}w ago at ${globalVenueName||'another venue'}`);
-  }
+  if(globalLast){ const weeks = Math.round((fromKey(dateKey)-fromKey(globalLast))/6048e5); if(weeks<6) warnings.push(`Also ran ${weeks}w ago at ${globalVenueName||'another venue'}`); }
   box.innerHTML = warnings.map(w=>`<div class="warn-chip">⚠ ${w}</div>`).join('');
 }
 function saveGig(){
@@ -795,70 +1266,49 @@ function saveGig(){
   const note = document.getElementById('gig-note').value.trim();
   const typedName = document.getElementById('gig-theme-search').value.trim();
   if(!venueId || !dateKey) return toast('Pick a venue and date.', true);
-
-  const finish = (themeId, themeName) => {
-    setSyncStatus('syncing');
-    db.ref('planner/gigs/'+venueId+'/'+dateKey).set({ themeId: themeId||null, themeName: themeName||null, status, note }).then(()=>{
-      if(themeId){
-        const t = state.themes[themeId]||{};
-        const newCount = (t.timesUsed||0) + (gigCtx._wasNewAssignment ? 1 : 0);
-        const updates = {};
-        updates['planner/themes/'+themeId+'/timesUsed'] = t.timesUsed ? t.timesUsed + (gigCtx._alreadyCounted?0:1) : 1;
-        if(!t.lastUsedDate || dateKey > t.lastUsedDate) updates['planner/themes/'+themeId+'/lastUsedDate'] = dateKey;
-        db.ref().update(updates);
-      }
-      toast('Saved.'); closeModal('gig-modal-overlay');
-    });
-  };
-
-  if(status==='none' || !typedName){
-    finish(null, null);
+  setSyncStatus('syncing');
+  if(status==='cancelled' || !typedName){
+    db.ref('planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, status: status==='cancelled'?'cancelled':'planned', note}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
-  if(gigCtx.selectedThemeId && gigCtx.selectedThemeName===typedName){
-    gigCtx._alreadyCounted = true; // don't double count if theme unchanged from existing gig — best effort
-    finish(gigCtx.selectedThemeId, typedName);
-  } else {
-    // new theme name typed — create it
-    const newId = db.ref('planner/themes').push().key;
-    db.ref('planner/themes/'+newId).set({ name: typedName, category:'uncategorized', timesUsed:0, lastUsedDate:null }).then(()=>{
-      finish(newId, typedName);
+  resolveThemeIdByName(typedName).then(themeId=>{
+    db.ref('planner/gigs/'+venueId+'/'+dateKey).set({themeId, themeName:typedName, status:'planned', note}).then(()=>{
+      bumpThemeUsageForVenue(themeId, dateKey, venueId);
+      toast('Saved.'); closeModal('gig-modal-overlay');
     });
-  }
+  });
 }
-function deleteGig(){
+function bumpThemeUsageForVenue(themeId, dk, venueId){
+  const t = state.themes[themeId]||{};
+  const updates = {};
+  updates['planner/themes/'+themeId+'/timesUsed'] = (t.timesUsed||0)+1;
+  if(!t.lastUsedDate || dk > t.lastUsedDate){ updates['planner/themes/'+themeId+'/lastUsedDate']=dk; updates['planner/themes/'+themeId+'/lastUsedVenueId']=venueId; }
+  db.ref().update(updates);
+}
+function clearGig(){
   const venueId = document.getElementById('gig-venue').value;
   const dateKey = document.getElementById('gig-date').value;
   if(!venueId||!dateKey) return;
   setSyncStatus('syncing');
-  db.ref('planner/gigs/'+venueId+'/'+dateKey).remove().then(()=>{ toast('Removed.'); closeModal('gig-modal-overlay'); });
+  db.ref('planner/gigs/'+venueId+'/'+dateKey).remove().then(()=>{ toast('Cleared — back to unplanned.'); closeModal('gig-modal-overlay'); });
 }
 
 // ═══════════════════════════════════════════════
 //  MODAL HELPERS
 // ═══════════════════════════════════════════════
 function openModal(id){ document.getElementById(id).classList.add('open'); }
-function closeModal(id){ document.getElementById(id).classList.remove('open'); renderActiveTab(); }
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); renderActiveTab(); if(activeTab==='venues'&&currentVenueDetailId) {} }
 
 // ═══════════════════════════════════════════════
-//  IMPORT — XLSX PARSING
+//  IMPORT — XLSX PARSING (dates read as UTC — see toKeyUTC above)
 // ═══════════════════════════════════════════════
 const SECTION_TITLES = ['Seasonal Places','One Time Events','Themed Round Ideas','Finished Places'];
 let importResult = null;
-
 const dropZone = document.getElementById('drop-zone');
 dropZone.addEventListener('dragover', e=>{ e.preventDefault(); dropZone.classList.add('drag'); });
 dropZone.addEventListener('dragleave', ()=> dropZone.classList.remove('drag'));
 dropZone.addEventListener('drop', e=>{ e.preventDefault(); dropZone.classList.remove('drag'); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
-
-function importLog(msg){
-  const el = document.getElementById('import-log');
-  el.style.display='block';
-  el.textContent += msg + '\n';
-  el.scrollTop = el.scrollHeight;
-}
-
+function importLog(msg){ const el=document.getElementById('import-log'); el.style.display='block'; el.textContent+=msg+'\n'; el.scrollTop=el.scrollHeight; }
 function handleFile(file){
   if(!file) return;
   document.getElementById('import-log').textContent='';
@@ -875,16 +1325,11 @@ function handleFile(file){
       importResult = parseSheet(ws, range);
       importLog(`Found ${importResult.venueBlocks.length} venue blocks and ${importResult.themeIdeaNames.length} theme-library-only entries.`);
       renderImportPreview();
-    }catch(err){
-      importLog('Error: ' + err.message);
-      toast('Could not read that file.', true);
-    }
+    }catch(err){ importLog('Error: ' + err.message); toast('Could not read that file.', true); }
   };
   reader.readAsArrayBuffer(file);
 }
-
 function cellAt(ws,r,c){ const addr = XLSX.utils.encode_cell({r,c}); const cd = ws[addr]; return cd ? cd.v : null; }
-
 function parseVenueHeader(raw){
   let s = String(raw).trim();
   let day='', time='', payNote='', cadenceRaw='';
@@ -917,10 +1362,8 @@ function parsePayText(raw){
   const amtM = s.match(/\$?\s*(\d{2,4})/);
   const amount = amtM ? parseInt(amtM[1]) : null;
   let method = '';
-  if(/venmo/i.test(s)) method='venmo';
-  else if(/chk|check/i.test(s)) method='check';
-  else if(/cash/i.test(s)) method='cash';
-  else if(/w-?9|invoice/i.test(s)) method='invoice';
+  if(/venmo/i.test(s)) method='venmo'; else if(/chk|check/i.test(s)) method='check';
+  else if(/cash/i.test(s)) method='cash'; else if(/w-?9|invoice/i.test(s)) method='invoice';
   return {amount, method};
 }
 function sectionToStatus(section){
@@ -932,35 +1375,23 @@ function slugify(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').rep
 
 function parseSheet(ws, range){
   const maxRow = range.e.r, maxCol = range.e.c, HEADSCAN = 6;
-  const venueBlocks = [];
-  const themeIdeaNames = [];
-  let section = 'Main';
-  let c = 0;
+  const venueBlocks = []; const themeIdeaNames = [];
+  let section = 'Main'; let c = 0;
   while(c <= maxCol){
-    for(let r=0;r<HEADSCAN;r++){
-      const v = cellAt(ws,r,c);
-      if(typeof v==='string' && SECTION_TITLES.includes(v.trim())) section = v.trim();
-    }
+    for(let r=0;r<HEADSCAN;r++){ const v = cellAt(ws,r,c); if(typeof v==='string' && SECTION_TITLES.includes(v.trim())) section = v.trim(); }
     if(section==='Themed Round Ideas'){
       for(let r=0;r<=maxRow;r++){
         const v = cellAt(ws,r,c);
-        if(typeof v==='string' && v.trim() && !SECTION_TITLES.includes(v.trim()) && v.trim().toLowerCase()!=='date'){
-          themeIdeaNames.push(v.trim());
-        }
+        if(typeof v==='string' && v.trim() && !SECTION_TITLES.includes(v.trim()) && v.trim().toLowerCase()!=='date') themeIdeaNames.push(v.trim());
       }
       c+=1; continue;
     }
-    if(section==='One Time Events'){ c+=1; continue; } // handled manually — structurally different (3-col)
-
+    if(section==='One Time Events'){ c+=1; continue; }
     let dateRow=-1;
-    for(let r=0;r<HEADSCAN;r++){
-      const v = cellAt(ws,r,c);
-      if(typeof v==='string' && v.trim().toLowerCase()==='date'){ dateRow=r; break; }
-    }
+    for(let r=0;r<HEADSCAN;r++){ const v = cellAt(ws,r,c); if(typeof v==='string' && v.trim().toLowerCase()==='date'){ dateRow=r; break; } }
     if(dateRow===-1){ c+=1; continue; }
     const nameRaw = cellAt(ws, dateRow, c+1);
     if(!nameRaw || typeof nameRaw!=='string' || !nameRaw.trim()){ c+=1; continue; }
-
     let dataStart = dateRow+1, payNote='';
     const probe = cellAt(ws, dateRow+1, c);
     if(!(probe instanceof Date)){
@@ -970,26 +1401,25 @@ function parseSheet(ws, range){
     }
     const parsed = parseVenueHeader(nameRaw.trim());
     if(payNote && !parsed.payNote) parsed.payNote = payNote;
-
     venueBlocks.push({ section, dateCol:c, nameCol:c+1, dataStart, rawName:nameRaw.trim(), ...parsed, entries:[] });
     c += 2;
   }
-
   venueBlocks.forEach(block=>{
     for(let r=block.dataStart; r<=maxRow; r++){
       const dv = cellAt(ws, r, block.dateCol);
       const tv = cellAt(ws, r, block.nameCol);
       if(!dv && !tv) continue;
-      let dateObj = dv instanceof Date ? dv : null;
-      if(!dateObj && typeof dv==='string' && dv.trim()){
+      let dateKey = null;
+      if(dv instanceof Date){
+        dateKey = toKeyUTC(dv); // SheetJS cellDates are UTC-anchored
+      } else if(typeof dv==='string' && dv.trim()){
         const d = new Date(dv);
-        if(!isNaN(d)) dateObj = d;
+        if(!isNaN(d)) dateKey = toKey(d); // parsed from a plain string — already local, not UTC-shifted
       }
-      if(!dateObj || !tv || typeof tv!=='string' || !tv.trim()) continue;
-      block.entries.push({date:dateObj, text:tv.trim()});
+      if(!dateKey || !tv || typeof tv!=='string' || !tv.trim()) continue;
+      block.entries.push({dateKey, text: tv.trim()});
     }
   });
-
   return {venueBlocks, themeIdeaNames};
 }
 
@@ -1003,51 +1433,38 @@ function renderImportPreview(){
   `;
   document.getElementById('import-idea-note').textContent = importResult.themeIdeaNames.length
     ? `Plus ${importResult.themeIdeaNames.length} unscheduled ideas from your "Themed Round Ideas" list.` : '';
-
   document.getElementById('import-rows').innerHTML = importResult.venueBlocks.map((b,i)=>`
     <tr>
       <td><input type="checkbox" id="imp-inc-${i}" checked></td>
       <td><input type="text" id="imp-name-${i}" value="${escapeHtml(b.name)}"></td>
-      <td><select id="imp-day-${i}">
-        ${['','Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<option ${b.day===d?'selected':''}>${d}</option>`).join('')}
-      </select></td>
+      <td><select id="imp-day-${i}">${['','Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<option ${b.day===d?'selected':''}>${d}</option>`).join('')}</select></td>
       <td><input type="text" id="imp-time-${i}" value="${escapeHtml(b.time||'')}"></td>
       <td><input type="text" id="imp-pay-${i}" value="${parsePayText(b.payNote).amount||''}"></td>
-      <td><select id="imp-method-${i}">
-        ${['','cash','check','venmo','invoice'].map(m=>`<option value="${m}" ${parsePayText(b.payNote).method===m?'selected':''}>${m||'—'}</option>`).join('')}
-      </select></td>
-      <td><select id="imp-status-${i}">
-        ${['active','seasonal','finished','prospective'].map(s=>`<option value="${s}" ${sectionToStatus(b.section)===s?'selected':''}>${s}</option>`).join('')}
-      </select></td>
+      <td><select id="imp-method-${i}">${['','cash','check','venmo','invoice'].map(m=>`<option value="${m}" ${parsePayText(b.payNote).method===m?'selected':''}>${m||'—'}</option>`).join('')}</select></td>
+      <td><select id="imp-status-${i}">${['active','seasonal','finished','prospective'].map(s=>`<option value="${s}" ${sectionToStatus(b.section)===s?'selected':''}>${s}</option>`).join('')}</select></td>
       <td>${b.entries.length} <span style="color:var(--text3)">(${b.section})</span></td>
     </tr>
   `).join('');
 }
-
 async function commitImport(){
   if(!importResult) return;
   const btn = document.getElementById('import-commit-btn');
   btn.disabled = true; btn.textContent = 'Importing…';
   setSyncStatus('syncing');
-
   const updates = {};
-  const themeIndex = {}; // lowercase name -> {id, timesUsed, lastUsedDate, name}
-  Object.entries(state.themes||{}).forEach(([id,t])=>{
-    themeIndex[(t.name||'').trim().toLowerCase()] = {id, timesUsed:t.timesUsed||0, lastUsedDate:t.lastUsedDate||null, name:t.name};
-  });
+  const themeIndex = {};
+  Object.entries(state.themes||{}).forEach(([id,t])=>{ themeIndex[(t.name||'').trim().toLowerCase()] = {id, timesUsed:t.timesUsed||0, lastUsedDate:t.lastUsedDate||null, name:t.name, tags:t.tags||[]}; });
   function themeIdFor(name){
     const key = name.trim().toLowerCase();
     if(themeIndex[key]) return themeIndex[key].id;
     const id = 'th_'+slugify(name)+'_'+Math.random().toString(36).slice(2,7);
-    themeIndex[key] = {id, timesUsed:0, lastUsedDate:null, name:name.trim()};
+    themeIndex[key] = {id, timesUsed:0, lastUsedDate:null, name:name.trim(), tags:suggestTags(name)};
     return id;
   }
-
   const NONE_RE = /^none\b/i;
   const SKIP_RE = /(closed|moved to|switched to|cancell?ed)/i;
   const todayKey = toKey(new Date());
   let venueCount=0, gigCount=0;
-
   importResult.venueBlocks.forEach((b,i)=>{
     const incEl = document.getElementById('imp-inc-'+i);
     if(!incEl || !incEl.checked) return;
@@ -1058,57 +1475,44 @@ async function commitImport(){
     const payAmount = parseInt(document.getElementById('imp-pay-'+i).value)||null;
     const payMethod = document.getElementById('imp-method-'+i).value;
     const status = document.getElementById('imp-status-'+i).value;
-
     const venueId = 'v_'+slugify(name)+'_'+(day||'x')+'_'+i;
-    updates['planner/venues/'+venueId] = {
-      name, day, time, pay:{amount:payAmount, method:payMethod}, status,
-      source:'belladonna', cadence:'weekly', cadenceRaw: b.cadenceRaw||'', notes:'', createdAt: Date.now()
-    };
+    let venueLastUsed = null;
+    updates['planner/venues/'+venueId] = { name, groupName:name, day, time, pay:{amount:payAmount, method:payMethod}, status,
+      source:'belladonna', cadence:'weekly', cadenceRaw: b.cadenceRaw||'', notes:'', host:'', createdAt: Date.now() };
     venueCount++;
-
     b.entries.forEach(e=>{
-      const dk = toKey(e.date);
-      const text = e.text.trim();
+      const dk = e.dateKey; const text = e.text.trim();
       let gig;
-      if(NONE_RE.test(text)){
-        gig = {themeId:null, themeName:null, status:'none', note:''};
-      } else if(SKIP_RE.test(text)){
-        gig = {themeId:null, themeName:null, status:'none', note:text};
-      } else {
+      if(NONE_RE.test(text)) gig = {themeId:null, themeName:null, status:'cancelled', note:''};
+      else if(SKIP_RE.test(text)) gig = {themeId:null, themeName:null, status:'cancelled', note:text};
+      else {
         const tid = themeIdFor(text);
         const idx = themeIndex[text.trim().toLowerCase()];
         idx.timesUsed += 1;
-        if(!idx.lastUsedDate || dk > idx.lastUsedDate) idx.lastUsedDate = dk;
-        gig = {themeId:tid, themeName:text, status: dk<=todayKey?'confirmed':'planned', note:''};
+        if(!idx.lastUsedDate || dk > idx.lastUsedDate){ idx.lastUsedDate = dk; venueLastUsed = venueId; idx.lastUsedVenueId = venueId; }
+        gig = {themeId:tid, themeName:text, status:'planned', note:''};
       }
       updates['planner/gigs/'+venueId+'/'+dk] = gig;
       gigCount++;
     });
   });
-
   importResult.themeIdeaNames.forEach(name=>{
     const key = name.trim().toLowerCase();
     if(!key || themeIndex[key]) return;
-    themeIndex[key] = {id:'th_'+slugify(name)+'_'+Math.random().toString(36).slice(2,7), timesUsed:0, lastUsedDate:null, name:name.trim()};
+    themeIndex[key] = {id:'th_'+slugify(name)+'_'+Math.random().toString(36).slice(2,7), timesUsed:0, lastUsedDate:null, name:name.trim(), tags:suggestTags(name)};
   });
-
   Object.values(themeIndex).forEach(info=>{
-    updates['planner/themes/'+info.id] = { name: info.name, category:'uncategorized', timesUsed: info.timesUsed, lastUsedDate: info.lastUsedDate };
+    updates['planner/themes/'+info.id] = { name: info.name, tags: info.tags||[], timesUsed: info.timesUsed, lastUsedDate: info.lastUsedDate, lastUsedVenueId: info.lastUsedVenueId||null };
   });
-
   try{
     await db.ref().update(updates);
     importLog(`Imported ${venueCount} venues and ${gigCount} gig entries, ${Object.keys(themeIndex).length} themes in the library.`);
     toast('Import complete.');
     switchTab('overview');
-  }catch(err){
-    importLog('Import failed: '+err.message);
-    toast('Import failed — see log.', true);
-  }
+  }catch(err){ importLog('Import failed: '+err.message); toast('Import failed — see log.', true); }
   btn.disabled=false; btn.textContent='Import Selected to Planner';
 }
 
-// init
 renderActiveTab();
 </script>
 </body>
