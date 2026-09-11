@@ -1212,13 +1212,13 @@ function saveNewPassword() {
 //  FIREBASE
 // ═══════════════════════════════════════════════
 const firebaseConfig = {
-  apiKey: "AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",
-  authDomain: "belladonnatrivia.firebaseapp.com",
-  databaseURL: "https://belladonnatrivia-default-rtdb.firebaseio.com",
-  projectId: "belladonnatrivia",
-  storageBucket: "belladonnatrivia.firebasestorage.app",
-  messagingSenderId: "658670195433",
-  appId: "1:658670195433:web:f66cbc32344f4d4d63d678"
+  apiKey: "AIzaSyCIfAE1JGHsUGzzVH2pz1Vyj5b5OhA0tDQ",
+  authDomain: "belladonna-hq.firebaseapp.com",
+  databaseURL: "https://belladonna-hq-default-rtdb.firebaseio.com",
+  projectId: "belladonna-hq",
+  storageBucket: "belladonna-hq.firebasestorage.app",
+  messagingSenderId: "1021873183587",
+  appId: "1:1021873183587:web:def283bb7b5ca48e4f9156"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -1230,7 +1230,7 @@ const db = firebase.database();
 let plannerVenues = {};
 let selectedVenueId = '';
 let selectedVenueGig = null;
-db.ref('planner/venues').on('value', snap=>{
+db.ref('trivia/planner/venues').on('value', snap=>{
   plannerVenues = snap.val() || {};
   const sel = document.getElementById('venue-select');
   if(!sel) return;
@@ -1249,7 +1249,7 @@ function onVenueSelectChange(){
   selectedVenueGig = null;
   if(!selectedVenueId){ preview.style.display='none'; return; }
   const dk = todayKeyLocal();
-  db.ref('planner/gigs/'+selectedVenueId+'/'+dk).once('value').then(snap=>{
+  db.ref('trivia/planner/gigs/'+selectedVenueId+'/'+dk).once('value').then(snap=>{
     const gig = snap.val();
     selectedVenueGig = gig;
     if(gig && gig.themeName){
@@ -1291,12 +1291,12 @@ let dragCardId = null;
 let categoryTypes = [];
 let appSettings = {};
 
-db.ref('categoryTypes').on('value', snap => {
+db.ref('trivia/categoryTypes').on('value', snap => {
   const data = snap.val()||{};
   categoryTypes = Object.entries(data).map(([id,v])=>({id,...v}));
   renderCatTypeDropdown();
 });
-db.ref('appSettings').on('value', snap => {
+db.ref('trivia/appSettings').on('value', snap => {
   appSettings = snap.val()||{};
 });
 // ═══════════════════════════════════════════════
@@ -1326,10 +1326,10 @@ async function saveSettings() {
     plainBg: document.getElementById('s-plain-bg').value.trim(),
   };
   try {
-    await db.ref('appSettings').set(settings);
+    await db.ref('trivia/appSettings').set(settings);
     // Save edited category types
     for(const t of categoryTypes) {
-      await db.ref(`categoryTypes/${t.id}`).set({
+      await db.ref(`trivia/categoryTypes/${t.id}`).set({
         name: t.name||'', rules: t.rules||'', createdAt: t.createdAt||Date.now()
       });
     }
@@ -1358,14 +1358,14 @@ function renderCatTypesList() {
 async function addCategoryType() {
   const newType = {name:'New Type', rules:'', createdAt:Date.now()};
   try {
-    const ref = await db.ref('categoryTypes').push(newType);
-    await db.ref(`categoryTypes/${ref.key}`).set(newType);
+    const ref = await db.ref('trivia/categoryTypes').push(newType);
+    await db.ref(`trivia/categoryTypes/${ref.key}`).set(newType);
   } catch(e) { toast('Failed: '+e.message, true); }
 }
 async function deleteCategoryType(id) {
   if(!confirm('Delete this category type?')) return;
   try {
-    await db.ref(`categoryTypes/${id}`).remove();
+    await db.ref(`trivia/categoryTypes/${id}`).remove();
   } catch(e) { toast('Failed: '+e.message, true); }
 }
 function renderCatTypeDropdown() {
@@ -1376,7 +1376,7 @@ function renderCatTypeDropdown() {
     categoryTypes.map(t=>`<option value="${t.id}" ${t.id===cur?'selected':''}>${t.name}</option>`).join('');
 }
 
-db.ref('categories').on('value', snap => {
+db.ref('trivia/categories').on('value', snap => {
   const data = snap.val() || {};
   categories = Object.entries(data).map(([id, v]) => ({id, ...v}));
   migrateMiniGamesTag();
@@ -1478,7 +1478,7 @@ function migrateMiniGamesTag() {
     const tags = parseTags(cat.genre);
     if(tags.includes('Mini Trivia')) {
       const renamed = tags.map(t => t === 'Mini Trivia' ? 'Mini Games' : t);
-      updates[`categories/${cat.id}/genre`] = renamed.join(', ');
+      updates[`trivia/categories/${cat.id}/genre`] = renamed.join(', ');
     }
   });
   if(Object.keys(updates).length) {
@@ -1728,7 +1728,7 @@ async function onCardDrop(e, targetId) {
   sorted.splice(targetIdx > sourceIdx ? targetIdx - 1 : targetIdx, 0, moved);
 
   const updates = {};
-  sorted.forEach((cat,i) => { updates[`categories/${cat.id}/sortOrder`] = i; });
+  sorted.forEach((cat,i) => { updates[`trivia/categories/${cat.id}/sortOrder`] = i; });
   try {
     await db.ref().update(updates);
     toast('Order saved');
@@ -1964,10 +1964,10 @@ async function saveCategory() {
 
   try {
     if(editingId) {
-      await db.ref(`categories/${editingId}`).update(data);
+      await db.ref(`trivia/categories/${editingId}`).update(data);
       toast('Category updated!');
     } else {
-      await db.ref('categories').push({...data, createdAt: Date.now()});
+      await db.ref('trivia/categories').push({...data, createdAt: Date.now()});
       toast('Category added!');
     }
     setSyncStatus('synced');
@@ -1988,7 +1988,7 @@ async function deleteCategory() {
   if(!confirm('Delete this category? This cannot be undone.')) return;
   setSyncStatus('syncing');
   try {
-    await db.ref(`categories/${editingId}`).remove();
+    await db.ref(`trivia/categories/${editingId}`).remove();
     // Also remove from lineup if present
     lineup = lineup.map(id => id === editingId ? null : id);
     saveLineup();
@@ -2065,18 +2065,18 @@ function updateSubmitCount() {
 // Send command to trivia.html via Firebase
 function sendHostCommand(cmd) {
   if(!db) return;
-  db.ref('liveGame/hostCommand').set({ cmd, ts: Date.now() });
+  db.ref('trivia/liveGame/hostCommand').set({ cmd, ts: Date.now() });
 }
 
 function toggleHostTimed() {
   hostTimedOn = !hostTimedOn;
   document.getElementById('hb-timed-toggle').classList.toggle('on', hostTimedOn);
-  db.ref('liveGame/timedOverride').set(hostTimedOn);
+  db.ref('trivia/liveGame/timedOverride').set(hostTimedOn);
 }
 
 function toggleLbAdmin() {
   lbAdminVisible = !lbAdminVisible;
-  db.ref('liveGame/leaderboardVisible').set(lbAdminVisible);
+  db.ref('trivia/liveGame/leaderboardVisible').set(lbAdminVisible);
   const btn = document.getElementById('hb-lb-btn');
   if(btn) {
     btn.classList.toggle('hb-btn-ghost', !lbAdminVisible);
@@ -2104,15 +2104,15 @@ async function runConfirmedAction() {
   const action = pendingConfirmAction; // save before closeConfirm nulls it
   closeConfirm();
   if(action === 'clear') {
-    await db.ref('liveGame/teams').remove();
-    await db.ref('liveGame/answers').remove();
-    await db.ref('liveGame/status').set('waiting');
+    await db.ref('trivia/liveGame/teams').remove();
+    await db.ref('trivia/liveGame/answers').remove();
+    await db.ref('trivia/liveGame/status').set('waiting');
     document.getElementById('hb-scores').innerHTML = '<span style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet</span>';
     currentTeamCount = 0; currentSubmitCount = 0; updateSubmitCount();
     allAnswersCache = {};
     toast('Scores cleared');
   } else if(action === 'reset') {
-    await db.ref('liveGame').remove();
+    await db.ref('trivia/liveGame').remove();
     lbAdminVisible = false; hostTimedOn = false;
     allAnswersCache = {};
     document.getElementById('hb-timed-toggle').classList.remove('on');
@@ -2255,7 +2255,7 @@ function scheduleAutoGrade(qId, teamId, ans, isCorrect) {
   if(_autoGradeScheduled.has(key)) return;
   _autoGradeScheduled.add(key);
   // Auto-grade immediately — these are exact matches, no score held
-  setTimeout(() => db.ref('liveGame/answers/' + qId + '/' + teamId + '/status').set(isCorrect ? 'correct' : 'wrong'), 100);
+  setTimeout(() => db.ref('trivia/liveGame/answers/' + qId + '/' + teamId + '/status').set(isCorrect ? 'correct' : 'wrong'), 100);
 }
 
 function updateGradeButton() {
@@ -2301,13 +2301,13 @@ async function giveScores() {
         pts,
       });
       if(ans.status === 'correct' && pts > 0) {
-        scoreUpdates['liveGame/teams/' + teamId + '/score'] = (scoreUpdates['liveGame/teams/' + teamId + '/score'] || 0) + pts;
+        scoreUpdates['trivia/liveGame/teams/' + teamId + '/score'] = (scoreUpdates['trivia/liveGame/teams/' + teamId + '/score'] || 0) + pts;
       }
     }
   }
-  const updates = { 'liveGame/resultsVisible': true, ...scoreUpdates };
+  const updates = { 'trivia/liveGame/resultsVisible': true, ...scoreUpdates };
   for(const [teamId, res] of Object.entries(results)) {
-    updates['liveGame/results/' + teamId] = res;
+    updates['trivia/liveGame/results/' + teamId] = res;
   }
   await db.ref().update(updates);
   toast('Scores given to players!');
@@ -2316,7 +2316,7 @@ async function giveScores() {
 async function ungradeAnswer(btn) {
   const qId = btn.dataset.qid;
   const teamId = btn.dataset.tid;
-  await db.ref('liveGame/answers/' + qId + '/' + teamId + '/status').set('pending');
+  await db.ref('trivia/liveGame/answers/' + qId + '/' + teamId + '/status').set('pending');
   toast('Marked as pending');
 }
 
@@ -2354,7 +2354,7 @@ async function saveEditAnswer(btn) {
   const input = document.getElementById(rowId + '_input');
   if(!input) return;
   const newVal = input.value.trim();
-  await db.ref('liveGame/answers/' + qId + '/' + teamId + '/answer').set(newVal);
+  await db.ref('trivia/liveGame/answers/' + qId + '/' + teamId + '/answer').set(newVal);
   toast('Answer updated');
   renderGradingQuestion();
 }
@@ -2371,7 +2371,7 @@ function closeHistory() {
 function renderHistory() {
   const body = document.getElementById('hb-history-body');
   if(!body) return;
-  db.ref('gameHistory').orderByKey().limitToLast(20).once('value', snap => {
+  db.ref('trivia/gameHistory').orderByKey().limitToLast(20).once('value', snap => {
     const all = snap.val() || {};
     const entries = Object.values(all).sort((a,b) => (b.startedAt||0)-(a.startedAt||0));
     if(!entries.length) {
@@ -2396,10 +2396,10 @@ function renderHistory() {
 // ── Manual point adjustment ───────────────────────────────────────────
 async function adjustPoints(teamId, delta) {
   if(!teamId || !delta) return;
-  const snap = await db.ref('liveGame/teams/' + teamId + '/score').once('value');
+  const snap = await db.ref('trivia/liveGame/teams/' + teamId + '/score').once('value');
   const current = snap.val() || 0;
   const newScore = Math.max(0, current + delta);
-  await db.ref('liveGame/teams/' + teamId + '/score').set(newScore);
+  await db.ref('trivia/liveGame/teams/' + teamId + '/score').set(newScore);
   toast((delta > 0 ? '+' : '') + delta + ' pts to team');
 }
 
@@ -2409,7 +2409,7 @@ function getAdjDelta(teamId) {
 }
 
 // ── Firebase listeners ───────────────────────────────────────────────
-db.ref('liveGame/status').on('value', snap => {
+db.ref('trivia/liveGame/status').on('value', snap => {
   const status = snap.val();
   const isLive = status === 'question' || status === 'waiting' || status === 'closed';
   document.getElementById('hb-live-dot')?.classList.toggle('active', isLive);
@@ -2417,7 +2417,7 @@ db.ref('liveGame/status').on('value', snap => {
   if(label) label.textContent = isLive ? 'Game Live' : 'No game active';
 });
 
-db.ref('liveGame/slideState').on('value', snap => {
+db.ref('trivia/liveGame/slideState').on('value', snap => {
   const s = snap.val();
   const typeEl   = document.getElementById('hb-preview-type');
   const numEl    = document.getElementById('hb-preview-num');
@@ -2446,7 +2446,7 @@ db.ref('liveGame/slideState').on('value', snap => {
 });
 
 // Host-only "next question" peek — never shown on the audience screen or player phones
-db.ref('liveGame/hostPeek').on('value', snap => {
+db.ref('trivia/liveGame/hostPeek').on('value', snap => {
   const p = snap.val();
   const box   = document.getElementById('hb-peek-box');
   const label = document.getElementById('hb-peek-label');
@@ -2466,7 +2466,7 @@ db.ref('liveGame/hostPeek').on('value', snap => {
   if(reBtn) reBtn.style.display = 'block';
 });
 
-db.ref('liveGame/answers').on('value', snap => {
+db.ref('trivia/liveGame/answers').on('value', snap => {
   const allAnswers = snap.val() || {};
   allAnswersCache = allAnswers;
   let submitCount = 0;
@@ -2484,7 +2484,7 @@ db.ref('liveGame/answers').on('value', snap => {
 });
 
 // ── Update scores renderer to include point adjustment ─────────────────
-db.ref('liveGame/teams').on('value', snap => {
+db.ref('trivia/liveGame/teams').on('value', snap => {
   const teams = snap.val() || {};
   const sorted = Object.entries(teams)
     .map(([id,t]) => ({id, name:t.name||'?', score:t.score||0}))
@@ -2552,9 +2552,9 @@ async function saveSettings() {
     tagline: document.getElementById('s-tagline').value.trim(),
   };
   try {
-    await db.ref('appSettings').set(settings);
+    await db.ref('trivia/appSettings').set(settings);
     for(const t of categoryTypes) {
-      await db.ref('categoryTypes/'+t.id).set({name:t.name||'',rules:t.rules||'',createdAt:t.createdAt||Date.now()});
+      await db.ref('trivia/categoryTypes/'+t.id).set({name:t.name||'',rules:t.rules||'',createdAt:t.createdAt||Date.now()});
     }
     toast('Settings saved!');
     closeSettings();
@@ -2578,13 +2578,13 @@ function renderCatTypesList() {
 async function addCategoryType() {
   const newType = {name:'New Type',rules:'',createdAt:Date.now()};
   try {
-    const ref = await db.ref('categoryTypes').push(newType);
-    await db.ref('categoryTypes/'+ref.key).set(newType);
+    const ref = await db.ref('trivia/categoryTypes').push(newType);
+    await db.ref('trivia/categoryTypes/'+ref.key).set(newType);
   } catch(e) { toast('Failed: '+e.message, true); }
 }
 async function deleteCategoryType(id) {
   if(!confirm('Delete this category type?')) return;
-  try { await db.ref('categoryTypes/'+id).remove(); }
+  try { await db.ref('trivia/categoryTypes/'+id).remove(); }
   catch(e) { toast('Failed: '+e.message, true); }
 }
 function renderCatTypeDropdown() {
