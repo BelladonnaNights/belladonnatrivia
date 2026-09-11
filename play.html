@@ -345,10 +345,10 @@ html,body{
 //  FIREBASE
 // ═══════════════════════════════════════════════
 const cfg = {
-  apiKey:"AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",
-  authDomain:"belladonnatrivia.firebaseapp.com",
-  databaseURL:"https://belladonnatrivia-default-rtdb.firebaseio.com",
-  projectId:"belladonnatrivia"
+  apiKey:"AIzaSyCIfAE1JGHsUGzzVH2pz1Vyj5b5OhA0tDQ",
+  authDomain:"belladonna-hq.firebaseapp.com",
+  databaseURL:"https://belladonna-hq-default-rtdb.firebaseio.com",
+  projectId:"belladonna-hq"
 };
 if(!firebase.apps.length) firebase.initializeApp(cfg);
 const db = firebase.database();
@@ -387,7 +387,7 @@ async function register() {
   btn.textContent = 'Joining…';
 
   // Check if game is active
-  const gameSnap = await db.ref('liveGame/status').once('value');
+  const gameSnap = await db.ref('trivia/liveGame/status').once('value');
   const status = gameSnap.val();
 
   // Generate or reuse team ID
@@ -399,21 +399,21 @@ async function register() {
   localStorage.setItem('bella_team_name', name);
 
   // Store the current session ID so stale sessions are detected
-  const sessSnap = await db.ref('liveGame/sessionId').once('value');
+  const sessSnap = await db.ref('trivia/liveGame/sessionId').once('value');
   if(sessSnap.val()) {
     mySessionId = sessSnap.val();
     localStorage.setItem('bella_session_id', mySessionId);
   }
 
   // Register in Firebase
-  await db.ref(`liveGame/teams/${teamId}`).set({
+  await db.ref(`trivia/liveGame/teams/${teamId}`).set({
     name,
     score: 0,
     joinedAt: Date.now(),
   });
 
   // Get existing score if rejoining
-  const scoreSnap = await db.ref(`liveGame/teams/${teamId}/score`).once('value');
+  const scoreSnap = await db.ref(`trivia/liveGame/teams/${teamId}/score`).once('value');
   myScore = scoreSnap.val() || 0;
 
   showWait();
@@ -433,7 +433,7 @@ function showWait() {
 //  FIREBASE LISTENERS
 // ═══════════════════════════════════════════════
 function startListening() {
-  db.ref('liveGame').on('value', snap => {
+  db.ref('trivia/liveGame').on('value', snap => {
     const game = snap.val();
 
     // Game was closed/reset by host — but only send back to register if truly no game
@@ -708,12 +708,12 @@ async function submitAnswer(value, btn, type) {
     let correctAnswer = '';
     let questionText = currentQ.text || '';
     try {
-      const metaSnap = await db.ref('liveGame/questionMeta/' + currentQ.id).once('value');
+      const metaSnap = await db.ref('trivia/liveGame/questionMeta/' + currentQ.id).once('value');
       const meta = metaSnap.val();
       if(meta) { correctAnswer = meta.correctAnswer || ''; questionText = meta.questionText || questionText; }
     } catch(e) {}
 
-    await db.ref(`liveGame/answers/${currentQ.id}/${teamId}`).set({
+    await db.ref(`trivia/liveGame/answers/${currentQ.id}/${teamId}`).set({
       answer: value,
       timestamp: Date.now(),
       elapsed: elapsed,
@@ -835,7 +835,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Fetch current game state
-  const snap = await db.ref('liveGame').once('value');
+  const snap = await db.ref('trivia/liveGame').once('value');
   const game = snap.val();
   const currentSessionId = game?.sessionId || null;
 
