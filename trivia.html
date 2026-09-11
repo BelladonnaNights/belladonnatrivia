@@ -572,7 +572,7 @@ var catTypes = [];
 var db; // global Firebase database reference
 (function() {
   try {
-    const cfg = {apiKey:"AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",authDomain:"belladonnatrivia.firebaseapp.com",databaseURL:"https://belladonnatrivia-default-rtdb.firebaseio.com",projectId:"belladonnatrivia"};
+    const cfg = {apiKey:"AIzaSyCIfAE1JGHsUGzzVH2pz1Vyj5b5OhA0tDQ",authDomain:"belladonna-hq.firebaseapp.com",databaseURL:"https://belladonna-hq-default-rtdb.firebaseio.com",projectId:"belladonna-hq"};
     if(!firebase.apps.length) firebase.initializeApp(cfg);
     db = firebase.database();
   } catch(e) {}
@@ -596,7 +596,7 @@ function toggleJoinPanel() {
 function initLiveGame() {
   const sessionId = 'session_' + Date.now();
   const startedAt = Date.now();
-  db.ref('liveGame').set({
+  db.ref('trivia/liveGame').set({
     status: 'waiting',
     currentQuestion: null,
     leaderboardVisible: false,
@@ -604,7 +604,7 @@ function initLiveGame() {
     startedAt,
   });
   // Push initial slide state so host board shows something immediately
-  db.ref('liveGame/slideState').set({
+  db.ref('trivia/liveGame/slideState').set({
     label: 'Game Ready',
     text: 'Waiting for host to start…',
     qNum: '',
@@ -615,7 +615,7 @@ function initLiveGame() {
   });
   // Save to game history (last 20 games kept via Firebase)
   const categories = (state.rounds||[]).map(r => r.title || r.tabName || 'Unknown').join(', ');
-  db.ref('gameHistory/' + sessionId).set({
+  db.ref('trivia/gameHistory/' + sessionId).set({
     sessionId,
     startedAt,
     date: new Date(startedAt).toLocaleString(),
@@ -623,12 +623,12 @@ function initLiveGame() {
     teams: null,
   });
   // Prune to 20 most recent
-  db.ref('gameHistory').once('value', snap => {
+  db.ref('trivia/gameHistory').once('value', snap => {
     const all = snap.val() || {};
     const keys = Object.keys(all).sort();
     if(keys.length > 20) {
       const toDelete = keys.slice(0, keys.length - 20);
-      toDelete.forEach(k => db.ref('gameHistory/' + k).remove());
+      toDelete.forEach(k => db.ref('trivia/gameHistory/' + k).remove());
     }
   });
 }
@@ -637,11 +637,11 @@ function toggleLeaderboard() {
   leaderboardVisible = !leaderboardVisible;
   const overlay = document.getElementById('lb-overlay');
   overlay.style.display = leaderboardVisible ? 'flex' : 'none';
-  db.ref('liveGame/leaderboardVisible').set(leaderboardVisible);
+  db.ref('trivia/liveGame/leaderboardVisible').set(leaderboardVisible);
   const btn = document.getElementById('lb-toggle-btn');
   if(btn) btn.textContent = leaderboardVisible ? 'Hide Leaderboard' : 'Show Leaderboard';
   if(leaderboardVisible) {
-    db.ref('liveGame/teams').once('value', snap => renderLeaderboardOverlay(snap.val()||{}));
+    db.ref('trivia/liveGame/teams').once('value', snap => renderLeaderboardOverlay(snap.val()||{}));
   }
 }
 
@@ -664,7 +664,7 @@ let nextQuestionTimedOverride = null;
 
 // Listen for host board timed toggle
 if(db) {
-  db.ref('liveGame/timedOverride').on('value', snap => {
+  db.ref('trivia/liveGame/timedOverride').on('value', snap => {
     const val = snap.val();
     if(val !== null && val !== undefined) nextQuestionTimedOverride = !!val;
   });
@@ -686,7 +686,7 @@ function pushLiveQuestion(q, qIndex, round) {
   const qId = `q_${state.roundIndex}_${qIndex}`;
   const timed = getEffectiveTimed(round);
 
-  db.ref('liveGame').update({
+  db.ref('trivia/liveGame').update({
     status: 'question',
     currentQuestion: {
       id: qId, text: q.question, type: q.type||'open',
@@ -696,17 +696,17 @@ function pushLiveQuestion(q, qIndex, round) {
     }
   });
   // Store correct answer on the question node so grading panel can read it
-  db.ref(`liveGame/questionMeta/${qId}`).set({
+  db.ref(`trivia/liveGame/questionMeta/${qId}`).set({
     questionText: q.question,
     correctAnswer: q.answer,
   });
-  db.ref(`liveGame/answers/${qId}`).remove();
+  db.ref(`trivia/liveGame/answers/${qId}`).remove();
 }
 
 // Listen for host commands from admin board
 if(db) {
   let lastHostCommandTs = 0;
-  db.ref('liveGame/hostCommand').on('value', snap => {
+  db.ref('trivia/liveGame/hostCommand').on('value', snap => {
     const cmd = snap.val();
     if(!cmd || !cmd.ts || cmd.ts <= lastHostCommandTs) return;
     lastHostCommandTs = cmd.ts;
@@ -734,26 +734,26 @@ window.addEventListener('beforeunload', () => {
   if(db) {
     try {
       // Save final teams to history before closing
-      db.ref('liveGame/teams').once('value', snap => {
+      db.ref('trivia/liveGame/teams').once('value', snap => {
         const teams = snap.val();
-        db.ref('liveGame').once('value', snap2 => {
+        db.ref('trivia/liveGame').once('value', snap2 => {
           const g = snap2.val();
           if(g && g.sessionId && teams) {
-            db.ref('gameHistory/' + g.sessionId + '/teams').set(teams);
-            db.ref('gameHistory/' + g.sessionId + '/endedAt').set(Date.now());
+            db.ref('trivia/gameHistory/' + g.sessionId + '/teams').set(teams);
+            db.ref('trivia/gameHistory/' + g.sessionId + '/endedAt').set(Date.now());
           }
         });
       });
-      db.ref('liveGame/slideState').remove();
-      db.ref('liveGame/status').set(null);
-      db.ref('liveGame/currentQuestion').set(null);
+      db.ref('trivia/liveGame/slideState').remove();
+      db.ref('trivia/liveGame/status').set(null);
+      db.ref('trivia/liveGame/currentQuestion').set(null);
     } catch(e) {}
   }
 });
 
 function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
   if(!db) return;
-  db.ref('liveGame/slideState').set({
+  db.ref('trivia/liveGame/slideState').set({
     label:  label  || '',
     text:   text   || '',
     qNum:   qNum   || '',
@@ -771,7 +771,7 @@ function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
 function pushNextQuestionPeek() {
   if(!db) return;
   const round = currentRound();
-  if(!round) { db.ref('liveGame/hostPeek').set(null); return; }
+  if(!round) { db.ref('trivia/liveGame/hostPeek').set(null); return; }
   const type = slideType();
   let nextText = '', nextLabel = '', nextAnswer = '';
 
@@ -796,7 +796,7 @@ function pushNextQuestionPeek() {
     }
   }
 
-  db.ref('liveGame/hostPeek').set({ text: nextText, answer: nextAnswer, label: nextLabel, ts: Date.now() });
+  db.ref('trivia/liveGame/hostPeek').set({ text: nextText, answer: nextAnswer, label: nextLabel, ts: Date.now() });
 }
 
 // Host-triggered: swap the upcoming (not-yet-shown) question for a fresh
@@ -871,8 +871,8 @@ function fuzzyConfidence(submitted,correct) {
 }
 
 
-    db.ref('appSettings').once('value', s => { appSettings = s.val()||{}; });
-    db.ref('categoryTypes').once('value', s => { const d=s.val()||{}; catTypes=Object.entries(d).map(([id,v])=>({id,...v})); });
+    db.ref('trivia/appSettings').once('value', s => { appSettings = s.val()||{}; });
+    db.ref('trivia/categoryTypes').once('value', s => { const d=s.val()||{}; catTypes=Object.entries(d).map(([id,v])=>({id,...v})); });
 
 
 // Only show Follow Us + Rules on round 1
@@ -1136,7 +1136,7 @@ function advanceSlide() {
 
   // Close digital answers when leaving a question
   if(type === S_QUESTION) {
-    db.ref('liveGame/status').set('closed');
+    db.ref('trivia/liveGame/status').set('closed');
     // Stop any music audio
     if(window._musicAudio) { window._musicAudio.pause(); window._musicAudio = null; }
     if(window._musicCtx) { try { window._musicCtx.close(); } catch(e) {} window._musicCtx = null; }
@@ -2360,7 +2360,7 @@ function initVenueIntro(){
     return;
   }
 
-  db.ref('planner/gigs/'+venueId+'/'+gigDate).once('value').then(snap=>{
+  db.ref('trivia/planner/gigs/'+venueId+'/'+gigDate).once('value').then(snap=>{
     const gig = snap.val();
     if(gig && gig.themeName){
       document.getElementById('vi-theme-headline').textContent = gig.themeName.toUpperCase();
@@ -2373,7 +2373,7 @@ function initVenueIntro(){
     document.getElementById('vi-theme-sub').textContent = "Couldn't reach the Planner.";
   });
 
-  db.ref('planner/gigs/'+venueId).once('value').then(snap=>{
+  db.ref('trivia/planner/gigs/'+venueId).once('value').then(snap=>{
     const all = snap.val() || {};
     const upcoming = Object.entries(all)
       .filter(([dk,g]) => dk > gigDate && g.themeName)
