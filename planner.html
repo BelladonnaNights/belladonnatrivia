@@ -681,13 +681,13 @@ a{color:inherit}
 //  FIREBASE
 // ═══════════════════════════════════════════════
 const firebaseConfig = {
-  apiKey: "AIzaSyBHZekpX2HQOjI94EYJPSJS9Kew4gpTM0w",
-  authDomain: "belladonnatrivia.firebaseapp.com",
-  databaseURL: "https://belladonnatrivia-default-rtdb.firebaseio.com",
-  projectId: "belladonnatrivia",
-  storageBucket: "belladonnatrivia.firebasestorage.app",
-  messagingSenderId: "658670195433",
-  appId: "1:658670195433:web:f66cbc32344f4d4d63d678"
+  apiKey: "AIzaSyCIfAE1JGHsUGzzVH2pz1Vyj5b5OhA0tDQ",
+  authDomain: "belladonna-hq.firebaseapp.com",
+  databaseURL: "https://belladonna-hq-default-rtdb.firebaseio.com",
+  projectId: "belladonna-hq",
+  storageBucket: "belladonna-hq.firebasestorage.app",
+  messagingSenderId: "1021873183587",
+  appId: "1:1021873183587:web:def283bb7b5ca48e4f9156"
 };
 if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
@@ -708,10 +708,10 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<
 //  STATE
 // ═══════════════════════════════════════════════
 const state = { venues:{}, themes:{}, gigs:{}, sequences:{} };
-db.ref('planner/venues').on('value', snap=>{ state.venues = snap.val()||{}; onDataChange(); });
-db.ref('planner/themes').on('value', snap=>{ state.themes = snap.val()||{}; onDataChange(); updateThemeDatalist(); });
-db.ref('planner/gigs').on('value', snap=>{ state.gigs = snap.val()||{}; onDataChange(); });
-db.ref('planner/sequences').on('value', snap=>{ state.sequences = snap.val()||{}; onDataChange(); });
+db.ref('trivia/planner/venues').on('value', snap=>{ state.venues = snap.val()||{}; onDataChange(); });
+db.ref('trivia/planner/themes').on('value', snap=>{ state.themes = snap.val()||{}; onDataChange(); updateThemeDatalist(); });
+db.ref('trivia/planner/gigs').on('value', snap=>{ state.gigs = snap.val()||{}; onDataChange(); });
+db.ref('trivia/planner/sequences').on('value', snap=>{ state.sequences = snap.val()||{}; onDataChange(); });
 function onDataChange(){ setSyncStatus('synced'); renderActiveTab(); }
 function updateThemeDatalist(){
   document.getElementById('theme-name-list').innerHTML = Object.values(state.themes||{})
@@ -1140,15 +1140,15 @@ async function gridPaste(){
     if(r<0||c<0||r>=gridRows||c>=gridCols){ skipped++; continue; }
     const addr = cellAddr(r,c);
     if(!addr || !addr.dateKey){ skipped++; continue; }
-    if(!cell.themeName){ updates['planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null; continue; }
+    if(!cell.themeName){ updates['trivia/planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null; continue; }
     const themeId = await resolveThemeIdByName(cell.themeName);
-    updates['planner/gigs/'+addr.venueId+'/'+addr.dateKey] = { themeId, themeName:cell.themeName, status:cell.status||'planned', note:'' };
+    updates['trivia/planner/gigs/'+addr.venueId+'/'+addr.dateKey] = { themeId, themeName:cell.themeName, status:cell.status||'planned', note:'' };
     bumpThemeUsageForVenue(themeId, addr.dateKey, addr.venueId);
   }
   if(clipboard.mode==='cut'){
     for(const cell of clipboard.cells){
       const addr = cellAddr(cell.origR, cell.origC);
-      if(addr && addr.dateKey) updates['planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null;
+      if(addr && addr.dateKey) updates['trivia/planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null;
     }
   }
   await db.ref().update(updates);
@@ -1162,7 +1162,7 @@ async function gridClearSelected(){
   const updates = {};
   for(let r=rect.rMin;r<=rect.rMax;r++) for(let c=rect.cMin;c<=rect.cMax;c++){
     const addr = cellAddr(r,c);
-    if(addr && addr.dateKey) updates['planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null;
+    if(addr && addr.dateKey) updates['trivia/planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null;
   }
   await db.ref().update(updates);
   toast('Cleared.');
@@ -1249,7 +1249,7 @@ async function submitApplySequenceAt(){
   for(const themeName of (s.themes||[])){
     const dk = toKey(d);
     const themeId = await resolveThemeIdByName(themeName);
-    updates['planner/gigs/'+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:''};
+    updates['trivia/planner/gigs/'+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:''};
     bumpThemeUsageForVenue(themeId, dk, venueId);
     d = addDays(d,7);
   }
@@ -1430,15 +1430,15 @@ function vdInlineSave(row, dk, themeNameOrNull, statusOrNull){
 
   if(!themeName){
     if(status === 'cancelled'){
-      db.ref('planner/gigs/'+id+'/'+dk).set({themeId:null, themeName:null, status:'cancelled', note:existing.note||''});
+      db.ref('trivia/planner/gigs/'+id+'/'+dk).set({themeId:null, themeName:null, status:'cancelled', note:existing.note||''});
     } else {
-      db.ref('planner/gigs/'+id+'/'+dk).remove();
+      db.ref('trivia/planner/gigs/'+id+'/'+dk).remove();
     }
     flashSaved(row);
     return;
   }
   resolveThemeIdByName(themeName).then(themeId=>{
-    db.ref('planner/gigs/'+id+'/'+dk).set({themeId, themeName, status: status==='cancelled'?'planned':status, note:existing.note||''});
+    db.ref('trivia/planner/gigs/'+id+'/'+dk).set({themeId, themeName, status: status==='cancelled'?'planned':status, note:existing.note||''});
     bumpThemeUsage(themeId, dk);
     flashSaved(row);
   });
@@ -1454,16 +1454,16 @@ function resolveThemeIdByName(name){
   const key = name.trim().toLowerCase();
   const found = Object.entries(state.themes||{}).find(([id,t])=>(t.name||'').trim().toLowerCase()===key);
   if(found) return Promise.resolve(found[0]);
-  const newId = db.ref('planner/themes').push().key;
-  return db.ref('planner/themes/'+newId).set({name:name.trim(), tags:suggestTags(name), timesUsed:0, lastUsedDate:null, lastUsedVenueId:null}).then(()=>newId);
+  const newId = db.ref('trivia/planner/themes').push().key;
+  return db.ref('trivia/planner/themes/'+newId).set({name:name.trim(), tags:suggestTags(name), timesUsed:0, lastUsedDate:null, lastUsedVenueId:null}).then(()=>newId);
 }
 function bumpThemeUsage(themeId, dk){
   const t = state.themes[themeId] || {};
   const updates = {};
-  updates['planner/themes/'+themeId+'/timesUsed'] = (t.timesUsed||0) + 1;
+  updates['trivia/planner/themes/'+themeId+'/timesUsed'] = (t.timesUsed||0) + 1;
   if(!t.lastUsedDate || dk > t.lastUsedDate){
-    updates['planner/themes/'+themeId+'/lastUsedDate'] = dk;
-    updates['planner/themes/'+themeId+'/lastUsedVenueId'] = currentVenueDetailId;
+    updates['trivia/planner/themes/'+themeId+'/lastUsedDate'] = dk;
+    updates['trivia/planner/themes/'+themeId+'/lastUsedVenueId'] = currentVenueDetailId;
   }
   db.ref().update(updates);
 }
@@ -1515,7 +1515,7 @@ function submitQuickBulk(){
     for(const name of themeNames){
       const dk = toKey(d);
       const themeId = await resolveThemeIdByName(name);
-      updates['planner/gigs/'+id+'/'+dk] = {themeId, themeName:name, status:'planned', note:''};
+      updates['trivia/planner/gigs/'+id+'/'+dk] = {themeId, themeName:name, status:'planned', note:''};
       bumpThemeUsage(themeId, dk);
       d = addDays(d,7);
     }
@@ -1568,7 +1568,7 @@ async function submitBulkFill(){
     const d = addDays(start, i*7);
     const dk = toKey(d);
     const themeId = await resolveThemeIdByName(themeNames[i]);
-    updates['planner/gigs/'+id+'/'+dk] = {themeId, themeName:themeNames[i], status:'planned', note:''};
+    updates['trivia/planner/gigs/'+id+'/'+dk] = {themeId, themeName:themeNames[i], status:'planned', note:''};
     bumpThemeUsage(themeId, dk);
   }
   await db.ref().update(updates);
@@ -1614,9 +1614,9 @@ function saveVenue(){
     notes: document.getElementById('v-notes').value.trim(),
     cadence: 'weekly'
   };
-  const id = editingVenueId || db.ref('planner/venues').push().key;
+  const id = editingVenueId || db.ref('trivia/planner/venues').push().key;
   setSyncStatus('syncing');
-  db.ref('planner/venues/'+id).update(data).then(()=>{ toast('Venue saved.'); closeModal('venue-modal-overlay'); });
+  db.ref('trivia/planner/venues/'+id).update(data).then(()=>{ toast('Venue saved.'); closeModal('venue-modal-overlay'); });
 }
 function deleteVenue(){
   if(!editingVenueId) return;
@@ -1771,10 +1771,10 @@ function suggestTagsForModal(){
 function saveTheme(){
   const name = document.getElementById('t-name').value.trim();
   if(!name) return toast('Theme needs a name.', true);
-  const themeId = editingThemeId || db.ref('planner/themes').push().key;
+  const themeId = editingThemeId || db.ref('trivia/planner/themes').push().key;
   const existing = editingThemeId ? state.themes[editingThemeId] : {};
   setSyncStatus('syncing');
-  db.ref('planner/themes/'+themeId).update({
+  db.ref('trivia/planner/themes/'+themeId).update({
     name, tags: editingThemeTags,
     timesUsed: parseInt(document.getElementById('t-times-used').value)||0,
     lastUsedDate: document.getElementById('t-last-used').value || null,
@@ -1785,7 +1785,7 @@ function deleteTheme(){
   if(!editingThemeId) return;
   if(!confirm('Delete this theme from the library?')) return;
   setSyncStatus('syncing');
-  db.ref('planner/themes/'+editingThemeId).remove().then(()=>{ toast('Theme deleted.'); closeModal('theme-modal-overlay'); });
+  db.ref('trivia/planner/themes/'+editingThemeId).remove().then(()=>{ toast('Theme deleted.'); closeModal('theme-modal-overlay'); });
 }
 
 // ═══════════════════════════════════════════════
@@ -1830,15 +1830,15 @@ function saveSequence(){
   const themes = document.getElementById('seq-themes').value.split('\n').map(s=>s.trim()).filter(Boolean);
   if(!name) return toast('Give the sequence a name.', true);
   if(!themes.length) return toast('Add at least one theme.', true);
-  const id = editingSequenceId || db.ref('planner/sequences').push().key;
+  const id = editingSequenceId || db.ref('trivia/planner/sequences').push().key;
   setSyncStatus('syncing');
-  db.ref('planner/sequences/'+id).set({name, themes}).then(()=>{ toast('Sequence saved.'); closeModal('sequence-modal-overlay'); renderSequences(); });
+  db.ref('trivia/planner/sequences/'+id).set({name, themes}).then(()=>{ toast('Sequence saved.'); closeModal('sequence-modal-overlay'); renderSequences(); });
 }
 function deleteSequence(){
   if(!editingSequenceId) return;
   if(!confirm('Delete this sequence?')) return;
   setSyncStatus('syncing');
-  db.ref('planner/sequences/'+editingSequenceId).remove().then(()=>{ toast('Sequence deleted.'); closeModal('sequence-modal-overlay'); renderSequences(); });
+  db.ref('trivia/planner/sequences/'+editingSequenceId).remove().then(()=>{ toast('Sequence deleted.'); closeModal('sequence-modal-overlay'); renderSequences(); });
 }
 let applyingSequenceId = null;
 function openApplySequence(seqId){
@@ -1870,7 +1870,7 @@ async function submitApplySequence(){
   for(const themeName of (s.themes||[])){
     const dk = toKey(d);
     const themeId = await resolveThemeIdByName(themeName);
-    updates['planner/gigs/'+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:''};
+    updates['trivia/planner/gigs/'+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:''};
     bumpThemeUsageForVenue(themeId, dk, venueId);
     d = addDays(d,7);
   }
@@ -1944,11 +1944,11 @@ function saveGig(){
   if(!venueId || !dateKey) return toast('Pick a venue and date.', true);
   setSyncStatus('syncing');
   if(status==='cancelled' || !typedName){
-    db.ref('planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, status: status==='cancelled'?'cancelled':'planned', note}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, status: status==='cancelled'?'cancelled':'planned', note}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
   resolveThemeIdByName(typedName).then(themeId=>{
-    db.ref('planner/gigs/'+venueId+'/'+dateKey).set({themeId, themeName:typedName, status:'planned', note}).then(()=>{
+    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId, themeName:typedName, status:'planned', note}).then(()=>{
       bumpThemeUsageForVenue(themeId, dateKey, venueId);
       toast('Saved.'); closeModal('gig-modal-overlay');
     });
@@ -1957,8 +1957,8 @@ function saveGig(){
 function bumpThemeUsageForVenue(themeId, dk, venueId){
   const t = state.themes[themeId]||{};
   const updates = {};
-  updates['planner/themes/'+themeId+'/timesUsed'] = (t.timesUsed||0)+1;
-  if(!t.lastUsedDate || dk > t.lastUsedDate){ updates['planner/themes/'+themeId+'/lastUsedDate']=dk; updates['planner/themes/'+themeId+'/lastUsedVenueId']=venueId; }
+  updates['trivia/planner/themes/'+themeId+'/timesUsed'] = (t.timesUsed||0)+1;
+  if(!t.lastUsedDate || dk > t.lastUsedDate){ updates['trivia/planner/themes/'+themeId+'/lastUsedDate']=dk; updates['trivia/planner/themes/'+themeId+'/lastUsedVenueId']=venueId; }
   db.ref().update(updates);
 }
 function clearGig(){
@@ -1966,7 +1966,7 @@ function clearGig(){
   const dateKey = document.getElementById('gig-date').value;
   if(!venueId||!dateKey) return;
   setSyncStatus('syncing');
-  db.ref('planner/gigs/'+venueId+'/'+dateKey).remove().then(()=>{ toast('Cleared — back to unplanned.'); closeModal('gig-modal-overlay'); });
+  db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).remove().then(()=>{ toast('Cleared — back to unplanned.'); closeModal('gig-modal-overlay'); });
 }
 
 // ═══════════════════════════════════════════════
@@ -2153,7 +2153,7 @@ async function commitImport(){
     const status = document.getElementById('imp-status-'+i).value;
     const venueId = 'v_'+slugify(name)+'_'+(day||'x')+'_'+i;
     let venueLastUsed = null;
-    updates['planner/venues/'+venueId] = { name, groupName:name, day, time, pay:{amount:payAmount, method:payMethod}, status,
+    updates['trivia/planner/venues/'+venueId] = { name, groupName:name, day, time, pay:{amount:payAmount, method:payMethod}, status,
       source:'belladonna', cadence:'weekly', cadenceRaw: b.cadenceRaw||'', notes:'', host:'', createdAt: Date.now() };
     venueCount++;
     b.entries.forEach(e=>{
@@ -2168,7 +2168,7 @@ async function commitImport(){
         if(!idx.lastUsedDate || dk > idx.lastUsedDate){ idx.lastUsedDate = dk; venueLastUsed = venueId; idx.lastUsedVenueId = venueId; }
         gig = {themeId:tid, themeName:text, status:'planned', note:''};
       }
-      updates['planner/gigs/'+venueId+'/'+dk] = gig;
+      updates['trivia/planner/gigs/'+venueId+'/'+dk] = gig;
       gigCount++;
     });
   });
@@ -2178,7 +2178,7 @@ async function commitImport(){
     themeIndex[key] = {id:'th_'+slugify(name)+'_'+Math.random().toString(36).slice(2,7), timesUsed:0, lastUsedDate:null, name:name.trim(), tags:suggestTags(name)};
   });
   Object.values(themeIndex).forEach(info=>{
-    updates['planner/themes/'+info.id] = { name: info.name, tags: info.tags||[], timesUsed: info.timesUsed, lastUsedDate: info.lastUsedDate, lastUsedVenueId: info.lastUsedVenueId||null };
+    updates['trivia/planner/themes/'+info.id] = { name: info.name, tags: info.tags||[], timesUsed: info.timesUsed, lastUsedDate: info.lastUsedDate, lastUsedVenueId: info.lastUsedVenueId||null };
   });
   try{
     await db.ref().update(updates);
