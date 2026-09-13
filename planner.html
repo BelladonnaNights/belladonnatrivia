@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -251,6 +252,8 @@ a{color:inherit}
     <div class="nav-subtitle">Trivia venues &amp; theme scheduling</div>
   </div>
   <div class="nav-right">
+    <span class="sync-label" id="gateway-user-label" style="margin-right:0.5rem;"></span>
+    <button class="btn btn-ghost btn-sm" onclick="gatewaySignOut()">Sign Out</button>
     <button class="btn btn-ghost btn-sm" onclick="openModal('import-overlay')">Import Spreadsheet</button>
     <span class="sync-dot" id="sync-dot"></span>
     <span class="sync-label" id="sync-label">connecting…</span>
@@ -691,6 +694,7 @@ const firebaseConfig = {
 };
 if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+const auth = firebase.auth();
 
 function setSyncStatus(status){
   const dot=document.getElementById('sync-dot'), label=document.getElementById('sync-label');
@@ -703,15 +707,27 @@ function toast(msg, isErr){
   setTimeout(()=>t.className='',2800);
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function gatewaySignOut(){ auth.signOut().then(()=>{ window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app=trivia'; }); }
 
 // ═══════════════════════════════════════════════
-//  STATE
+//  STATE — gated behind the Belladonna Gateway login. Realtime Database's
+//  rules require a signed-in account to read trivia/planner data at all, so
+//  nothing below starts listening until that's confirmed. Not signed in?
+//  Straight to the shared login page, with a return trip back here after.
 // ═══════════════════════════════════════════════
 const state = { venues:{}, themes:{}, gigs:{}, sequences:{} };
-db.ref('trivia/planner/venues').on('value', snap=>{ state.venues = snap.val()||{}; onDataChange(); });
-db.ref('trivia/planner/themes').on('value', snap=>{ state.themes = snap.val()||{}; onDataChange(); updateThemeDatalist(); });
-db.ref('trivia/planner/gigs').on('value', snap=>{ state.gigs = snap.val()||{}; onDataChange(); });
-db.ref('trivia/planner/sequences').on('value', snap=>{ state.sequences = snap.val()||{}; onDataChange(); });
+auth.onAuthStateChanged(function(user){
+  if(!user){
+    window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app=trivia';
+    return;
+  }
+  const label=document.getElementById('gateway-user-label');
+  if(label)label.textContent=user.email||'account';
+  db.ref('trivia/planner/venues').on('value', snap=>{ state.venues = snap.val()||{}; onDataChange(); });
+  db.ref('trivia/planner/themes').on('value', snap=>{ state.themes = snap.val()||{}; onDataChange(); updateThemeDatalist(); });
+  db.ref('trivia/planner/gigs').on('value', snap=>{ state.gigs = snap.val()||{}; onDataChange(); });
+  db.ref('trivia/planner/sequences').on('value', snap=>{ state.sequences = snap.val()||{}; onDataChange(); });
+});
 function onDataChange(){ setSyncStatus('synced'); renderActiveTab(); }
 function updateThemeDatalist(){
   document.getElementById('theme-name-list').innerHTML = Object.values(state.themes||{})
