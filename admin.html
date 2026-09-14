@@ -7,6 +7,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -582,6 +584,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <div class="nav-title">BELLADONNA <span>TRIVIA</span></div>
   </div>
   <div class="nav-right">
+    <span class="sync-label" id="gateway-user-label" style="margin-right:0.4rem;"></span>
+    <button class="nav-btn nav-btn-ghost" onclick="gatewaySignOut()">Sign Out</button>
     <div class="sync-dot" id="sync-dot"></div>
     <div class="sync-label" id="sync-label">connecting…</div>
     <button class="nav-btn nav-btn-ghost" onclick="openAdminLogin()" id="admin-gear-btn" title="Admin">
@@ -1223,6 +1227,56 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+const dbFs = firebase.firestore();
+const auth = firebase.auth();
+
+// ── GATEWAY LOGIN GATE ──
+// This shares its session with planner.html (both use the 'trivia' app key),
+// so an admin who's already using the Planner never has to sign in again to
+// get here — no redirect, no confirm click, nothing. But being *in* the
+// Trivia app family only proves regular access; this page additionally
+// requires adminAccess.trivia specifically, checked once Firebase confirms
+// who's actually signed in.
+const GATEWAY_APP_KEY='trivia';
+const GATEWAY_SESSION_MS=6*60*60*1000;
+function hasValidGatewaySession(){
+  try{
+    const raw=localStorage.getItem('gatewaySession_'+GATEWAY_APP_KEY);
+    if(!raw)return false;
+    const s=JSON.parse(raw);
+    return (Date.now()-s.ts)<GATEWAY_SESSION_MS;
+  }catch(e){return false;}
+}
+if(!hasValidGatewaySession()){
+  window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;
+}
+function gatewaySignOut(){
+  try{Object.keys(localStorage).filter(k=>k.startsWith('gatewaySession_')).forEach(k=>localStorage.removeItem(k));}catch(e){}
+  auth.signOut().then(()=>{window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;});
+}
+function showAdminBlocked(msg){
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:#080808;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1rem;padding:2rem;text-align:center;';
+  overlay.innerHTML='<div style="font-family:\'Bebas Neue\',sans-serif;font-size:1.6rem;color:#c9a84c;letter-spacing:0.05em;">Trivia Admin</div>'
+    +'<div style="font-family:\'DM Sans\',sans-serif;font-size:0.85rem;color:#b0a898;max-width:360px;line-height:1.7;">'+msg+'</div>'
+    +'<button onclick="gatewaySignOut()" style="background:none;border:1px solid rgba(201,168,76,.4);color:#c9a84c;border-radius:8px;padding:0.6rem 1.2rem;font-family:\'DM Sans\',sans-serif;font-size:0.75rem;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;">Sign In As Someone Else</button>';
+  document.body.appendChild(overlay);
+}
+auth.onAuthStateChanged(function(user){
+  if(!user){
+    window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;
+    return;
+  }
+  dbFs.collection('users').doc(user.uid).get().then(function(snap){
+    const profile=snap.exists?snap.data():{};
+    const banned=profile.status==='banned';
+    const isTriviaAdmin=!!(profile.adminAccess&&profile.adminAccess.trivia);
+    if(banned){ showAdminBlocked('This account is currently restricted.'); return; }
+    if(!isTriviaAdmin){ showAdminBlocked((profile.name?profile.name+', your':'Your')+' account has Trivia access but not Trivia Admin access. Ask Belladonna to grant it from the Accounts tab in HQ if you think this is a mistake.'); return; }
+    const bar=document.getElementById('gateway-user-label');
+    if(bar)bar.textContent=user.email||'account';
+  }).catch(function(){ showAdminBlocked('Could not verify admin access. Please try again.'); });
+});
 
 // ═══════════════════════════════════════════════
 //  PLANNER — venue picker (feeds trivia.html's pre-round theme screen)
