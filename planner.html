@@ -707,18 +707,38 @@ function toast(msg, isErr){
   setTimeout(()=>t.className='',2800);
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-function gatewaySignOut(){ auth.signOut().then(()=>{ window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app=trivia'; }); }
+
+// ── GATEWAY LOGIN GATE ──
+// Trivia gets its own independent 6-hour "stay signed in" window, tracked
+// locally just for Trivia — signing into another app never resets it.
+const GATEWAY_APP_KEY='trivia';
+const GATEWAY_SESSION_MS=6*60*60*1000;
+function hasValidGatewaySession(){
+  try{
+    const raw=localStorage.getItem('gatewaySession_'+GATEWAY_APP_KEY);
+    if(!raw)return false;
+    const s=JSON.parse(raw);
+    return (Date.now()-s.ts)<GATEWAY_SESSION_MS;
+  }catch(e){return false;}
+}
+if(!hasValidGatewaySession()){
+  window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;
+}
+function gatewaySignOut(){
+  try{Object.keys(localStorage).filter(k=>k.startsWith('gatewaySession_')).forEach(k=>localStorage.removeItem(k));}catch(e){}
+  auth.signOut().then(()=>{ window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY; });
+}
 
 // ═══════════════════════════════════════════════
-//  STATE — gated behind the Belladonna Gateway login. Realtime Database's
-//  rules require a signed-in account to read trivia/planner data at all, so
-//  nothing below starts listening until that's confirmed. Not signed in?
-//  Straight to the shared login page, with a return trip back here after.
+//  STATE — Realtime Database's rules require a signed-in account to read
+//  trivia/planner data. The gate above already sent them to the login page
+//  if their local session was missing/expired; this just waits for Firebase
+//  to confirm the real session before actually opening the data listeners.
 // ═══════════════════════════════════════════════
 const state = { venues:{}, themes:{}, gigs:{}, sequences:{} };
 auth.onAuthStateChanged(function(user){
   if(!user){
-    window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app=trivia';
+    window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;
     return;
   }
   const label=document.getElementById('gateway-user-label');
