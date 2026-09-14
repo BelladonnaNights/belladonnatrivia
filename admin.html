@@ -1248,11 +1248,11 @@ function hasValidGatewaySession(){
   }catch(e){return false;}
 }
 if(!hasValidGatewaySession()){
-  window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;
+  window.location.href='https://belladonnanights.github.io/belladonna-gateway/accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;
 }
 function gatewaySignOut(){
   try{Object.keys(localStorage).filter(k=>k.startsWith('gatewaySession_')).forEach(k=>localStorage.removeItem(k));}catch(e){}
-  auth.signOut().then(()=>{window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;});
+  auth.signOut().then(()=>{window.location.href='https://belladonnanights.github.io/belladonna-gateway/accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;});
 }
 function showAdminBlocked(msg){
   const overlay=document.createElement('div');
@@ -1264,7 +1264,7 @@ function showAdminBlocked(msg){
 }
 auth.onAuthStateChanged(function(user){
   if(!user){
-    window.location.href='accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;
+    window.location.href='https://belladonnanights.github.io/belladonna-gateway/accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;
     return;
   }
   dbFs.collection('users').doc(user.uid).get().then(function(snap){
