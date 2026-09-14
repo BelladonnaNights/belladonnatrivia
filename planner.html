@@ -49,6 +49,10 @@ a{color:inherit}
 .tab-btn:hover{color:var(--text2)}
 .tab-btn.active{color:var(--gold2);border-bottom-color:var(--gold)}
 .tab-badge{display:inline-block;margin-left:6px;background:var(--red-dim);color:var(--red);border-radius:99px;padding:1px 7px;font-size:10px}
+.mode-pill{font-family:var(--font);font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--text3);
+  background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:8px 18px;margin:0 6px 10px 0;cursor:pointer;transition:all .2s;}
+.mode-pill:hover{color:var(--text2);border-color:var(--border2);}
+.mode-pill.active{background:var(--gold-dim);border-color:var(--gold-border);color:var(--gold2);}
 
 .wrap{padding:2rem;max-width:1500px;margin:0 auto}
 .panel{display:none}
@@ -254,17 +258,22 @@ a{color:inherit}
   <div class="nav-right">
     <span class="sync-label" id="gateway-user-label" style="margin-right:0.5rem;"></span>
     <button class="btn btn-ghost btn-sm" onclick="gatewaySignOut()">Sign Out</button>
-    <button class="btn btn-ghost btn-sm" onclick="openModal('import-overlay')">Import Spreadsheet</button>
+    <button class="btn btn-ghost btn-sm trivia-only-tab" onclick="openModal('import-overlay')">Import Spreadsheet</button>
     <span class="sync-dot" id="sync-dot"></span>
     <span class="sync-label" id="sync-label">connecting…</span>
   </div>
+</div>
+
+<div class="tabs" style="padding-top:0.6rem;">
+  <button class="mode-pill active" onclick="setPlannerMode('trivia',this)">🎯 Planning Trivia</button>
+  <button class="mode-pill" onclick="setPlannerMode('bingo',this)">🎱 Planning Bingo</button>
 </div>
 
 <div class="tabs">
   <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
   <button class="tab-btn" data-tab="planning" onclick="switchTab('planning')">Planning <span class="tab-badge" id="needs-count" style="display:none">0</span></button>
   <button class="tab-btn" data-tab="venues" onclick="switchTab('venues')">Venues</button>
-  <button class="tab-btn" data-tab="themes" onclick="switchTab('themes')">Theme Library</button>
+  <button class="tab-btn" data-tab="themes" onclick="switchTab('themes')"><span id="theme-tab-label">Theme Library</span></button>
 </div>
 
 <div class="wrap">
@@ -419,7 +428,7 @@ a{color:inherit}
     <div class="filter-bar">
       <div class="vd-view-toggle">
         <button class="pill active" data-tlview="library" onclick="setThemeTabView('library')">Theme Library</button>
-        <button class="pill" data-tlview="sequences" onclick="setThemeTabView('sequences')">Bulk Sequences</button>
+        <button class="pill trivia-only-tab" data-tlview="sequences" onclick="setThemeTabView('sequences')">Bulk Sequences</button>
       </div>
     </div>
 
@@ -743,16 +752,95 @@ auth.onAuthStateChanged(function(user){
   }
   const label=document.getElementById('gateway-user-label');
   if(label)label.textContent=user.email||'account';
-  db.ref('trivia/planner/venues').on('value', snap=>{ state.venues = snap.val()||{}; onDataChange(); });
-  db.ref('trivia/planner/themes').on('value', snap=>{ state.themes = snap.val()||{}; onDataChange(); updateThemeDatalist(); });
-  db.ref('trivia/planner/gigs').on('value', snap=>{ state.gigs = snap.val()||{}; onDataChange(); });
-  db.ref('trivia/planner/sequences').on('value', snap=>{ state.sequences = snap.val()||{}; onDataChange(); });
+  attachModeListeners();
 });
 function onDataChange(){ setSyncStatus('synced'); renderActiveTab(); }
 function updateThemeDatalist(){
   document.getElementById('theme-name-list').innerHTML = Object.values(state.themes||{})
-    .map(t=>`<option value="${escapeHtml(t.name)}">`).join('');
+    .map(t=>`<option value="${escapeHtml(plannerMode==='bingo'?t.title:t.name)}">`).join('');
 }
+
+// ═══════════════════════════════════════════════
+//  PLANNING MODE — Trivia or Bingo. Same planner, different app's real data.
+//  Venues share a compatible shape between both apps already. Gigs don't —
+//  Trivia nests them by venue then date; Bingo stores a flat dated list. Gigs
+//  get transformed into Trivia's nested shape on read (so all the existing
+//  calendar code just works unmodified) and routed through saveGig/clearGig
+//  on write, which branch by mode into each app's real, native format.
+// ═══════════════════════════════════════════════
+let plannerMode = 'trivia';
+const MODE_PATHS = {
+  trivia: { venues:'trivia/planner/venues', gigs:'trivia/planner/gigs', library:'trivia/planner/themes', sequences:'trivia/planner/sequences' },
+  bingo:  { venues:'bingo/landing/venues',  gigs:'bingo/landing/schedule', library:'bingo/landing/categories', sequences:null }
+};
+let modeListenerRefs = [];
+function detachModeListeners(){
+  modeListenerRefs.forEach(r=>r.off('value'));
+  modeListenerRefs = [];
+}
+function attachModeListeners(){
+  detachModeListeners();
+  const p = MODE_PATHS[plannerMode];
+
+  const venuesRef = db.ref(p.venues);
+  venuesRef.on('value', snap=>{ state.venues = snap.val()||{}; onDataChange(); });
+  modeListenerRefs.push(venuesRef);
+
+  const libraryRef = db.ref(p.library);
+  libraryRef.on('value', snap=>{ state.themes = snap.val()||{}; onDataChange(); updateThemeDatalist(); });
+  modeListenerRefs.push(libraryRef);
+
+  const gigsRef = db.ref(p.gigs);
+  gigsRef.on('value', snap=>{
+    const raw = snap.val()||{};
+    if(plannerMode==='bingo'){
+      // Flat {entryId:{id,date,venueId,rounds,notes}} -> nested {venueId:{dateKey:gigObj}},
+      // matching Trivia's shape so every existing calendar/warning/history
+      // function keeps working exactly as written, for both modes.
+      const nested = {};
+      Object.values(raw).forEach(e=>{
+        if(!e || !e.venueId || !e.date) return;
+        if(!nested[e.venueId]) nested[e.venueId] = {};
+        const roundIds = e.rounds || e.categoryIds || [];
+        const firstCat = roundIds[0] ? (state.themes||{})[roundIds[0]] : null;
+        nested[e.venueId][e.date] = {
+          themeId: roundIds[0]||null,
+          themeName: firstCat ? firstCat.title : (roundIds.length ? roundIds.length+' round'+(roundIds.length===1?'':'s') : ''),
+          status: 'planned',
+          note: e.notes||'',
+          _bingoEntryId: e.id,
+          _bingoRounds: roundIds
+        };
+      });
+      state.gigs = nested;
+    } else {
+      state.gigs = raw;
+    }
+    onDataChange();
+  });
+  modeListenerRefs.push(gigsRef);
+
+  if(p.sequences){
+    const seqRef = db.ref(p.sequences);
+    seqRef.on('value', snap=>{ state.sequences = snap.val()||{}; onDataChange(); });
+    modeListenerRefs.push(seqRef);
+  } else {
+    state.sequences = {};
+  }
+}
+function setPlannerMode(mode, el){
+  if(mode===plannerMode) return;
+  plannerMode = mode;
+  document.querySelectorAll('.mode-pill').forEach(p=>p.classList.remove('active'));
+  if(el) el.classList.add('active');
+  // Trivia-only power features — hide rather than half-support in Bingo mode
+  document.querySelectorAll('.trivia-only-tab').forEach(t=>{ t.style.display = mode==='trivia' ? '' : 'none'; });
+  document.getElementById('theme-tab-label').textContent = mode==='bingo' ? 'Categories' : 'Themes';
+  state.venues={}; state.themes={}; state.gigs={}; state.sequences={};
+  attachModeListeners();
+  switchTab('dashboard');
+}
+
 
 // ═══════════════════════════════════════════════
 //  DATE HELPERS — toKey is LOCAL (for user-entered dates via <input type=date>
@@ -823,8 +911,28 @@ function renderActiveTab(){
   if(activeTab==='dashboard') { renderDayBoxes(); renderMonthCalendar(); renderSpreadsheetView(); }
   else if(activeTab==='planning') renderPlanning();
   else if(activeTab==='venues') renderVenues();
-  else if(activeTab==='themes') { renderThemes(); renderSequences(); }
+  else if(activeTab==='themes') {
+    if(plannerMode==='bingo') renderBingoCategoriesReadOnly();
+    else { renderThemes(); renderSequences(); }
+  }
   renderNeedsBadge();
+}
+// Bingo's categories need images and a couple of Bingo-specific flags the
+// Planner doesn't have UI for — those stay fully editable in the Bingo app's
+// own admin panel. This is a simple read-only view so you can still see
+// what's in the library while scheduling, without a half-working editor.
+function renderBingoCategoriesReadOnly(){
+  const el = document.getElementById('panel-themes');
+  if(!el) return;
+  const cats = Object.entries(state.themes||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
+  el.innerHTML = `<div style="padding:1rem;">
+    <div style="font-size:13px;color:var(--text3);font-style:italic;margin-bottom:1rem;">Bingo categories are managed in the Bingo app itself (they need an image) — this is just a look at what's there to schedule with.</div>
+    ${cats.length ? cats.map(([id,c])=>`<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:6px;">
+        ${c.image?`<img src="${c.image}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;" onerror="this.style.display='none'">`:''}
+        <span style="font-size:13px;color:var(--text);">${escapeHtml(c.title||'(untitled)')}</span>
+        ${c.classicBingo?'<span style="font-size:10px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase;">Classic</span>':''}
+      </div>`).join('') : '<div style="font-size:13px;color:var(--text3);font-style:italic;">No categories yet — add one in the Bingo app.</div>'}
+  </div>`;
 }
 
 // ═══════════════════════════════════════════════
@@ -1151,7 +1259,18 @@ function gridCellEdit(r,c){
 
 // -- Clipboard: copy / cut / paste / clear — scoped to the current selection --
 let clipboard = null; // {mode, cells:[{dr,dc,themeName,status,origR,origC}]}
+// Bulk tools (copy/paste, drag-apply-sequence, inline quick-edit, CSV import)
+// only know Trivia's nested gig shape so far — guarding them here rather than
+// letting them silently write trivia-shaped data into Bingo's flat schedule.
+// Single-gig add/edit/clear (the day-cell modal) and Venues both work fully
+// in both modes already; these bulk paths are the one piece still Trivia-only.
+function blockIfBingoMode(featureName){
+  if(plannerMode!=='bingo') return false;
+  toast((featureName||'This')+" isn't available in Bingo mode yet — use Add/Edit Gig for one night at a time.", true);
+  return true;
+}
 function gridCopy(){
+  if(blockIfBingoMode('Copy')) return;
   const rect = selRect(); if(!rect) return;
   const cells = [];
   for(let r=rect.rMin;r<=rect.rMax;r++) for(let c=rect.cMin;c<=rect.cMax;c++){
@@ -1165,6 +1284,7 @@ function gridCopy(){
 }
 function gridCut(){ gridCopy(); if(clipboard) clipboard.mode='cut'; updateSelectionHighlight(); toast('Cut — paste somewhere to move it.'); }
 async function gridPaste(){
+  if(blockIfBingoMode('Paste')) return;
   if(!clipboard){ return; }
   const rect = selRect();
   const anchorR = rect ? rect.rMin : 0, anchorC = rect ? rect.cMin : 0;
@@ -1193,6 +1313,7 @@ async function gridPaste(){
   if(clipboard.mode==='cut') clipboard = null;
 }
 async function gridClearSelected(){
+  if(blockIfBingoMode('Bulk clear')) return;
   const rect = selRect(); if(!rect) return;
   setSyncStatus('syncing');
   const updates = {};
@@ -1266,6 +1387,7 @@ function gridSaveSelectionAsSequence(){
 }
 let applySequenceAtCtx = null;
 function openApplySequenceAt(venueId, dateKey){
+  if(blockIfBingoMode('Apply Sequence')) return;
   applySequenceAtCtx = { venueId, dateKey };
   const v = state.venues[venueId];
   document.getElementById('apply-at-target').textContent = `${v?v.name:''} — starting ${fmtMDY(dateKey)}`;
@@ -1459,6 +1581,7 @@ function renderVdTimeline(){
 }
 
 function vdInlineSave(row, dk, themeNameOrNull, statusOrNull){
+  if(blockIfBingoMode('Quick inline edit')) return;
   const id = currentVenueDetailId;
   const themeName = themeNameOrNull !== null ? themeNameOrNull.trim() : (row.querySelector('.tl-input').value||'').trim();
   const status = statusOrNull !== null ? statusOrNull : row.querySelector('.tl-select').value;
@@ -1539,6 +1662,7 @@ function renderQuickScheduleRows(){
     : '<div class="empty-state">This venue has no day set — add one in Edit Venue first.</div>';
 }
 function submitQuickBulk(){
+  if(blockIfBingoMode('Bulk theme paste')) return;
   const id = currentVenueDetailId;
   const v = state.venues[id];
   const themeNames = document.getElementById('qs-bulk-text').value.split('\n').map(s=>s.trim()).filter(Boolean);
@@ -1650,15 +1774,24 @@ function saveVenue(){
     notes: document.getElementById('v-notes').value.trim(),
     cadence: 'weekly'
   };
-  const id = editingVenueId || db.ref('trivia/planner/venues').push().key;
+  const id = editingVenueId || db.ref(MODE_PATHS[plannerMode].venues).push().key;
   setSyncStatus('syncing');
-  db.ref('trivia/planner/venues/'+id).update(data).then(()=>{ toast('Venue saved.'); closeModal('venue-modal-overlay'); });
+  db.ref(MODE_PATHS[plannerMode].venues+'/'+id).update(data).then(()=>{ toast('Venue saved.'); closeModal('venue-modal-overlay'); });
 }
 function deleteVenue(){
   if(!editingVenueId) return;
   if(!confirm('Delete this venue and all its scheduled gigs? This cannot be undone.')) return;
   setSyncStatus('syncing');
-  db.ref().update({['planner/venues/'+editingVenueId]:null, ['planner/gigs/'+editingVenueId]:null}).then(()=>{
+  const p = MODE_PATHS[plannerMode];
+  const updates = {};
+  updates[p.venues+'/'+editingVenueId] = null;
+  if(plannerMode==='bingo'){
+    // Flat list — remove every schedule entry that pointed at this venue, individually.
+    Object.values(state.gigs[editingVenueId]||{}).forEach(g=>{ if(g._bingoEntryId) updates[p.gigs+'/'+g._bingoEntryId] = null; });
+  } else {
+    updates[p.gigs+'/'+editingVenueId] = null;
+  }
+  db.ref().update(updates).then(()=>{
     toast('Venue deleted.'); closeModal('venue-modal-overlay'); switchTab('venues');
   });
 }
@@ -1979,6 +2112,7 @@ function saveGig(){
   const typedName = document.getElementById('gig-theme-search').value.trim();
   if(!venueId || !dateKey) return toast('Pick a venue and date.', true);
   setSyncStatus('syncing');
+  if(plannerMode==='bingo'){ saveBingoGig(venueId,dateKey,status,note,typedName); return; }
   if(status==='cancelled' || !typedName){
     db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, status: status==='cancelled'?'cancelled':'planned', note}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
@@ -1988,6 +2122,26 @@ function saveGig(){
       bumpThemeUsageForVenue(themeId, dateKey, venueId);
       toast('Saved.'); closeModal('gig-modal-overlay');
     });
+  });
+}
+// Bingo mode's single-day save — writes to the real flat bingo/landing/schedule
+// entry the Bingo app itself reads, so it shows up there too, not a copy.
+// Category must be picked from the existing library (typed exactly matching
+// one), same as choosing an existing Trivia theme by name — new categories
+// need an image, so those still get created in the Bingo app's own admin.
+function saveBingoGig(venueId,dateKey,status,note,typedName){
+  const cancelled = status==='cancelled';
+  const existingEntryId = ((state.gigs[venueId]||{})[dateKey]||{})._bingoEntryId || null;
+  const id = existingEntryId || ('sched_'+Date.now());
+  let catId = null;
+  if(!cancelled && typedName){
+    const found = Object.entries(state.themes||{}).find(([cid,c])=>(c.title||'').trim().toLowerCase()===typedName.toLowerCase());
+    if(found) catId = found[0];
+    else { toast('Pick an existing Bingo category from the list — new ones are added in the Bingo app itself.', true); setSyncStatus('synced'); return; }
+  }
+  const rounds = (cancelled || !catId) ? [] : [catId];
+  db.ref('bingo/landing/schedule/'+id).set({id, date:dateKey, venueId, rounds, categoryIds:rounds, notes:note}).then(()=>{
+    toast('Saved.'); closeModal('gig-modal-overlay');
   });
 }
 function bumpThemeUsageForVenue(themeId, dk, venueId){
@@ -2002,6 +2156,12 @@ function clearGig(){
   const dateKey = document.getElementById('gig-date').value;
   if(!venueId||!dateKey) return;
   setSyncStatus('syncing');
+  if(plannerMode==='bingo'){
+    const existingEntryId = ((state.gigs[venueId]||{})[dateKey]||{})._bingoEntryId || null;
+    if(!existingEntryId){ closeModal('gig-modal-overlay'); return; }
+    db.ref('bingo/landing/schedule/'+existingEntryId).remove().then(()=>{ toast('Cleared — back to unplanned.'); closeModal('gig-modal-overlay'); });
+    return;
+  }
   db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).remove().then(()=>{ toast('Cleared — back to unplanned.'); closeModal('gig-modal-overlay'); });
 }
 
@@ -2022,6 +2182,7 @@ dropZone.addEventListener('dragleave', ()=> dropZone.classList.remove('drag'));
 dropZone.addEventListener('drop', e=>{ e.preventDefault(); dropZone.classList.remove('drag'); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
 function importLog(msg){ const el=document.getElementById('import-log'); el.style.display='block'; el.textContent+=msg+'\n'; el.scrollTop=el.scrollHeight; }
 function handleFile(file){
+  if(blockIfBingoMode('Spreadsheet import')) return;
   if(!file) return;
   document.getElementById('import-log').textContent='';
   document.getElementById('import-preview').style.display='none';
