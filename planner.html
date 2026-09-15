@@ -95,7 +95,6 @@ a{color:inherit}
 .badge-seasonal{background:var(--blue-dim);color:var(--blue)}
 .badge-finished{background:rgba(255,255,255,.05);color:var(--text3)}
 .badge-paused{background:rgba(52,152,219,.10);color:var(--text2)}
-.badge-prospective{background:var(--purple-dim);color:var(--purple)}
 .badge-one-time{background:var(--gold-dim);color:var(--gold2)}
 
 .theme-link{color:var(--text2);cursor:pointer;text-decoration:none;border-bottom:1px dashed var(--border3)}
@@ -265,8 +264,8 @@ a{color:inherit}
 </div>
 
 <div class="tabs" style="padding-top:0.6rem;">
-  <button class="mode-pill active" onclick="setPlannerMode('trivia',this)">🎯 Planning Trivia</button>
-  <button class="mode-pill" onclick="setPlannerMode('bingo',this)">🎱 Planning Bingo</button>
+  <button class="mode-pill active" onclick="setPlannerMode('trivia',this)">TRIVIA</button>
+  <button class="mode-pill" onclick="setPlannerMode('bingo',this)">BINGO</button>
 </div>
 
 <div class="tabs">
@@ -352,13 +351,12 @@ a{color:inherit}
   <!-- VENUES -->
   <div class="panel" id="panel-venues">
     <div class="section-title">Venues</div>
-    <div class="section-sub">Every venue, current, seasonal, prospective, or finished.</div>
+    <div class="section-sub">Every venue, current, seasonal, paused, or finished.</div>
     <div class="filter-bar" id="venue-list-filters">
       <input class="search-input" id="venue-search" placeholder="Search venues…" oninput="renderVenues()">
       <button class="pill active" data-vf="all" onclick="setVenueFilter('all')">All</button>
       <button class="pill" data-vf="active" onclick="setVenueFilter('active')">Active</button>
       <button class="pill" data-vf="seasonal" onclick="setVenueFilter('seasonal')">Seasonal</button>
-      <button class="pill" data-vf="prospective" onclick="setVenueFilter('prospective')">Trivia Time (prospective)</button>
       <button class="pill" data-vf="paused" onclick="setVenueFilter('paused')">Paused</button>
       <button class="pill" data-vf="finished" onclick="setVenueFilter('finished')">Finished</button>
       <span style="flex:1"></span>
@@ -554,7 +552,7 @@ a{color:inherit}
       <div><label class="form-label">Status</label>
         <select class="form-select" id="v-status">
           <option value="active">Active</option><option value="paused">Paused</option><option value="seasonal">Seasonal</option>
-          <option value="one-time">One-time</option><option value="prospective">Prospective (Trivia Time)</option>
+          <option value="one-time">One-time</option>
           <option value="finished">Finished</option>
         </select></div>
       <div><label class="form-label">Source</label>
@@ -928,7 +926,7 @@ function renderBingoCategoriesReadOnly(){
   el.innerHTML = `<div style="padding:1rem;">
     <div style="font-size:13px;color:var(--text3);font-style:italic;margin-bottom:1rem;">Bingo categories are managed in the Bingo app itself (they need an image) — this is just a look at what's there to schedule with.</div>
     ${cats.length ? cats.map(([id,c])=>`<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:6px;">
-        ${c.image?`<img src="${c.image}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;" onerror="this.style.display='none'">`:''}
+        ${(c.squareImage||c.image)?`<img src="${c.squareImage||c.image}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;" onerror="this.style.display='none'">`:''}
         <span style="font-size:13px;color:var(--text);">${escapeHtml(c.title||'(untitled)')}</span>
         ${c.classicBingo?'<span style="font-size:10px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase;">Classic</span>':''}
       </div>`).join('') : '<div style="font-size:13px;color:var(--text3);font-style:italic;">No categories yet — add one in the Bingo app.</div>'}
@@ -2314,7 +2312,7 @@ function renderImportPreview(){
       <td><input type="text" id="imp-time-${i}" value="${escapeHtml(b.time||'')}"></td>
       <td><input type="text" id="imp-pay-${i}" value="${parsePayText(b.payNote).amount||''}"></td>
       <td><select id="imp-method-${i}">${['','cash','check','venmo','invoice'].map(m=>`<option value="${m}" ${parsePayText(b.payNote).method===m?'selected':''}>${m||'—'}</option>`).join('')}</select></td>
-      <td><select id="imp-status-${i}">${['active','seasonal','finished','prospective'].map(s=>`<option value="${s}" ${sectionToStatus(b.section)===s?'selected':''}>${s}</option>`).join('')}</select></td>
+      <td><select id="imp-status-${i}">${['active','seasonal','finished'].map(s=>`<option value="${s}" ${sectionToStatus(b.section)===s?'selected':''}>${s}</option>`).join('')}</select></td>
       <td>${b.entries.length} <span style="color:var(--text3)">(${b.section})</span></td>
     </tr>
   `).join('');
