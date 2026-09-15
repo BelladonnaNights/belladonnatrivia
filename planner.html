@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 <style>
@@ -701,7 +702,35 @@ const firebaseConfig = {
 };
 if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+const dbFs = firebase.firestore();
 const auth = firebase.auth();
+
+// Checkout's cancel toggle writes to Firestore's `shifts` collection (no login
+// on checkin/checkout, so this is the only place a cancellation can land).
+// Loaded once and re-applied over whichever mode's gigs just came in — this
+// makes every existing calendar/dashboard render automatically reflect a
+// checkout-side cancellation too, since they already all respect gig.status.
+let shiftsCancelled = [];
+function loadShiftsCancelled(){
+  dbFs.collection('shifts').where('cancelled','==',true).get().then(snap=>{
+    shiftsCancelled = snap.docs.map(d=>d.data());
+    applyCheckoutCancellations();
+  }).catch(e=>console.warn('Could not load shifts:',e));
+}
+function normVenue(s){ return (s||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,' ').trim(); }
+function applyCheckoutCancellations(){
+  if(!shiftsCancelled.length) return;
+  Object.entries(state.gigs||{}).forEach(([venueId,byDate])=>{
+    const v = state.venues[venueId];
+    if(!v) return;
+    Object.entries(byDate||{}).forEach(([dateKey,gig])=>{
+      if(gig.status==='cancelled') return;
+      const hit = shiftsCancelled.some(s=>normVenue(s.venue)===normVenue(v.name)&&s.date===dateKey);
+      if(hit) gig.status='cancelled';
+    });
+  });
+  renderActiveTab();
+}
 
 function setSyncStatus(status){
   const dot=document.getElementById('sync-dot'), label=document.getElementById('sync-label');
@@ -751,6 +780,7 @@ auth.onAuthStateChanged(function(user){
   const label=document.getElementById('gateway-user-label');
   if(label)label.textContent=user.email||'account';
   attachModeListeners();
+  loadShiftsCancelled();
 });
 function onDataChange(){ setSyncStatus('synced'); renderActiveTab(); }
 function updateThemeDatalist(){
@@ -814,6 +844,7 @@ function attachModeListeners(){
     } else {
       state.gigs = raw;
     }
+    applyCheckoutCancellations();
     onDataChange();
   });
   modeListenerRefs.push(gigsRef);
