@@ -782,7 +782,12 @@ auth.onAuthStateChanged(function(user){
   }
   const label=document.getElementById('gateway-user-label');
   if(label)label.textContent=user.email||'account';
-  loadPlannerLocations();
+  dbFs.collection('users').doc(user.uid).get().then(function(snap){
+    const profile=snap.exists?snap.data():{};
+    myLocationId=profile.locationId||null;
+    myAllLocations=!!profile.allLocations;
+    loadPlannerLocations();
+  }).catch(function(){ loadPlannerLocations(); });
   loadShiftsCancelled();
 });
 function onDataChange(){ setSyncStatus('synced'); renderActiveTab(); }
@@ -811,13 +816,26 @@ const MODE_PATHS = {
 // so they're deliberately left untouched by this.
 let plannerLocations = [{code:'wa-southsound',label:'WA - South Sound'}];
 let selectedLocationId = null;
+let myLocationId = null, myAllLocations = false;
 function loadPlannerLocations(){
   db.collection('hq_data').doc('locations').get().then(snap=>{
     if(snap.exists&&Array.isArray(snap.data().list)&&snap.data().list.length)plannerLocations=snap.data().list;
     const sel=document.getElementById('plannerLocationSelect');
-    sel.innerHTML=plannerLocations.map(l=>`<option value="${l.code}">${l.label}</option>`).join('');
-    selectedLocationId=plannerLocations[0].code;
-    sel.value=selectedLocationId;
+    if(myAllLocations){
+      sel.disabled=false;
+      sel.innerHTML=plannerLocations.map(l=>`<option value="${l.code}">${l.label}</option>`).join('');
+      selectedLocationId=myLocationId&&plannerLocations.some(l=>l.code===myLocationId)?myLocationId:plannerLocations[0].code;
+      sel.value=selectedLocationId;
+    }else{
+      // Locked to their own assigned location — no switching, nothing else
+      // to see. If they somehow have no location assigned yet, fall back to
+      // the first one rather than showing nothing.
+      selectedLocationId=myLocationId||plannerLocations[0].code;
+      const mine=plannerLocations.find(l=>l.code===selectedLocationId);
+      sel.innerHTML=`<option value="${selectedLocationId}">${mine?mine.label:selectedLocationId}</option>`;
+      sel.value=selectedLocationId;
+      sel.disabled=true;
+    }
     attachModeListeners();
   }).catch(()=>{
     const sel=document.getElementById('plannerLocationSelect');
@@ -827,6 +845,7 @@ function loadPlannerLocations(){
   });
 }
 function setPlannerLocation(code){
+  if(!myAllLocations)return; // locked accounts can't switch — the select is disabled, but don't trust the DOM alone
   selectedLocationId=code;
   state.venues={}; state.themes={}; state.gigs={}; state.sequences={};
   attachModeListeners();
