@@ -264,9 +264,12 @@ a{color:inherit}
   </div>
 </div>
 
-<div class="tabs" style="padding-top:0.6rem;">
-  <button class="mode-pill active" onclick="setPlannerMode('trivia',this)">TRIVIA</button>
-  <button class="mode-pill" onclick="setPlannerMode('bingo',this)">BINGO</button>
+<div class="tabs" style="padding-top:0.6rem;justify-content:space-between;">
+  <div>
+    <button class="mode-pill active" onclick="setPlannerMode('trivia',this)">TRIVIA</button>
+    <button class="mode-pill" onclick="setPlannerMode('bingo',this)">BINGO</button>
+  </div>
+  <select id="plannerLocationSelect" onchange="setPlannerLocation(this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:999px;color:var(--gold);padding:8px 18px;font-size:12px;font-weight:600;margin:0 0 10px 0;"></select>
 </div>
 
 <div class="tabs">
@@ -779,7 +782,7 @@ auth.onAuthStateChanged(function(user){
   }
   const label=document.getElementById('gateway-user-label');
   if(label)label.textContent=user.email||'account';
-  attachModeListeners();
+  loadPlannerLocations();
   loadShiftsCancelled();
 });
 function onDataChange(){ setSyncStatus('synced'); renderActiveTab(); }
@@ -801,6 +804,37 @@ const MODE_PATHS = {
   trivia: { venues:'trivia/planner/venues', gigs:'trivia/planner/gigs', library:'trivia/planner/themes', sequences:'trivia/planner/sequences' },
   bingo:  { venues:'bingo/landing/venues',  gigs:'bingo/landing/schedule', library:'bingo/landing/categories', sequences:null }
 };
+// ── LOCATIONS ── same shared list HQ manages. Venues and gigs get filtered
+// to the selected location on read (untagged legacy records still show, so
+// nothing already in the database silently vanishes) and tagged with it on
+// write. Themes/categories are a shared content library, not per-territory,
+// so they're deliberately left untouched by this.
+let plannerLocations = [{code:'wa-southsound',label:'WA - South Sound'}];
+let selectedLocationId = null;
+function loadPlannerLocations(){
+  db.collection('hq_data').doc('locations').get().then(snap=>{
+    if(snap.exists&&Array.isArray(snap.data().list)&&snap.data().list.length)plannerLocations=snap.data().list;
+    const sel=document.getElementById('plannerLocationSelect');
+    sel.innerHTML=plannerLocations.map(l=>`<option value="${l.code}">${l.label}</option>`).join('');
+    selectedLocationId=plannerLocations[0].code;
+    sel.value=selectedLocationId;
+    attachModeListeners();
+  }).catch(()=>{
+    const sel=document.getElementById('plannerLocationSelect');
+    sel.innerHTML='<option value="wa-southsound">WA - South Sound</option>';
+    selectedLocationId='wa-southsound';
+    attachModeListeners();
+  });
+}
+function setPlannerLocation(code){
+  selectedLocationId=code;
+  state.venues={}; state.themes={}; state.gigs={}; state.sequences={};
+  attachModeListeners();
+}
+function locationMatches(recordLocId){
+  if(!selectedLocationId)return true;
+  return !recordLocId||recordLocId===selectedLocationId;
+}
 let modeListenerRefs = [];
 function detachModeListeners(){
   modeListenerRefs.forEach(r=>r.off('value'));
@@ -811,7 +845,13 @@ function attachModeListeners(){
   const p = MODE_PATHS[plannerMode];
 
   const venuesRef = db.ref(p.venues);
-  venuesRef.on('value', snap=>{ state.venues = snap.val()||{}; onDataChange(); });
+  venuesRef.on('value', snap=>{
+    const raw = snap.val()||{};
+    const filtered={};
+    Object.entries(raw).forEach(([id,v])=>{ if(locationMatches(v.locationId))filtered[id]=v; });
+    state.venues = filtered;
+    onDataChange();
+  });
   modeListenerRefs.push(venuesRef);
 
   const libraryRef = db.ref(p.library);
@@ -828,6 +868,7 @@ function attachModeListeners(){
       const nested = {};
       Object.values(raw).forEach(e=>{
         if(!e || !e.venueId || !e.date) return;
+        if(!state.venues[e.venueId]) return; // venue filtered out by location
         if(!nested[e.venueId]) nested[e.venueId] = {};
         const roundIds = e.rounds || e.categoryIds || [];
         const firstCat = roundIds[0] ? (state.themes||{})[roundIds[0]] : null;
@@ -842,7 +883,9 @@ function attachModeListeners(){
       });
       state.gigs = nested;
     } else {
-      state.gigs = raw;
+      const filtered={};
+      Object.entries(raw).forEach(([venueId,byDate])=>{ if(state.venues[venueId])filtered[venueId]=byDate; });
+      state.gigs = filtered;
     }
     applyCheckoutCancellations();
     onDataChange();
@@ -1801,7 +1844,8 @@ function saveVenue(){
     source: document.getElementById('v-source').value,
     host: document.getElementById('v-host').value.trim(),
     notes: document.getElementById('v-notes').value.trim(),
-    cadence: 'weekly'
+    cadence: 'weekly',
+    locationId: selectedLocationId
   };
   const id = editingVenueId || db.ref(MODE_PATHS[plannerMode].venues).push().key;
   setSyncStatus('syncing');
@@ -2143,11 +2187,11 @@ function saveGig(){
   setSyncStatus('syncing');
   if(plannerMode==='bingo'){ saveBingoGig(venueId,dateKey,status,note,typedName); return; }
   if(status==='cancelled' || !typedName){
-    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, status: status==='cancelled'?'cancelled':'planned', note}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, status: status==='cancelled'?'cancelled':'planned', note, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
   resolveThemeIdByName(typedName).then(themeId=>{
-    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId, themeName:typedName, status:'planned', note}).then(()=>{
+    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId, themeName:typedName, status:'planned', note, locationId:selectedLocationId}).then(()=>{
       bumpThemeUsageForVenue(themeId, dateKey, venueId);
       toast('Saved.'); closeModal('gig-modal-overlay');
     });
@@ -2169,7 +2213,7 @@ function saveBingoGig(venueId,dateKey,status,note,typedName){
     else { toast('Pick an existing Bingo category from the list — new ones are added in the Bingo app itself.', true); setSyncStatus('synced'); return; }
   }
   const rounds = (cancelled || !catId) ? [] : [catId];
-  db.ref('bingo/landing/schedule/'+id).set({id, date:dateKey, venueId, rounds, categoryIds:rounds, notes:note}).then(()=>{
+  db.ref('bingo/landing/schedule/'+id).set({id, date:dateKey, venueId, rounds, categoryIds:rounds, notes:note, locationId:selectedLocationId}).then(()=>{
     toast('Saved.'); closeModal('gig-modal-overlay');
   });
 }
