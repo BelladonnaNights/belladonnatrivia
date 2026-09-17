@@ -296,11 +296,39 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   border-bottom:2px solid var(--gold-glow);
   backdrop-filter:blur(16px);
   box-shadow:0 4px 24px rgba(0,0,0,.5);
-  display:grid;
+}
+#host-board-tab{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 16px;cursor:pointer;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  min-height:36px;
+  transition:background .15s;
+}
+#host-board-tab:hover{background:rgba(201,168,76,.05)}
+.hb-tab-left{display:flex;align-items:center;gap:10px}
+.hb-tab-title{
+  font-family:var(--cinzel);font-size:9px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--gold);
+}
+#hb-tab-summary{
+  font-family:var(--cinzel);font-size:9px;letter-spacing:.08em;
+  color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:400px;
+}
+.hb-chevron-btn{
+  background:none;border:none;color:var(--text3);cursor:pointer;
+  font-size:12px;padding:2px 6px;transition:transform .25s,color .15s;
+  flex-shrink:0;
+}
+.hb-chevron-btn:hover{color:var(--gold)}
+#host-board.expanded .hb-chevron-btn{transform:rotate(180deg)}
+#host-board-body{
+  display:none;
   grid-template-columns:var(--hb-left-w, 340px) 1fr 200px;
   grid-template-rows:auto auto;
   min-height:190px;
 }
+#host-board.expanded #host-board-body{display:grid}
 /* Draggable divider between mini-screen and live scores */
 .hb-col-divider{
   grid-column:1;grid-row:1/3;
@@ -606,87 +634,100 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 <!-- HOST BOARD -->
 <div id="host-board">
 
-  <!-- LEFT: Live status + mini preview -->
-  <div class="hb-left">
-    <div class="hb-live-bar">
+  <!-- Collapse tab — always visible -->
+  <div id="host-board-tab" onclick="toggleHostBoard()">
+    <div class="hb-tab-left">
       <div class="hb-live-dot" id="hb-live-dot"></div>
-      <span class="hb-live-label" id="hb-live-label">No game active</span>
+      <span class="hb-tab-title">HOST BOARD</span>
+      <span id="hb-tab-summary"></span>
     </div>
-    <div class="hb-preview-thumb" id="hb-preview-thumb">
-      <div class="hb-preview-thumb-bg" id="hb-preview-bg"></div>
-      <div class="hb-preview-thumb-overlay">
-        <div class="hb-preview-slide-type" id="hb-preview-type"></div>
-        <div class="hb-preview-thumb-num" id="hb-preview-num"></div>
-        <div class="hb-preview-q-text" id="hb-preview-q"></div>
-        <div class="hb-preview-ans-text" id="hb-preview-answer"></div>
-        <!-- Belladonna watermark shown when idle -->
-        <div id="hb-idle-watermark" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.18;pointer-events:none">
-          <svg width="40" height="40" viewBox="0 0 100 100" fill="var(--gold)">
-            <circle cx="50" cy="30" r="18" fill="none" stroke="var(--gold)" stroke-width="4"/>
-            <path d="M28 55 Q50 80 72 55" fill="none" stroke="var(--gold)" stroke-width="4"/>
-            <path d="M36 70 Q50 90 64 70" fill="none" stroke="var(--gold)" stroke-width="3"/>
-            <circle cx="50" cy="30" r="6" fill="var(--gold)"/>
-          </svg>
+    <button class="hb-chevron-btn" title="Expand / Collapse">▲</button>
+  </div>
+
+  <!-- Collapsible body -->
+  <div id="host-board-body">
+
+    <!-- LEFT: Live status + mini preview -->
+    <div class="hb-left">
+      <div class="hb-live-bar">
+        <div class="hb-live-label" id="hb-live-label">No game active</div>
+      </div>
+      <div class="hb-preview-thumb" id="hb-preview-thumb">
+        <div class="hb-preview-thumb-bg" id="hb-preview-bg"></div>
+        <div class="hb-preview-thumb-overlay">
+          <div class="hb-preview-slide-type" id="hb-preview-type"></div>
+          <div class="hb-preview-thumb-num" id="hb-preview-num"></div>
+          <div class="hb-preview-q-text" id="hb-preview-q"></div>
+          <div class="hb-preview-ans-text" id="hb-preview-answer"></div>
+          <div id="hb-idle-watermark" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.18;pointer-events:none">
+            <svg width="40" height="40" viewBox="0 0 100 100" fill="var(--gold)">
+              <circle cx="50" cy="30" r="18" fill="none" stroke="var(--gold)" stroke-width="4"/>
+              <path d="M28 55 Q50 80 72 55" fill="none" stroke="var(--gold)" stroke-width="4"/>
+              <path d="M36 70 Q50 90 64 70" fill="none" stroke="var(--gold)" stroke-width="3"/>
+              <circle cx="50" cy="30" r="6" fill="var(--gold)"/>
+            </svg>
+          </div>
+        </div>
+        <div class="hb-preview-resize-handle" id="hb-preview-resize-handle" title="Drag to resize"></div>
+      </div>
+      <div style="padding:6px 12px;flex-shrink:0">
+        <div class="hb-section-label">Answers</div>
+        <div class="hb-submit-count" id="hb-submit-count">— / —</div>
+      </div>
+    </div>
+
+    <!-- Draggable divider -->
+    <div class="hb-col-divider" id="hb-col-divider" title="Drag to resize"></div>
+
+    <!-- MIDDLE: Live scores + nav controls -->
+    <div class="hb-middle">
+      <div class="hb-middle-top">
+        <div class="hb-section-label">Current Slide</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <span id="hb-slide-label" style="font-size:11px;color:var(--text2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span>
+        </div>
+        <div class="hb-nav-controls">
+          <button class="hb-nav-btn" onclick="sendHostCommand('back')">← Back</button>
+          <button class="hb-nav-btn hb-nav-btn-primary" onclick="sendHostCommand('next')">Next →</button>
+          <button class="hb-nav-btn" onclick="sendHostCommand('reveal')" id="hb-reveal-btn">Space Reveal</button>
+          <button class="hb-nav-btn" id="hb-audio-btn" onclick="sendHostCommand('audio')" style="display:none">▶ Play Audio</button>
         </div>
       </div>
-      <div class="hb-preview-resize-handle" id="hb-preview-resize-handle" title="Drag to resize"></div>
-    </div>
-    <div style="padding:6px 12px;flex-shrink:0">
-      <div class="hb-section-label">Answers</div>
-      <div class="hb-submit-count" id="hb-submit-count">— / —</div>
-    </div>
-  </div>
-
-  <!-- Draggable divider — resizes the mini-screen column -->
-  <div class="hb-col-divider" id="hb-col-divider" title="Drag to resize"></div>
-
-  <!-- MIDDLE: Live scores + nav controls -->
-  <div class="hb-middle">
-    <div class="hb-middle-top">
-      <div class="hb-section-label">Current Slide</div>
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-        <span id="hb-preview-q" style="font-size:11px;color:var(--text2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 4px;flex-shrink:0">
+        <div class="hb-section-label" style="margin:0">Live Scores</div>
+        <button class="hb-grade-btn-trigger" id="hb-grade-btn" onclick="openGradingPanel()" style="display:none">
+          Grade Answers <span id="hb-pending-count">0</span> pending
+        </button>
       </div>
-      <div class="hb-nav-controls">
-        <button class="hb-nav-btn" onclick="sendHostCommand('back')">← Back</button>
-        <button class="hb-nav-btn hb-nav-btn-primary" onclick="sendHostCommand('next')">Next →</button>
-        <button class="hb-nav-btn" onclick="sendHostCommand('reveal')" id="hb-reveal-btn">Space Reveal</button>
-        <button class="hb-nav-btn" id="hb-audio-btn" onclick="sendHostCommand('audio')" style="display:none">▶ Play Audio</button>
+      <div class="hb-scores-grid" id="hb-scores">
+        <span style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet</span>
+      </div>
+      <div style="padding:6px 16px;flex-shrink:0">
+        <div class="hb-submit-count" id="hb-submit-count-2"></div>
       </div>
     </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 4px;flex-shrink:0">
-      <div class="hb-section-label" style="margin:0">Live Scores</div>
-      <button class="hb-grade-btn-trigger" id="hb-grade-btn" onclick="openGradingPanel()" style="display:none">
-        Grade Answers <span id="hb-pending-count">0</span> pending
-      </button>
-    </div>
-    <div class="hb-scores-grid" id="hb-scores">
-      <span style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet</span>
-    </div>
-    <div style="padding:6px 16px;flex-shrink:0">
-      <div class="hb-submit-count" id="hb-submit-count">— / —</div>
-    </div>
-  </div>
 
-  <!-- RIGHT: Controls -->
-  <div class="hb-right">
-    <div class="hb-right-label">Controls</div>
-    <div class="hb-peek-box" id="hb-peek-box" style="display:none">
-      <div class="hb-peek-label" id="hb-peek-label">Next</div>
-      <div class="hb-peek-text" id="hb-peek-text"></div>
-      <div class="hb-peek-answer" id="hb-peek-answer" style="display:none"></div>
-      <button class="hb-peek-rerandom-btn" id="hb-peek-rerandom-btn" onclick="sendHostCommand('rerandomize-next')" style="display:none">Re-randomize ↻</button>
+    <!-- RIGHT: Controls -->
+    <div class="hb-right">
+      <div class="hb-right-label">Controls</div>
+      <div class="hb-peek-box" id="hb-peek-box" style="display:none">
+        <div class="hb-peek-label" id="hb-peek-label">Next</div>
+        <div class="hb-peek-text" id="hb-peek-text"></div>
+        <div class="hb-peek-answer" id="hb-peek-answer" style="display:none"></div>
+        <button class="hb-peek-rerandom-btn" id="hb-peek-rerandom-btn" onclick="sendHostCommand('rerandomize-next')" style="display:none">Re-randomize ↻</button>
+      </div>
+      <div class="hb-timed-row">
+        <span class="hb-timed-label">⏱ Timed (10s)</span>
+        <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()"></div>
+      </div>
+      <button class="hb-btn hb-btn-ghost" id="hb-lb-btn" onclick="toggleLbAdmin()">Show Leaderboard</button>
+      <button class="hb-btn hb-btn-gold" id="hb-give-scores-btn" onclick="giveScores()" style="display:none">Give Scores →</button>
+      <button class="hb-btn hb-btn-ghost" onclick="openHistory()">Game History</button>
+      <button class="hb-btn hb-btn-ghost" onclick="confirmAction('clear')">Clear Scores</button>
+      <button class="hb-btn hb-btn-ghost" onclick="confirmAction('reset')">Reset Game</button>
     </div>
-    <div class="hb-timed-row">
-      <span class="hb-timed-label">⏱ Timed (10s)</span>
-      <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()"></div>
-    </div>
-    <button class="hb-btn hb-btn-ghost" id="hb-lb-btn" onclick="toggleLbAdmin()">Show Leaderboard</button>
-    <button class="hb-btn hb-btn-gold" id="hb-give-scores-btn" onclick="giveScores()" style="display:none">Give Scores →</button>
-    <button class="hb-btn hb-btn-ghost" onclick="openHistory()">Game History</button>
-    <button class="hb-btn hb-btn-ghost" onclick="confirmAction('clear')">Clear Scores</button>
-    <button class="hb-btn hb-btn-ghost" onclick="confirmAction('reset')">Reset Game</button>
-  </div>
+
+  </div><!-- end #host-board-body -->
 </div>
 
 <!-- GRADING PANEL -->
@@ -2104,33 +2145,69 @@ let hostTimedOn = false;
 let pendingConfirmAction = null;
 let currentSubmitCount = 0;
 let currentTeamCount = 0;
-let allAnswersCache = {}; // qId -> { teamId -> answerObj }
+let allAnswersCache = {};
 let currentSlideState = null;
 
-// Renders "submitted / total teams" into the submit-count readouts.
-// NOTE: two elements in the markup share id="hb-submit-count" (one by the
-// mini-preview, one under Live Scores) — querySelectorAll catches both;
-// getElementById would silently only ever update the first.
+// ── MULTI-HOST ISOLATION ──────────────────────────────────────────────
+// All live game data lives under games/{hostUid}/ so hosts NEVER
+// touch each other's data, regardless of how many run simultaneously.
+let LIVE_GAME_PATH = 'games/__unset__'; // replaced once auth fires
+let _hbListeners = []; // track active listeners so we can re-attach on login
+
+auth.onAuthStateChanged(function(user) {
+  if(!user) return;
+  const newPath = 'games/' + user.uid;
+  if(newPath === LIVE_GAME_PATH) return; // same host, no change
+  LIVE_GAME_PATH = newPath;
+  // Re-attach all host board Firebase listeners to the correct path
+  attachHbListeners();
+});
+
+function liveRef(subpath) {
+  return db.ref(LIVE_GAME_PATH + (subpath ? '/' + subpath : ''));
+}
+
+// ── Host board collapse ────────────────────────────────────────────────
+function toggleHostBoard() {
+  const board = document.getElementById('host-board');
+  board.classList.toggle('expanded');
+  // Update layout min-height so page content adjusts
+  const layout = document.querySelector('.layout');
+  if(layout) layout.style.minHeight = board.classList.contains('expanded')
+    ? 'calc(100vh - 254px)' : 'calc(100vh - 100px)';
+}
+
+// Renders answer count into the submit-count readouts.
 function updateSubmitCount() {
   const text = currentTeamCount > 0 ? (currentSubmitCount + ' / ' + currentTeamCount) : '— / —';
-  document.querySelectorAll('#hb-submit-count').forEach(el => el.textContent = text);
+  const el = document.getElementById('hb-submit-count');
+  if(el) el.textContent = text;
+  // Update tab summary when collapsed
+  const summary = document.getElementById('hb-tab-summary');
+  if(summary) {
+    const dot = document.getElementById('hb-live-dot');
+    const isLive = dot && dot.classList.contains('active');
+    summary.textContent = isLive
+      ? (currentTeamCount > 0 ? currentTeamCount + ' teams · ' + currentSubmitCount + ' answered' : 'Game live')
+      : '';
+  }
 }
 
 // Send command to trivia.html via Firebase
 function sendHostCommand(cmd) {
   if(!db) return;
-  db.ref('trivia/liveGame/hostCommand').set({ cmd, ts: Date.now() });
+  liveRef('hostCommand').set({ cmd, ts: Date.now() });
 }
 
 function toggleHostTimed() {
   hostTimedOn = !hostTimedOn;
   document.getElementById('hb-timed-toggle').classList.toggle('on', hostTimedOn);
-  db.ref('trivia/liveGame/timedOverride').set(hostTimedOn);
+  liveRef('timedOverride').set(hostTimedOn);
 }
 
 function toggleLbAdmin() {
   lbAdminVisible = !lbAdminVisible;
-  db.ref('trivia/liveGame/leaderboardVisible').set(lbAdminVisible);
+  liveRef('leaderboardVisible').set(lbAdminVisible);
   const btn = document.getElementById('hb-lb-btn');
   if(btn) {
     btn.classList.toggle('hb-btn-ghost', !lbAdminVisible);
@@ -2158,15 +2235,15 @@ async function runConfirmedAction() {
   const action = pendingConfirmAction; // save before closeConfirm nulls it
   closeConfirm();
   if(action === 'clear') {
-    await db.ref('trivia/liveGame/teams').remove();
-    await db.ref('trivia/liveGame/answers').remove();
-    await db.ref('trivia/liveGame/status').set('waiting');
+    await liveRef('teams').remove();
+    await liveRef('answers').remove();
+    await liveRef('status').set('waiting');
     document.getElementById('hb-scores').innerHTML = '<span style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet</span>';
     currentTeamCount = 0; currentSubmitCount = 0; updateSubmitCount();
     allAnswersCache = {};
     toast('Scores cleared');
   } else if(action === 'reset') {
-    await db.ref('trivia/liveGame').remove();
+    await liveRef().remove();
     lbAdminVisible = false; hostTimedOn = false;
     allAnswersCache = {};
     document.getElementById('hb-timed-toggle').classList.remove('on');
@@ -2176,6 +2253,8 @@ async function runConfirmedAction() {
     document.getElementById('hb-preview-type').textContent = '';
     document.getElementById('hb-preview-num').textContent = '';
     document.getElementById('hb-preview-q').textContent = '';
+    const sl = document.getElementById('hb-slide-label');
+    if(sl) sl.textContent = '';
     document.getElementById('hb-preview-answer').textContent = '';
     document.getElementById('hb-preview-bg').style.backgroundImage = '';
     document.getElementById('hb-scores').innerHTML = '<span style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet</span>';
@@ -2463,7 +2542,18 @@ function getAdjDelta(teamId) {
 }
 
 // ── Firebase listeners ───────────────────────────────────────────────
-db.ref('trivia/liveGame/status').on('value', snap => {
+// Wrapped in attachHbListeners() so they re-attach to the correct
+// host-scoped path whenever the signed-in user changes.
+let _hbRefs = []; // active listener refs — detached on re-attach
+
+function attachHbListeners() {
+  // Detach any previous listeners
+  _hbRefs.forEach(r => r.off());
+  _hbRefs = [];
+
+  const statusRef = liveRef('status');
+  _hbRefs.push(statusRef);
+  statusRef.on('value', snap => {
   const status = snap.val();
   const isLive = status === 'question' || status === 'waiting' || status === 'closed';
   document.getElementById('hb-live-dot')?.classList.toggle('active', isLive);
@@ -2471,7 +2561,7 @@ db.ref('trivia/liveGame/status').on('value', snap => {
   if(label) label.textContent = isLive ? 'Game Live' : 'No game active';
 });
 
-db.ref('trivia/liveGame/slideState').on('value', snap => {
+  const slideStateRef = liveRef('slideState'); _hbRefs.push(slideStateRef); slideStateRef.on('value', snap => {
   const s = snap.val();
   const typeEl   = document.getElementById('hb-preview-type');
   const numEl    = document.getElementById('hb-preview-num');
@@ -2480,10 +2570,12 @@ db.ref('trivia/liveGame/slideState').on('value', snap => {
   const bgEl     = document.getElementById('hb-preview-bg');
   const audioBtn = document.getElementById('hb-audio-btn');
   const watermark= document.getElementById('hb-idle-watermark');
+  const slideLabel = document.getElementById('hb-slide-label');
   if(!s) {
     if(typeEl) typeEl.textContent = '';
     if(numEl)  numEl.textContent  = '';
     if(qEl)    qEl.textContent    = '';
+    if(slideLabel) slideLabel.textContent = '';
     if(ansEl)  ansEl.textContent  = '';
     if(bgEl)   bgEl.style.backgroundImage = '';
     if(audioBtn) audioBtn.style.display = 'none';
@@ -2495,12 +2587,13 @@ db.ref('trivia/liveGame/slideState').on('value', snap => {
   if(typeEl) typeEl.textContent = s.label || '';
   if(numEl)  numEl.textContent  = s.qNum  || '';
   if(qEl)    qEl.textContent    = s.text  || '';
+  if(slideLabel) slideLabel.textContent = (s.qNum ? s.qNum + ' — ' : '') + (s.text || s.label || '');
   if(ansEl)  { ansEl.textContent = s.answer || ''; ansEl.style.display = s.answer ? 'block' : 'none'; }
   if(audioBtn) audioBtn.style.display = s.hasAudio ? 'inline-flex' : 'none';
 });
 
 // Host-only "next question" peek — never shown on the audience screen or player phones
-db.ref('trivia/liveGame/hostPeek').on('value', snap => {
+  const hostPeekRef = liveRef('hostPeek'); _hbRefs.push(hostPeekRef); hostPeekRef.on('value', snap => {
   const p = snap.val();
   const box   = document.getElementById('hb-peek-box');
   const label = document.getElementById('hb-peek-label');
@@ -2520,7 +2613,7 @@ db.ref('trivia/liveGame/hostPeek').on('value', snap => {
   if(reBtn) reBtn.style.display = 'block';
 });
 
-db.ref('trivia/liveGame/answers').on('value', snap => {
+  const answersRef = liveRef('answers'); _hbRefs.push(answersRef); answersRef.on('value', snap => {
   const allAnswers = snap.val() || {};
   allAnswersCache = allAnswers;
   let submitCount = 0;
@@ -2538,7 +2631,7 @@ db.ref('trivia/liveGame/answers').on('value', snap => {
 });
 
 // ── Update scores renderer to include point adjustment ─────────────────
-db.ref('trivia/liveGame/teams').on('value', snap => {
+  const teamsRef = liveRef('teams'); _hbRefs.push(teamsRef); teamsRef.on('value', snap => {
   const teams = snap.val() || {};
   const sorted = Object.entries(teams)
     .map(([id,t]) => ({id, name:t.name||'?', score:t.score||0}))
@@ -2564,6 +2657,7 @@ db.ref('trivia/liveGame/teams').on('value', snap => {
       ).join('')
     : '<span style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3)">No teams yet</span>';
 });
+} // end attachHbListeners
 
 // ═══════════════════════════════════════════════
 // ═══════════════════════════════════════════════
