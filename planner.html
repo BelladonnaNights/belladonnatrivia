@@ -295,6 +295,12 @@ a{color:inherit}
     </div>
 
     <div id="venue-boxes-view">
+      <div class="week-nav">
+        <button class="btn btn-ghost btn-sm" onclick="shiftDayBoxWeek(-1)">‹ Prev</button>
+        <div class="week-label" id="daybox-week-label"></div>
+        <button class="btn btn-ghost btn-sm" onclick="shiftDayBoxWeek(1)">Next ›</button>
+        <button class="btn btn-ghost btn-sm" onclick="jumpDayBoxToday()">Today</button>
+      </div>
       <div class="daybox-grid" id="daybox-grid"></div>
     </div>
 
@@ -309,7 +315,10 @@ a{color:inherit}
     </div>
 
     <div id="venue-spreadsheet-view" style="display:none">
-      <div class="filter-bar">
+      <!-- Layout picker hidden per request — only "Venues as Rows" is shown for now.
+           Nothing below is deleted: flip SPREADSHEET_LOCK_VENUE_ROWS to false in the
+           script and remove this div's display:none to bring the other two layouts back. -->
+      <div class="filter-bar" id="spreadsheet-layout-picker" style="display:none">
         <span class="form-label" style="margin:0">Layout</span>
         <button class="pill active" data-sformat="venue-rows" onclick="setSpreadsheetFormat('venue-rows')">Venues as Rows</button>
         <button class="pill" data-sformat="week-rows" onclick="setSpreadsheetFormat('week-rows')">Weeks as Rows</button>
@@ -359,8 +368,8 @@ a{color:inherit}
     <div class="section-sub">Every venue, current, seasonal, paused, or finished.</div>
     <div class="filter-bar" id="venue-list-filters">
       <input class="search-input" id="venue-search" placeholder="Search venues…" oninput="renderVenues()">
-      <button class="pill active" data-vf="all" onclick="setVenueFilter('all')">All</button>
-      <button class="pill" data-vf="active" onclick="setVenueFilter('active')">Active</button>
+      <button class="pill" data-vf="all" onclick="setVenueFilter('all')">All</button>
+      <button class="pill active" data-vf="active" onclick="setVenueFilter('active')">Active</button>
       <button class="pill" data-vf="seasonal" onclick="setVenueFilter('seasonal')">Seasonal</button>
       <button class="pill" data-vf="paused" onclick="setVenueFilter('paused')">Paused</button>
       <button class="pill" data-vf="finished" onclick="setVenueFilter('finished')">Finished</button>
@@ -783,15 +792,23 @@ auth.onAuthStateChanged(function(user){
   }
   const label=document.getElementById('gateway-user-label');
   if(label)label.textContent=user.email||'account';
-  dbFs.collection('users').doc(user.uid).get().then(function(snap){
-    const profile=snap.exists?snap.data():{};
-    myLocationId=profile.locationId||null;
-    myAllLocations=!!profile.allLocations;
-    loadPlannerLocations();
+  // Force a fresh ID token before touching the Realtime Database. There's a
+  // known race where auth.onAuthStateChanged fires slightly before RTDB's own
+  // connection has re-authenticated with that session — attaching .on('value')
+  // listeners in that window can get silently permission-denied (no error
+  // surfaces, it just never calls back), which is exactly "stuck on connecting
+  // forever, fixed by leaving and coming back" — this closes that window.
+  user.getIdToken(true).then(function(){
+    dbFs.collection('users').doc(user.uid).get().then(function(snap){
+      const profile=snap.exists?snap.data():{};
+      myLocationId=profile.locationId||null;
+      myAllLocations=!!profile.allLocations;
+      loadPlannerLocations();
+    }).catch(function(){ loadPlannerLocations(); });
   }).catch(function(){ loadPlannerLocations(); });
   loadShiftsCancelled();
 });
-function onDataChange(){ setSyncStatus('synced'); renderActiveTab(); }
+function onDataChange(){ clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); renderActiveTab(); }
 function updateThemeDatalist(){
   document.getElementById('theme-name-list').innerHTML = Object.values(state.themes||{})
     .map(t=>`<option value="${escapeHtml(plannerMode==='bingo'?t.title:t.name)}">`).join('');
@@ -860,9 +877,33 @@ function detachModeListeners(){
   modeListenerRefs.forEach(r=>r.off('value'));
   modeListenerRefs = [];
 }
+// Watchdog: if we're still showing "connecting…" a few seconds after
+// attaching listeners, something silently failed (the RTDB-auth race
+// described above, a dropped connection, etc). Retrying once — the same
+// detach+reattach that manually toggling Trivia/Bingo was doing by
+// accident — self-heals it instead of leaving you stuck until you notice.
+let syncWatchdogTimer = null;
+function armSyncWatchdog(){
+  clearTimeout(syncWatchdogTimer);
+  syncWatchdogTimer = setTimeout(function(){
+    const dot = document.getElementById('sync-dot');
+    if(dot && dot.classList.contains('synced')) return;
+    console.warn('Planner: still connecting after 6s — retrying listeners.');
+    attachModeListeners();
+  }, 6000);
+}
+function onListenerError(label){
+  return function(err){
+    console.error('Planner: '+label+' listener failed:', err);
+    toast('Lost connection loading '+label+' — retrying…', true);
+    clearTimeout(syncWatchdogTimer);
+    syncWatchdogTimer = setTimeout(attachModeListeners, 2000);
+  };
+}
 function attachModeListeners(){
   detachModeListeners();
   const p = MODE_PATHS[plannerMode];
+  armSyncWatchdog();
 
   const venuesRef = db.ref(p.venues);
   venuesRef.on('value', snap=>{
@@ -871,11 +912,11 @@ function attachModeListeners(){
     Object.entries(raw).forEach(([id,v])=>{ if(locationMatches(v.locationId))filtered[id]=v; });
     state.venues = filtered;
     onDataChange();
-  });
+  }, onListenerError('venues'));
   modeListenerRefs.push(venuesRef);
 
   const libraryRef = db.ref(p.library);
-  libraryRef.on('value', snap=>{ state.themes = snap.val()||{}; onDataChange(); updateThemeDatalist(); });
+  libraryRef.on('value', snap=>{ state.themes = snap.val()||{}; onDataChange(); updateThemeDatalist(); }, onListenerError('theme/category library'));
   modeListenerRefs.push(libraryRef);
 
   const gigsRef = db.ref(p.gigs);
@@ -909,12 +950,12 @@ function attachModeListeners(){
     }
     applyCheckoutCancellations();
     onDataChange();
-  });
+  }, onListenerError('gigs/schedule'));
   modeListenerRefs.push(gigsRef);
 
   if(p.sequences){
     const seqRef = db.ref(p.sequences);
-    seqRef.on('value', snap=>{ state.sequences = snap.val()||{}; onDataChange(); });
+    seqRef.on('value', snap=>{ state.sequences = snap.val()||{}; onDataChange(); }, onListenerError('sequences'));
     modeListenerRefs.push(seqRef);
   } else {
     state.sequences = {};
@@ -1093,7 +1134,7 @@ function setDashboardView(v){
 // ═══════════════════════════════════════════════
 //  VENUES TAB — list only (calendar/day-boxes live on Dashboard)
 // ═══════════════════════════════════════════════
-let venueFilter = 'all';
+let venueFilter = 'active';
 let venueSort = {key:'name', dir:1};
 function setVenueFilter(f){ venueFilter=f; document.querySelectorAll('[data-vf]').forEach(p=>p.classList.toggle('active', p.dataset.vf===f)); renderVenues(); }
 function setVenueSort(key){ if(venueSort.key===key) venueSort.dir*=-1; else { venueSort={key,dir:1}; } renderVenues(); }
@@ -1141,13 +1182,17 @@ function renderVenues(){
 //   classic:    each venue gets its own Date + Theme column pair, one row per
 //               week — this is the closest match to the original spreadsheet layout
 let spreadsheetRangeStart = startOfWeek(new Date());
-let spreadsheetFormat = (function(){ try{ return localStorage.getItem('plannerSpreadsheetFormat')||'venue-rows'; }catch(e){ return 'venue-rows'; } })();
+// Set to false (and un-hide #spreadsheet-layout-picker above) to bring the
+// other two layouts back — nothing about them was removed, just locked off.
+const SPREADSHEET_LOCK_VENUE_ROWS = true;
+let spreadsheetFormat = SPREADSHEET_LOCK_VENUE_ROWS ? 'venue-rows' : (function(){ try{ return localStorage.getItem('plannerSpreadsheetFormat')||'venue-rows'; }catch(e){ return 'venue-rows'; } })();
 const SPREADSHEET_NOTES = {
   'venue-rows': "Each row is a venue, each column is one calendar week (labeled by that week's Monday).",
   'week-rows': "Each row is one calendar week, each column is a venue.",
   'classic': "Each venue gets its own Date + Theme columns, one row per week — closest to the original spreadsheet."
 };
 function setSpreadsheetFormat(f){
+  if(SPREADSHEET_LOCK_VENUE_ROWS) f = 'venue-rows';
   spreadsheetFormat = f;
   try{ localStorage.setItem('plannerSpreadsheetFormat', f); }catch(e){}
   document.querySelectorAll('[data-sformat]').forEach(p=>p.classList.toggle('active', p.dataset.sformat===f));
@@ -1562,22 +1607,31 @@ function openDayAgenda(dk){
   openModal('day-agenda-overlay');
 }
 
-// -- Day boxes --
+// -- Day boxes ("This Week") -- now date-aware with prev/next week nav
+let dayBoxWeekStart = startOfWeek(new Date());
+function shiftDayBoxWeek(n){ dayBoxWeekStart = addDays(dayBoxWeekStart, n*7); renderDayBoxes(); }
+function jumpDayBoxToday(){ dayBoxWeekStart = startOfWeek(new Date()); renderDayBoxes(); }
 function renderDayBoxes(){
   if(activeTab!=='dashboard') return;
+  const label = document.getElementById('daybox-week-label');
+  if(label) label.textContent = fmtRange(dayBoxWeekStart, addDays(dayBoxWeekStart,6));
   const order = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   const byDay = {}; order.forEach(d=>byDay[d]=[]);
   Object.entries(state.venues||{}).forEach(([id,v])=>{
     if(v.status!=='active' && v.status!=='seasonal') return;
     if(v.day && byDay[v.day]) byDay[v.day].push([id,v]);
   });
-  document.getElementById('daybox-grid').innerHTML = order.map(d=>`
-    <div class="daybox"><h4>${d}</h4>
-      ${byDay[d].length ? byDay[d].sort((a,b)=>(a[1].time||'').localeCompare(b[1].time||'')).map(([id,v])=>`
-        <div class="daybox-item" style="cursor:pointer" onclick="openVenueDetail('${id}')">${escapeHtml(v.name)}<small>${v.time||''}${v.host?' · '+escapeHtml(v.host):''}</small></div>
-      `).join('') : '<div class="daybox-item" style="color:var(--text3)">Nothing scheduled</div>'}
-    </div>
-  `).join('');
+  document.getElementById('daybox-grid').innerHTML = order.map((d,i)=>{
+    const date = addDays(dayBoxWeekStart, i);
+    const dk = toKey(date);
+    return `<div class="daybox"><h4>${d}<br><span style="font-family:var(--font);font-weight:400;font-size:11px;color:var(--text3)">${date.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></h4>
+      ${byDay[d].length ? byDay[d].sort((a,b)=>(a[1].time||'').localeCompare(b[1].time||'')).map(([id,v])=>{
+        const gig = (state.gigs[id]||{})[dk];
+        const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? 'cancelled' : 'unplanned';
+        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${id}','${dk}')">${escapeHtml(v.name)}<small>${v.time||''} — ${label}</small></div>`;
+      }).join('') : '<div class="daybox-item" style="color:var(--text3)">Nothing scheduled</div>'}
+    </div>`;
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════
