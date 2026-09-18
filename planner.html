@@ -522,20 +522,20 @@ a{color:inherit}
 </div>
 
 <div class="modal-overlay" id="gig-modal-overlay">
-  <div class="modal">
-    <h3>Assign Theme</h3>
+  <div class="modal wide">
+    <h3>Assign Category</h3>
     <label class="form-label">Venue</label>
     <select class="form-select" id="gig-venue" onchange="onGigVenueChange()"></select>
     <label class="form-label">Date</label>
     <input type="date" class="form-input" id="gig-date" onchange="renderGigWarnings()">
-    <label class="form-label" id="gig-theme-label">Theme</label>
-    <input type="text" class="form-input" id="gig-theme-search" placeholder="Search or type a new theme…" oninput="renderThemeSuggest()">
+    <label class="form-label" id="gig-theme-label">Category</label>
+    <input type="text" class="form-input" id="gig-theme-search" placeholder="Search Evergreen, Featured, or Music Trivia…" oninput="renderThemeSuggest()">
     <div class="theme-suggest" id="theme-suggest"></div>
     <div id="gig-warnings"></div>
     <div id="gig-round3-section" style="display:none">
-      <label class="form-label">Round 3 — Coordinating Music</label>
+      <label class="form-label" id="gig-round3-label">Coordinating Category</label>
       <div id="gig-round3-suggest"></div>
-      <input type="text" class="form-input" id="gig-round3-search" placeholder="Search music themes, or pick a suggestion above…" oninput="renderRound3Suggest()">
+      <input type="text" class="form-input" id="gig-round3-search" placeholder="Search, or pick a suggestion above…" oninput="renderRound3Suggest()">
       <div class="theme-suggest" id="round3-theme-suggest"></div>
     </div>
     <label class="form-label">Status</label>
@@ -550,6 +550,11 @@ a{color:inherit}
       <span style="flex:1"></span>
       <button class="btn btn-ghost" onclick="closeModal('gig-modal-overlay')">Cancel</button>
       <button class="btn btn-primary" onclick="saveGig()">Save</button>
+    </div>
+
+    <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border2)">
+      <label class="form-label" id="gig-schedule-preview-label">This venue's schedule</label>
+      <div class="tl-container" style="max-height:280px" id="gig-schedule-preview"></div>
     </div>
   </div>
 </div>
@@ -608,18 +613,18 @@ a{color:inherit}
     <h3 id="theme-modal-title">Add Theme</h3>
     <label class="form-label">Theme Name</label>
     <input type="text" class="form-input" id="t-name">
-    <label class="form-label">Round / Tier</label>
+    <label class="form-label">Category Type</label>
     <select class="form-select" id="t-tier" onchange="renderPairsWithSection()">
       <option value="">— Unassigned / legacy —</option>
       <option value="general-knowledge">Round 1 — General Knowledge</option>
-      <option value="evergreen-topic">Round 2 — Evergreen Topic</option>
-      <option value="coordinating-music">Round 3 — Coordinating Music</option>
-      <option value="theme-night">Theme Night Vault (special event only)</option>
+      <option value="evergreen-topic">Evergreen Trivia</option>
+      <option value="coordinating-music">Music Trivia</option>
+      <option value="featured">Featured Trivia</option>
     </select>
     <div id="t-pairs-section" style="display:none">
-      <label class="form-label">Pairs With (suggested Round 3 music when this topic is picked)</label>
+      <label class="form-label" id="t-pairs-label">Pairs With</label>
       <div id="t-pairs-chips"></div>
-      <input type="text" class="form-input" id="t-pairs-search" placeholder="Search coordinating-music themes…" oninput="renderPairsSuggest()">
+      <input type="text" class="form-input" id="t-pairs-search" placeholder="Search…" oninput="renderPairsSuggest()">
       <div class="theme-suggest" id="t-pairs-suggest"></div>
     </div>
     <label class="form-label">Tags</label>
@@ -1083,16 +1088,20 @@ const TAG_RULES = [
 function suggestTags(name){ return TAG_RULES.filter(r=>r.re.test(name)).map(r=>r.tag); }
 const TIER_LABELS = {
   'general-knowledge': 'Round 1 · General Knowledge',
-  'evergreen-topic': 'Round 2 · Evergreen Topic',
-  'coordinating-music': 'Round 3 · Coordinating Music',
-  'theme-night': 'Theme Night Vault'
+  'evergreen-topic': 'Evergreen Trivia',
+  'coordinating-music': 'Music Trivia',
+  'featured': 'Featured Trivia'
 };
 const TIER_BADGE = {
   'general-knowledge': 'badge-empty',
   'evergreen-topic': 'badge-planned',
   'coordinating-music': 'badge-active',
-  'theme-night': 'badge-vault'
+  'featured': 'badge-vault'
 };
+// 'theme-night' was the old internal name for what's now 'featured' — treat them
+// as the same tier everywhere so nothing already tagged that way gets orphaned.
+function normTier(tier){ return tier==='theme-night' ? 'featured' : tier; }
+function canPair(tier){ return tier==='evergreen-topic' || tier==='coordinating-music' || tier==='featured'; }
 let activeTierFilter = null;
 function setTierFilter(tier){ activeTierFilter = activeTierFilter===tier ? null : tier; renderThemes(); }
 
@@ -2101,12 +2110,13 @@ function renderThemes(){
   let list = list0;
   if(q) list = list.filter(([id,t])=>(t.name||'').toLowerCase().includes(q));
   if(activeTagFilter) list = list.filter(([id,t])=>(t.tags||[]).includes(activeTagFilter));
-  if(activeTierFilter) list = list.filter(([id,t])=>t.tier===activeTierFilter);
+  if(activeTierFilter) list = list.filter(([id,t])=>normTier(t.tier)===activeTierFilter);
   list = sortEntries(list, themeSort, ([id,t])=>themeSort.key==='timesUsed' ? (t.timesUsed||0) : t[themeSort.key]);
 
   document.getElementById('themes-rows').innerHTML = list.map(([id,t])=>{
     const venueName = t.lastUsedVenueId && state.venues[t.lastUsedVenueId] ? state.venues[t.lastUsedVenueId].name : '—';
-    const tierBadge = t.tier ? `<span class="badge ${TIER_BADGE[t.tier]||'badge-empty'}">${TIER_LABELS[t.tier]||t.tier}</span>` : '';
+    const nt = normTier(t.tier);
+    const tierBadge = nt ? `<span class="badge ${TIER_BADGE[nt]||'badge-empty'}">${TIER_LABELS[nt]||nt}</span>` : '';
     return `<tr>
       <td><input type="checkbox" class="theme-row-check" data-id="${id}" ${selectedThemeIds.has(id)?'checked':''} onchange="toggleThemeSelection('${id}', this.checked)"></td>
       <td>${escapeHtml(t.name||'')} ${tierBadge}</td>
@@ -2189,7 +2199,7 @@ function openThemeModal(id){
   editingThemePairs = (t.pairsWith||[]).slice();
   document.getElementById('theme-modal-title').textContent = id ? 'Edit Theme' : 'Add Theme';
   document.getElementById('t-name').value = t.name||'';
-  document.getElementById('t-tier').value = t.tier||'';
+  document.getElementById('t-tier').value = normTier(t.tier)||'';
   document.getElementById('t-times-used').value = t.timesUsed||0;
   document.getElementById('t-last-used').value = t.lastUsedDate||'';
   document.getElementById('theme-delete-btn').style.display = id ? 'inline-block' : 'none';
@@ -2215,12 +2225,26 @@ function suggestTagsForModal(){
   renderTagChips();
   if(!suggested.length) toast('No keyword matches — add tags manually.');
 }
-// -- Round 3 pairing (only shown for evergreen-topic themes) --
+// -- Pairing, shown for all three pairing-capable tiers. What the search box
+//    matches against depends on which tier we're editing:
+//    Evergreen  -> only Music themes
+//    Music      -> only Evergreen themes
+//    Featured   -> either Evergreen or Music themes
+function pairScopeFor(tier){
+  if(tier==='evergreen-topic') return t=>normTier(t.tier)==='coordinating-music';
+  if(tier==='coordinating-music') return t=>normTier(t.tier)==='evergreen-topic';
+  if(tier==='featured') return t=>normTier(t.tier)==='evergreen-topic'||normTier(t.tier)==='coordinating-music';
+  return null;
+}
 function renderPairsWithSection(){
   const tier = document.getElementById('t-tier').value;
   const section = document.getElementById('t-pairs-section');
-  section.style.display = tier==='evergreen-topic' ? 'block' : 'none';
-  if(tier!=='evergreen-topic') return;
+  section.style.display = canPair(tier) ? 'block' : 'none';
+  if(!canPair(tier)) return;
+  const label = tier==='evergreen-topic' ? 'Pairs With (suggested Music Trivia)'
+    : tier==='coordinating-music' ? 'Pairs With (suggested Evergreen Trivia)'
+    : 'Pairs With (Evergreen or Music Trivia)';
+  document.getElementById('t-pairs-label').textContent = label;
   document.getElementById('t-pairs-chips').innerHTML = editingThemePairs.map((id,i)=>{
     const t = state.themes[id];
     return `<span class="tag-chip">${escapeHtml(t?t.name:'(deleted theme)')}<span class="x" onclick="removePairChip(${i})">×</span></span>`;
@@ -2232,12 +2256,14 @@ function removePairChip(i){ editingThemePairs.splice(i,1); renderPairsWithSectio
 function renderPairsSuggest(){
   const q = document.getElementById('t-pairs-search').value.trim().toLowerCase();
   const box = document.getElementById('t-pairs-suggest');
-  if(!q){ box.innerHTML=''; return; }
+  const tier = document.getElementById('t-tier').value;
+  const scope = pairScopeFor(tier);
+  if(!q || !scope){ box.innerHTML=''; return; }
   const matches = Object.entries(state.themes||{})
-    .filter(([id,t])=> t.tier==='coordinating-music' && !editingThemePairs.includes(id) && (t.name||'').toLowerCase().includes(q))
+    .filter(([id,t])=> scope(t) && !editingThemePairs.includes(id) && (t.name||'').toLowerCase().includes(q))
     .slice(0,20);
-  box.innerHTML = matches.map(([id,t])=>`<div class="theme-opt" onclick="addPairChip('${id}')">${escapeHtml(t.name)}</div>`).join('')
-    || '<div class="theme-opt" style="color:var(--text3)">No coordinating-music themes match — tag one as Round 3 first.</div>';
+  box.innerHTML = matches.map(([id,t])=>`<div class="theme-opt" onclick="addPairChip('${id}')">${escapeHtml(t.name)}<small>${TIER_LABELS[normTier(t.tier)]||''}</small></div>`).join('')
+    || '<div class="theme-opt" style="color:var(--text3)">No match — tag the other category\'s type first.</div>';
 }
 function addPairChip(id){
   if(!editingThemePairs.includes(id)) editingThemePairs.push(id);
@@ -2252,7 +2278,7 @@ function saveTheme(){
   setSyncStatus('syncing');
   db.ref('trivia/planner/themes/'+themeId).update({
     name, tags: editingThemeTags, tier: tier || null,
-    pairsWith: tier==='evergreen-topic' ? editingThemePairs : null,
+    pairsWith: canPair(tier) ? editingThemePairs : null,
     timesUsed: parseInt(document.getElementById('t-times-used').value)||0,
     lastUsedDate: document.getElementById('t-last-used').value || null,
     lastUsedVenueId: existing.lastUsedVenueId || null
@@ -2372,8 +2398,7 @@ function openGigModal(venueId, dateKey){
   const existing = (dateKey && state.gigs[venueId]) ? state.gigs[venueId][dateKey] : null;
   document.getElementById('gig-theme-search').value = existing && existing.themeName ? existing.themeName : '';
   if(existing && existing.themeId){ gigCtx.selectedThemeId = existing.themeId; gigCtx.selectedThemeName = existing.themeName; }
-  document.getElementById('gig-theme-label').textContent = plannerMode==='trivia' ? 'Round 2 — Topic' : 'Category';
-  document.getElementById('gig-round3-section').style.display = plannerMode==='trivia' ? 'block' : 'none';
+  document.getElementById('gig-theme-label').textContent = plannerMode==='trivia' ? 'Category' : 'Category';
   document.getElementById('gig-round3-search').value = existing && existing.round3Name ? existing.round3Name : '';
   if(existing && existing.round3ThemeId){ gigCtx.selectedRound3Id = existing.round3ThemeId; gigCtx.selectedRound3Name = existing.round3Name; }
   document.getElementById('gig-status').value = existing && existing.status==='cancelled' ? 'cancelled' : 'planned';
@@ -2383,9 +2408,10 @@ function openGigModal(venueId, dateKey){
   document.getElementById('round3-theme-suggest').innerHTML = '';
   renderRound3Pairing();
   renderGigWarnings();
+  renderGigSchedulePreview();
   openModal('gig-modal-overlay');
 }
-function onGigVenueChange(){ gigCtx.venueId = document.getElementById('gig-venue').value; renderGigWarnings(); }
+function onGigVenueChange(){ gigCtx.venueId = document.getElementById('gig-venue').value; renderGigWarnings(); renderGigSchedulePreview(); }
 function renderThemeSuggest(){
   const q = document.getElementById('gig-theme-search').value.trim().toLowerCase();
   gigCtx.selectedThemeId = null; gigCtx.selectedThemeName = null;
@@ -2393,7 +2419,7 @@ function renderThemeSuggest(){
   if(!q){ document.getElementById('theme-suggest').innerHTML=''; return; }
   const matches = Object.entries(state.themes||{}).filter(([id,t])=>(t.name||'').toLowerCase().includes(q)).slice(0,25);
   document.getElementById('theme-suggest').innerHTML = matches.map(([id,t])=>`
-    <div class="theme-opt" onclick="pickTheme('${id}')">${escapeHtml(t.name)}<small>Used ${t.timesUsed||0}× · last ${t.lastUsedDate?fmtMDY(t.lastUsedDate):'never'}</small></div>
+    <div class="theme-opt" onclick="pickTheme('${id}')">${escapeHtml(t.name)}${normTier(t.tier)?` <span style="color:var(--text3)">· ${TIER_LABELS[normTier(t.tier)]}</span>`:''}<small>Used ${t.timesUsed||0}× · last ${t.lastUsedDate?fmtMDY(t.lastUsedDate):'never'}</small></div>
   `).join('') || `<div class="theme-opt" style="color:var(--text3)">No match — this will be saved as a new theme.</div>`;
 }
 function pickTheme(id){
@@ -2404,28 +2430,40 @@ function pickTheme(id){
   renderRound3Pairing();
   renderGigWarnings();
 }
-// -- Round 3 — suggested from Round 2's pairsWith, with search fallback --
+// -- Coordinating category — suggested from the primary pick's pairsWith.
+//    What's shown/searchable in this second slot depends on the primary's tier:
+//    Evergreen picked -> Music only. Music picked -> Evergreen only.
+//    Featured picked  -> either (Featured pairs can be a mix of both).
 function renderRound3Pairing(){
   const box = document.getElementById('gig-round3-suggest');
+  const section = document.getElementById('gig-round3-section');
   if(!box) return;
   const t = gigCtx.selectedThemeId ? state.themes[gigCtx.selectedThemeId] : null;
-  const pairs = (t && t.pairsWith) ? t.pairsWith.filter(id=>state.themes[id]) : [];
+  const tier = t ? normTier(t.tier) : null;
+  section.style.display = (plannerMode==='trivia' && canPair(tier)) ? 'block' : 'none';
+  if(!canPair(tier)) return;
+  document.getElementById('gig-round3-label').textContent = tier==='evergreen-topic' ? 'Coordinating Music'
+    : tier==='coordinating-music' ? 'Coordinating Evergreen Topic' : 'Coordinating Category';
+  const pairs = (t.pairsWith||[]).filter(id=>state.themes[id]);
   box.innerHTML = pairs.length
     ? pairs.map(id=>{
         const mt = state.themes[id];
         const active = gigCtx.selectedRound3Id===id;
         return `<span class="tag-pill ${active?'active':''}" onclick="pickRound3('${id}')">${escapeHtml(mt.name)}</span>`;
       }).join('')
-    : (t ? '<span style="color:var(--text3);font-size:11px">No pairings saved for this topic yet — search below.</span>' : '');
+    : '<span style="color:var(--text3);font-size:11px">No pairings saved for this category yet — search below.</span>';
 }
 function renderRound3Suggest(){
   const q = document.getElementById('gig-round3-search').value.trim().toLowerCase();
   gigCtx.selectedRound3Id = null; gigCtx.selectedRound3Name = null;
-  if(!q){ document.getElementById('round3-theme-suggest').innerHTML=''; return; }
-  const matches = Object.entries(state.themes||{}).filter(([id,t])=>t.tier==='coordinating-music' && (t.name||'').toLowerCase().includes(q)).slice(0,25);
-  document.getElementById('round3-theme-suggest').innerHTML = matches.map(([id,t])=>`
-    <div class="theme-opt" onclick="pickRound3('${id}')">${escapeHtml(t.name)}</div>
-  `).join('') || `<div class="theme-opt" style="color:var(--text3)">No coordinating-music theme matches that.</div>`;
+  const box = document.getElementById('round3-theme-suggest');
+  if(!q){ box.innerHTML=''; return; }
+  const t = gigCtx.selectedThemeId ? state.themes[gigCtx.selectedThemeId] : null;
+  const scope = t ? pairScopeFor(normTier(t.tier)) : null;
+  const matches = Object.entries(state.themes||{}).filter(([id,t2])=>(!scope||scope(t2)) && (t2.name||'').toLowerCase().includes(q)).slice(0,25);
+  box.innerHTML = matches.map(([id,t2])=>`
+    <div class="theme-opt" onclick="pickRound3('${id}')">${escapeHtml(t2.name)} <span style="color:var(--text3)">· ${TIER_LABELS[normTier(t2.tier)]||''}</span></div>
+  `).join('') || `<div class="theme-opt" style="color:var(--text3)">No match.</div>`;
 }
 function pickRound3(id){
   const t = state.themes[id];
@@ -2433,6 +2471,43 @@ function pickRound3(id){
   document.getElementById('gig-round3-search').value = t.name;
   document.getElementById('round3-theme-suggest').innerHTML = '';
   renderRound3Pairing();
+}
+// -- Embedded schedule preview: this venue's history/upcoming, today pinned to top --
+function renderGigSchedulePreview(){
+  const venueId = document.getElementById('gig-venue').value;
+  const box = document.getElementById('gig-schedule-preview');
+  const labelEl = document.getElementById('gig-schedule-preview-label');
+  if(!venueId || !box) return;
+  const v = state.venues[venueId];
+  labelEl.textContent = v ? v.name+"'s schedule" : 'Schedule';
+  const gigs = state.gigs[venueId]||{};
+  const today = new Date(); today.setHours(0,0,0,0);
+  const rangeStart = addDays(today, -8*7), rangeEnd = addDays(today, 12*7);
+  const dateSet = new Set();
+  if(v && v.day){
+    let d = new Date(rangeStart);
+    const target = DAY_MAP[v.day];
+    if(target!==undefined){
+      d = addDays(d, (target - d.getDay() + 7) % 7);
+      while(d <= rangeEnd){ dateSet.add(toKey(d)); d = addDays(d,7); }
+    }
+  }
+  Object.keys(gigs).forEach(dk=>{ if(dk>=toKey(rangeStart) && dk<=toKey(rangeEnd)) dateSet.add(dk); });
+  const dates = Array.from(dateSet).sort();
+  const prevVenueDetailId = currentVenueDetailId;
+  currentVenueDetailId = venueId; // scheduleRowHtml/vdInlineSave key off this
+  let html = ''; let lastMonth = '';
+  dates.forEach(dk=>{
+    const monthLabel = fromKey(dk).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    if(monthLabel !== lastMonth){ html += `<div class="tl-month-label">${monthLabel}</div>`; lastMonth = monthLabel; }
+    html += scheduleRowHtml(dk, gigs[dk]);
+  });
+  box.innerHTML = html || '<div class="empty-state">No dates in range for this venue.</div>';
+  // deferred: the modal is still display:none at this point in the call order
+  // (openGigModal calls this, then opens the modal right after), so scrollIntoView
+  // would have no layout to work with if run synchronously here.
+  setTimeout(()=>{ const row = box.querySelector('.tl-row.tl-today'); if(row) row.scrollIntoView({block:'start'}); }, 0);
+  currentVenueDetailId = prevVenueDetailId;
 }
 function renderGigWarnings(){
   const box = document.getElementById('gig-warnings');
@@ -2477,12 +2552,17 @@ function saveGig(){
     };
     if(!typedRound3){ finish(null, null); return; }
     if(gigCtx.selectedRound3Id && gigCtx.selectedRound3Name===typedRound3){ finish(gigCtx.selectedRound3Id, typedRound3); return; }
-    // typed a music theme name that wasn't picked from the list — create/find it, tagged as coordinating-music
+    // typed a category name that wasn't picked from the list — create/find it
     const key = typedRound3.trim().toLowerCase();
     const found = Object.entries(state.themes||{}).find(([id,t])=>(t.name||'').trim().toLowerCase()===key);
     if(found){ finish(found[0], typedRound3); return; }
+    const primaryTier = gigCtx.selectedThemeId ? normTier((state.themes[gigCtx.selectedThemeId]||{}).tier) : null;
+    // Infer the new category's tier from the primary pick's tier — mirrors pairScopeFor.
+    // A Featured primary can pair with either, so we leave a freshly-typed one untiered
+    // rather than guess wrong; tier it later in the Theme Library if needed.
+    const newTier = primaryTier==='evergreen-topic' ? 'coordinating-music' : primaryTier==='coordinating-music' ? 'evergreen-topic' : null;
     const newId = db.ref('trivia/planner/themes').push().key;
-    db.ref('trivia/planner/themes/'+newId).set({name:typedRound3, tier:'coordinating-music', tags:suggestTags(typedRound3), timesUsed:0, lastUsedDate:null, lastUsedVenueId:null}).then(()=>finish(newId, typedRound3));
+    db.ref('trivia/planner/themes/'+newId).set({name:typedRound3, tier:newTier, tags:suggestTags(typedRound3), timesUsed:0, lastUsedDate:null, lastUsedVenueId:null}).then(()=>finish(newId, typedRound3));
   });
 }
 // Bingo mode's single-day save — writes to the real flat bingo/landing/schedule
