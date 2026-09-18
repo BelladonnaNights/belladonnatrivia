@@ -97,6 +97,7 @@ a{color:inherit}
 .badge-finished{background:rgba(255,255,255,.05);color:var(--text3)}
 .badge-paused{background:rgba(52,152,219,.10);color:var(--text2)}
 .badge-one-time{background:var(--gold-dim);color:var(--gold2)}
+.badge-vault{background:var(--purple-dim);color:var(--purple)}
 
 .theme-link{color:var(--text2);cursor:pointer;text-decoration:none;border-bottom:1px dashed var(--border3)}
 .theme-link:hover{color:var(--gold2);border-color:var(--gold-glow)}
@@ -264,13 +265,14 @@ a{color:inherit}
     <span class="sync-label" id="sync-label">connecting…</span>
   </div>
 </div>
+<div id="planner-error-banner" style="display:none;background:rgba(231,76,60,.14);color:#ff9a8a;border-bottom:1px solid rgba(231,76,60,.4);padding:9px 2rem;font-size:12px;text-align:center"></div>
 
 <div class="tabs" style="padding-top:0.6rem;justify-content:space-between;">
   <div>
     <button class="mode-pill active" onclick="setPlannerMode('trivia',this)">TRIVIA</button>
     <button class="mode-pill" onclick="setPlannerMode('bingo',this)">BINGO</button>
   </div>
-  <select id="plannerLocationSelect" onchange="setPlannerLocation(this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:999px;color:var(--gold);padding:8px 18px;font-size:12px;font-weight:600;margin:0 0 10px 0;"></select>
+  <select id="plannerLocationSelect" onchange="setPlannerLocation(this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:999px;color:var(--gold);padding:8px 18px;font-size:12px;font-weight:600;margin:0 0 10px 0;min-width:190px;max-width:260px"><option>Loading locations…</option></select>
 </div>
 
 <div class="tabs">
@@ -452,6 +454,7 @@ a{color:inherit}
         <span style="flex:1"></span>
         <button class="btn btn-primary btn-sm" onclick="openThemeModal()">+ Add Theme</button>
       </div>
+      <div class="filter-bar" id="tier-filter-bar"></div>
       <div class="filter-bar" id="tag-filter-bar"></div>
 
       <div id="dup-view" style="display:none"></div>
@@ -518,10 +521,16 @@ a{color:inherit}
     <select class="form-select" id="gig-venue" onchange="onGigVenueChange()"></select>
     <label class="form-label">Date</label>
     <input type="date" class="form-input" id="gig-date" onchange="renderGigWarnings()">
-    <label class="form-label">Theme</label>
+    <label class="form-label" id="gig-theme-label">Theme</label>
     <input type="text" class="form-input" id="gig-theme-search" placeholder="Search or type a new theme…" oninput="renderThemeSuggest()">
     <div class="theme-suggest" id="theme-suggest"></div>
     <div id="gig-warnings"></div>
+    <div id="gig-round3-section" style="display:none">
+      <label class="form-label">Round 3 — Coordinating Music</label>
+      <div id="gig-round3-suggest"></div>
+      <input type="text" class="form-input" id="gig-round3-search" placeholder="Search music themes, or pick a suggestion above…" oninput="renderRound3Suggest()">
+      <div class="theme-suggest" id="round3-theme-suggest"></div>
+    </div>
     <label class="form-label">Status</label>
     <select class="form-select" id="gig-status">
       <option value="planned">Planned</option>
@@ -592,6 +601,20 @@ a{color:inherit}
     <h3 id="theme-modal-title">Add Theme</h3>
     <label class="form-label">Theme Name</label>
     <input type="text" class="form-input" id="t-name">
+    <label class="form-label">Round / Tier</label>
+    <select class="form-select" id="t-tier" onchange="renderPairsWithSection()">
+      <option value="">— Unassigned / legacy —</option>
+      <option value="general-knowledge">Round 1 — General Knowledge</option>
+      <option value="evergreen-topic">Round 2 — Evergreen Topic</option>
+      <option value="coordinating-music">Round 3 — Coordinating Music</option>
+      <option value="theme-night">Theme Night Vault (special event only)</option>
+    </select>
+    <div id="t-pairs-section" style="display:none">
+      <label class="form-label">Pairs With (suggested Round 3 music when this topic is picked)</label>
+      <div id="t-pairs-chips"></div>
+      <input type="text" class="form-input" id="t-pairs-search" placeholder="Search coordinating-music themes…" oninput="renderPairsSuggest()">
+      <div class="theme-suggest" id="t-pairs-suggest"></div>
+    </div>
     <label class="form-label">Tags</label>
     <div id="t-tag-chips"></div>
     <div style="display:flex;gap:6px;margin-bottom:10px">
@@ -784,6 +807,17 @@ function gatewaySignOut(){
 //  if their local session was missing/expired; this just waits for Firebase
 //  to confirm the real session before actually opening the data listeners.
 // ═══════════════════════════════════════════════
+function showErrorBanner(msg){
+  const b = document.getElementById('planner-error-banner');
+  if(!b) return;
+  b.textContent = '⚠ '+msg;
+  b.style.display = 'block';
+}
+function hideErrorBanner(){
+  const b = document.getElementById('planner-error-banner');
+  if(b) b.style.display = 'none';
+}
+
 const state = { venues:{}, themes:{}, gigs:{}, sequences:{} };
 auth.onAuthStateChanged(function(user){
   if(!user){
@@ -804,11 +838,19 @@ auth.onAuthStateChanged(function(user){
       myLocationId=profile.locationId||null;
       myAllLocations=!!profile.allLocations;
       loadPlannerLocations();
-    }).catch(function(){ loadPlannerLocations(); });
-  }).catch(function(){ loadPlannerLocations(); });
+    }).catch(function(err){
+      console.error('Planner: could not load user profile:', err);
+      showErrorBanner('Could not load your account profile ('+(err.code||err.message)+'). Using defaults — some venues may be hidden by location.');
+      loadPlannerLocations();
+    });
+  }).catch(function(err){
+    console.error('Planner: could not refresh sign-in token:', err);
+    showErrorBanner('Could not refresh your sign-in ('+(err.code||err.message)+'). Try signing out and back in.');
+    loadPlannerLocations();
+  });
   loadShiftsCancelled();
 });
-function onDataChange(){ clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); renderActiveTab(); }
+function onDataChange(){ clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner(); renderActiveTab(); }
 function updateThemeDatalist(){
   document.getElementById('theme-name-list').innerHTML = Object.values(state.themes||{})
     .map(t=>`<option value="${escapeHtml(plannerMode==='bingo'?t.title:t.name)}">`).join('');
@@ -855,10 +897,13 @@ function loadPlannerLocations(){
       sel.disabled=true;
     }
     attachModeListeners();
-  }).catch(()=>{
+  }).catch(err=>{
+    console.error('Planner: could not load hq_data/locations:', err);
+    showErrorBanner('Could not load the location list ('+(err.code||err.message)+') — defaulting to WA - South Sound.');
     const sel=document.getElementById('plannerLocationSelect');
     sel.innerHTML='<option value="wa-southsound">WA - South Sound</option>';
     selectedLocationId='wa-southsound';
+    sel.disabled=!myAllLocations;
     attachModeListeners();
   });
 }
@@ -889,12 +934,14 @@ function armSyncWatchdog(){
     const dot = document.getElementById('sync-dot');
     if(dot && dot.classList.contains('synced')) return;
     console.warn('Planner: still connecting after 6s — retrying listeners.');
+    showErrorBanner('Still connecting after 6 seconds — retrying automatically. If this repeats, try signing out and back in.');
     attachModeListeners();
   }, 6000);
 }
 function onListenerError(label){
   return function(err){
     console.error('Planner: '+label+' listener failed:', err);
+    showErrorBanner(label+' failed to load ('+(err.code||err.message)+') — retrying…');
     toast('Lost connection loading '+label+' — retrying…', true);
     clearTimeout(syncWatchdogTimer);
     syncWatchdogTimer = setTimeout(attachModeListeners, 2000);
@@ -1027,6 +1074,20 @@ const TAG_RULES = [
   {tag:'video games', re:/video game/i},
 ];
 function suggestTags(name){ return TAG_RULES.filter(r=>r.re.test(name)).map(r=>r.tag); }
+const TIER_LABELS = {
+  'general-knowledge': 'Round 1 · General Knowledge',
+  'evergreen-topic': 'Round 2 · Evergreen Topic',
+  'coordinating-music': 'Round 3 · Coordinating Music',
+  'theme-night': 'Theme Night Vault'
+};
+const TIER_BADGE = {
+  'general-knowledge': 'badge-empty',
+  'evergreen-topic': 'badge-planned',
+  'coordinating-music': 'badge-active',
+  'theme-night': 'badge-vault'
+};
+let activeTierFilter = null;
+function setTierFilter(tier){ activeTierFilter = activeTierFilter===tier ? null : tier; renderThemes(); }
 
 // ═══════════════════════════════════════════════
 //  TABS
@@ -1087,7 +1148,7 @@ function renderPlanning(){
     const isUnassigned = !gig || (!gig.themeName && gig.status!=='cancelled');
     if(isUnassigned && dk) unassigned.push({id, name:v.name, dk});
     const themeCell = gig && gig.themeName
-      ? `<span class="theme-link" onclick="openGigModal('${id}','${dk}')">${escapeHtml(gig.themeName)}</span>`
+      ? `<span class="theme-link" onclick="openGigModal('${id}','${dk}')">${escapeHtml(gig.themeName)}</span>${gig.round3Name?`<br><span style="color:var(--text3);font-size:11px">♪ ${escapeHtml(gig.round3Name)}</span>`:''}`
       : gig && gig.status==='cancelled'
         ? `<span class="empty-cell">cancelled${gig.note?' — '+escapeHtml(gig.note):''}</span>`
         : `<span class="empty-cell">unplanned</span>`;
@@ -1279,8 +1340,9 @@ function renderSpreadsheetView(){
     const addr = cellAddr(r,c);
     const gig = addr && addr.dateKey ? (state.gigs[addr.venueId]||{})[addr.dateKey] : null;
     const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? '—' : '';
+    const titleText = gig && gig.round3Name ? `${label} (♪ ${gig.round3Name})` : label;
     const empty = label ? '' : '<span style="color:var(--text3)">·</span>';
-    return `<td data-r="${r}" data-c="${c}" title="${label}"
+    return `<td data-r="${r}" data-c="${c}" title="${escapeHtml(titleText)}"
       onmousedown="gridMouseDown(event,${r},${c})" onmouseover="gridMouseOver(event,${r},${c})"
       ondblclick="gridCellEdit(${r},${c})" oncontextmenu="gridContextMenu(event,${r},${c})">${label||empty}</td>`;
   };
@@ -1598,8 +1660,9 @@ function openDayAgenda(dk){
   document.getElementById('agenda-body').innerHTML = items.length ? items.map(it=>{
     const g = it.gig;
     const label = g && g.themeName ? escapeHtml(g.themeName) : g && g.status==='cancelled' ? 'Cancelled' : 'Unplanned';
+    const round3 = g && g.round3Name ? ` · ♪ ${escapeHtml(g.round3Name)}` : '';
     return `<div class="tl-row" style="grid-template-columns:1fr 90px 64px">
-      <div style="font-size:12.5px">${escapeHtml(it.venueName)}<br><span class="empty-cell" style="font-style:normal;color:var(--text2)">${label}</span></div>
+      <div style="font-size:12.5px">${escapeHtml(it.venueName)}<br><span class="empty-cell" style="font-style:normal;color:var(--text2)">${label}${round3}</span></div>
       <span class="badge badge-${g?(g.status||'planned'):'empty'}">${g?(g.status||'planned'):'unplanned'}</span>
       <button class="btn btn-ghost btn-sm" onclick="closeModal('day-agenda-overlay');openGigModal('${it.venueId}','${dk}')">Edit</button>
     </div>`;
@@ -1628,7 +1691,8 @@ function renderDayBoxes(){
       ${byDay[d].length ? byDay[d].sort((a,b)=>(a[1].time||'').localeCompare(b[1].time||'')).map(([id,v])=>{
         const gig = (state.gigs[id]||{})[dk];
         const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? 'cancelled' : 'unplanned';
-        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${id}','${dk}')">${escapeHtml(v.name)}<small>${v.time||''} — ${label}</small></div>`;
+        const round3 = gig && gig.round3Name ? ` · ♪ ${escapeHtml(gig.round3Name)}` : '';
+        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${id}','${dk}')">${escapeHtml(v.name)}<small>${v.time||''} — ${label}${round3}</small></div>`;
       }).join('') : '<div class="daybox-item" style="color:var(--text3)">Nothing scheduled</div>'}
     </div>`;
   }).join('');
@@ -1685,10 +1749,15 @@ function scheduleRowHtml(dk, gig){
   const today = toKey(new Date());
   gig = gig || {};
   const isPast = dk < today, isToday = dk === today;
+  const round3Sub = gig.round3Name
+    ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;cursor:pointer" onclick="openGigModal('${currentVenueDetailId}','${dk}')">♪ ${escapeHtml(gig.round3Name)} (click to change)</div>` : '';
   return `<div class="tl-row ${isPast?'tl-past':''} ${isToday?'tl-today':''}" data-dk="${dk}">
     <div class="tl-date">${fmtDisplay(fromKey(dk))}</div>
-    <input class="tl-input" list="theme-name-list" value="${escapeHtml(gig.themeName||'')}" placeholder="unplanned"
-      onchange="vdInlineSave(this.closest('.tl-row'), '${dk}', this.value, null)">
+    <div>
+      <input class="tl-input" list="theme-name-list" value="${escapeHtml(gig.themeName||'')}" placeholder="unplanned"
+        onchange="vdInlineSave(this.closest('.tl-row'), '${dk}', this.value, null)">
+      ${round3Sub}
+    </div>
     <select class="tl-select" onchange="vdInlineSave(this.closest('.tl-row'), '${dk}', null, this.value)">
       <option value="planned" ${(!gig.status||gig.status==='planned')?'selected':''}>Planned</option>
       <option value="cancelled" ${gig.status==='cancelled'?'selected':''}>Cancelled</option>
@@ -2008,6 +2077,9 @@ function renderThemes(){
     <div class="stat-card"><div class="stat-num">${unused}</div><div class="stat-lbl">Never used yet</div></div>
     <div class="stat-card"><div class="stat-num">${allTags.length}</div><div class="stat-lbl">Tags in use</div></div>
   `;
+  document.getElementById('tier-filter-bar').innerHTML = Object.keys(TIER_LABELS).map(tier=>
+    `<button class="pill ${activeTierFilter===tier?'active':''}" onclick="setTierFilter('${tier}')">${TIER_LABELS[tier]}</button>`
+  ).join('');
   document.getElementById('tag-filter-bar').innerHTML = allTags.map(tag=>
     `<button class="tag-pill ${activeTagFilter===tag?'active':''}" onclick="setTagFilter('${tag.replace(/'/g,"\\'")}')">${escapeHtml(tag)}</button>`
   ).join('');
@@ -2022,12 +2094,14 @@ function renderThemes(){
   let list = list0;
   if(q) list = list.filter(([id,t])=>(t.name||'').toLowerCase().includes(q));
   if(activeTagFilter) list = list.filter(([id,t])=>(t.tags||[]).includes(activeTagFilter));
+  if(activeTierFilter) list = list.filter(([id,t])=>t.tier===activeTierFilter);
   list = sortEntries(list, themeSort, ([id,t])=>themeSort.key==='timesUsed' ? (t.timesUsed||0) : t[themeSort.key]);
 
   document.getElementById('themes-rows').innerHTML = list.map(([id,t])=>{
     const venueName = t.lastUsedVenueId && state.venues[t.lastUsedVenueId] ? state.venues[t.lastUsedVenueId].name : '—';
+    const tierBadge = t.tier ? `<span class="badge ${TIER_BADGE[t.tier]||'badge-empty'}">${TIER_LABELS[t.tier]||t.tier}</span>` : '';
     return `<tr>
-      <td>${escapeHtml(t.name||'')}</td>
+      <td>${escapeHtml(t.name||'')} ${tierBadge}</td>
       <td>${(t.tags||[]).map(tag=>`<span class="tag-chip">${escapeHtml(tag)}</span>`).join('')||'<span style="color:var(--text3)">—</span>'}</td>
       <td>${t.timesUsed||0}</td>
       <td>${fmtMDY(t.lastUsedDate)}</td>
@@ -2053,17 +2127,20 @@ function openHistoryModal(themeId){
 }
 
 // -- Theme modal --
-let editingThemeId = null, editingThemeTags = [];
+let editingThemeId = null, editingThemeTags = [], editingThemePairs = [];
 function openThemeModal(id){
   editingThemeId = id||null;
   const t = id ? state.themes[id] : {};
   editingThemeTags = (t.tags||[]).slice();
+  editingThemePairs = (t.pairsWith||[]).slice();
   document.getElementById('theme-modal-title').textContent = id ? 'Edit Theme' : 'Add Theme';
   document.getElementById('t-name').value = t.name||'';
+  document.getElementById('t-tier').value = t.tier||'';
   document.getElementById('t-times-used').value = t.timesUsed||0;
   document.getElementById('t-last-used').value = t.lastUsedDate||'';
   document.getElementById('theme-delete-btn').style.display = id ? 'inline-block' : 'none';
   renderTagChips();
+  renderPairsWithSection();
   openModal('theme-modal-overlay');
 }
 function renderTagChips(){
@@ -2084,14 +2161,44 @@ function suggestTagsForModal(){
   renderTagChips();
   if(!suggested.length) toast('No keyword matches — add tags manually.');
 }
+// -- Round 3 pairing (only shown for evergreen-topic themes) --
+function renderPairsWithSection(){
+  const tier = document.getElementById('t-tier').value;
+  const section = document.getElementById('t-pairs-section');
+  section.style.display = tier==='evergreen-topic' ? 'block' : 'none';
+  if(tier!=='evergreen-topic') return;
+  document.getElementById('t-pairs-chips').innerHTML = editingThemePairs.map((id,i)=>{
+    const t = state.themes[id];
+    return `<span class="tag-chip">${escapeHtml(t?t.name:'(deleted theme)')}<span class="x" onclick="removePairChip(${i})">×</span></span>`;
+  }).join('') || '<span style="color:var(--text3);font-size:12px">No pairings yet — search below to add one</span>';
+  document.getElementById('t-pairs-suggest').innerHTML = '';
+  document.getElementById('t-pairs-search').value = '';
+}
+function removePairChip(i){ editingThemePairs.splice(i,1); renderPairsWithSection(); }
+function renderPairsSuggest(){
+  const q = document.getElementById('t-pairs-search').value.trim().toLowerCase();
+  const box = document.getElementById('t-pairs-suggest');
+  if(!q){ box.innerHTML=''; return; }
+  const matches = Object.entries(state.themes||{})
+    .filter(([id,t])=> t.tier==='coordinating-music' && !editingThemePairs.includes(id) && (t.name||'').toLowerCase().includes(q))
+    .slice(0,20);
+  box.innerHTML = matches.map(([id,t])=>`<div class="theme-opt" onclick="addPairChip('${id}')">${escapeHtml(t.name)}</div>`).join('')
+    || '<div class="theme-opt" style="color:var(--text3)">No coordinating-music themes match — tag one as Round 3 first.</div>';
+}
+function addPairChip(id){
+  if(!editingThemePairs.includes(id)) editingThemePairs.push(id);
+  renderPairsWithSection();
+}
 function saveTheme(){
   const name = document.getElementById('t-name').value.trim();
   if(!name) return toast('Theme needs a name.', true);
   const themeId = editingThemeId || db.ref('trivia/planner/themes').push().key;
   const existing = editingThemeId ? state.themes[editingThemeId] : {};
+  const tier = document.getElementById('t-tier').value;
   setSyncStatus('syncing');
   db.ref('trivia/planner/themes/'+themeId).update({
-    name, tags: editingThemeTags,
+    name, tags: editingThemeTags, tier: tier || null,
+    pairsWith: tier==='evergreen-topic' ? editingThemePairs : null,
     timesUsed: parseInt(document.getElementById('t-times-used').value)||0,
     lastUsedDate: document.getElementById('t-last-used').value || null,
     lastUsedVenueId: existing.lastUsedVenueId || null
@@ -2198,9 +2305,9 @@ async function submitApplySequence(){
 // ═══════════════════════════════════════════════
 //  GIG MODAL (This Week / Needs Planning / Calendar quick-assign)
 // ═══════════════════════════════════════════════
-let gigCtx = { venueId:null, dateKey:null, selectedThemeId:null, selectedThemeName:null };
+let gigCtx = { venueId:null, dateKey:null, selectedThemeId:null, selectedThemeName:null, selectedRound3Id:null, selectedRound3Name:null };
 function openGigModal(venueId, dateKey){
-  gigCtx = { venueId, dateKey: dateKey||null, selectedThemeId:null, selectedThemeName:null };
+  gigCtx = { venueId, dateKey: dateKey||null, selectedThemeId:null, selectedThemeName:null, selectedRound3Id:null, selectedRound3Name:null };
   const sel = document.getElementById('gig-venue');
   sel.innerHTML = Object.entries(state.venues||{}).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''))
     .map(([id,v])=>`<option value="${id}" ${id===venueId?'selected':''}>${escapeHtml(v.name||'')}</option>`).join('');
@@ -2208,10 +2315,16 @@ function openGigModal(venueId, dateKey){
   const existing = (dateKey && state.gigs[venueId]) ? state.gigs[venueId][dateKey] : null;
   document.getElementById('gig-theme-search').value = existing && existing.themeName ? existing.themeName : '';
   if(existing && existing.themeId){ gigCtx.selectedThemeId = existing.themeId; gigCtx.selectedThemeName = existing.themeName; }
+  document.getElementById('gig-theme-label').textContent = plannerMode==='trivia' ? 'Round 2 — Topic' : 'Category';
+  document.getElementById('gig-round3-section').style.display = plannerMode==='trivia' ? 'block' : 'none';
+  document.getElementById('gig-round3-search').value = existing && existing.round3Name ? existing.round3Name : '';
+  if(existing && existing.round3ThemeId){ gigCtx.selectedRound3Id = existing.round3ThemeId; gigCtx.selectedRound3Name = existing.round3Name; }
   document.getElementById('gig-status').value = existing && existing.status==='cancelled' ? 'cancelled' : 'planned';
   document.getElementById('gig-note').value = existing ? (existing.note||'') : '';
   document.getElementById('gig-clear-btn').style.display = existing ? 'inline-block' : 'none';
   document.getElementById('theme-suggest').innerHTML = '';
+  document.getElementById('round3-theme-suggest').innerHTML = '';
+  renderRound3Pairing();
   renderGigWarnings();
   openModal('gig-modal-overlay');
 }
@@ -2219,6 +2332,7 @@ function onGigVenueChange(){ gigCtx.venueId = document.getElementById('gig-venue
 function renderThemeSuggest(){
   const q = document.getElementById('gig-theme-search').value.trim().toLowerCase();
   gigCtx.selectedThemeId = null; gigCtx.selectedThemeName = null;
+  renderRound3Pairing();
   if(!q){ document.getElementById('theme-suggest').innerHTML=''; return; }
   const matches = Object.entries(state.themes||{}).filter(([id,t])=>(t.name||'').toLowerCase().includes(q)).slice(0,25);
   document.getElementById('theme-suggest').innerHTML = matches.map(([id,t])=>`
@@ -2230,7 +2344,38 @@ function pickTheme(id){
   gigCtx.selectedThemeId = id; gigCtx.selectedThemeName = t.name;
   document.getElementById('gig-theme-search').value = t.name;
   document.getElementById('theme-suggest').innerHTML = '';
+  renderRound3Pairing();
   renderGigWarnings();
+}
+// -- Round 3 — suggested from Round 2's pairsWith, with search fallback --
+function renderRound3Pairing(){
+  const box = document.getElementById('gig-round3-suggest');
+  if(!box) return;
+  const t = gigCtx.selectedThemeId ? state.themes[gigCtx.selectedThemeId] : null;
+  const pairs = (t && t.pairsWith) ? t.pairsWith.filter(id=>state.themes[id]) : [];
+  box.innerHTML = pairs.length
+    ? pairs.map(id=>{
+        const mt = state.themes[id];
+        const active = gigCtx.selectedRound3Id===id;
+        return `<span class="tag-pill ${active?'active':''}" onclick="pickRound3('${id}')">${escapeHtml(mt.name)}</span>`;
+      }).join('')
+    : (t ? '<span style="color:var(--text3);font-size:11px">No pairings saved for this topic yet — search below.</span>' : '');
+}
+function renderRound3Suggest(){
+  const q = document.getElementById('gig-round3-search').value.trim().toLowerCase();
+  gigCtx.selectedRound3Id = null; gigCtx.selectedRound3Name = null;
+  if(!q){ document.getElementById('round3-theme-suggest').innerHTML=''; return; }
+  const matches = Object.entries(state.themes||{}).filter(([id,t])=>t.tier==='coordinating-music' && (t.name||'').toLowerCase().includes(q)).slice(0,25);
+  document.getElementById('round3-theme-suggest').innerHTML = matches.map(([id,t])=>`
+    <div class="theme-opt" onclick="pickRound3('${id}')">${escapeHtml(t.name)}</div>
+  `).join('') || `<div class="theme-opt" style="color:var(--text3)">No coordinating-music theme matches that.</div>`;
+}
+function pickRound3(id){
+  const t = state.themes[id];
+  gigCtx.selectedRound3Id = id; gigCtx.selectedRound3Name = t.name;
+  document.getElementById('gig-round3-search').value = t.name;
+  document.getElementById('round3-theme-suggest').innerHTML = '';
+  renderRound3Pairing();
 }
 function renderGigWarnings(){
   const box = document.getElementById('gig-warnings');
@@ -2257,18 +2402,30 @@ function saveGig(){
   const status = document.getElementById('gig-status').value;
   const note = document.getElementById('gig-note').value.trim();
   const typedName = document.getElementById('gig-theme-search').value.trim();
+  const typedRound3 = plannerMode==='trivia' ? document.getElementById('gig-round3-search').value.trim() : '';
   if(!venueId || !dateKey) return toast('Pick a venue and date.', true);
   setSyncStatus('syncing');
   if(plannerMode==='bingo'){ saveBingoGig(venueId,dateKey,status,note,typedName); return; }
   if(status==='cancelled' || !typedName){
-    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, status: status==='cancelled'?'cancelled':'planned', note, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, status: status==='cancelled'?'cancelled':'planned', note, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
   resolveThemeIdByName(typedName).then(themeId=>{
-    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId, themeName:typedName, status:'planned', note, locationId:selectedLocationId}).then(()=>{
-      bumpThemeUsageForVenue(themeId, dateKey, venueId);
-      toast('Saved.'); closeModal('gig-modal-overlay');
-    });
+    const finish = (round3Id, round3Name)=>{
+      db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId, themeName:typedName, round3ThemeId:round3Id||null, round3Name:round3Name||null, status:'planned', note, locationId:selectedLocationId}).then(()=>{
+        bumpThemeUsageForVenue(themeId, dateKey, venueId);
+        if(round3Id) bumpThemeUsageForVenue(round3Id, dateKey, venueId);
+        toast('Saved.'); closeModal('gig-modal-overlay');
+      });
+    };
+    if(!typedRound3){ finish(null, null); return; }
+    if(gigCtx.selectedRound3Id && gigCtx.selectedRound3Name===typedRound3){ finish(gigCtx.selectedRound3Id, typedRound3); return; }
+    // typed a music theme name that wasn't picked from the list — create/find it, tagged as coordinating-music
+    const key = typedRound3.trim().toLowerCase();
+    const found = Object.entries(state.themes||{}).find(([id,t])=>(t.name||'').trim().toLowerCase()===key);
+    if(found){ finish(found[0], typedRound3); return; }
+    const newId = db.ref('trivia/planner/themes').push().key;
+    db.ref('trivia/planner/themes/'+newId).set({name:typedRound3, tier:'coordinating-music', tags:suggestTags(typedRound3), timesUsed:0, lastUsedDate:null, lastUsedVenueId:null}).then(()=>finish(newId, typedRound3));
   });
 }
 // Bingo mode's single-day save — writes to the real flat bingo/landing/schedule
