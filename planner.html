@@ -457,10 +457,17 @@ a{color:inherit}
       <div class="filter-bar" id="tier-filter-bar"></div>
       <div class="filter-bar" id="tag-filter-bar"></div>
 
+      <div class="filter-bar" id="theme-bulk-bar" style="display:none">
+        <span id="theme-select-count" style="font-size:12px;color:var(--gold2)"></span>
+        <button class="btn btn-danger btn-sm" onclick="bulkDeleteThemes()">Delete Selected</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearThemeSelection()">Clear Selection</button>
+      </div>
+
       <div id="dup-view" style="display:none"></div>
 
       <table class="gtable" id="themes-table">
         <thead><tr>
+          <th style="width:26px"><input type="checkbox" id="theme-select-all" onchange="toggleSelectAllThemes(this.checked)"></th>
           <th data-sort="name" onclick="setThemeSort('name')">Theme</th>
           <th>Tags</th>
           <th data-sort="timesUsed" onclick="setThemeSort('timesUsed')">Times Used</th>
@@ -2101,6 +2108,7 @@ function renderThemes(){
     const venueName = t.lastUsedVenueId && state.venues[t.lastUsedVenueId] ? state.venues[t.lastUsedVenueId].name : '—';
     const tierBadge = t.tier ? `<span class="badge ${TIER_BADGE[t.tier]||'badge-empty'}">${TIER_LABELS[t.tier]||t.tier}</span>` : '';
     return `<tr>
+      <td><input type="checkbox" class="theme-row-check" data-id="${id}" ${selectedThemeIds.has(id)?'checked':''} onchange="toggleThemeSelection('${id}', this.checked)"></td>
       <td>${escapeHtml(t.name||'')} ${tierBadge}</td>
       <td>${(t.tags||[]).map(tag=>`<span class="tag-chip">${escapeHtml(tag)}</span>`).join('')||'<span style="color:var(--text3)">—</span>'}</td>
       <td>${t.timesUsed||0}</td>
@@ -2109,8 +2117,54 @@ function renderThemes(){
       <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openThemeModal('${id}')">Edit</button></td>
     </tr>`;
   }).join('');
+  // drop selections for themes deleted elsewhere (not just filtered out of view)
+  Array.from(selectedThemeIds).forEach(id=>{ if(!state.themes[id]) selectedThemeIds.delete(id); });
+  document.getElementById('theme-select-all').checked = list.length>0 && list.every(([id])=>selectedThemeIds.has(id));
+  updateThemeBulkBar();
 }
 function setTagFilter(tag){ activeTagFilter = activeTagFilter===tag ? null : tag; renderThemes(); }
+
+// -- Bulk select / delete --
+let selectedThemeIds = new Set();
+function toggleThemeSelection(id, checked){
+  if(checked) selectedThemeIds.add(id); else selectedThemeIds.delete(id);
+  document.getElementById('theme-select-all').checked = false;
+  updateThemeBulkBar();
+}
+function toggleSelectAllThemes(checked){
+  document.querySelectorAll('.theme-row-check').forEach(cb=>{
+    cb.checked = checked;
+    if(checked) selectedThemeIds.add(cb.dataset.id); else selectedThemeIds.delete(cb.dataset.id);
+  });
+  updateThemeBulkBar();
+}
+function clearThemeSelection(){
+  selectedThemeIds.clear();
+  document.getElementById('theme-select-all').checked = false;
+  renderThemes();
+}
+function updateThemeBulkBar(){
+  const bar = document.getElementById('theme-bulk-bar');
+  const n = selectedThemeIds.size;
+  bar.style.display = n>0 ? 'flex' : 'none';
+  document.getElementById('theme-select-count').textContent = n+' selected';
+}
+function bulkDeleteThemes(){
+  const n = selectedThemeIds.size;
+  if(!n) return;
+  if(!confirm(`Delete ${n} theme${n===1?'':'s'} from the library? This can't be undone.`)) return;
+  setSyncStatus('syncing');
+  const updates = {};
+  selectedThemeIds.forEach(id=>{ updates['trivia/planner/themes/'+id] = null; });
+  db.ref().update(updates).then(()=>{
+    toast(`Deleted ${n} theme${n===1?'':'s'}.`);
+    selectedThemeIds.clear();
+  }).catch(err=>{
+    console.error('Bulk delete failed:', err);
+    toast('Delete failed: '+(err.code||err.message), true);
+    setSyncStatus('synced');
+  });
+}
 
 function openHistoryModal(themeId){
   const t = state.themes[themeId]; if(!t) return;
@@ -2202,13 +2256,16 @@ function saveTheme(){
     timesUsed: parseInt(document.getElementById('t-times-used').value)||0,
     lastUsedDate: document.getElementById('t-last-used').value || null,
     lastUsedVenueId: existing.lastUsedVenueId || null
-  }).then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); });
+  }).then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); })
+    .catch(err=>{ console.error('Save theme failed:', err); toast('Save failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
 }
 function deleteTheme(){
   if(!editingThemeId) return;
   if(!confirm('Delete this theme from the library?')) return;
   setSyncStatus('syncing');
-  db.ref('trivia/planner/themes/'+editingThemeId).remove().then(()=>{ toast('Theme deleted.'); closeModal('theme-modal-overlay'); });
+  db.ref('trivia/planner/themes/'+editingThemeId).remove()
+    .then(()=>{ toast('Theme deleted.'); closeModal('theme-modal-overlay'); })
+    .catch(err=>{ console.error('Delete theme failed:', err); toast('Delete failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
 }
 
 // ═══════════════════════════════════════════════
