@@ -534,12 +534,13 @@ a{color:inherit}
     <div id="gig-warnings"></div>
     <div id="gig-round3-section" style="display:none">
       <label class="form-label" id="gig-round3-label">Coordinating Category</label>
-      <div id="gig-round3-suggest"></div>
-      <input type="text" class="form-input" id="gig-round3-search" placeholder="Search, or pick a suggestion above…" oninput="renderRound3Suggest()">
+      <input type="text" class="form-input" id="gig-round3-search" placeholder="Type to filter, or just click in to browse all…"
+        onfocus="renderRound3List()" oninput="gigCtx.selectedRound3Id=null; gigCtx.selectedRound3Name=null; renderRound3List();">
       <div class="theme-suggest" id="round3-theme-suggest"></div>
     </div>
     <label class="form-label">Status</label>
     <select class="form-select" id="gig-status">
+      <option value="unplanned">Unplanned</option>
       <option value="planned">Planned</option>
       <option value="cancelled">Cancelled</option>
     </select>
@@ -616,10 +617,11 @@ a{color:inherit}
     <label class="form-label">Category Type</label>
     <select class="form-select" id="t-tier" onchange="renderPairsWithSection()">
       <option value="">— Unassigned / legacy —</option>
-      <option value="general-knowledge">Round 1 — General Knowledge</option>
+      <option value="general-knowledge">General Knowledge</option>
       <option value="evergreen-topic">Evergreen Trivia</option>
       <option value="coordinating-music">Music Trivia</option>
       <option value="featured">Featured Trivia</option>
+      <option value="theme-night">Theme Night Vault (special event only)</option>
     </select>
     <div id="t-pairs-section" style="display:none">
       <label class="form-label" id="t-pairs-label">Pairs With</label>
@@ -1087,21 +1089,23 @@ const TAG_RULES = [
 ];
 function suggestTags(name){ return TAG_RULES.filter(r=>r.re.test(name)).map(r=>r.tag); }
 const TIER_LABELS = {
-  'general-knowledge': 'Round 1 · General Knowledge',
+  'general-knowledge': 'General Knowledge',
   'evergreen-topic': 'Evergreen Trivia',
   'coordinating-music': 'Music Trivia',
-  'featured': 'Featured Trivia'
+  'featured': 'Featured Trivia',
+  'theme-night': 'Theme Night Vault'
 };
 const TIER_BADGE = {
   'general-knowledge': 'badge-empty',
   'evergreen-topic': 'badge-planned',
   'coordinating-music': 'badge-active',
-  'featured': 'badge-vault'
+  'featured': 'badge-vault',
+  'theme-night': 'badge-one-time'
 };
-// 'theme-night' was the old internal name for what's now 'featured' — treat them
-// as the same tier everywhere so nothing already tagged that way gets orphaned.
-function normTier(tier){ return tier==='theme-night' ? 'featured' : tier; }
-function canPair(tier){ return tier==='evergreen-topic' || tier==='coordinating-music' || tier==='featured'; }
+// Kept as a passthrough (no remapping) — 'theme-night' is its own tier
+// (Theme Night Vault), distinct from 'featured' (Featured Trivia).
+function normTier(tier){ return tier; }
+function canPair(tier){ return tier==='evergreen-topic' || tier==='coordinating-music' || tier==='featured' || tier==='theme-night'; }
 let activeTierFilter = null;
 function setTierFilter(tier){ activeTierFilter = activeTierFilter===tier ? null : tier; renderThemes(); }
 
@@ -2231,9 +2235,9 @@ function suggestTagsForModal(){
 //    Music      -> only Evergreen themes
 //    Featured   -> either Evergreen or Music themes
 function pairScopeFor(tier){
-  if(tier==='evergreen-topic') return t=>normTier(t.tier)==='coordinating-music';
-  if(tier==='coordinating-music') return t=>normTier(t.tier)==='evergreen-topic';
-  if(tier==='featured') return t=>normTier(t.tier)==='evergreen-topic'||normTier(t.tier)==='coordinating-music';
+  if(tier==='evergreen-topic') return t=>t.tier==='coordinating-music';
+  if(tier==='coordinating-music') return t=>t.tier==='evergreen-topic';
+  if(tier==='featured'||tier==='theme-night') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music';
   return null;
 }
 function renderPairsWithSection(){
@@ -2401,7 +2405,9 @@ function openGigModal(venueId, dateKey){
   document.getElementById('gig-theme-label').textContent = plannerMode==='trivia' ? 'Category' : 'Category';
   document.getElementById('gig-round3-search').value = existing && existing.round3Name ? existing.round3Name : '';
   if(existing && existing.round3ThemeId){ gigCtx.selectedRound3Id = existing.round3ThemeId; gigCtx.selectedRound3Name = existing.round3Name; }
-  document.getElementById('gig-status').value = existing && existing.status==='cancelled' ? 'cancelled' : 'planned';
+  document.getElementById('gig-status').value = existing
+    ? (existing.status==='cancelled' ? 'cancelled' : (existing.themeName ? 'planned' : 'unplanned'))
+    : 'unplanned';
   document.getElementById('gig-note').value = existing ? (existing.note||'') : '';
   document.getElementById('gig-clear-btn').style.display = existing ? 'inline-block' : 'none';
   document.getElementById('theme-suggest').innerHTML = '';
@@ -2430,47 +2436,47 @@ function pickTheme(id){
   renderRound3Pairing();
   renderGigWarnings();
 }
-// -- Coordinating category — suggested from the primary pick's pairsWith.
-//    What's shown/searchable in this second slot depends on the primary's tier:
-//    Evergreen picked -> Music only. Music picked -> Evergreen only.
-//    Featured picked  -> either (Featured pairs can be a mix of both).
+// -- Coordinating category — one ranked list, not a hard filter. Whatever
+//    you've saved in this category's Pairs With shows first, then the rest of
+//    the "expected" complementary type, then everything else — but you can
+//    still search and pick anything at all, any type, if that's what you want.
 function renderRound3Pairing(){
-  const box = document.getElementById('gig-round3-suggest');
   const section = document.getElementById('gig-round3-section');
-  if(!box) return;
   const t = gigCtx.selectedThemeId ? state.themes[gigCtx.selectedThemeId] : null;
-  const tier = t ? normTier(t.tier) : null;
+  const tier = t ? t.tier : null;
   section.style.display = (plannerMode==='trivia' && canPair(tier)) ? 'block' : 'none';
-  if(!canPair(tier)) return;
+  if(!canPair(tier)){ document.getElementById('round3-theme-suggest').innerHTML=''; return; }
   document.getElementById('gig-round3-label').textContent = tier==='evergreen-topic' ? 'Coordinating Music'
     : tier==='coordinating-music' ? 'Coordinating Evergreen Topic' : 'Coordinating Category';
-  const pairs = (t.pairsWith||[]).filter(id=>state.themes[id]);
-  box.innerHTML = pairs.length
-    ? pairs.map(id=>{
-        const mt = state.themes[id];
-        const active = gigCtx.selectedRound3Id===id;
-        return `<span class="tag-pill ${active?'active':''}" onclick="pickRound3('${id}')">${escapeHtml(mt.name)}</span>`;
-      }).join('')
-    : '<span style="color:var(--text3);font-size:11px">No pairings saved for this category yet — search below.</span>';
+  renderRound3List();
 }
-function renderRound3Suggest(){
-  const q = document.getElementById('gig-round3-search').value.trim().toLowerCase();
-  gigCtx.selectedRound3Id = null; gigCtx.selectedRound3Name = null;
+function renderRound3List(){
   const box = document.getElementById('round3-theme-suggest');
-  if(!q){ box.innerHTML=''; return; }
   const t = gigCtx.selectedThemeId ? state.themes[gigCtx.selectedThemeId] : null;
-  const scope = t ? pairScopeFor(normTier(t.tier)) : null;
-  const matches = Object.entries(state.themes||{}).filter(([id,t2])=>(!scope||scope(t2)) && (t2.name||'').toLowerCase().includes(q)).slice(0,25);
-  box.innerHTML = matches.map(([id,t2])=>`
-    <div class="theme-opt" onclick="pickRound3('${id}')">${escapeHtml(t2.name)} <span style="color:var(--text3)">· ${TIER_LABELS[normTier(t2.tier)]||''}</span></div>
-  `).join('') || `<div class="theme-opt" style="color:var(--text3)">No match.</div>`;
+  if(!t || !canPair(t.tier)){ box.innerHTML=''; return; }
+  const q = document.getElementById('gig-round3-search').value.trim().toLowerCase();
+  const pairIds = new Set((t.pairsWith||[]).filter(id=>state.themes[id]));
+  const scope = pairScopeFor(t.tier);
+  let list = Object.entries(state.themes||{}).filter(([id])=>id!==gigCtx.selectedThemeId);
+  if(q) list = list.filter(([id,t2])=>(t2.name||'').toLowerCase().includes(q));
+  list.sort((a,b)=>{
+    const aPair = pairIds.has(a[0])?0:1, bPair = pairIds.has(b[0])?0:1;
+    if(aPair!==bPair) return aPair-bPair;
+    const aScope = (scope&&scope(a[1]))?0:1, bScope = (scope&&scope(b[1]))?0:1;
+    if(aScope!==bScope) return aScope-bScope;
+    return (a[1].name||'').localeCompare(b[1].name||'');
+  });
+  list = list.slice(0,40);
+  box.innerHTML = list.length ? list.map(([id,t2])=>{
+    const suggested = pairIds.has(id);
+    return `<div class="theme-opt" onclick="pickRound3('${id}')">${suggested?'★ ':''}${escapeHtml(t2.name)} <span style="color:var(--text3)">· ${TIER_LABELS[t2.tier]||'untagged'}</span></div>`;
+  }).join('') : '<div class="theme-opt" style="color:var(--text3)">No categories yet.</div>';
 }
 function pickRound3(id){
   const t = state.themes[id];
   gigCtx.selectedRound3Id = id; gigCtx.selectedRound3Name = t.name;
   document.getElementById('gig-round3-search').value = t.name;
   document.getElementById('round3-theme-suggest').innerHTML = '';
-  renderRound3Pairing();
 }
 // -- Embedded schedule preview: this venue's history/upcoming, today pinned to top --
 function renderGigSchedulePreview(){
@@ -2538,8 +2544,12 @@ function saveGig(){
   if(!venueId || !dateKey) return toast('Pick a venue and date.', true);
   setSyncStatus('syncing');
   if(plannerMode==='bingo'){ saveBingoGig(venueId,dateKey,status,note,typedName); return; }
-  if(status==='cancelled' || !typedName){
-    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, status: status==='cancelled'?'cancelled':'planned', note, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+  if(status==='unplanned' || (!typedName && status!=='cancelled')){
+    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).remove().then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+    return;
+  }
+  if(status==='cancelled'){
+    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, status:'cancelled', note, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
   resolveThemeIdByName(typedName).then(themeId=>{
