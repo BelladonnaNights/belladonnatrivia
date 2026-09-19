@@ -98,6 +98,7 @@ a{color:inherit}
 .badge-paused{background:rgba(52,152,219,.10);color:var(--text2)}
 .badge-one-time{background:var(--gold-dim);color:var(--gold2)}
 .badge-vault{background:var(--purple-dim);color:var(--purple)}
+.badge-feature{background:rgba(230,126,34,.14);color:#e8935a}
 
 .theme-link{color:var(--text2);cursor:pointer;text-decoration:none;border-bottom:1px dashed var(--border3)}
 .theme-link:hover{color:var(--gold2);border-color:var(--gold-glow)}
@@ -107,13 +108,14 @@ a{color:inherit}
 .pill{background:transparent;border:1px solid var(--border2);border-radius:99px;padding:5px 14px;font-size:10px;
   font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;color:var(--text3);cursor:pointer;transition:all .2s}
 .pill:hover{border-color:var(--gold-glow);color:var(--gold2)}
-.pill.active{background:var(--gold-shine);border-color:transparent;color:#000;font-weight:700;box-shadow:0 0 0 1px var(--gold2),0 2px 8px rgba(201,168,76,.4)}
-.pill.active::before{content:'✓ ';}
-.pill-clear{background:transparent;border:1px solid rgba(231,76,60,.4);color:var(--red)}
-.pill-clear:hover{background:var(--red-dim);border-color:var(--red)}
+.pill.active{background:var(--gold-dim);border-color:var(--gold2);color:var(--gold2);box-shadow:0 0 10px 1px rgba(201,168,76,.55)}
 .search-input{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);
   padding:8px 12px;color:var(--text);font-family:var(--font);font-size:13px;min-width:220px}
 .search-input:focus{outline:none;border-color:var(--gold-glow2)}
+.search-with-clear{position:relative;display:inline-flex;align-items:center}
+.search-with-clear .search-input{padding-right:28px}
+.search-clear-x{position:absolute;right:9px;color:var(--text3);cursor:pointer;font-size:14px;line-height:1;user-select:none}
+.search-clear-x:hover{color:var(--text2)}
 
 .tag-chip{display:inline-flex;align-items:center;gap:4px;background:var(--purple-dim);color:var(--purple);
   border-radius:99px;padding:2px 9px;font-size:10px;font-family:var(--cinzel);letter-spacing:.04em;margin:1px 3px 1px 0}
@@ -121,7 +123,7 @@ a{color:inherit}
 .tag-chip .x:hover{opacity:1}
 .tag-pill{background:transparent;border:1px solid var(--purple);color:var(--purple);border-radius:99px;padding:4px 12px;
   font-size:10px;font-family:var(--cinzel);letter-spacing:.06em;cursor:pointer;margin:2px;transition:all .2s}
-.tag-pill.active{background:var(--purple);border-color:var(--purple);color:#fff;font-weight:700;box-shadow:0 2px 8px rgba(155,89,182,.45)}
+.tag-pill.active{background:var(--purple-dim);border-color:var(--purple);color:#fff;box-shadow:0 0 10px 1px rgba(155,89,182,.55)}
 .tag-pill.active::before{content:'✓ ';}
 
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:1.5rem}
@@ -454,7 +456,10 @@ a{color:inherit}
     <div id="theme-library-view">
       <div class="stat-row" id="theme-stats"></div>
       <div class="filter-bar">
-        <input class="search-input" id="theme-search" placeholder="Search themes…" oninput="renderThemes()">
+        <span class="search-with-clear">
+          <input class="search-input" id="theme-search" placeholder="Search themes…" oninput="renderThemes()">
+          <span class="search-clear-x" onclick="document.getElementById('theme-search').value='';renderThemes();">✕</span>
+        </span>
         <button class="pill" id="dup-toggle" onclick="toggleDupView()">Possible Duplicates</button>
         <span style="flex:1"></span>
         <button class="btn btn-primary btn-sm" onclick="openThemeModal()">+ Add Theme</button>
@@ -536,7 +541,7 @@ a{color:inherit}
     <div class="form-row2">
       <div>
         <label class="form-label">Trivia Category</label>
-        <input type="text" class="form-input" id="gig-theme-search" placeholder="Search Evergreen, Featured, or Vault…"
+        <input type="text" class="form-input" id="gig-theme-search" placeholder="Search Evergreen, Theme Set, Vault, or Feature Trivia…"
           onfocus="renderCategoryList('primary')" oninput="gigCtx.selectedThemeId=null; gigCtx.selectedThemeName=null; renderCategoryList('primary');">
         <div class="theme-suggest" id="theme-suggest"></div>
       </div>
@@ -631,8 +636,9 @@ a{color:inherit}
       <option value="general-knowledge">General Knowledge</option>
       <option value="evergreen-topic">Evergreen Trivia</option>
       <option value="coordinating-music">Music Trivia</option>
-      <option value="featured">Featured Trivia</option>
+      <option value="featured">Theme Set</option>
       <option value="theme-night">Theme Night Vault (special event only)</option>
+      <option value="feature-trivia">Feature Trivia (hyper-specific, e.g. Taylor Swift)</option>
     </select>
     <div id="t-pairs-section" style="display:none">
       <label class="form-label" id="t-pairs-label">Pairs With</label>
@@ -1104,20 +1110,24 @@ const TIER_LABELS = {
   'general-knowledge': 'General Knowledge',
   'evergreen-topic': 'Evergreen Trivia',
   'coordinating-music': 'Music Trivia',
-  'featured': 'Featured Trivia',
-  'theme-night': 'Theme Night Vault'
+  'featured': 'Theme Set',
+  'theme-night': 'Theme Night Vault',
+  'feature-trivia': 'Feature Trivia'
 };
 const TIER_BADGE = {
   'general-knowledge': 'badge-empty',
   'evergreen-topic': 'badge-planned',
   'coordinating-music': 'badge-active',
   'featured': 'badge-vault',
-  'theme-night': 'badge-one-time'
+  'theme-night': 'badge-one-time',
+  'feature-trivia': 'badge-feature'
 };
-// Kept as a passthrough (no remapping) — 'theme-night' is its own tier
-// (Theme Night Vault), distinct from 'featured' (Featured Trivia).
+// Four pairing-capable tiers beyond General Knowledge:
+//  featured (Theme Set) — a marketing-named bundle of existing categories
+//  theme-night (Theme Night Vault) — special/ticketed-event-only, not regular rotation
+//  feature-trivia (Feature Trivia) — hyper-specific single topics, regular rotation is fine
 function normTier(tier){ return tier; }
-function canPair(tier){ return tier==='evergreen-topic' || tier==='coordinating-music' || tier==='featured' || tier==='theme-night'; }
+function canPair(tier){ return tier==='evergreen-topic' || tier==='coordinating-music' || tier==='featured' || tier==='theme-night' || tier==='feature-trivia'; }
 let activeTierFilters = new Set();
 function setTierFilter(tier){
   if(activeTierFilters.has(tier)) activeTierFilters.delete(tier); else activeTierFilters.add(tier);
@@ -2132,9 +2142,8 @@ function renderThemes(){
     <div class="stat-card"><div class="stat-num">${unused}</div><div class="stat-lbl">Never used yet</div></div>
     <div class="stat-card"><div class="stat-num">${allTags.length}</div><div class="stat-lbl">Tags in use</div></div>
   `;
-  const hasFilters = activeTierFilters.size>0 || activeTagFilters.size>0;
   document.getElementById('tier-filter-bar').innerHTML =
-    (hasFilters ? `<button class="pill pill-clear" onclick="clearThemeFilters()">✕ Clear Filters</button>` : '')
+    `<button class="tag-pill" onclick="clearThemeFilters()">Clear</button>`
     + Object.keys(TIER_LABELS).map(tier=>
       `<button class="pill ${activeTierFilters.has(tier)?'active':''}" onclick="setTierFilter('${tier}')">${TIER_LABELS[tier]}</button>`
     ).join('');
@@ -2278,11 +2287,11 @@ function suggestTagsForModal(){
 //    matches against depends on which tier we're editing:
 //    Evergreen  -> only Music themes
 //    Music      -> only Evergreen themes
-//    Featured   -> either Evergreen or Music themes
+//    Theme Set / Feature Trivia -> either Evergreen or Music themes
 function pairScopeFor(tier){
   if(tier==='evergreen-topic') return t=>t.tier==='coordinating-music';
   if(tier==='coordinating-music') return t=>t.tier==='evergreen-topic';
-  if(tier==='featured'||tier==='theme-night') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music';
+  if(tier==='featured'||tier==='theme-night'||tier==='feature-trivia') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music';
   return null;
 }
 function renderPairsWithSection(){
