@@ -107,7 +107,10 @@ a{color:inherit}
 .pill{background:transparent;border:1px solid var(--border2);border-radius:99px;padding:5px 14px;font-size:10px;
   font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;color:var(--text3);cursor:pointer;transition:all .2s}
 .pill:hover{border-color:var(--gold-glow);color:var(--gold2)}
-.pill.active{background:var(--gold-dim);border-color:var(--gold-glow2);color:var(--gold2)}
+.pill.active{background:var(--gold-shine);border-color:transparent;color:#000;font-weight:700;box-shadow:0 0 0 1px var(--gold2),0 2px 8px rgba(201,168,76,.4)}
+.pill.active::before{content:'✓ ';}
+.pill-clear{background:transparent;border:1px solid rgba(231,76,60,.4);color:var(--red)}
+.pill-clear:hover{background:var(--red-dim);border-color:var(--red)}
 .search-input{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);
   padding:8px 12px;color:var(--text);font-family:var(--font);font-size:13px;min-width:220px}
 .search-input:focus{outline:none;border-color:var(--gold-glow2)}
@@ -117,8 +120,9 @@ a{color:inherit}
 .tag-chip .x{cursor:pointer;opacity:.6}
 .tag-chip .x:hover{opacity:1}
 .tag-pill{background:transparent;border:1px solid var(--purple);color:var(--purple);border-radius:99px;padding:4px 12px;
-  font-size:10px;font-family:var(--cinzel);letter-spacing:.06em;cursor:pointer;margin:2px}
-.tag-pill.active{background:var(--purple-dim)}
+  font-size:10px;font-family:var(--cinzel);letter-spacing:.06em;cursor:pointer;margin:2px;transition:all .2s}
+.tag-pill.active{background:var(--purple);border-color:var(--purple);color:#fff;font-weight:700;box-shadow:0 2px 8px rgba(155,89,182,.45)}
+.tag-pill.active::before{content:'✓ ';}
 
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:1.5rem}
 .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px}
@@ -1114,8 +1118,11 @@ const TIER_BADGE = {
 // (Theme Night Vault), distinct from 'featured' (Featured Trivia).
 function normTier(tier){ return tier; }
 function canPair(tier){ return tier==='evergreen-topic' || tier==='coordinating-music' || tier==='featured' || tier==='theme-night'; }
-let activeTierFilter = null;
-function setTierFilter(tier){ activeTierFilter = activeTierFilter===tier ? null : tier; renderThemes(); }
+let activeTierFilters = new Set();
+function setTierFilter(tier){
+  if(activeTierFilters.has(tier)) activeTierFilters.delete(tier); else activeTierFilters.add(tier);
+  renderThemes();
+}
 
 // ═══════════════════════════════════════════════
 //  TABS
@@ -2064,7 +2071,7 @@ function deleteVenue(){
 //  THEMES TAB
 // ═══════════════════════════════════════════════
 let themeSort = {key:'lastUsedDate', dir:-1};
-let activeTagFilter = null;
+let activeTagFilters = new Set();
 let dupViewOpen = false;
 function setThemeSort(key){ if(themeSort.key===key) themeSort.dir*=-1; else themeSort={key,dir:1}; renderThemes(); }
 function toggleDupView(){
@@ -2125,11 +2132,14 @@ function renderThemes(){
     <div class="stat-card"><div class="stat-num">${unused}</div><div class="stat-lbl">Never used yet</div></div>
     <div class="stat-card"><div class="stat-num">${allTags.length}</div><div class="stat-lbl">Tags in use</div></div>
   `;
-  document.getElementById('tier-filter-bar').innerHTML = Object.keys(TIER_LABELS).map(tier=>
-    `<button class="pill ${activeTierFilter===tier?'active':''}" onclick="setTierFilter('${tier}')">${TIER_LABELS[tier]}</button>`
-  ).join('');
+  const hasFilters = activeTierFilters.size>0 || activeTagFilters.size>0;
+  document.getElementById('tier-filter-bar').innerHTML =
+    (hasFilters ? `<button class="pill pill-clear" onclick="clearThemeFilters()">✕ Clear Filters</button>` : '')
+    + Object.keys(TIER_LABELS).map(tier=>
+      `<button class="pill ${activeTierFilters.has(tier)?'active':''}" onclick="setTierFilter('${tier}')">${TIER_LABELS[tier]}</button>`
+    ).join('');
   document.getElementById('tag-filter-bar').innerHTML = allTags.map(tag=>
-    `<button class="tag-pill ${activeTagFilter===tag?'active':''}" onclick="setTagFilter('${tag.replace(/'/g,"\\'")}')">${escapeHtml(tag)}</button>`
+    `<button class="tag-pill ${activeTagFilters.has(tag)?'active':''}" onclick="setTagFilter('${tag.replace(/'/g,"\\'")}')">${escapeHtml(tag)}</button>`
   ).join('');
 
   document.querySelectorAll('#themes-table th[data-sort]').forEach(th=>{
@@ -2141,8 +2151,8 @@ function renderThemes(){
   const q = (document.getElementById('theme-search')?.value||'').toLowerCase();
   let list = list0;
   if(q) list = list.filter(([id,t])=>(t.name||'').toLowerCase().includes(q));
-  if(activeTagFilter) list = list.filter(([id,t])=>(t.tags||[]).includes(activeTagFilter));
-  if(activeTierFilter) list = list.filter(([id,t])=>normTier(t.tier)===activeTierFilter);
+  if(activeTagFilters.size) list = list.filter(([id,t])=>(t.tags||[]).some(tag=>activeTagFilters.has(tag)));
+  if(activeTierFilters.size) list = list.filter(([id,t])=>activeTierFilters.has(normTier(t.tier)));
   list = sortEntries(list, themeSort, ([id,t])=>themeSort.key==='timesUsed' ? (t.timesUsed||0) : t[themeSort.key]);
 
   document.getElementById('themes-rows').innerHTML = list.map(([id,t])=>{
@@ -2164,7 +2174,14 @@ function renderThemes(){
   document.getElementById('theme-select-all').checked = list.length>0 && list.every(([id])=>selectedThemeIds.has(id));
   updateThemeBulkBar();
 }
-function setTagFilter(tag){ activeTagFilter = activeTagFilter===tag ? null : tag; renderThemes(); }
+function setTagFilter(tag){
+  if(activeTagFilters.has(tag)) activeTagFilters.delete(tag); else activeTagFilters.add(tag);
+  renderThemes();
+}
+function clearThemeFilters(){
+  activeTierFilters.clear(); activeTagFilters.clear();
+  renderThemes();
+}
 
 // -- Bulk select / delete --
 let selectedThemeIds = new Set();
@@ -2307,14 +2324,32 @@ function saveTheme(){
   const themeId = editingThemeId || db.ref('trivia/planner/themes').push().key;
   const existing = editingThemeId ? state.themes[editingThemeId] : {};
   const tier = document.getElementById('t-tier').value;
+  const newPairs = canPair(tier) ? editingThemePairs.slice() : [];
+  const oldPairs = existing.pairsWith || [];
   setSyncStatus('syncing');
-  db.ref('trivia/planner/themes/'+themeId).update({
+  const updates = {};
+  updates['trivia/planner/themes/'+themeId] = {
     name, tags: editingThemeTags, tier: tier || null,
-    pairsWith: canPair(tier) ? editingThemePairs : null,
+    pairsWith: canPair(tier) ? newPairs : null,
     timesUsed: parseInt(document.getElementById('t-times-used').value)||0,
     lastUsedDate: document.getElementById('t-last-used').value || null,
     lastUsedVenueId: existing.lastUsedVenueId || null
-  }).then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); })
+  };
+  // Keep pairings reciprocal — if this saves as paired with another category,
+  // that category's own Pairs With gets this one added automatically too
+  // (and removed there if it was just removed here).
+  newPairs.filter(id=>!oldPairs.includes(id)).forEach(otherId=>{
+    const other = state.themes[otherId];
+    if(!other) return;
+    const otherPairs = (other.pairsWith||[]).slice();
+    if(!otherPairs.includes(themeId)){ otherPairs.push(themeId); updates['trivia/planner/themes/'+otherId+'/pairsWith'] = otherPairs; }
+  });
+  oldPairs.filter(id=>!newPairs.includes(id)).forEach(otherId=>{
+    const other = state.themes[otherId];
+    if(!other) return;
+    updates['trivia/planner/themes/'+otherId+'/pairsWith'] = (other.pairsWith||[]).filter(id=>id!==themeId);
+  });
+  db.ref().update(updates).then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); })
     .catch(err=>{ console.error('Save theme failed:', err); toast('Save failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
 }
 function deleteTheme(){
