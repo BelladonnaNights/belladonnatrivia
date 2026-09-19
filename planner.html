@@ -123,8 +123,7 @@ a{color:inherit}
 .tag-chip .x:hover{opacity:1}
 .tag-pill{background:transparent;border:1px solid var(--purple);color:var(--purple);border-radius:99px;padding:4px 12px;
   font-size:10px;font-family:var(--cinzel);letter-spacing:.06em;cursor:pointer;margin:2px;transition:all .2s}
-.tag-pill.active{background:var(--purple-dim);border-color:var(--purple);color:#fff;box-shadow:0 0 10px 1px rgba(155,89,182,.55)}
-.tag-pill.active::before{content:'✓ ';}
+.tag-pill.active{background:var(--purple-dim);border-color:var(--purple);color:var(--purple);box-shadow:0 0 10px 1px rgba(155,89,182,.55)}
 
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:1.5rem}
 .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px}
@@ -638,7 +637,7 @@ a{color:inherit}
       <option value="coordinating-music">Music Trivia</option>
       <option value="featured">Theme Set</option>
       <option value="theme-night">Theme Night Vault (special event only)</option>
-      <option value="feature-trivia">Feature Trivia (hyper-specific, e.g. Taylor Swift)</option>
+      <option value="feature-trivia">Feature Trivia</option>
     </select>
     <div id="t-pairs-section" style="display:none">
       <label class="form-label" id="t-pairs-label">Pairs With</label>
@@ -1111,16 +1110,16 @@ const TIER_LABELS = {
   'evergreen-topic': 'Evergreen Trivia',
   'coordinating-music': 'Music Trivia',
   'featured': 'Theme Set',
-  'theme-night': 'Theme Night Vault',
-  'feature-trivia': 'Feature Trivia'
+  'feature-trivia': 'Feature Trivia',
+  'theme-night': 'Theme Night Vault'
 };
 const TIER_BADGE = {
   'general-knowledge': 'badge-empty',
   'evergreen-topic': 'badge-planned',
   'coordinating-music': 'badge-active',
   'featured': 'badge-vault',
-  'theme-night': 'badge-one-time',
-  'feature-trivia': 'badge-feature'
+  'feature-trivia': 'badge-feature',
+  'theme-night': 'badge-one-time'
 };
 // Four pairing-capable tiers beyond General Knowledge:
 //  featured (Theme Set) — a marketing-named bundle of existing categories
@@ -2143,7 +2142,7 @@ function renderThemes(){
     <div class="stat-card"><div class="stat-num">${allTags.length}</div><div class="stat-lbl">Tags in use</div></div>
   `;
   document.getElementById('tier-filter-bar').innerHTML =
-    `<button class="tag-pill" onclick="clearThemeFilters()">Clear</button>`
+    `<button class="pill" onclick="clearThemeFilters()">Clear</button>`
     + Object.keys(TIER_LABELS).map(tier=>
       `<button class="pill ${activeTierFilters.has(tier)?'active':''}" onclick="setTierFilter('${tier}')">${TIER_LABELS[tier]}</button>`
     ).join('');
@@ -2291,7 +2290,9 @@ function suggestTagsForModal(){
 function pairScopeFor(tier){
   if(tier==='evergreen-topic') return t=>t.tier==='coordinating-music';
   if(tier==='coordinating-music') return t=>t.tier==='evergreen-topic';
-  if(tier==='featured'||tier==='theme-night'||tier==='feature-trivia') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music';
+  if(tier==='featured') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music'||t.tier==='feature-trivia';
+  if(tier==='feature-trivia') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music'||t.tier==='featured';
+  if(tier==='theme-night') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music';
   return null;
 }
 function renderPairsWithSection(){
