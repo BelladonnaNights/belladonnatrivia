@@ -636,8 +636,8 @@ a{color:inherit}
       <option value="evergreen-topic">Evergreen Trivia</option>
       <option value="coordinating-music">Music Trivia</option>
       <option value="featured">Theme Set</option>
-      <option value="theme-night">Theme Night Vault (special event only)</option>
       <option value="feature-trivia">Feature Trivia</option>
+      <option value="theme-night">Theme Night Vault (special event only)</option>
     </select>
     <div id="t-pairs-section" style="display:none">
       <label class="form-label" id="t-pairs-label">Pairs With</label>
@@ -753,6 +753,7 @@ a{color:inherit}
 
 <div id="toast"></div>
 <div class="grid-context-menu" id="grid-context-menu"></div>
+<div class="theme-suggest" id="inline-suggest-box" style="position:fixed;display:none;z-index:700;max-height:220px;overflow-y:auto;background:var(--surface2);box-shadow:0 8px 24px rgba(0,0,0,.5)"></div>
 
 <script>
 // ═══════════════════════════════════════════════
@@ -1798,9 +1799,11 @@ function scheduleRowHtml(dk, gig){
   const statusVal = gig.status==='cancelled' ? 'cancelled' : (gig.themeName||gig.round3Name) ? 'planned' : 'unplanned';
   return `<div class="tl-row ${isPast?'tl-past':''} ${isToday?'tl-today':''}" data-dk="${dk}">
     <div class="tl-date">${fmtDisplay(fromKey(dk))}</div>
-    <input class="tl-input" list="theme-name-list" value="${escapeHtml(gig.themeName||'')}" placeholder="Trivia category"
+    <input class="tl-input" value="${escapeHtml(gig.themeName||'')}" placeholder="Trivia category"
+      onfocus="showInlineSuggest(this,'${dk}','trivia')" oninput="showInlineSuggest(this,'${dk}','trivia')"
       onchange="vdInlineSave(this.closest('.tl-row'), '${dk}')">
-    <input class="tl-input" list="theme-name-list" value="${escapeHtml(gig.round3Name||'')}" placeholder="Music category"
+    <input class="tl-input" value="${escapeHtml(gig.round3Name||'')}" placeholder="Music category"
+      onfocus="showInlineSuggest(this,'${dk}','music')" oninput="showInlineSuggest(this,'${dk}','music')"
       onchange="vdInlineSave(this.closest('.tl-row'), '${dk}')">
     <select class="tl-select" onchange="vdInlineSave(this.closest('.tl-row'), '${dk}')">
       <option value="unplanned" ${statusVal==='unplanned'?'selected':''}>Unplanned</option>
@@ -1809,6 +1812,59 @@ function scheduleRowHtml(dk, gig){
     </select>
   </div>`;
 }
+// -- Shared floating suggestion box for inline schedule rows (Venue Detail,
+//    Quick Schedule, the Assign modal's embedded preview) — same ranked
+//    "matches on top" behavior as the Assign modal's two boxes, just one
+//    reusable popup instead of a dropdown baked into every row in the DOM.
+let inlineSuggestCtx = null;
+function showInlineSuggest(inputEl, dk, which){
+  const row = inputEl.closest('.tl-row');
+  const inputs = row.querySelectorAll('.tl-input');
+  const otherInput = which==='trivia' ? inputs[1] : inputs[0];
+  const q = inputEl.value.trim().toLowerCase();
+  const otherName = otherInput.value.trim();
+  const otherTheme = otherName ? Object.values(state.themes||{}).find(t=>(t.name||'').trim().toLowerCase()===otherName.toLowerCase()) : null;
+  const pairIds = otherTheme ? new Set((otherTheme.pairsWith||[]).filter(pid=>state.themes[pid])) : new Set();
+  const scope = otherTheme ? pairScopeFor(otherTheme.tier) : (which==='trivia' ? (t=>t.tier!=='coordinating-music') : (t=>t.tier==='coordinating-music'));
+  let list = Object.entries(state.themes||{});
+  if(q) list = list.filter(([id,t])=>(t.name||'').toLowerCase().includes(q));
+  list.sort((a,b)=>{
+    const aP = pairIds.has(a[0])?0:1, bP = pairIds.has(b[0])?0:1;
+    if(aP!==bP) return aP-bP;
+    const aS = (scope&&scope(a[1]))?0:1, bS = (scope&&scope(b[1]))?0:1;
+    if(aS!==bS) return aS-bS;
+    return (a[1].name||'').localeCompare(b[1].name||'');
+  });
+  list = list.slice(0,30);
+  const box = document.getElementById('inline-suggest-box');
+  box.innerHTML = list.length ? list.map(([id,t])=>{
+    const suggested = pairIds.has(id);
+    return `<div class="theme-opt" onmousedown="event.preventDefault();pickInlineSuggest('${id}')">${suggested?'★ ':''}${escapeHtml(t.name)} <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span></div>`;
+  }).join('') : '<div class="theme-opt" style="color:var(--text3)">No match — will save as typed.</div>';
+  const rect = inputEl.getBoundingClientRect();
+  box.style.left = rect.left+'px';
+  box.style.top = (rect.bottom+4)+'px';
+  box.style.width = Math.max(rect.width,200)+'px';
+  box.style.display = 'block';
+  inlineSuggestCtx = { input: inputEl, row, dk };
+}
+function pickInlineSuggest(id){
+  const t = state.themes[id];
+  if(!inlineSuggestCtx) return;
+  inlineSuggestCtx.input.value = t.name;
+  const ctx = inlineSuggestCtx;
+  hideInlineSuggest();
+  vdInlineSave(ctx.row, ctx.dk);
+}
+function hideInlineSuggest(){
+  const box = document.getElementById('inline-suggest-box');
+  if(box) box.style.display = 'none';
+  inlineSuggestCtx = null;
+}
+document.addEventListener('click', e=>{
+  if(e.target.closest('#inline-suggest-box') || e.target.classList.contains('tl-input')) return;
+  hideInlineSuggest();
+});
 
 function renderVdTimeline(){
   const id = currentVenueDetailId;
@@ -2135,7 +2191,11 @@ function levenshtein(a,b){
 function renderThemes(){
   const list0 = Object.entries(state.themes||{});
   const total = list0.length, unused = list0.filter(([id,t])=>!t.timesUsed).length;
-  const allTags = [...new Set(list0.flatMap(([id,t])=>t.tags||[]))].sort();
+  // Dedupe tags case-insensitively — "Comedy" and "comedy" are the same tag.
+  // First casing seen wins for display; matching/filtering always ignores case.
+  const tagMap = new Map();
+  list0.forEach(([id,t])=>(t.tags||[]).forEach(tag=>{ const k=tag.toLowerCase(); if(!tagMap.has(k)) tagMap.set(k,tag); }));
+  const allTags = [...tagMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
   document.getElementById('theme-stats').innerHTML = `
     <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">Total themes</div></div>
     <div class="stat-card"><div class="stat-num">${unused}</div><div class="stat-lbl">Never used yet</div></div>
@@ -2146,8 +2206,8 @@ function renderThemes(){
     + Object.keys(TIER_LABELS).map(tier=>
       `<button class="pill ${activeTierFilters.has(tier)?'active':''}" onclick="setTierFilter('${tier}')">${TIER_LABELS[tier]}</button>`
     ).join('');
-  document.getElementById('tag-filter-bar').innerHTML = allTags.map(tag=>
-    `<button class="tag-pill ${activeTagFilters.has(tag)?'active':''}" onclick="setTagFilter('${tag.replace(/'/g,"\\'")}')">${escapeHtml(tag)}</button>`
+  document.getElementById('tag-filter-bar').innerHTML = allTags.map(([key,label])=>
+    `<button class="tag-pill ${activeTagFilters.has(key)?'active':''}" onclick="setTagFilter('${key.replace(/'/g,"\\'")}')">${escapeHtml(label)}</button>`
   ).join('');
 
   document.querySelectorAll('#themes-table th[data-sort]').forEach(th=>{
@@ -2159,7 +2219,7 @@ function renderThemes(){
   const q = (document.getElementById('theme-search')?.value||'').toLowerCase();
   let list = list0;
   if(q) list = list.filter(([id,t])=>(t.name||'').toLowerCase().includes(q));
-  if(activeTagFilters.size) list = list.filter(([id,t])=>(t.tags||[]).some(tag=>activeTagFilters.has(tag)));
+  if(activeTagFilters.size) list = list.filter(([id,t])=>(t.tags||[]).some(tag=>activeTagFilters.has(tag.toLowerCase())));
   if(activeTierFilters.size) list = list.filter(([id,t])=>activeTierFilters.has(normTier(t.tier)));
   list = sortEntries(list, themeSort, ([id,t])=>themeSort.key==='timesUsed' ? (t.timesUsed||0) : t[themeSort.key]);
 
@@ -2183,7 +2243,8 @@ function renderThemes(){
   updateThemeBulkBar();
 }
 function setTagFilter(tag){
-  if(activeTagFilters.has(tag)) activeTagFilters.delete(tag); else activeTagFilters.add(tag);
+  const key = tag.toLowerCase();
+  if(activeTagFilters.has(key)) activeTagFilters.delete(key); else activeTagFilters.add(key);
   renderThemes();
 }
 function clearThemeFilters(){
@@ -2271,14 +2332,14 @@ function renderTagChips(){
 function addTagFromInput(){
   const input = document.getElementById('t-tag-input');
   const val = input.value.trim();
-  if(val && !editingThemeTags.includes(val)){ editingThemeTags.push(val); renderTagChips(); }
+  if(val && !editingThemeTags.some(t=>t.toLowerCase()===val.toLowerCase())){ editingThemeTags.push(val); renderTagChips(); }
   input.value='';
 }
 function removeTagChip(i){ editingThemeTags.splice(i,1); renderTagChips(); }
 function suggestTagsForModal(){
   const name = document.getElementById('t-name').value;
   const suggested = suggestTags(name);
-  suggested.forEach(tag=>{ if(!editingThemeTags.includes(tag)) editingThemeTags.push(tag); });
+  suggested.forEach(tag=>{ if(!editingThemeTags.some(t=>t.toLowerCase()===tag.toLowerCase())) editingThemeTags.push(tag); });
   renderTagChips();
   if(!suggested.length) toast('No keyword matches — add tags manually.');
 }
@@ -2290,9 +2351,11 @@ function suggestTagsForModal(){
 function pairScopeFor(tier){
   if(tier==='evergreen-topic') return t=>t.tier==='coordinating-music';
   if(tier==='coordinating-music') return t=>t.tier==='evergreen-topic';
-  if(tier==='featured') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music'||t.tier==='feature-trivia';
-  if(tier==='feature-trivia') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music'||t.tier==='featured';
-  if(tier==='theme-night') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music';
+  // The three "special" tiers (Theme Set, Feature Trivia, Theme Night Vault)
+  // can all pair with Evergreen, Music, and each other.
+  if(tier==='featured') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music'||t.tier==='feature-trivia'||t.tier==='theme-night';
+  if(tier==='feature-trivia') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music'||t.tier==='featured'||t.tier==='theme-night';
+  if(tier==='theme-night') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music'||t.tier==='featured'||t.tier==='feature-trivia';
   return null;
 }
 function renderPairsWithSection(){
