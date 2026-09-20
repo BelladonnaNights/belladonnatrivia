@@ -1037,8 +1037,14 @@ function detachModeListeners(){
   modeListenerRefs = [];
   if(vmAllCategoriesUnsub){ vmAllCategoriesUnsub(); vmAllCategoriesUnsub = null; }
   if(vmAllNightsUnsub){ vmAllNightsUnsub(); vmAllNightsUnsub = null; }
-  vmCategoryThemes = {};
-  state.vmAllCategories = {}; state.vmAllNights = {};
+  // Deliberately NOT clearing vmCategoryThemes/state.vmAllCategories/vmAllNights
+  // here. This runs on every reattachment — including the watchdog's automatic
+  // "still connecting" retry — not just on an actual mode switch. Blanking
+  // already-loaded data every time that fires, before the (comparatively slow,
+  // image-heavy) Venue Menu collection finishes reloading, is what was making
+  // categories visibly disappear and reappear. The mode-switch branch in
+  // attachModeListeners() already clears these explicitly when actually
+  // switching to Bingo, which is the only time they should go away.
 }
 // Watchdog: if we're still showing "connecting…" a few seconds after
 // attaching listeners, something silently failed (the RTDB-auth race
