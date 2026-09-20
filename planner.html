@@ -2348,15 +2348,13 @@ function suggestTagsForModal(){
 //    Evergreen  -> only Music themes
 //    Music      -> only Evergreen themes
 //    Theme Set / Feature Trivia -> either Evergreen or Music themes
+// Every pairing-capable tier can pair with every other pairing-capable tier —
+// Evergreen, Music, Theme Set, Feature Trivia, and Theme Night Vault can all
+// link to any of the others. General Knowledge stays out of this entirely,
+// since it's not something you tag or pair — it's just the fixed Round 1.
 function pairScopeFor(tier){
-  if(tier==='evergreen-topic') return t=>t.tier==='coordinating-music';
-  if(tier==='coordinating-music') return t=>t.tier==='evergreen-topic';
-  // The three "special" tiers (Theme Set, Feature Trivia, Theme Night Vault)
-  // can all pair with Evergreen, Music, and each other.
-  if(tier==='featured') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music'||t.tier==='feature-trivia'||t.tier==='theme-night';
-  if(tier==='feature-trivia') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music'||t.tier==='featured'||t.tier==='theme-night';
-  if(tier==='theme-night') return t=>t.tier==='evergreen-topic'||t.tier==='coordinating-music'||t.tier==='featured'||t.tier==='feature-trivia';
-  return null;
+  if(!canPair(tier)) return null;
+  return t => canPair(t.tier);
 }
 function renderPairsWithSection(){
   const tier = document.getElementById('t-tier').value;
