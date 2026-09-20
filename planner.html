@@ -1106,7 +1106,7 @@ function attachModeListeners(){
         all[d.id] = c;
         if(c.plannerTier){
           tagged[d.id] = {
-            name: c.name||'', tier: c.plannerTier, tags: c.tags||[], pairsWith: c.pairsWith||[],
+            name: c.name||'', tier: c.plannerTier, tags: normalizeVmTags(c.tags), pairsWith: c.pairsWith||[],
             timesUsed: c.timesUsed||0, lastUsedDate: c.lastUsedDate||null, lastUsedVenueId: c.lastUsedVenueId||null,
             _vmSource: 'category'
           };
@@ -1270,6 +1270,18 @@ const TIER_BADGE = {
 //  mini-games (Mini Games) — short add-on rounds (Superhero Logos, Celebrity Mug Shots, etc.)
 //  music-bingo (Music Bingo) — bingo-format rounds built around a music theme
 function normTier(tier){ return tier; }
+// Venue Menu stores tags as a plain comma-separated string, not an array like
+// native Planner themes. This is the one place that difference gets ironed
+// out — after this, every theme's .tags is guaranteed to be a real array,
+// regardless of source, so nothing downstream needs to know or guess.
+function normalizeVmTags(raw){
+  if(Array.isArray(raw)) return raw;
+  if(typeof raw==='string') return raw.split(',').map(s=>s.trim()).filter(Boolean);
+  return [];
+}
+// Defensive fallback used anywhere .tags gets iterated — a malformed tags
+// field on any one record should never be able to crash the whole render.
+function safeTags(t){ return Array.isArray(t && t.tags) ? t.tags : []; }
 function canPair(tier){ return tier==='evergreen-topic' || tier==='coordinating-music' || tier==='featured' || tier==='theme-night' || tier==='feature-trivia' || tier==='mini-games' || tier==='music-bingo' || tier==='sing-along' || tier==='battle'; }
 let activeTierFilters = new Set();
 function setTierFilter(tier){
@@ -2338,7 +2350,7 @@ function renderThemes(){
   // Dedupe tags case-insensitively — "Comedy" and "comedy" are the same tag.
   // First casing seen wins for display; matching/filtering always ignores case.
   const tagMap = new Map();
-  list0.forEach(([id,t])=>(t.tags||[]).forEach(tag=>{ const k=tag.toLowerCase(); if(!tagMap.has(k)) tagMap.set(k,tag); }));
+  list0.forEach(([id,t])=>safeTags(t).forEach(tag=>{ const k=(tag||'').toLowerCase(); if(k && !tagMap.has(k)) tagMap.set(k,tag); }));
   const allTags = [...tagMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
   document.getElementById('theme-stats').innerHTML = `
     <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">Total themes</div></div>
@@ -2363,7 +2375,7 @@ function renderThemes(){
   const q = (document.getElementById('theme-search')?.value||'').toLowerCase();
   let list = list0;
   if(q) list = list.filter(([id,t])=>(t.name||'').toLowerCase().includes(q));
-  if(activeTagFilters.size) list = list.filter(([id,t])=>(t.tags||[]).some(tag=>activeTagFilters.has(tag.toLowerCase())));
+  if(activeTagFilters.size) list = list.filter(([id,t])=>safeTags(t).some(tag=>activeTagFilters.has((tag||'').toLowerCase())));
   if(activeTierFilters.size) list = list.filter(([id,t])=>activeTierFilters.has(normTier(t.tier)));
   list = sortEntries(list, themeSort, ([id,t])=>themeSort.key==='timesUsed' ? (t.timesUsed||0) : t[themeSort.key]);
 
@@ -2375,7 +2387,7 @@ function renderThemes(){
     return `<tr>
       <td><input type="checkbox" class="theme-row-check" data-id="${id}" ${selectedThemeIds.has(id)?'checked':''} onchange="toggleThemeSelection('${id}', this.checked)"></td>
       <td>${escapeHtml(t.name||'')} ${tierBadge}${vmBadge}</td>
-      <td>${(t.tags||[]).map(tag=>`<span class="tag-chip">${escapeHtml(tag)}</span>`).join('')||'<span style="color:var(--text3)">—</span>'}</td>
+      <td>${safeTags(t).map(tag=>`<span class="tag-chip">${escapeHtml(tag)}</span>`).join('')||'<span style="color:var(--text3)">—</span>'}</td>
       <td>${t.timesUsed||0}</td>
       <td>${fmtMDY(t.lastUsedDate)}</td>
       <td>${venueName!=='—' ? `<span class="theme-link" onclick="openHistoryModal('${id}')">${escapeHtml(venueName)}</span>` : '—'}</td>
@@ -2582,7 +2594,7 @@ async function confirmLinkTheme(){
   setSyncStatus('syncing');
   try{
     const mergedTier = vmCat.plannerTier || oldTheme.tier || null;
-    const mergedTags = Array.from(new Set([...(vmCat.tags||[]), ...(oldTheme.tags||[])]));
+    const mergedTags = Array.from(new Set([...safeTags(vmCat), ...safeTags(oldTheme)]));
     const mergedPairs = Array.from(new Set([...(vmCat.pairsWith||[]), ...(oldTheme.pairsWith||[])])).filter(id=>id!==oldThemeId);
     const mergedTimesUsed = (vmCat.timesUsed||0) + (oldTheme.timesUsed||0);
     let mergedLastUsed = vmCat.lastUsedDate||null, mergedLastVenue = vmCat.lastUsedVenueId||null;
@@ -2667,7 +2679,7 @@ let editingThemeId = null, editingThemeTags = [], editingThemePairs = [];
 function openThemeModal(id){
   editingThemeId = id||null;
   const t = id ? state.themes[id] : {};
-  editingThemeTags = (t.tags||[]).slice();
+  editingThemeTags = safeTags(t).slice();
   editingThemePairs = (t.pairsWith||[]).slice();
   document.getElementById('theme-modal-title').textContent = id ? 'Edit Theme' : 'Add Theme';
   document.getElementById('t-name').value = t.name||'';
@@ -3310,7 +3322,7 @@ async function commitImport(){
   setSyncStatus('syncing');
   const updates = {};
   const themeIndex = {};
-  Object.entries(state.themes||{}).forEach(([id,t])=>{ themeIndex[(t.name||'').trim().toLowerCase()] = {id, timesUsed:t.timesUsed||0, lastUsedDate:t.lastUsedDate||null, name:t.name, tags:t.tags||[]}; });
+  Object.entries(state.themes||{}).forEach(([id,t])=>{ themeIndex[(t.name||'').trim().toLowerCase()] = {id, timesUsed:t.timesUsed||0, lastUsedDate:t.lastUsedDate||null, name:t.name, tags:safeTags(t)}; });
   function themeIdFor(name){
     const key = name.trim().toLowerCase();
     if(themeIndex[key]) return themeIndex[key].id;
