@@ -99,6 +99,8 @@ a{color:inherit}
 .badge-one-time{background:var(--gold-dim);color:var(--gold2)}
 .badge-vault{background:var(--purple-dim);color:var(--purple)}
 .badge-feature{background:rgba(230,126,34,.14);color:#e8935a}
+.badge-mini{background:rgba(26,188,156,.14);color:#4ecdc4}
+.badge-bingo{background:rgba(233,30,99,.14);color:#f06a9c}
 
 .theme-link{color:var(--text2);cursor:pointer;text-decoration:none;border-bottom:1px dashed var(--border3)}
 .theme-link:hover{color:var(--gold2);border-color:var(--gold-glow)}
@@ -638,6 +640,8 @@ a{color:inherit}
       <option value="featured">Theme Set</option>
       <option value="feature-trivia">Feature Trivia</option>
       <option value="theme-night">Theme Night Vault (special event only)</option>
+      <option value="mini-games">Mini Games</option>
+      <option value="music-bingo">Music Bingo</option>
     </select>
     <div id="t-pairs-section" style="display:none">
       <label class="form-label" id="t-pairs-label">Pairs With</label>
@@ -1112,7 +1116,9 @@ const TIER_LABELS = {
   'coordinating-music': 'Music Trivia',
   'featured': 'Theme Set',
   'feature-trivia': 'Feature Trivia',
-  'theme-night': 'Theme Night Vault'
+  'theme-night': 'Theme Night Vault',
+  'mini-games': 'Mini Games',
+  'music-bingo': 'Music Bingo'
 };
 const TIER_BADGE = {
   'general-knowledge': 'badge-empty',
@@ -1120,14 +1126,18 @@ const TIER_BADGE = {
   'coordinating-music': 'badge-active',
   'featured': 'badge-vault',
   'feature-trivia': 'badge-feature',
-  'theme-night': 'badge-one-time'
+  'theme-night': 'badge-one-time',
+  'mini-games': 'badge-mini',
+  'music-bingo': 'badge-bingo'
 };
-// Four pairing-capable tiers beyond General Knowledge:
+// Six pairing-capable tiers beyond General Knowledge:
 //  featured (Theme Set) — a marketing-named bundle of existing categories
 //  theme-night (Theme Night Vault) — special/ticketed-event-only, not regular rotation
 //  feature-trivia (Feature Trivia) — hyper-specific single topics, regular rotation is fine
+//  mini-games (Mini Games) — short add-on rounds (Superhero Logos, Celebrity Mug Shots, etc.)
+//  music-bingo (Music Bingo) — bingo-format rounds built around a music theme
 function normTier(tier){ return tier; }
-function canPair(tier){ return tier==='evergreen-topic' || tier==='coordinating-music' || tier==='featured' || tier==='theme-night' || tier==='feature-trivia'; }
+function canPair(tier){ return tier==='evergreen-topic' || tier==='coordinating-music' || tier==='featured' || tier==='theme-night' || tier==='feature-trivia' || tier==='mini-games' || tier==='music-bingo'; }
 let activeTierFilters = new Set();
 function setTierFilter(tier){
   if(activeTierFilters.has(tier)) activeTierFilters.delete(tier); else activeTierFilters.add(tier);
