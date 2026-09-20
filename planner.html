@@ -268,6 +268,7 @@ a{color:inherit}
     <a href="https://belladonnanights.github.io/belladonna-gateway/accounts.html?view=account" class="btn btn-ghost btn-sm" style="text-decoration:none;">My Account</a>
     <button class="btn btn-ghost btn-sm" onclick="gatewaySignOut()">Sign Out</button>
     <button class="btn btn-ghost btn-sm trivia-only-tab" onclick="openModal('import-overlay')">Import Spreadsheet</button>
+    <button class="btn btn-ghost btn-sm trivia-only-tab" onclick="openModal('venue-migrate-overlay')">Migrate Venue Menu</button>
     <span class="sync-dot" id="sync-dot"></span>
     <span class="sync-label" id="sync-label">connecting…</span>
   </div>
@@ -504,6 +505,22 @@ a{color:inherit}
 </div>
 
 <!-- MODALS -->
+<div class="modal-overlay" id="venue-migrate-overlay">
+  <div class="modal wide">
+    <h3>Migrate Venue Menu</h3>
+    <div class="section-sub">One-time copy of categories, nights, and tag config from the old Venue Menu project (belladonnabrainstormtool) into belladonna-hq. Nothing is deleted from the old project — this only copies.</div>
+    <div id="vm-log" class="import-log" style="display:none"></div>
+    <div id="vm-preview" style="display:none">
+      <div class="stat-row" id="vm-stats"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('venue-migrate-overlay')">Close</button>
+      <button class="btn btn-ghost" id="vm-preview-btn" onclick="vmRunPreview()">Preview</button>
+      <button class="btn btn-primary" id="vm-commit-btn" onclick="vmRunMigration()" style="display:none">Copy Into belladonna-hq</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="import-overlay">
   <div class="modal wide">
     <h3>Import Spreadsheet</h3>
@@ -775,6 +792,97 @@ const firebaseConfig = {
 if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const dbFs = firebase.firestore();
+
+// ═══════════════════════════════════════════════
+//  ONE-TIME: Venue Menu migration (belladonnabrainstormtool → belladonna-hq)
+//  Source project is read-only here and has no security rules of its own,
+//  so no separate sign-in is needed to read from it. Writes go through the
+//  same dbFs connection this page is already signed into.
+// ═══════════════════════════════════════════════
+let vmData = null;
+function vmLog(msg, isErr){
+  const el = document.getElementById('vm-log');
+  el.style.display = 'block';
+  const line = document.createElement('div');
+  if(isErr) line.style.color = '#ff9a7a';
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function vmSourceDb(){
+  const existing = firebase.apps.find(a=>a.name==='venueMenuSrc');
+  const app = existing || firebase.initializeApp({
+    apiKey: "AIzaSyAQUq6wKgBHIfaVCjxOXa7fpsJ0qmTocqI",
+    authDomain: "belladonnabrainstormtool.firebaseapp.com",
+    projectId: "belladonnabrainstormtool",
+    storageBucket: "belladonnabrainstormtool.firebasestorage.app",
+    messagingSenderId: "981934324501",
+    appId: "1:981934324501:web:9ba85ffde67d2d2b95c71c"
+  }, 'venueMenuSrc');
+  return app.firestore();
+}
+async function vmRunPreview(){
+  document.getElementById('vm-preview-btn').disabled = true;
+  vmLog('Reading from belladonnabrainstormtool…');
+  try{
+    const srcDb = vmSourceDb();
+    const [catsSnap, nightsSnap, nt, mt, st, tt] = await Promise.all([
+      srcDb.collection('categories').get(),
+      srcDb.collection('nights').get(),
+      srcDb.collection('config').doc('nightTags').get(),
+      srcDb.collection('config').doc('miniTags').get(),
+      srcDb.collection('config').doc('singaTags').get(),
+      srcDb.collection('config').doc('triviaTags').get()
+    ]);
+    vmData = {
+      categories: catsSnap.docs.map(d=>({id:d.id, data:d.data()})),
+      nights: nightsSnap.docs.map(d=>({id:d.id, data:d.data()})),
+      config: { nightTags: nt.exists?nt.data():null, miniTags: mt.exists?mt.data():null, singaTags: st.exists?st.data():null, triviaTags: tt.exists?tt.data():null }
+    };
+    vmLog('Found '+vmData.categories.length+' categories, '+vmData.nights.length+' nights.');
+    document.getElementById('vm-stats').innerHTML = `
+      <div class="stat-card"><div class="stat-num">${vmData.categories.length}</div><div class="stat-lbl">Categories</div></div>
+      <div class="stat-card"><div class="stat-num">${vmData.nights.length}</div><div class="stat-lbl">Nights</div></div>
+      <div class="stat-card"><div class="stat-num">${Object.values(vmData.config).filter(Boolean).length} / 4</div><div class="stat-lbl">Config docs</div></div>
+    `;
+    document.getElementById('vm-preview').style.display = 'block';
+    document.getElementById('vm-commit-btn').style.display = 'inline-block';
+  }catch(err){
+    vmLog('Preview failed: '+err.message, true);
+    document.getElementById('vm-preview-btn').disabled = false;
+  }
+}
+async function vmRunMigration(){
+  if(!vmData) return;
+  document.getElementById('vm-commit-btn').disabled = true;
+  vmLog('Writing into belladonna-hq…');
+  try{
+    let n=0;
+    for(const c of vmData.categories){
+      await dbFs.collection('venueMenuCategories').doc(c.id).set(c.data);
+      n++;
+      if(n%10===0) vmLog('  …'+n+' categories written');
+    }
+    vmLog(vmData.categories.length+' categories written.');
+    n=0;
+    for(const nt2 of vmData.nights){
+      await dbFs.collection('venueMenuNights').doc(nt2.id).set(nt2.data);
+      n++;
+    }
+    vmLog(vmData.nights.length+' nights written.');
+    for(const [key,val] of Object.entries(vmData.config)){
+      if(val) await dbFs.collection('venueMenuConfig').doc(key).set(val);
+    }
+    vmLog('Config docs written.');
+    vmLog("Done. Nothing was deleted from belladonnabrainstormtool — it's still there as a backup.");
+    toast('Venue Menu migrated.');
+  }catch(err){
+    vmLog('Migration failed partway: '+err.message, true);
+    vmLog('Safe to re-run — writes use the same document IDs, so re-running just overwrites rather than duplicating.', true);
+    document.getElementById('vm-commit-btn').disabled = false;
+  }
+}
+
 const auth = firebase.auth();
 
 // Checkout's cancel toggle writes to Firestore's `shifts` collection (no login
