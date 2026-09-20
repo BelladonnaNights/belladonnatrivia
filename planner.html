@@ -629,9 +629,12 @@ a{color:inherit}
     </div>
 
     <div id="gig-chain-area" style="display:none">
-      <label class="form-label">Build the full set — pick a paired option, then keep going</label>
+      <label class="form-label">Build your own night — click any number of the suggested pairings below</label>
       <div id="gig-chain-chips" style="margin-bottom:8px"></div>
-      <div id="gig-chain-next-options"></div>
+      <div id="gig-chain-options"></div>
+      <label class="form-label" style="margin-top:10px">Or add a category not on that list</label>
+      <input type="text" class="form-input" id="gig-chain-search" placeholder="Search any category…" oninput="renderChainSearch()">
+      <div class="theme-suggest" id="gig-chain-search-suggest"></div>
     </div>
 
     <div id="gig-no-create-slot"></div>
@@ -3101,6 +3104,15 @@ function renderCategoryList(slot){
     return `<div class="theme-opt" onclick="pickCategory('${slot}','${id}')">${suggested?'★ ':''}${escapeHtml(t.name)} <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span></div>`;
   }).join('') : (q ? '<div class="theme-opt" style="color:var(--text3)">No match — this will be saved as a new category.</div>' : '<div class="theme-opt" style="color:var(--text3)">No categories yet.</div>');
 }
+// Picking any category anywhere in this modal means the gig is planned —
+// Status defaults to Unplanned, and nothing else ever advanced it, so saving
+// after only picking categories was silently hitting the "unplanned = don't
+// save" branch below. This only ever moves it forward, never back — an
+// explicit Cancelled stays exactly as set.
+function maybeAutoPlan(){
+  const statusEl = document.getElementById('gig-status');
+  if(statusEl.value==='unplanned') statusEl.value = 'planned';
+}
 function pickCategory(slot, id){
   const t = state.themes[id];
   const f = slotFields(slot);
@@ -3108,6 +3120,7 @@ function pickCategory(slot, id){
   else { gigCtx.selectedRound3Id=id; gigCtx.selectedRound3Name=t.name; }
   document.getElementById(f.searchId).value = t.name;
   document.getElementById(f.boxId).innerHTML = '';
+  maybeAutoPlan();
   renderGigWarnings();
   if(slot==='primary') renderSecondaryArea();
 }
@@ -3115,9 +3128,11 @@ function pickCategory(slot, id){
 // -- What shows up beneath the Trivia Category box depends on its tier:
 //    Theme Set      -> two clean pick-lists, one of its saved Trivia
 //                       pairings and one of its saved Music pairings.
-//    Feature Trivia / Theme Night -> an open-ended chain: pick any paired
-//                       option, then see and pick from THAT one's own
-//                       pairings, building up a full set for the gig.
+//    Feature Trivia / Theme Night -> every one of its saved pairings shown
+//                       at once, click any number of them — the list never
+//                       narrows or disappears, click again to remove one —
+//                       plus a free-text search to add anything not on that
+//                       list. "Build your own night."
 //    Anything else  -> the plain default Music Category box, unchanged.
 function renderSecondaryArea(){
   const t = gigCtx.selectedThemeId ? state.themes[gigCtx.selectedThemeId] : null;
@@ -3127,6 +3142,8 @@ function renderSecondaryArea(){
   document.getElementById('gig-default-music-slot').style.display = (!isThemeSet && !isChainTier) ? '' : 'none';
   document.getElementById('gig-themeset-area').style.display = isThemeSet ? 'block' : 'none';
   document.getElementById('gig-chain-area').style.display = isChainTier ? 'block' : 'none';
+  document.getElementById('gig-chain-search').value = '';
+  document.getElementById('gig-chain-search-suggest').innerHTML = '';
   if(isThemeSet) renderThemeSetOptions(t);
   else if(isChainTier) renderChainArea();
 }
@@ -3145,35 +3162,57 @@ function renderThemeSetOptions(t){
 function pickThemeSetTrivia(id){
   const t = state.themes[id];
   gigCtx.extra = [{id, name:t.name}];
+  maybeAutoPlan();
   renderThemeSetOptions(state.themes[gigCtx.selectedThemeId]);
 }
 function pickThemeSetMusic(id){
   const t = state.themes[id];
   gigCtx.selectedRound3Id = id; gigCtx.selectedRound3Name = t.name;
   document.getElementById('gig-round3-search').value = t.name; // kept in sync even though this box is hidden in Theme Set mode — saveGig reads it directly
+  maybeAutoPlan();
   renderThemeSetOptions(state.themes[gigCtx.selectedThemeId]);
 }
 function renderChainArea(){
-  const chipsBox = document.getElementById('gig-chain-chips');
-  chipsBox.innerHTML = gigCtx.extra.length ? gigCtx.extra.map((item,i)=>
+  const root = state.themes[gigCtx.selectedThemeId];
+  const pickedIds = new Set(gigCtx.extra.map(e=>e.id));
+  document.getElementById('gig-chain-chips').innerHTML = gigCtx.extra.length ? gigCtx.extra.map((item,i)=>
     `<span class="tag-chip">${escapeHtml(item.name)}<span class="x" onclick="removeChainItem(${i})">×</span></span>`
-  ).join('') : '<span style="color:var(--text3);font-size:12px">Nothing added yet — pick from below.</span>';
-  const tailId = gigCtx.extra.length ? gigCtx.extra[gigCtx.extra.length-1].id : gigCtx.selectedThemeId;
-  const tailTheme = state.themes[tailId];
-  const usedIds = new Set([gigCtx.selectedThemeId, ...gigCtx.extra.map(e=>e.id)]);
-  const pairs = tailTheme ? (tailTheme.pairsWith||[]).filter(id=>!usedIds.has(id) && state.themes[id]) : [];
-  document.getElementById('gig-chain-next-options').innerHTML = pairs.length ? pairs.map(id=>{
+  ).join('') : '<span style="color:var(--text3);font-size:12px">Nothing added yet — click any suggestion below, or search to add something else.</span>';
+  const pairs = root ? (root.pairsWith||[]).filter(id=>state.themes[id]) : [];
+  document.getElementById('gig-chain-options').innerHTML = pairs.length ? pairs.map(id=>{
     const p = state.themes[id];
-    return `<div class="theme-opt" onclick="addChainItem('${id}')">${escapeHtml(p.name)} <span style="color:var(--text3)">· ${TIER_LABELS[p.tier]||''}</span></div>`;
-  }).join('') : '<div class="theme-opt" style="color:var(--text3)">No further pairings saved from here.</div>';
+    const active = pickedIds.has(id);
+    return `<div class="theme-opt${active?' active-pick':''}" onclick="toggleChainItem('${id}')">${escapeHtml(p.name)} <span style="color:var(--text3)">· ${TIER_LABELS[p.tier]||''}</span></div>`;
+  }).join('') : '<div class="theme-opt" style="color:var(--text3)">No saved pairings yet — search below to add any category.</div>';
 }
-function addChainItem(id){
-  const t = state.themes[id];
-  gigCtx.extra.push({id, name:t.name});
+function toggleChainItem(id){
+  const idx = gigCtx.extra.findIndex(e=>e.id===id);
+  if(idx>-1){ gigCtx.extra.splice(idx,1); }
+  else { const t=state.themes[id]; gigCtx.extra.push({id, name:t.name}); maybeAutoPlan(); }
   renderChainArea();
 }
 function removeChainItem(i){
   gigCtx.extra.splice(i,1);
+  renderChainArea();
+}
+function renderChainSearch(){
+  const q = document.getElementById('gig-chain-search').value.trim().toLowerCase();
+  const box = document.getElementById('gig-chain-search-suggest');
+  if(!q){ box.innerHTML=''; return; }
+  const usedIds = new Set([gigCtx.selectedThemeId, ...gigCtx.extra.map(e=>e.id)]);
+  const matches = Object.entries(state.themes||{})
+    .filter(([id,t])=>!usedIds.has(id) && (t.name||'').toLowerCase().includes(q))
+    .slice(0,25);
+  box.innerHTML = matches.length ? matches.map(([id,t])=>
+    `<div class="theme-opt" onclick="pickChainSearchResult('${id}')">${escapeHtml(t.name)} <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span></div>`
+  ).join('') : '<div class="theme-opt" style="color:var(--text3)">No match.</div>';
+}
+function pickChainSearchResult(id){
+  const t = state.themes[id];
+  gigCtx.extra.push({id, name:t.name});
+  document.getElementById('gig-chain-search').value = '';
+  document.getElementById('gig-chain-search-suggest').innerHTML = '';
+  maybeAutoPlan();
   renderChainArea();
 }
 // -- Embedded schedule preview: this venue's history/upcoming, today pinned to top --
