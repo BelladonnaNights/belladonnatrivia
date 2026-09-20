@@ -26,6 +26,15 @@
   --radius:8px;--radius-lg:14px;
   --display:'Bebas Neue',sans-serif;--cinzel:'Cinzel',serif;--serif:'EB Garamond',serif;--font:'DM Sans',sans-serif;
 }
+body[data-theme="light"]{
+  --bg:#faf6ec;--surface:#ffffff;--surface2:#f6efe0;--surface3:#ede2c8;
+  --border:rgba(40,30,10,.10);--border2:rgba(40,30,10,.18);--border3:rgba(40,30,10,.28);
+  --text:#2a2118;--text2:#5c4f3e;--text3:#8a7a63;
+  --gold:#a97f22;--gold2:#8c6a1e;--gold3:#6e5417;
+  --gold-shine:linear-gradient(135deg,#a97f22 0%,#c99a30 45%,#a97f22 70%,#93711c 100%);
+  --gold-dim:rgba(169,127,34,.12);--gold-glow:rgba(169,127,34,.35);--gold-glow2:rgba(169,127,34,.6);
+  --red-dim:rgba(231,76,60,.14);--green-dim:rgba(46,204,113,.16);--blue-dim:rgba(52,152,219,.15);--purple-dim:rgba(155,89,182,.15);
+}
 html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var(--text)}
 ::-webkit-scrollbar{width:5px}
 ::-webkit-scrollbar-thumb{background:rgba(201,168,76,.2);border-radius:3px}
@@ -153,6 +162,8 @@ a{color:inherit}
 .theme-opt{padding:8px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border)}
 .theme-opt:last-child{border-bottom:none}
 .theme-opt:hover{background:var(--gold-dim);color:var(--gold2)}
+.theme-opt.active-pick{background:var(--gold-dim);color:var(--gold2);font-weight:600}
+.theme-opt.active-pick::before{content:'✓ ';}
 .theme-opt small{display:block;color:var(--text3);font-size:10px;margin-top:2px}
 
 /* VENUE DETAIL */
@@ -267,6 +278,7 @@ a{color:inherit}
   </div>
   <div class="nav-right">
     <span class="sync-label" id="gateway-user-label" style="margin-right:0.5rem;"></span>
+    <button class="btn btn-ghost btn-sm" id="theme-toggle-btn" onclick="toggleLightMode()">☀ Light Mode</button>
     <a href="https://belladonnanights.github.io/belladonna-gateway/accounts.html?view=account" class="btn btn-ghost btn-sm" style="text-decoration:none;">My Account</a>
     <button class="btn btn-ghost btn-sm" onclick="gatewaySignOut()">Sign Out</button>
     <button class="btn btn-ghost btn-sm trivia-only-tab" onclick="openModal('import-overlay')">Import Spreadsheet</button>
@@ -591,16 +603,37 @@ a{color:inherit}
       <div>
         <label class="form-label">Trivia Category</label>
         <input type="text" class="form-input" id="gig-theme-search" placeholder="Search Evergreen, Theme Set, Vault, or Feature Trivia…"
-          onfocus="renderCategoryList('primary')" oninput="gigCtx.selectedThemeId=null; gigCtx.selectedThemeName=null; renderCategoryList('primary');">
+          onfocus="renderCategoryList('primary')" oninput="gigCtx.selectedThemeId=null; gigCtx.selectedThemeName=null; gigCtx.extra=[]; renderCategoryList('primary'); renderSecondaryArea();">
         <div class="theme-suggest" id="theme-suggest"></div>
       </div>
-      <div>
+      <div id="gig-default-music-slot">
         <label class="form-label">Music Category</label>
         <input type="text" class="form-input" id="gig-round3-search" placeholder="Search Music Trivia…"
           onfocus="renderCategoryList('music')" oninput="gigCtx.selectedRound3Id=null; gigCtx.selectedRound3Name=null; renderCategoryList('music');">
         <div class="theme-suggest" id="round3-theme-suggest"></div>
       </div>
     </div>
+
+    <div id="gig-themeset-area" style="display:none">
+      <div class="section-sub" style="margin-bottom:.5rem">This Theme Set's saved pairings — pick one of each to build the gig.</div>
+      <div class="form-row2">
+        <div>
+          <label class="form-label">Suggested Trivia Category</label>
+          <div id="gig-themeset-trivia-options"></div>
+        </div>
+        <div>
+          <label class="form-label">Suggested Music Category</label>
+          <div id="gig-themeset-music-options"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="gig-chain-area" style="display:none">
+      <label class="form-label">Build the full set — pick a paired option, then keep going</label>
+      <div id="gig-chain-chips" style="margin-bottom:8px"></div>
+      <div id="gig-chain-next-options"></div>
+    </div>
+
     <div id="gig-no-create-slot"></div>
     <div id="gig-warnings"></div>
     <label class="form-label">Status</label>
@@ -842,6 +875,21 @@ const firebaseConfig = {
 };
 if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+
+// -- Light/dark mode — applied immediately, before anything else, to avoid a flash --
+function applyStoredTheme(){
+  let mode = 'dark';
+  try{ mode = localStorage.getItem('plannerTheme') || 'dark'; }catch(e){}
+  document.body.dataset.theme = mode;
+  const btn = document.getElementById('theme-toggle-btn');
+  if(btn) btn.textContent = mode==='light' ? '☾ Dark Mode' : '☀ Light Mode';
+}
+function toggleLightMode(){
+  const next = document.body.dataset.theme==='light' ? 'dark' : 'light';
+  try{ localStorage.setItem('plannerTheme', next); }catch(e){}
+  applyStoredTheme();
+}
+applyStoredTheme();
 const dbFs = firebase.firestore();
 const auth = firebase.auth();
 
@@ -922,7 +970,7 @@ function hideErrorBanner(){
   if(b) b.style.display = 'none';
 }
 
-const state = { venues:{}, themes:{}, gigs:{}, sequences:{}, vmAllCategories:{}, vmAllNights:{} };
+const state = { venues:{}, themes:{}, gigs:{}, sequences:{}, vmAllCategories:{}, vmAllNights:{}, bingoCategoriesRaw:{}, bingoScheduleRaw:{} };
 // state.themes is a merge of two sources: RTDB (native Planner themes) and
 // Firestore's venueMenuCategories (only ones tagged with a plannerTier).
 // Kept as two separate buckets and combined on every update from either side,
@@ -963,6 +1011,12 @@ auth.onAuthStateChanged(function(user){
     loadPlannerLocations();
   });
   loadShiftsCancelled();
+  // Bingo's category/schedule data, loaded independent of whichever mode is
+  // currently active — the Venue Menu tab (Trivia-side only) needs to be able
+  // to search and link against Bingo categories too, so this can't wait for
+  // a mode switch to load.
+  db.ref('bingo/landing/categories').on('value', snap=>{ state.bingoCategoriesRaw = snap.val()||{}; }, err=>console.error('bingo categories (for linking) failed:', err));
+  db.ref('bingo/landing/schedule').on('value', snap=>{ state.bingoScheduleRaw = snap.val()||{}; }, err=>console.error('bingo schedule (for linking) failed:', err));
 });
 function onDataChange(){ clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner(); renderActiveTab(); }
 function updateThemeDatalist(){
@@ -1180,7 +1234,7 @@ function setPlannerMode(mode, el){
   if(el) el.classList.add('active');
   // Trivia-only power features — hide rather than half-support in Bingo mode
   document.querySelectorAll('.trivia-only-tab').forEach(t=>{ t.style.display = mode==='trivia' ? '' : 'none'; });
-  document.getElementById('theme-tab-label').textContent = mode==='bingo' ? 'Categories' : 'Theme Library';
+  document.getElementById('theme-tab-label').textContent = 'Theme Library';
   state.venues={}; state.themes={}; state.gigs={}; state.sequences={}; rtdbThemes={}; vmCategoryThemes={};
   attachModeListeners();
   switchTab('dashboard');
@@ -2107,9 +2161,17 @@ function resolveThemeIdByName(name){
 }
 function bumpThemeUsage(themeId, dk){
   const t = state.themes[themeId] || {};
+  const timesUsed = (t.timesUsed||0) + 1;
+  const bumpLastUsed = !t.lastUsedDate || dk > t.lastUsedDate;
+  if(t._vmSource){
+    const patch = { timesUsed };
+    if(bumpLastUsed){ patch.lastUsedDate = dk; patch.lastUsedVenueId = currentVenueDetailId; }
+    dbFs.collection('venueMenuCategories').doc(themeId).update(patch);
+    return;
+  }
   const updates = {};
-  updates['trivia/planner/themes/'+themeId+'/timesUsed'] = (t.timesUsed||0) + 1;
-  if(!t.lastUsedDate || dk > t.lastUsedDate){
+  updates['trivia/planner/themes/'+themeId+'/timesUsed'] = timesUsed;
+  if(bumpLastUsed){
     updates['trivia/planner/themes/'+themeId+'/lastUsedDate'] = dk;
     updates['trivia/planner/themes/'+themeId+'/lastUsedVenueId'] = currentVenueDetailId;
   }
@@ -2542,7 +2604,7 @@ function applyBulkVmTier(){
 let linkCtx = null;
 function openLinkModal(vmId){
   const vmCat = state.vmAllCategories[vmId];
-  linkCtx = { vmId, oldThemeId:null, oldThemeName:null };
+  linkCtx = { vmId, oldId:null, oldName:null, oldSource:null };
   document.getElementById('link-vm-name').textContent = 'Linking: "' + (vmCat?vmCat.name:'') + '" (Venue Menu)';
   document.getElementById('link-search').value = '';
   document.getElementById('link-suggest').innerHTML = '';
@@ -2552,17 +2614,21 @@ function openLinkModal(vmId){
 }
 function renderLinkSuggest(){
   const q = document.getElementById('link-search').value.trim().toLowerCase();
-  linkCtx.oldThemeId = null; linkCtx.oldThemeName = null;
+  linkCtx.oldId = null; linkCtx.oldName = null; linkCtx.oldSource = null;
   document.getElementById('link-selected-summary').style.display = 'none';
   document.getElementById('link-confirm-btn').disabled = true;
   const box = document.getElementById('link-suggest');
   if(!q){ box.innerHTML=''; return; }
-  const matches = Object.entries(state.themes||{})
+  const triviaMatches = Object.entries(state.themes||{})
     .filter(([id,t]) => !t._vmSource && (t.name||'').toLowerCase().includes(q))
-    .slice(0,25);
-  box.innerHTML = matches.length ? matches.map(([id,t])=>
-    `<div class="theme-opt" onclick="pickLinkTarget('${id}')">${escapeHtml(t.name)} <small>Used ${t.timesUsed||0}× · ${TIER_LABELS[t.tier]||'untagged'}</small></div>`
-  ).join('') : '<div class="theme-opt" style="color:var(--text3)">No match among your existing (non-Venue-Menu) themes.</div>';
+    .map(([id,t]) => ({id, name:t.name, source:'trivia', sub:`Used ${t.timesUsed||0}× · ${TIER_LABELS[t.tier]||'untagged'}`}));
+  const bingoMatches = Object.entries(state.bingoCategoriesRaw||{})
+    .filter(([id,c]) => (c.title||'').toLowerCase().includes(q))
+    .map(([id,c]) => ({id, name:c.title, source:'bingo', sub:'Bingo category'}));
+  const all = [...triviaMatches, ...bingoMatches].slice(0,30);
+  box.innerHTML = all.length ? all.map(m=>
+    `<div class="theme-opt" onclick="pickLinkTarget('${m.id}','${m.source}')">${escapeHtml(m.name)} <small>${escapeHtml(m.sub)}</small></div>`
+  ).join('') : '<div class="theme-opt" style="color:var(--text3)">No match among your existing Trivia or Bingo categories.</div>';
 }
 function countGigReferences(themeId){
   let n = 0;
@@ -2571,60 +2637,92 @@ function countGigReferences(themeId){
   });
   return n;
 }
-function pickLinkTarget(oldId){
-  const t = state.themes[oldId];
-  linkCtx.oldThemeId = oldId; linkCtx.oldThemeName = t.name;
-  document.getElementById('link-search').value = t.name;
+function countBingoScheduleReferences(catId){
+  return Object.values(state.bingoScheduleRaw||{}).filter(entry =>
+    (entry.rounds||[]).includes(catId) || (entry.categoryIds||[]).includes(catId)
+  ).length;
+}
+function pickLinkTarget(oldId, source){
+  linkCtx.oldId = oldId; linkCtx.oldSource = source;
+  let name, summaryText;
+  if(source==='trivia'){
+    const t = state.themes[oldId];
+    linkCtx.oldName = name = t.name;
+    const gigCount = countGigReferences(oldId);
+    summaryText = `This merges "${name}" (Trivia) into the Venue Menu record, repoints ${gigCount} scheduled gig${gigCount===1?'':'s'} to use it, and removes the old standalone entry. Can't be undone.`;
+  } else {
+    const c = state.bingoCategoriesRaw[oldId];
+    linkCtx.oldName = name = c.title;
+    const usedCount = countBingoScheduleReferences(oldId);
+    summaryText = `This merges "${name}" (Bingo) into the Venue Menu record, repoints ${usedCount} scheduled entr${usedCount===1?'y':'ies'} to use it, and removes the old standalone Bingo category. Can't be undone.`;
+  }
+  document.getElementById('link-search').value = name;
   document.getElementById('link-suggest').innerHTML = '';
-  const gigCount = countGigReferences(oldId);
-  document.getElementById('link-summary-text').textContent =
-    `This merges "${t.name}" into the Venue Menu record, repoints ${gigCount} scheduled gig${gigCount===1?'':'s'} to use it, and removes the old standalone entry. Can't be undone.`;
+  document.getElementById('link-summary-text').textContent = summaryText;
   document.getElementById('link-selected-summary').style.display = 'block';
   document.getElementById('link-confirm-btn').disabled = false;
 }
 async function confirmLinkTheme(){
-  if(!linkCtx || !linkCtx.oldThemeId) return;
-  const { vmId, oldThemeId } = linkCtx;
+  if(!linkCtx || !linkCtx.oldId) return;
+  const { vmId, oldId, oldSource } = linkCtx;
   const vmCat = state.vmAllCategories[vmId];
-  const oldTheme = state.themes[oldThemeId];
-  if(!vmCat || !oldTheme) return toast('Something went missing — try again.', true);
-  if(!confirm(`Link "${vmCat.name}" (Venue Menu) with "${oldTheme.name}" (Planner)? This can't be undone.`)) return;
+  if(!vmCat) return toast('Something went missing — try again.', true);
+  if(!confirm(`Link "${vmCat.name}" (Venue Menu) with "${linkCtx.oldName}" (${oldSource==='bingo'?'Bingo':'Trivia'})? This can't be undone.`)) return;
 
   document.getElementById('link-confirm-btn').disabled = true;
   setSyncStatus('syncing');
   try{
-    const mergedTier = vmCat.plannerTier || oldTheme.tier || null;
-    const mergedTags = Array.from(new Set([...safeTags(vmCat), ...safeTags(oldTheme)]));
-    const mergedPairs = Array.from(new Set([...(vmCat.pairsWith||[]), ...(oldTheme.pairsWith||[])])).filter(id=>id!==oldThemeId);
-    const mergedTimesUsed = (vmCat.timesUsed||0) + (oldTheme.timesUsed||0);
-    let mergedLastUsed = vmCat.lastUsedDate||null, mergedLastVenue = vmCat.lastUsedVenueId||null;
-    if(oldTheme.lastUsedDate && (!mergedLastUsed || oldTheme.lastUsedDate > mergedLastUsed)){
-      mergedLastUsed = oldTheme.lastUsedDate; mergedLastVenue = oldTheme.lastUsedVenueId||null;
-    }
-
     const rtdbUpdates = {};
-    Object.entries(state.gigs||{}).forEach(([venueId, byDate])=>{
-      Object.entries(byDate||{}).forEach(([dk, g])=>{
-        if(g.themeId===oldThemeId) rtdbUpdates['trivia/planner/gigs/'+venueId+'/'+dk+'/themeId'] = vmId;
-        if(g.round3ThemeId===oldThemeId) rtdbUpdates['trivia/planner/gigs/'+venueId+'/'+dk+'/round3ThemeId'] = vmId;
-      });
-    });
     const firestoreWrites = [];
-    Object.entries(state.themes||{}).forEach(([tid,t])=>{
-      if(tid===oldThemeId) return;
-      if((t.pairsWith||[]).includes(oldThemeId)){
-        const newPairs = t.pairsWith.filter(id=>id!==oldThemeId);
-        if(!newPairs.includes(vmId)) newPairs.push(vmId);
-        if(t._vmSource) firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(tid).update({pairsWith:newPairs}));
-        else rtdbUpdates['trivia/planner/themes/'+tid+'/pairsWith'] = newPairs;
-      }
-    });
 
-    firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(vmId).update({
-      plannerTier: mergedTier, tags: mergedTags, pairsWith: mergedPairs,
-      timesUsed: mergedTimesUsed, lastUsedDate: mergedLastUsed, lastUsedVenueId: mergedLastVenue
-    }));
-    rtdbUpdates['trivia/planner/themes/'+oldThemeId] = null;
+    if(oldSource==='trivia'){
+      const oldTheme = state.themes[oldId];
+      const mergedTier = vmCat.plannerTier || oldTheme.tier || null;
+      const mergedTags = Array.from(new Set([...safeTags(vmCat), ...safeTags(oldTheme)]));
+      const mergedPairs = Array.from(new Set([...(vmCat.pairsWith||[]), ...(oldTheme.pairsWith||[])])).filter(id=>id!==oldId);
+      const mergedTimesUsed = (vmCat.timesUsed||0) + (oldTheme.timesUsed||0);
+      let mergedLastUsed = vmCat.lastUsedDate||null, mergedLastVenue = vmCat.lastUsedVenueId||null;
+      if(oldTheme.lastUsedDate && (!mergedLastUsed || oldTheme.lastUsedDate > mergedLastUsed)){
+        mergedLastUsed = oldTheme.lastUsedDate; mergedLastVenue = oldTheme.lastUsedVenueId||null;
+      }
+
+      Object.entries(state.gigs||{}).forEach(([venueId, byDate])=>{
+        Object.entries(byDate||{}).forEach(([dk, g])=>{
+          if(g.themeId===oldId) rtdbUpdates['trivia/planner/gigs/'+venueId+'/'+dk+'/themeId'] = vmId;
+          if(g.round3ThemeId===oldId) rtdbUpdates['trivia/planner/gigs/'+venueId+'/'+dk+'/round3ThemeId'] = vmId;
+        });
+      });
+      Object.entries(state.themes||{}).forEach(([tid,t])=>{
+        if(tid===oldId) return;
+        if((t.pairsWith||[]).includes(oldId)){
+          const newPairs = t.pairsWith.filter(id=>id!==oldId);
+          if(!newPairs.includes(vmId)) newPairs.push(vmId);
+          if(t._vmSource) firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(tid).update({pairsWith:newPairs}));
+          else rtdbUpdates['trivia/planner/themes/'+tid+'/pairsWith'] = newPairs;
+        }
+      });
+
+      firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(vmId).update({
+        plannerTier: mergedTier, tags: mergedTags.join(', '), pairsWith: mergedPairs,
+        timesUsed: mergedTimesUsed, lastUsedDate: mergedLastUsed, lastUsedVenueId: mergedLastVenue
+      }));
+      rtdbUpdates['trivia/planner/themes/'+oldId] = null;
+    } else {
+      // Bingo categories don't have the tier/pairing/usage fields the Planner
+      // invented — adopt whatever the Venue Menu side already has for those,
+      // untouched, and just repoint the schedule references.
+      Object.entries(state.bingoScheduleRaw||{}).forEach(([entryId, entry])=>{
+        if((entry.rounds||[]).includes(oldId)){
+          rtdbUpdates['bingo/landing/schedule/'+entryId+'/rounds'] = entry.rounds.map(id=>id===oldId?vmId:id);
+        }
+        if((entry.categoryIds||[]).includes(oldId)){
+          rtdbUpdates['bingo/landing/schedule/'+entryId+'/categoryIds'] = entry.categoryIds.map(id=>id===oldId?vmId:id);
+        }
+      });
+      rtdbUpdates['bingo/landing/categories/'+oldId] = null;
+      // vmCat's own fields are left as-is — nothing on the Venue Menu side
+      // needs to change just because it's now also usable from Bingo.
+    }
 
     await Promise.all([db.ref().update(rtdbUpdates), ...firestoreWrites]);
     toast('Linked and merged.');
@@ -2766,7 +2864,7 @@ function saveTheme(){
   const newPairs = canPair(tier) ? editingThemePairs.slice() : [];
   const oldPairs = existing.pairsWith || [];
   const commonFields = {
-    name, tags: editingThemeTags,
+    name,
     timesUsed: parseInt(document.getElementById('t-times-used').value)||0,
     lastUsedDate: document.getElementById('t-last-used').value || null,
     lastUsedVenueId: existing.lastUsedVenueId || null
@@ -2775,13 +2873,17 @@ function saveTheme(){
   const rtdbUpdates = {};
   const firestoreWrites = [];
 
-  // The theme being edited itself.
+  // The theme being edited itself. Tags stay an array on the RTDB side (how
+  // native Planner themes always store them) but go back as Venue Menu's own
+  // comma-separated string on the Firestore side, so index.html's own editor
+  // still sees the format it expects — the Planner reads it back as an array
+  // either way via normalizeVmTags/safeTags.
   if(isVm){
     firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(themeId).update({
-      ...commonFields, plannerTier: tier || null, pairsWith: canPair(tier) ? newPairs : null
+      ...commonFields, tags: editingThemeTags.join(', '), plannerTier: tier || null, pairsWith: canPair(tier) ? newPairs : null
     }));
   } else {
-    rtdbUpdates['trivia/planner/themes/'+themeId] = { ...commonFields, tier: tier || null, pairsWith: canPair(tier) ? newPairs : null };
+    rtdbUpdates['trivia/planner/themes/'+themeId] = { ...commonFields, tags: editingThemeTags, tier: tier || null, pairsWith: canPair(tier) ? newPairs : null };
   }
 
   // Reciprocal pairing — the "other side" of each add/remove might live in
@@ -2920,7 +3022,7 @@ async function submitApplySequence(){
 // ═══════════════════════════════════════════════
 //  GIG MODAL (This Week / Needs Planning / Calendar quick-assign)
 // ═══════════════════════════════════════════════
-let gigCtx = { venueId:null, dateKey:null, selectedThemeId:null, selectedThemeName:null, selectedRound3Id:null, selectedRound3Name:null };
+let gigCtx = { venueId:null, dateKey:null, selectedThemeId:null, selectedThemeName:null, selectedRound3Id:null, selectedRound3Name:null, extra:[] };
 // When on, typed text that doesn't match an existing category is saved as
 // plain text on the gig record only — nothing new gets added to the library.
 // Resets to off each time a schedule view is opened, so it's a deliberate
@@ -2938,7 +3040,7 @@ function noCreateToggleHtml(){
   </label>`;
 }
 function openGigModal(venueId, dateKey){
-  gigCtx = { venueId, dateKey: dateKey||null, selectedThemeId:null, selectedThemeName:null, selectedRound3Id:null, selectedRound3Name:null };
+  gigCtx = { venueId, dateKey: dateKey||null, selectedThemeId:null, selectedThemeName:null, selectedRound3Id:null, selectedRound3Name:null, extra:[] };
   noCreateMode = false;
   document.getElementById('gig-no-create-slot').innerHTML = noCreateToggleHtml();
   const sel = document.getElementById('gig-venue');
@@ -2950,6 +3052,7 @@ function openGigModal(venueId, dateKey){
   if(existing && existing.themeId){ gigCtx.selectedThemeId = existing.themeId; gigCtx.selectedThemeName = existing.themeName; }
   document.getElementById('gig-round3-search').value = existing && existing.round3Name ? existing.round3Name : '';
   if(existing && existing.round3ThemeId){ gigCtx.selectedRound3Id = existing.round3ThemeId; gigCtx.selectedRound3Name = existing.round3Name; }
+  gigCtx.extra = (existing && Array.isArray(existing.extraCategories)) ? existing.extraCategories.slice() : [];
   document.getElementById('gig-status').value = existing
     ? (existing.status==='cancelled' ? 'cancelled' : (existing.themeName ? 'planned' : 'unplanned'))
     : 'unplanned';
@@ -2957,6 +3060,7 @@ function openGigModal(venueId, dateKey){
   document.getElementById('gig-clear-btn').style.display = existing ? 'inline-block' : 'none';
   document.getElementById('theme-suggest').innerHTML = '';
   document.getElementById('round3-theme-suggest').innerHTML = '';
+  renderSecondaryArea();
   renderGigWarnings();
   renderGigSchedulePreview();
   openModal('gig-modal-overlay');
@@ -3000,11 +3104,77 @@ function renderCategoryList(slot){
 function pickCategory(slot, id){
   const t = state.themes[id];
   const f = slotFields(slot);
-  if(slot==='primary'){ gigCtx.selectedThemeId=id; gigCtx.selectedThemeName=t.name; }
+  if(slot==='primary'){ gigCtx.selectedThemeId=id; gigCtx.selectedThemeName=t.name; gigCtx.extra=[]; }
   else { gigCtx.selectedRound3Id=id; gigCtx.selectedRound3Name=t.name; }
   document.getElementById(f.searchId).value = t.name;
   document.getElementById(f.boxId).innerHTML = '';
   renderGigWarnings();
+  if(slot==='primary') renderSecondaryArea();
+}
+
+// -- What shows up beneath the Trivia Category box depends on its tier:
+//    Theme Set      -> two clean pick-lists, one of its saved Trivia
+//                       pairings and one of its saved Music pairings.
+//    Feature Trivia / Theme Night -> an open-ended chain: pick any paired
+//                       option, then see and pick from THAT one's own
+//                       pairings, building up a full set for the gig.
+//    Anything else  -> the plain default Music Category box, unchanged.
+function renderSecondaryArea(){
+  const t = gigCtx.selectedThemeId ? state.themes[gigCtx.selectedThemeId] : null;
+  const tier = t ? t.tier : null;
+  const isThemeSet = tier==='featured';
+  const isChainTier = tier==='feature-trivia' || tier==='theme-night';
+  document.getElementById('gig-default-music-slot').style.display = (!isThemeSet && !isChainTier) ? '' : 'none';
+  document.getElementById('gig-themeset-area').style.display = isThemeSet ? 'block' : 'none';
+  document.getElementById('gig-chain-area').style.display = isChainTier ? 'block' : 'none';
+  if(isThemeSet) renderThemeSetOptions(t);
+  else if(isChainTier) renderChainArea();
+}
+function renderThemeSetOptions(t){
+  const pairs = (t.pairsWith||[]).map(id=>[id, state.themes[id]]).filter(([id,p])=>p);
+  const musicOpts = pairs.filter(([id,p])=>p.tier==='coordinating-music');
+  const triviaOpts = pairs.filter(([id,p])=>p.tier!=='coordinating-music');
+  const extraId = gigCtx.extra[0] ? gigCtx.extra[0].id : null;
+  document.getElementById('gig-themeset-trivia-options').innerHTML = triviaOpts.length ? triviaOpts.map(([id,p])=>
+    `<div class="theme-opt${extraId===id?' active-pick':''}" onclick="pickThemeSetTrivia('${id}')">${escapeHtml(p.name)} <span style="color:var(--text3)">· ${TIER_LABELS[p.tier]||''}</span></div>`
+  ).join('') : '<div class="theme-opt" style="color:var(--text3)">No saved pairings of this type yet.</div>';
+  document.getElementById('gig-themeset-music-options').innerHTML = musicOpts.length ? musicOpts.map(([id,p])=>
+    `<div class="theme-opt${gigCtx.selectedRound3Id===id?' active-pick':''}" onclick="pickThemeSetMusic('${id}')">${escapeHtml(p.name)}</div>`
+  ).join('') : '<div class="theme-opt" style="color:var(--text3)">No saved music pairings yet.</div>';
+}
+function pickThemeSetTrivia(id){
+  const t = state.themes[id];
+  gigCtx.extra = [{id, name:t.name}];
+  renderThemeSetOptions(state.themes[gigCtx.selectedThemeId]);
+}
+function pickThemeSetMusic(id){
+  const t = state.themes[id];
+  gigCtx.selectedRound3Id = id; gigCtx.selectedRound3Name = t.name;
+  document.getElementById('gig-round3-search').value = t.name; // kept in sync even though this box is hidden in Theme Set mode — saveGig reads it directly
+  renderThemeSetOptions(state.themes[gigCtx.selectedThemeId]);
+}
+function renderChainArea(){
+  const chipsBox = document.getElementById('gig-chain-chips');
+  chipsBox.innerHTML = gigCtx.extra.length ? gigCtx.extra.map((item,i)=>
+    `<span class="tag-chip">${escapeHtml(item.name)}<span class="x" onclick="removeChainItem(${i})">×</span></span>`
+  ).join('') : '<span style="color:var(--text3);font-size:12px">Nothing added yet — pick from below.</span>';
+  const tailId = gigCtx.extra.length ? gigCtx.extra[gigCtx.extra.length-1].id : gigCtx.selectedThemeId;
+  const tailTheme = state.themes[tailId];
+  const usedIds = new Set([gigCtx.selectedThemeId, ...gigCtx.extra.map(e=>e.id)]);
+  const pairs = tailTheme ? (tailTheme.pairsWith||[]).filter(id=>!usedIds.has(id) && state.themes[id]) : [];
+  document.getElementById('gig-chain-next-options').innerHTML = pairs.length ? pairs.map(id=>{
+    const p = state.themes[id];
+    return `<div class="theme-opt" onclick="addChainItem('${id}')">${escapeHtml(p.name)} <span style="color:var(--text3)">· ${TIER_LABELS[p.tier]||''}</span></div>`;
+  }).join('') : '<div class="theme-opt" style="color:var(--text3)">No further pairings saved from here.</div>';
+}
+function addChainItem(id){
+  const t = state.themes[id];
+  gigCtx.extra.push({id, name:t.name});
+  renderChainArea();
+}
+function removeChainItem(i){
+  gigCtx.extra.splice(i,1);
+  renderChainArea();
 }
 // -- Embedded schedule preview: this venue's history/upcoming, today pinned to top --
 function renderGigSchedulePreview(){
@@ -3059,7 +3229,11 @@ function renderGigWarnings(){
     if(vid===venueId) return;
     Object.entries(dates||{}).forEach(([dk,g])=>{ if(g.themeId===themeId && dk<dateKey && (!globalLast||dk>globalLast)){ globalLast=dk; globalVenueName=(state.venues[vid]||{}).name; } });
   });
-  if(globalLast){ const weeks = Math.round((fromKey(dateKey)-fromKey(globalLast))/6048e5); if(weeks<6) warnings.push(`Also ran ${weeks}w ago at ${globalVenueName||'another venue'} (${fmtMDY(globalLast)})`); }
+  if(globalLast){
+    const weeks = Math.round((fromKey(dateKey)-fromKey(globalLast))/6048e5);
+    if(weeks===0) warnings.push(`Also running at ${globalVenueName||'another venue'} this week`);
+    else if(weeks<6) warnings.push(`Also ran ${weeks}w ago at ${globalVenueName||'another venue'} (${fmtMDY(globalLast)})`);
+  }
   box.innerHTML = warnings.map(w=>`<div class="warn-chip">⚠ ${w}</div>`).join('');
 }
 function saveGig(){
@@ -3077,7 +3251,7 @@ function saveGig(){
     return;
   }
   if(status==='cancelled'){
-    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, status:'cancelled', note, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, extraCategories:null, status:'cancelled', note, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
   // Either box may have been filled first — resolve each independently.
@@ -3111,12 +3285,17 @@ function saveGig(){
         }
       }
     }
+    // Extra categories — Theme Set's suggested-trivia pick, or a Feature
+    // Trivia/Theme Night chain — are picked from existing pairings only, so
+    // they're always real theme IDs already, nothing to resolve/create here.
+    const extraCategories = gigCtx.extra.length ? gigCtx.extra.map(e=>({id:e.id, name:e.name})) : null;
     await db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({
       themeId, themeName: typedName||null, round3ThemeId: round3Id, round3Name: typedRound3||null,
-      status:'planned', note, locationId:selectedLocationId
+      extraCategories, status:'planned', note, locationId:selectedLocationId
     });
     if(themeId) bumpThemeUsageForVenue(themeId, dateKey, venueId);
     if(round3Id) bumpThemeUsageForVenue(round3Id, dateKey, venueId);
+    gigCtx.extra.forEach(e=>bumpThemeUsageForVenue(e.id, dateKey, venueId));
     toast('Saved.'); closeModal('gig-modal-overlay');
   })();
 }
@@ -3142,9 +3321,17 @@ function saveBingoGig(venueId,dateKey,status,note,typedName){
 }
 function bumpThemeUsageForVenue(themeId, dk, venueId){
   const t = state.themes[themeId]||{};
+  const timesUsed = (t.timesUsed||0)+1;
+  const bumpLastUsed = !t.lastUsedDate || dk > t.lastUsedDate;
+  if(t._vmSource){
+    const patch = { timesUsed };
+    if(bumpLastUsed){ patch.lastUsedDate = dk; patch.lastUsedVenueId = venueId; }
+    dbFs.collection('venueMenuCategories').doc(themeId).update(patch);
+    return;
+  }
   const updates = {};
-  updates['trivia/planner/themes/'+themeId+'/timesUsed'] = (t.timesUsed||0)+1;
-  if(!t.lastUsedDate || dk > t.lastUsedDate){ updates['trivia/planner/themes/'+themeId+'/lastUsedDate']=dk; updates['trivia/planner/themes/'+themeId+'/lastUsedVenueId']=venueId; }
+  updates['trivia/planner/themes/'+themeId+'/timesUsed'] = timesUsed;
+  if(bumpLastUsed){ updates['trivia/planner/themes/'+themeId+'/lastUsedDate']=dk; updates['trivia/planner/themes/'+themeId+'/lastUsedVenueId']=venueId; }
   db.ref().update(updates);
 }
 function clearGig(){
