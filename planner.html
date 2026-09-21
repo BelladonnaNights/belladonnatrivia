@@ -2560,8 +2560,17 @@ function backfillLinkedStatus(){
   if(!confirm(`Found ${candidates.length} item${candidates.length===1?'':'s'} that look already-linked from before (they have pairings/usage history but are missing the new marker). Mark ${candidates.length===1?'it':'them'} as linked so ${candidates.length===1?'it':'they'} drop off this list again?\n\n${candidates.slice(0,10).map(c=>'• '+c.name).join('\n')}${candidates.length>10?'\n…and '+(candidates.length-10)+' more':''}`)) return;
   setSyncStatus('syncing');
   Promise.all(candidates.map(c => dbFs.collection(c.collection).doc(c.id).update({ linked: true })))
-    .then(()=>{ toast(`Marked ${candidates.length} item${candidates.length===1?'':'s'} as linked.`); })
+    .then(()=>{ toast(`Marked ${candidates.length} item${candidates.length===1?'':'s'} as linked.`); setSyncStatus('synced'); })
     .catch(err=>{ console.error('Backfill failed:', err); toast('Backfill failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
+}
+// Manual, no-guessing version — for when you know an item was already
+// handled and the heuristic above didn't catch it (e.g. it was linked to a
+// theme with no prior pairings or usage, so there was nothing to detect).
+function markAsLinked(id, collection){
+  setSyncStatus('syncing');
+  dbFs.collection(collection).doc(id).update({ linked: true })
+    .then(()=>{ toast('Hidden from this list.'); setSyncStatus('synced'); })
+    .catch(err=>{ console.error('markAsLinked failed:', err); toast('Failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
 }
 function renderVenueMenuTab(){
   if(vmView==='categories'){
@@ -2578,7 +2587,10 @@ function renderVenueMenuTab(){
         <td>${escapeHtml(c.name||'(untitled)')}</td>
         <td>${escapeHtml(c.type||'—')}</td>
         <td>${tierBadge}</td>
-        <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openLinkModal('${id}','venueMenuCategories')">Link to Existing Theme</button></td>
+        <td style="text-align:right">
+          <button class="btn btn-ghost btn-sm" onclick="openLinkModal('${id}','venueMenuCategories')">Link to Existing Theme</button>
+          <button class="btn btn-ghost btn-sm" onclick="markAsLinked('${id}','venueMenuCategories')" title="Already handled this one? Hide it without going through the search.">Already Linked</button>
+        </td>
       </tr>`;
     }).join('');
     document.getElementById('vm-empty').style.display = list.length ? 'none' : 'block';
@@ -2589,7 +2601,10 @@ function renderVenueMenuTab(){
     list.sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''));
     document.getElementById('vm-nights-rows').innerHTML = list.map(([id,n])=>
       `<tr><td>${escapeHtml(n.name||'(untitled)')}</td><td>${(n.categoryIds||[]).length}</td>
-        <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openLinkModal('${id}','venueMenuNights')">Link to Existing Theme Night</button></td>
+        <td style="text-align:right">
+          <button class="btn btn-ghost btn-sm" onclick="openLinkModal('${id}','venueMenuNights')">Link to Existing Theme Night</button>
+          <button class="btn btn-ghost btn-sm" onclick="markAsLinked('${id}','venueMenuNights')" title="Already handled this one? Hide it without going through the search.">Already Linked</button>
+        </td>
       </tr>`
     ).join('');
     document.getElementById('vm-empty').style.display = list.length ? 'none' : 'block';
