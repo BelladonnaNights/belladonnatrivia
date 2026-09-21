@@ -164,7 +164,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 }
 .q-image-wrap.loaded{opacity:1;}
 .q-image-wrap img{width:100%;height:100%;object-fit:contain;display:block;}
-.q-text-block{text-align:center;max-width:1000px}
+.q-text-block{text-align:center;max-width:1000px;display:flex;flex-direction:column;align-items:center;}
 .q-question{
   font-family:var(--cinzel);font-weight:600;
   font-size:clamp(32px,5vw,68px);
@@ -210,9 +210,11 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   border-radius:99px;padding:8px 20px;cursor:pointer;
   font-family:var(--cinzel);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);
   transition:all .2s;margin-top:.5rem;
+  align-self:center;
 }
 .audio-btn:hover{background:rgba(201,168,76,.22)}
 .audio-btn svg{width:16px;height:16px;fill:var(--gold)}
+.audio-btn:disabled{opacity:.6;cursor:pointer;pointer-events:auto}
 
 /* ANSWER OVERLAY */
 .answer-overlay{
@@ -1009,8 +1011,31 @@ async function loadMusicQuestions(sheetUrl, tabName, count) {
   const data = await res.json();
   const rows = (data.values || []).map(parseMusicRow).filter(Boolean);
   if(!rows.length) throw new Error('No valid rows found.');
-  // Shuffle and pick up to count — no difficulty sequencing for music
-  return { questions: shuffle(rows).slice(0, count), pool: rows };
+
+  // Shuffle within each artist bucket first, then interleave artists
+  // so we maximise variety and avoid repeating the same artist back-to-back.
+  const artistBuckets = {};
+  for(const row of shuffle(rows)) {
+    const artist = (row.answer || 'Unknown').toLowerCase().trim();
+    if(!artistBuckets[artist]) artistBuckets[artist] = [];
+    artistBuckets[artist].push(row);
+  }
+  // Round-robin across artists (each pass picks one song per artist)
+  const bucketQueues = Object.values(artistBuckets);
+  const interleaved = [];
+  let remaining = true;
+  while(remaining) {
+    remaining = false;
+    // Shuffle bucket order each pass so the same artist doesn't always go first
+    for(const bucket of shuffle([...bucketQueues])) {
+      if(bucket.length) {
+        interleaved.push(bucket.shift());
+        if(bucket.length) remaining = true;
+      }
+    }
+  }
+
+  return { questions: interleaved.slice(0, count), pool: rows };
 }
 
 function pickByDifficultySequence(rows, n) {
@@ -1630,7 +1655,7 @@ function renderQuestion(container, round) {
   let audioHtml = '';
   if(q.audioUrl && q.audioUrl.startsWith('http')) {
     const src = driveViewUrl(q.audioUrl);
-    audioHtml = `<button class="audio-btn" onclick="playAudio('${src}')">
+    audioHtml = `<button class="audio-btn" data-audio-src="${src}" onclick="playAudio(this)">
       <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
       Click to play
     </button>`;
@@ -2071,9 +2096,48 @@ function driveViewUrl(url) {
   return url;
 }
 
-function playAudio(src) {
+function playAudio(btn) {
+  // btn is the button element passed via onclick="playAudio(this)"
+  // If src is passed as string (legacy), find the button
+  if(typeof btn === 'string') {
+    // Legacy call — no toggle, just play
+    const audio = document.getElementById('audio-player');
+    audio.src = btn;
+    audio.play().catch(()=>toast('Audio blocked — click again'));
+    return;
+  }
+
+  const src = btn.dataset.audioSrc || btn.getAttribute('data-audio-src');
   const audio = document.getElementById('audio-player');
+
+  // If this button's audio is currently playing — pause it
+  if(audio._activeSrc === src && !audio.paused) {
+    audio.pause();
+    btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg> Click to play';
+    btn.classList.remove('playing');
+    return;
+  }
+
+  // If paused on this same src — resume from where it was
+  if(audio._activeSrc === src && audio.paused && audio.currentTime > 0) {
+    audio.play().catch(()=>toast('Audio blocked — click again'));
+    btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> Playing';
+    btn.classList.add('playing');
+    return;
+  }
+
+  // Fresh play — new src or restarting
   audio.src = src;
+  audio._activeSrc = src;
+  btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> Playing';
+  btn.classList.add('playing');
+
+  audio.onended = () => {
+    btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg> Click to play';
+    btn.classList.remove('playing');
+    audio._activeSrc = null;
+  };
+
   audio.play().catch(()=>toast('Audio blocked — click again'));
 }
 
