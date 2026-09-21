@@ -535,6 +535,7 @@ a{color:inherit}
         <span class="search-clear-x" onclick="document.getElementById('vm-search').value='';renderVenueMenuTab();">✕</span>
       </span>
       <button class="btn btn-ghost btn-sm" id="vm-backfill-btn" onclick="backfillLinkedStatus()" style="display:none">Fix Already-Linked Items</button>
+      <button class="btn btn-ghost btn-sm" onclick="openModal('push-to-vm-overlay')">Show My Trivia Categories Here</button>
     </div>
 
     <div class="filter-bar" id="vm-bulk-bar" style="display:none">
@@ -851,6 +852,22 @@ a{color:inherit}
     <h3 id="agenda-title">Day</h3>
     <div id="agenda-body"></div>
     <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('day-agenda-overlay')">Close</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="push-to-vm-overlay">
+  <div class="modal wide">
+    <h3>Show My Trivia Categories Here</h3>
+    <div class="section-sub">Copies every tagged Planner theme that doesn't already have a Venue Menu entry into one — no banner yet, but it'll show up in its category tab so you can add one whenever. This never touches or deletes the original Planner theme — it's a copy, not a move.</div>
+    <div id="push-vm-log" class="import-log" style="display:none"></div>
+    <div id="push-vm-preview" style="display:none">
+      <div class="stat-row" id="push-vm-stats"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('push-to-vm-overlay')">Close</button>
+      <button class="btn btn-ghost" id="push-vm-preview-btn" onclick="pushToVmPreview()">Preview</button>
+      <button class="btn btn-primary" id="push-vm-commit-btn" onclick="pushToVmCommit()" style="display:none">Copy Them Over</button>
+    </div>
   </div>
 </div>
 
@@ -1192,18 +1209,45 @@ function attachModeListeners(){
   // and is simpler besides — no reason to hit Firestore twice for the same data.)
   if(plannerMode==='trivia'){
     if(vmAllCategoriesUnsub) vmAllCategoriesUnsub();
+// Infers a Planner tier from Venue Menu's own `type` field when a category
+// has no plannerTier yet — only where the mapping is unambiguous. Anything
+// that doesn't clearly match (Karaoke, Way to Play, Quickies, etc.) is left
+// alone rather than guessed at.
+function inferPlannerTierFromType(typeStr){
+  const t = (typeStr||'').toLowerCase();
+  if(t.includes('mini')) return 'mini-games';
+  if(t.includes('sing')) return 'sing-along';
+  if(t.includes('bingo')) return 'music-bingo';
+  if(t.includes('battle')) return 'battle';
+  if(t.includes('trivia')) return 'evergreen-topic';
+  return null;
+}
+let autoTaggedVmIds = new Set();
     vmAllCategoriesUnsub = dbFs.collection('venueMenuCategories').onSnapshot(snap=>{
       const all = {}, tagged = {};
+      const toAutoTag = [];
       snap.forEach(d=>{
         const c = d.data();
         all[d.id] = c;
-        if(c.plannerTier){
+        let tier = c.plannerTier;
+        if(!tier){
+          const inferred = inferPlannerTierFromType(c.type);
+          if(inferred && !autoTaggedVmIds.has(d.id)){
+            autoTaggedVmIds.add(d.id);
+            toAutoTag.push([d.id, inferred]);
+            tier = inferred; // reflect immediately, don't wait on the round-trip
+          }
+        }
+        if(tier && !c.pushedFromPlannerId){
           tagged[d.id] = {
-            name: c.name||'', tier: c.plannerTier, tags: normalizeVmTags(c.tags), pairsWith: c.pairsWith||[],
+            name: c.name||'', tier, tags: normalizeVmTags(c.tags), pairsWith: c.pairsWith||[],
             timesUsed: c.timesUsed||0, lastUsedDate: c.lastUsedDate||null, lastUsedVenueId: c.lastUsedVenueId||null,
             _vmSource: 'category'
           };
         }
+      });
+      toAutoTag.forEach(([id,tier])=>{
+        dbFs.collection('venueMenuCategories').doc(id).update({plannerTier:tier}).catch(err=>console.error('Auto-tag failed for',id,err));
       });
       state.vmAllCategories = all;
       vmCategoryThemes = tagged;
@@ -2589,6 +2633,68 @@ function findLinkBackfillCandidates(){
     if(n.plannerTier && !n.linked && ((n.pairsWith||[]).length || n.timesUsed || n.lastUsedDate)) out.push({collection:'venueMenuNights', id, name:n.name});
   });
   return out;
+}
+// -- "Show My Trivia Categories Here" — a deliberate, preview-first copy of
+//    tagged RTDB Planner themes into new Venue Menu records, so they're
+//    visible in index.html to get a banner added. Never deletes or modifies
+//    the original RTDB theme — pure, safe, additive copy. Each created doc
+//    is marked with pushedFromPlannerId so re-running this doesn't create
+//    duplicates, and so the Theme Library doesn't show it a second time
+//    (see the vmAllCategoriesUnsub listener above) — the original RTDB
+//    theme already covers that role.
+const TIER_TO_VM_TYPE = {
+  'evergreen-topic':'Trivia', 'coordinating-music':'Trivia', 'featured':'Trivia',
+  'feature-trivia':'Trivia', 'theme-night':'Trivia',
+  'mini-games':'Mini Game', 'music-bingo':'Bingo', 'sing-along':'Sing-A-Long', 'battle':'Battles'
+};
+let pushToVmCandidates = null;
+function findPushToVmCandidates(){
+  const alreadyPushedIds = new Set(Object.values(state.vmAllCategories||{}).map(c=>c.pushedFromPlannerId).filter(Boolean));
+  return Object.entries(rtdbThemes||{})
+    .filter(([id,t]) => t.tier && TIER_TO_VM_TYPE[t.tier] && !alreadyPushedIds.has(id))
+    .map(([id,t]) => ({id, name:t.name, tier:t.tier}));
+}
+function pushToVmPreview(){
+  document.getElementById('push-vm-preview-btn').disabled = true;
+  pushToVmCandidates = findPushToVmCandidates();
+  const byTier = {};
+  pushToVmCandidates.forEach(c=>{ byTier[c.tier] = (byTier[c.tier]||0)+1; });
+  document.getElementById('push-vm-stats').innerHTML = Object.keys(TIER_LABELS).filter(t=>byTier[t]).map(t=>
+    `<div class="stat-card"><div class="stat-num">${byTier[t]}</div><div class="stat-lbl">${TIER_LABELS[t]}</div></div>`
+  ).join('') || '<div class="stat-card"><div class="stat-num">0</div><div class="stat-lbl">Nothing new to copy</div></div>';
+  document.getElementById('push-vm-preview').style.display = 'block';
+  document.getElementById('push-vm-commit-btn').style.display = pushToVmCandidates.length ? 'inline-block' : 'none';
+  document.getElementById('push-vm-preview-btn').disabled = false;
+}
+async function pushToVmCommit(){
+  if(!pushToVmCandidates || !pushToVmCandidates.length) return;
+  document.getElementById('push-vm-commit-btn').disabled = true;
+  const el = document.getElementById('push-vm-log');
+  el.style.display = 'block';
+  function log(msg){ const l=document.createElement('div'); l.textContent=msg; el.appendChild(l); el.scrollTop=el.scrollHeight; }
+  log('Copying '+pushToVmCandidates.length+' categories into the Venue Menu…');
+  let n = 0;
+  try{
+    for(const c of pushToVmCandidates){
+      const t = rtdbThemes[c.id];
+      if(!t) continue;
+      const newId = dbFs.collection('venueMenuCategories').doc().id;
+      await dbFs.collection('venueMenuCategories').doc(newId).set({
+        name: t.name||'', type: TIER_TO_VM_TYPE[t.tier], plannerTier: t.tier,
+        tags: (t.tags||[]).join(', '), pairsWith: t.pairsWith||[],
+        timesUsed: t.timesUsed||0, lastUsedDate: t.lastUsedDate||null, lastUsedVenueId: t.lastUsedVenueId||null,
+        pushedFromPlannerId: c.id
+      });
+      n++;
+      if(n%10===0) log('  …'+n+' copied');
+    }
+    log('Done — '+n+' categories copied. Add banners for them anytime in the Venue Menu.');
+    toast('Copied '+n+' categories to the Venue Menu.');
+  }catch(err){
+    log('Failed partway: '+(err.code||err.message));
+    toast('Copy failed: '+(err.code||err.message), true);
+  }
+  document.getElementById('push-vm-commit-btn').disabled = false;
 }
 function backfillLinkedStatus(){
   const candidates = findLinkBackfillCandidates();
