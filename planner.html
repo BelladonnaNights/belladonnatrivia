@@ -43,7 +43,8 @@ a{color:inherit}
 .nav{position:sticky;top:0;z-index:200;background:rgba(8,8,8,.95);backdrop-filter:blur(16px);
   border-bottom:1px solid var(--border);padding:0 2rem;height:64px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
 .nav-left{display:flex;align-items:center;gap:14px}
-.nav-title{font-family:var(--display);font-size:24px;letter-spacing:.06em;line-height:1}
+.nav-logo-img{width:38px;height:38px;object-fit:contain}
+.nav-title{font-family:var(--display);font-size:24px;letter-spacing:.06em;line-height:1;color:#f0ede8}
 .nav-title span{background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .nav-subtitle{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-left:4px;padding-left:14px;border-left:1px solid var(--border2)}
 .nav-right{display:flex;align-items:center;gap:10px}
@@ -273,6 +274,7 @@ a{color:inherit}
 
 <div class="nav">
   <div class="nav-left">
+    <img src="logo.png" alt="Belladonna" class="nav-logo-img" onerror="this.style.display='none'">
     <div class="nav-title">BELLADONNA <span>PLANNER</span></div>
     <div class="nav-subtitle">Trivia venues &amp; theme scheduling</div>
   </div>
@@ -281,7 +283,9 @@ a{color:inherit}
     <button class="btn btn-ghost btn-sm" id="theme-toggle-btn" onclick="toggleLightMode()">☀ Light Mode</button>
     <a href="https://belladonnanights.github.io/belladonna-gateway/accounts.html?view=account" class="btn btn-ghost btn-sm" style="text-decoration:none;">My Account</a>
     <button class="btn btn-ghost btn-sm" onclick="gatewaySignOut()">Sign Out</button>
+    <!-- Import Spreadsheet — hidden per request, code kept intact to re-enable later.
     <button class="btn btn-ghost btn-sm trivia-only-tab" onclick="openModal('import-overlay')">Import Spreadsheet</button>
+    -->
     <span class="sync-dot" id="sync-dot"></span>
     <span class="sync-label" id="sync-label">connecting…</span>
   </div>
@@ -2949,7 +2953,7 @@ function renderPairsSuggest(){
   const scope = pairScopeFor(tier);
   if(!q || !scope){ box.innerHTML=''; return; }
   const matches = Object.entries(state.themes||{})
-    .filter(([id,t])=> scope(t) && !editingThemePairs.includes(id) && (t.name||'').toLowerCase().includes(q))
+    .filter(([id,t])=> id!==editingThemeId && scope(t) && !editingThemePairs.includes(id) && (t.name||'').toLowerCase().includes(q))
     .slice(0,20);
   box.innerHTML = matches.map(([id,t])=>`<div class="theme-opt" onclick="addPairChip('${id}')">${escapeHtml(t.name)}<small>${TIER_LABELS[normTier(t.tier)]||''}</small></div>`).join('')
     || '<div class="theme-opt" style="color:var(--text3)">No match — tag the other category\'s type first.</div>';
@@ -3287,7 +3291,7 @@ function renderSecondaryArea(){
   else if(isChainTier) renderChainArea();
 }
 function renderThemeSetOptions(t){
-  const pairs = (t.pairsWith||[]).map(id=>[id, state.themes[id]]).filter(([id,p])=>p);
+  const pairs = (t.pairsWith||[]).map(id=>[id, state.themes[id]]).filter(([id,p])=>p && id!==gigCtx.selectedThemeId);
   const musicOpts = pairs.filter(([id,p])=>p.tier==='coordinating-music');
   const triviaOpts = pairs.filter(([id,p])=>p.tier!=='coordinating-music');
   const extraId = gigCtx.extra[0] ? gigCtx.extra[0].id : null;
@@ -3317,7 +3321,7 @@ function renderChainArea(){
   document.getElementById('gig-chain-chips').innerHTML = gigCtx.extra.length ? gigCtx.extra.map((item,i)=>
     `<span class="tag-chip">${escapeHtml(item.name)}<span class="x" onclick="removeChainItem(${i})">×</span></span>`
   ).join('') : '<span style="color:var(--text3);font-size:12px">Nothing added yet — click any suggestion below, or search to add something else.</span>';
-  const pairs = root ? (root.pairsWith||[]).filter(id=>state.themes[id]) : [];
+  const pairs = root ? (root.pairsWith||[]).filter(id=>state.themes[id] && id!==gigCtx.selectedThemeId) : [];
   document.getElementById('gig-chain-options').innerHTML = pairs.length ? pairs.map(id=>{
     const p = state.themes[id];
     const active = pickedIds.has(id);
