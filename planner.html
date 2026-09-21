@@ -519,7 +519,7 @@ a{color:inherit}
        the theme pool; untagged ones stay invisible to scheduling. -->
   <div class="panel" id="panel-venuemenu">
     <div class="section-title">Venue Menu</div>
-    <div class="section-sub">Categories and Nights from the live Venue Menu. Tag one with a Planner tier and it joins the Theme Library — searchable, pairable, assignable to gigs, same as any other category.</div>
+    <div class="section-sub">Categories and Nights from the live Venue Menu. Tag or link one with a Planner tier and it joins the Theme Library — and drops off this list, since it's fully handled at that point.</div>
 
     <div class="filter-bar">
       <div class="vd-view-toggle">
@@ -530,7 +530,6 @@ a{color:inherit}
         <input class="search-input" id="vm-search" placeholder="Search…" oninput="renderVenueMenuTab()">
         <span class="search-clear-x" onclick="document.getElementById('vm-search').value='';renderVenueMenuTab();">✕</span>
       </span>
-      <button class="pill" data-vmfilter="untagged" onclick="toggleVmUntaggedOnly()">Untagged Only</button>
     </div>
 
     <div class="filter-bar" id="vm-bulk-bar" style="display:none">
@@ -554,7 +553,7 @@ a{color:inherit}
     </table>
 
     <table class="gtable" id="vm-nights-table" style="display:none">
-      <thead><tr><th>Name</th><th># Categories</th></tr></thead>
+      <thead><tr><th>Name</th><th># Categories</th><th></th></tr></thead>
       <tbody id="vm-nights-rows"></tbody>
     </table>
     <div class="empty-state" id="vm-empty" style="display:none">Nothing here yet.</div>
@@ -978,9 +977,9 @@ const state = { venues:{}, themes:{}, gigs:{}, sequences:{}, vmAllCategories:{},
 // Firestore's venueMenuCategories (only ones tagged with a plannerTier).
 // Kept as two separate buckets and combined on every update from either side,
 // since they arrive from two different listeners on two different products.
-let rtdbThemes = {}, vmCategoryThemes = {}, vmAllCategoriesUnsub = null, vmAllNightsUnsub = null;
+let rtdbThemes = {}, vmCategoryThemes = {}, vmNightThemes = {}, vmAllCategoriesUnsub = null, vmAllNightsUnsub = null;
 function rebuildThemesState(){
-  state.themes = Object.assign({}, rtdbThemes, vmCategoryThemes);
+  state.themes = Object.assign({}, rtdbThemes, vmCategoryThemes, vmNightThemes);
   onDataChange();
   updateThemeDatalist();
 }
@@ -1081,7 +1080,7 @@ function loadPlannerLocations(){
 function setPlannerLocation(code){
   if(!myAllLocations)return; // locked accounts can't switch — the select is disabled, but don't trust the DOM alone
   selectedLocationId=code;
-  state.venues={}; state.themes={}; state.gigs={}; state.sequences={}; rtdbThemes={}; vmCategoryThemes={};
+  state.venues={}; state.themes={}; state.gigs={}; state.sequences={}; rtdbThemes={}; vmCategoryThemes={}; vmNightThemes={};
   attachModeListeners();
 }
 function locationMatches(recordLocId){
@@ -1177,15 +1176,29 @@ function attachModeListeners(){
     }, err=>{ console.error('venueMenuCategories listener failed:', err); });
     if(vmAllNightsUnsub) vmAllNightsUnsub();
     vmAllNightsUnsub = dbFs.collection('venueMenuNights').onSnapshot(snap=>{
-      const out = {};
-      snap.forEach(d=>{ out[d.id] = d.data(); });
+      const out = {}, tagged = {};
+      snap.forEach(d=>{
+        const n = d.data();
+        out[d.id] = n;
+        if(n.plannerTier){
+          tagged[d.id] = {
+            name: n.name||'', tier: n.plannerTier, tags: [], pairsWith: n.pairsWith||[],
+            timesUsed: n.timesUsed||0, lastUsedDate: n.lastUsedDate||null, lastUsedVenueId: n.lastUsedVenueId||null,
+            _vmSource: 'night'
+          };
+        }
+      });
       state.vmAllNights = out;
+      vmNightThemes = tagged;
+      rebuildThemesState();
       if(activeTab==='venuemenu') renderVenueMenuTab();
     }, err=>{ console.error('venueMenuNights listener failed:', err); });
   } else {
     if(vmAllCategoriesUnsub){ vmAllCategoriesUnsub(); vmAllCategoriesUnsub = null; }
     if(vmAllNightsUnsub){ vmAllNightsUnsub(); vmAllNightsUnsub = null; }
     state.vmAllCategories = {}; state.vmAllNights = {};
+    vmCategoryThemes = {}; vmNightThemes = {};
+    rebuildThemesState();
   }
 
   const gigsRef = db.ref(p.gigs);
@@ -1238,7 +1251,7 @@ function setPlannerMode(mode, el){
   // Trivia-only power features — hide rather than half-support in Bingo mode
   document.querySelectorAll('.trivia-only-tab').forEach(t=>{ t.style.display = mode==='trivia' ? '' : 'none'; });
   document.getElementById('theme-tab-label').textContent = 'Theme Library';
-  state.venues={}; state.themes={}; state.gigs={}; state.sequences={}; rtdbThemes={}; vmCategoryThemes={};
+  state.venues={}; state.themes={}; state.gigs={}; state.sequences={}; rtdbThemes={}; vmCategoryThemes={}; vmNightThemes={};
   attachModeListeners();
   switchTab('dashboard');
 }
@@ -2169,7 +2182,7 @@ function bumpThemeUsage(themeId, dk){
   if(t._vmSource){
     const patch = { timesUsed };
     if(bumpLastUsed){ patch.lastUsedDate = dk; patch.lastUsedVenueId = currentVenueDetailId; }
-    dbFs.collection('venueMenuCategories').doc(themeId).update(patch);
+    dbFs.collection(t._vmSource==='night' ? 'venueMenuNights' : 'venueMenuCategories').doc(themeId).update(patch);
     return;
   }
   const updates = {};
@@ -2501,11 +2514,13 @@ function updateThemeBulkBar(){
 }
 
 // ═══════════════════════════════════════════════
-//  VENUE MENU TAB — bulk-tag Venue Menu categories with a Planner tier so
-//  they join the Theme Library (see rebuildThemesState / vmCategoryThemes).
+//  VENUE MENU TAB — tag/link Venue Menu categories AND nights with a Planner
+//  tier so they join the Theme Library (see rebuildThemesState). Once
+//  something has a plannerTier — tagged or linked, doesn't matter which —
+//  it's fully handled and drops off both lists here; from then on it's
+//  managed through the Theme Library, same as anything else there.
 // ═══════════════════════════════════════════════
 let vmView = 'categories';
-let vmUntaggedOnly = false;
 let selectedVmIds = new Set();
 function setVenueMenuView(v){
   vmView = v;
@@ -2514,11 +2529,6 @@ function setVenueMenuView(v){
   document.getElementById('vm-nights-table').style.display = v==='nights' ? 'table' : 'none';
   document.getElementById('vm-bulk-bar').style.display = 'none'; // selection doesn't carry across views
   selectedVmIds.clear();
-  renderVenueMenuTab();
-}
-function toggleVmUntaggedOnly(){
-  vmUntaggedOnly = !vmUntaggedOnly;
-  document.querySelector('[data-vmfilter="untagged"]').classList.toggle('active', vmUntaggedOnly);
   renderVenueMenuTab();
 }
 function updateVenueMenuBadge(){
@@ -2533,28 +2543,26 @@ function renderVenueMenuTab(){
     document.getElementById('vm-bulk-tier').innerHTML = '<option value="">— choose a tier —</option>' +
       Object.keys(TIER_LABELS).filter(t=>t!=='general-knowledge').map(t=>`<option value="${t}">${TIER_LABELS[t]}</option>`).join('');
     const q = (document.getElementById('vm-search')?.value||'').toLowerCase();
-    let list = Object.entries(state.vmAllCategories||{});
-    if(vmUntaggedOnly) list = list.filter(([id,c])=>!c.plannerTier);
+    let list = Object.entries(state.vmAllCategories||{}).filter(([id,c])=>!c.plannerTier);
     if(q) list = list.filter(([id,c])=>(c.name||'').toLowerCase().includes(q));
     list.sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''));
-    document.getElementById('vm-categories-rows').innerHTML = list.map(([id,c])=>{
-      const tierBadge = c.plannerTier ? `<span class="badge ${TIER_BADGE[c.plannerTier]||'badge-empty'}">${TIER_LABELS[c.plannerTier]||c.plannerTier}</span>` : '<span class="empty-cell">untagged</span>';
-      return `<tr>
+    document.getElementById('vm-categories-rows').innerHTML = list.map(([id,c])=>`<tr>
         <td><input type="checkbox" class="vm-row-check" data-id="${id}" ${selectedVmIds.has(id)?'checked':''} onchange="toggleVmSelection('${id}', this.checked)"></td>
         <td>${escapeHtml(c.name||'(untitled)')}</td>
         <td>${escapeHtml(c.type||'—')}</td>
-        <td>${tierBadge}</td>
-        <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openLinkModal('${id}')">Link to Existing Theme</button></td>
-      </tr>`;
-    }).join('');
+        <td><span class="empty-cell">untagged</span></td>
+        <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openLinkModal('${id}','venueMenuCategories')">Link to Existing Theme</button></td>
+      </tr>`).join('');
     document.getElementById('vm-empty').style.display = list.length ? 'none' : 'block';
   } else {
     const q = (document.getElementById('vm-search')?.value||'').toLowerCase();
-    let list = Object.entries(state.vmAllNights||{});
+    let list = Object.entries(state.vmAllNights||{}).filter(([id,n])=>!n.plannerTier);
     if(q) list = list.filter(([id,n])=>(n.name||'').toLowerCase().includes(q));
     list.sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''));
     document.getElementById('vm-nights-rows').innerHTML = list.map(([id,n])=>
-      `<tr><td>${escapeHtml(n.name||'(untitled)')}</td><td>${(n.categoryIds||[]).length}</td></tr>`
+      `<tr><td>${escapeHtml(n.name||'(untitled)')}</td><td>${(n.categoryIds||[]).length}</td>
+        <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openLinkModal('${id}','venueMenuNights')">Link to Existing Theme Night</button></td>
+      </tr>`
     ).join('');
     document.getElementById('vm-empty').style.display = list.length ? 'none' : 'block';
   }
@@ -2605,11 +2613,13 @@ function applyBulkVmTier(){
 //    every other theme's Pairs With that referenced it, then removes the
 //    now-redundant standalone entry.
 let linkCtx = null;
-function openLinkModal(vmId){
-  const vmCat = state.vmAllCategories[vmId];
-  linkCtx = { vmId, oldId:null, oldName:null, oldSource:null };
-  document.getElementById('link-vm-name').textContent = 'Linking: "' + (vmCat?vmCat.name:'') + '" (Venue Menu)';
+function openLinkModal(vmId, collection){
+  const record = collection==='venueMenuNights' ? state.vmAllNights[vmId] : state.vmAllCategories[vmId];
+  linkCtx = { vmId, collection, oldId:null, oldName:null, oldSource:null };
+  const kindLabel = collection==='venueMenuNights' ? 'Night' : 'Venue Menu';
+  document.getElementById('link-vm-name').textContent = 'Linking: "' + (record?record.name:'') + '" (' + kindLabel + ')';
   document.getElementById('link-search').value = '';
+  document.getElementById('link-search').placeholder = collection==='venueMenuNights' ? 'Search your existing Theme Night Vault entries…' : 'Search your existing themes…';
   document.getElementById('link-suggest').innerHTML = '';
   document.getElementById('link-selected-summary').style.display = 'none';
   document.getElementById('link-confirm-btn').disabled = true;
@@ -2622,6 +2632,16 @@ function renderLinkSuggest(){
   document.getElementById('link-confirm-btn').disabled = true;
   const box = document.getElementById('link-suggest');
   if(!q){ box.innerHTML=''; return; }
+  if(linkCtx.collection==='venueMenuNights'){
+    // Nights map specifically to Theme Night Vault — only offer that tier.
+    const matches = Object.entries(state.themes||{})
+      .filter(([id,t]) => !t._vmSource && t.tier==='theme-night' && (t.name||'').toLowerCase().includes(q))
+      .map(([id,t]) => ({id, name:t.name, source:'trivia', sub:`Used ${t.timesUsed||0}× · Theme Night Vault`}));
+    box.innerHTML = matches.length ? matches.slice(0,30).map(m=>
+      `<div class="theme-opt" onclick="pickLinkTarget('${m.id}','${m.source}')">${escapeHtml(m.name)} <small>${escapeHtml(m.sub)}</small></div>`
+    ).join('') : '<div class="theme-opt" style="color:var(--text3)">No match among your existing Theme Night Vault entries.</div>';
+    return;
+  }
   const triviaMatches = Object.entries(state.themes||{})
     .filter(([id,t]) => !t._vmSource && (t.name||'').toLowerCase().includes(q))
     .map(([id,t]) => ({id, name:t.name, source:'trivia', sub:`Used ${t.timesUsed||0}× · ${TIER_LABELS[t.tier]||'untagged'}`}));
@@ -2648,11 +2668,12 @@ function countBingoScheduleReferences(catId){
 function pickLinkTarget(oldId, source){
   linkCtx.oldId = oldId; linkCtx.oldSource = source;
   let name, summaryText;
+  const isNight = linkCtx.collection==='venueMenuNights';
   if(source==='trivia'){
     const t = state.themes[oldId];
     linkCtx.oldName = name = t.name;
     const gigCount = countGigReferences(oldId);
-    summaryText = `This merges "${name}" (Trivia) into the Venue Menu record, repoints ${gigCount} scheduled gig${gigCount===1?'':'s'} to use it, and removes the old standalone entry. Can't be undone.`;
+    summaryText = `This merges "${name}" (${isNight?'Theme Night Vault':'Trivia'}) into the ${isNight?'Night':'Venue Menu'} record, repoints ${gigCount} scheduled gig${gigCount===1?'':'s'} to use it, and removes the old standalone entry. Can't be undone.`;
   } else {
     const c = state.bingoCategoriesRaw[oldId];
     linkCtx.oldName = name = c.title;
@@ -2667,10 +2688,11 @@ function pickLinkTarget(oldId, source){
 }
 async function confirmLinkTheme(){
   if(!linkCtx || !linkCtx.oldId) return;
-  const { vmId, oldId, oldSource } = linkCtx;
-  const vmCat = state.vmAllCategories[vmId];
-  if(!vmCat) return toast('Something went missing — try again.', true);
-  if(!confirm(`Link "${vmCat.name}" (Venue Menu) with "${linkCtx.oldName}" (${oldSource==='bingo'?'Bingo':'Trivia'})? This can't be undone.`)) return;
+  const { vmId, oldId, oldSource, collection } = linkCtx;
+  const vmRecord = collection==='venueMenuNights' ? state.vmAllNights[vmId] : state.vmAllCategories[vmId];
+  if(!vmRecord) return toast('Something went missing — try again.', true);
+  const kindLabel = collection==='venueMenuNights' ? 'Night' : 'Venue Menu';
+  if(!confirm(`Link "${vmRecord.name}" (${kindLabel}) with "${linkCtx.oldName}" (${oldSource==='bingo'?'Bingo':'Trivia'})? This can't be undone.`)) return;
 
   document.getElementById('link-confirm-btn').disabled = true;
   setSyncStatus('syncing');
@@ -2680,11 +2702,10 @@ async function confirmLinkTheme(){
 
     if(oldSource==='trivia'){
       const oldTheme = state.themes[oldId];
-      const mergedTier = vmCat.plannerTier || oldTheme.tier || null;
-      const mergedTags = Array.from(new Set([...safeTags(vmCat), ...safeTags(oldTheme)]));
-      const mergedPairs = Array.from(new Set([...(vmCat.pairsWith||[]), ...(oldTheme.pairsWith||[])])).filter(id=>id!==oldId);
-      const mergedTimesUsed = (vmCat.timesUsed||0) + (oldTheme.timesUsed||0);
-      let mergedLastUsed = vmCat.lastUsedDate||null, mergedLastVenue = vmCat.lastUsedVenueId||null;
+      const mergedTier = vmRecord.plannerTier || oldTheme.tier || null;
+      const mergedPairs = Array.from(new Set([...(vmRecord.pairsWith||[]), ...(oldTheme.pairsWith||[])])).filter(id=>id!==oldId);
+      const mergedTimesUsed = (vmRecord.timesUsed||0) + (oldTheme.timesUsed||0);
+      let mergedLastUsed = vmRecord.lastUsedDate||null, mergedLastVenue = vmRecord.lastUsedVenueId||null;
       if(oldTheme.lastUsedDate && (!mergedLastUsed || oldTheme.lastUsedDate > mergedLastUsed)){
         mergedLastUsed = oldTheme.lastUsedDate; mergedLastVenue = oldTheme.lastUsedVenueId||null;
       }
@@ -2700,20 +2721,27 @@ async function confirmLinkTheme(){
         if((t.pairsWith||[]).includes(oldId)){
           const newPairs = t.pairsWith.filter(id=>id!==oldId);
           if(!newPairs.includes(vmId)) newPairs.push(vmId);
-          if(t._vmSource) firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(tid).update({pairsWith:newPairs}));
+          if(t._vmSource==='night') firestoreWrites.push(dbFs.collection('venueMenuNights').doc(tid).update({pairsWith:newPairs}));
+          else if(t._vmSource) firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(tid).update({pairsWith:newPairs}));
           else rtdbUpdates['trivia/planner/themes/'+tid+'/pairsWith'] = newPairs;
         }
       });
 
-      firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(vmId).update({
-        plannerTier: mergedTier, tags: mergedTags.join(', '), pairsWith: mergedPairs,
+      const mergedFields = {
+        plannerTier: mergedTier, pairsWith: mergedPairs,
         timesUsed: mergedTimesUsed, lastUsedDate: mergedLastUsed, lastUsedVenueId: mergedLastVenue
-      }));
+      };
+      if(collection!=='venueMenuNights'){
+        const mergedTags = Array.from(new Set([...safeTags(vmRecord), ...safeTags(oldTheme)]));
+        mergedFields.tags = mergedTags.join(', ');
+      }
+      firestoreWrites.push(dbFs.collection(collection).doc(vmId).update(mergedFields));
       rtdbUpdates['trivia/planner/themes/'+oldId] = null;
     } else {
       // Bingo categories don't have the tier/pairing/usage fields the Planner
       // invented — adopt whatever the Venue Menu side already has for those,
-      // untouched, and just repoint the schedule references.
+      // untouched, and just repoint the schedule references. (Nights never
+      // reach this branch — they only ever link against Theme Night Vault.)
       Object.entries(state.bingoScheduleRaw||{}).forEach(([entryId, entry])=>{
         if((entry.rounds||[]).includes(oldId)){
           rtdbUpdates['bingo/landing/schedule/'+entryId+'/rounds'] = entry.rounds.map(id=>id===oldId?vmId:id);
@@ -2723,8 +2751,6 @@ async function confirmLinkTheme(){
         }
       });
       rtdbUpdates['bingo/landing/categories/'+oldId] = null;
-      // vmCat's own fields are left as-is — nothing on the Venue Menu side
-      // needs to change just because it's now also usable from Bingo.
     }
 
     await Promise.all([db.ref().update(rtdbUpdates), ...firestoreWrites]);
@@ -2750,7 +2776,7 @@ function bulkDeleteThemes(){
   setSyncStatus('syncing');
   const rtdbUpdates = {};
   rtdbIds.forEach(id=>{ rtdbUpdates['trivia/planner/themes/'+id] = null; });
-  const firestoreWrites = vmIds.map(id => dbFs.collection('venueMenuCategories').doc(id).update({ plannerTier: null }));
+  const firestoreWrites = vmIds.map(id => dbFs.collection(state.themes[id]._vmSource==='night' ? 'venueMenuNights' : 'venueMenuCategories').doc(id).update({ plannerTier: null }));
   Promise.all([db.ref().update(rtdbUpdates), ...firestoreWrites]).then(()=>{
     toast(`Removed ${n} theme${n===1?'':'s'} from the library.`);
     selectedThemeIds.clear();
@@ -2882,9 +2908,10 @@ function saveTheme(){
   // still sees the format it expects — the Planner reads it back as an array
   // either way via normalizeVmTags/safeTags.
   if(isVm){
-    firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(themeId).update({
-      ...commonFields, tags: editingThemeTags.join(', '), plannerTier: tier || null, pairsWith: canPair(tier) ? newPairs : null
-    }));
+    const isNight = existing._vmSource==='night';
+    const vmFields = { ...commonFields, plannerTier: tier || null, pairsWith: canPair(tier) ? newPairs : null };
+    if(!isNight) vmFields.tags = editingThemeTags.join(', '); // Nights don't have a tags field
+    firestoreWrites.push(dbFs.collection(isNight ? 'venueMenuNights' : 'venueMenuCategories').doc(themeId).update(vmFields));
   } else {
     rtdbUpdates['trivia/planner/themes/'+themeId] = { ...commonFields, tags: editingThemeTags, tier: tier || null, pairsWith: canPair(tier) ? newPairs : null };
   }
@@ -2894,7 +2921,8 @@ function saveTheme(){
   function writeOtherPairs(otherId, pairsArr){
     const other = state.themes[otherId];
     if(!other) return;
-    if(other._vmSource) firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(otherId).update({ pairsWith: pairsArr }));
+    if(other._vmSource==='night') firestoreWrites.push(dbFs.collection('venueMenuNights').doc(otherId).update({ pairsWith: pairsArr }));
+    else if(other._vmSource) firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(otherId).update({ pairsWith: pairsArr }));
     else rtdbUpdates['trivia/planner/themes/'+otherId+'/pairsWith'] = pairsArr;
   }
   newPairs.filter(id=>!oldPairs.includes(id)).forEach(otherId=>{
@@ -2919,7 +2947,7 @@ function deleteTheme(){
   if(existing && existing._vmSource){
     if(!confirm('This category also lives on the live Venue Menu — deleting it from the Planner would delete it there too.\n\nUn-tag it instead? It\'ll disappear from Planner scheduling but stay on the Venue Menu untouched.')) return;
     setSyncStatus('syncing');
-    dbFs.collection('venueMenuCategories').doc(editingThemeId).update({ plannerTier: null })
+    dbFs.collection(existing._vmSource==='night' ? 'venueMenuNights' : 'venueMenuCategories').doc(editingThemeId).update({ plannerTier: null })
       .then(()=>{ toast('Un-tagged — removed from Planner, still on the Venue Menu.'); closeModal('theme-modal-overlay'); })
       .catch(err=>{ console.error('Untag failed:', err); toast('Failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
     return;
@@ -3365,7 +3393,7 @@ function bumpThemeUsageForVenue(themeId, dk, venueId){
   if(t._vmSource){
     const patch = { timesUsed };
     if(bumpLastUsed){ patch.lastUsedDate = dk; patch.lastUsedVenueId = venueId; }
-    dbFs.collection('venueMenuCategories').doc(themeId).update(patch);
+    dbFs.collection(t._vmSource==='night' ? 'venueMenuNights' : 'venueMenuCategories').doc(themeId).update(patch);
     return;
   }
   const updates = {};
