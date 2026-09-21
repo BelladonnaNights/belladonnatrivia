@@ -530,6 +530,7 @@ a{color:inherit}
         <input class="search-input" id="vm-search" placeholder="Search…" oninput="renderVenueMenuTab()">
         <span class="search-clear-x" onclick="document.getElementById('vm-search').value='';renderVenueMenuTab();">✕</span>
       </span>
+      <button class="btn btn-ghost btn-sm" id="vm-backfill-btn" onclick="backfillLinkedStatus()" style="display:none">Fix Already-Linked Items</button>
     </div>
 
     <div class="filter-bar" id="vm-bulk-bar" style="display:none">
@@ -2534,9 +2535,33 @@ function setVenueMenuView(v){
 function updateVenueMenuBadge(){
   const remaining = Object.values(state.vmAllCategories||{}).filter(c=>!c.linked).length;
   const el = document.getElementById('venuemenu-untagged-count');
-  if(!el) return;
-  el.style.display = remaining>0 ? 'inline-block' : 'none';
-  el.textContent = remaining;
+  if(el){ el.style.display = remaining>0 ? 'inline-block' : 'none'; el.textContent = remaining; }
+  const btn = document.getElementById('vm-backfill-btn');
+  if(btn) btn.style.display = findLinkBackfillCandidates().length ? 'inline-block' : 'none';
+}
+// A real merge (via Link & Merge) always writes pairings and/or usage
+// history onto the record — bulk-tagging (applyBulkVmTier) never touches
+// those fields at all. So anything with plannerTier set, no `linked` marker
+// yet, AND real merge-shaped data on it was almost certainly linked before
+// the `linked` field existed to record that — not just bulk-tagged.
+function findLinkBackfillCandidates(){
+  const out = [];
+  Object.entries(state.vmAllCategories||{}).forEach(([id,c])=>{
+    if(c.plannerTier && !c.linked && ((c.pairsWith||[]).length || c.timesUsed || c.lastUsedDate)) out.push({collection:'venueMenuCategories', id, name:c.name});
+  });
+  Object.entries(state.vmAllNights||{}).forEach(([id,n])=>{
+    if(n.plannerTier && !n.linked && ((n.pairsWith||[]).length || n.timesUsed || n.lastUsedDate)) out.push({collection:'venueMenuNights', id, name:n.name});
+  });
+  return out;
+}
+function backfillLinkedStatus(){
+  const candidates = findLinkBackfillCandidates();
+  if(!candidates.length) return;
+  if(!confirm(`Found ${candidates.length} item${candidates.length===1?'':'s'} that look already-linked from before (they have pairings/usage history but are missing the new marker). Mark ${candidates.length===1?'it':'them'} as linked so ${candidates.length===1?'it':'they'} drop off this list again?\n\n${candidates.slice(0,10).map(c=>'• '+c.name).join('\n')}${candidates.length>10?'\n…and '+(candidates.length-10)+' more':''}`)) return;
+  setSyncStatus('syncing');
+  Promise.all(candidates.map(c => dbFs.collection(c.collection).doc(c.id).update({ linked: true })))
+    .then(()=>{ toast(`Marked ${candidates.length} item${candidates.length===1?'':'s'} as linked.`); })
+    .catch(err=>{ console.error('Backfill failed:', err); toast('Backfill failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
 }
 function renderVenueMenuTab(){
   if(vmView==='categories'){
