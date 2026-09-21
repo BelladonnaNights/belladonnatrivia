@@ -599,6 +599,7 @@ a{color:inherit}
     <select class="form-select" id="gig-venue" onchange="onGigVenueChange()"></select>
     <label class="form-label">Date</label>
     <input type="date" class="form-input" id="gig-date" onchange="renderGigWarnings()">
+    <div id="gig-trivia-fields">
     <div class="form-row2">
       <div>
         <label class="form-label">Trivia Category</label>
@@ -635,6 +636,24 @@ a{color:inherit}
       <label class="form-label" style="margin-top:10px">Or add a category not on that list</label>
       <input type="text" class="form-input" id="gig-chain-search" placeholder="Search any category…" oninput="renderChainSearch()">
       <div class="theme-suggest" id="gig-chain-search-suggest"></div>
+    </div>
+    </div>
+
+    <div id="gig-bingo-fields" style="display:none">
+      <div class="form-row2">
+        <div>
+          <label class="form-label">Music Bingo Category 1</label>
+          <input type="text" class="form-input" id="gig-bingo-cat1" placeholder="Search Bingo categories…"
+            onfocus="renderBingoCatSuggest(1)" oninput="renderBingoCatSuggest(1)">
+          <div class="theme-suggest" id="bingo-cat1-suggest"></div>
+        </div>
+        <div>
+          <label class="form-label">Music Bingo Category 2</label>
+          <input type="text" class="form-input" id="gig-bingo-cat2" placeholder="Search Bingo categories…"
+            onfocus="renderBingoCatSuggest(2)" oninput="renderBingoCatSuggest(2)">
+          <div class="theme-suggest" id="bingo-cat2-suggest"></div>
+        </div>
+      </div>
     </div>
 
     <div id="gig-no-create-slot"></div>
@@ -1025,7 +1044,7 @@ auth.onAuthStateChanged(function(user){
 function onDataChange(){ clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner(); renderActiveTab(); }
 function updateThemeDatalist(){
   document.getElementById('theme-name-list').innerHTML = Object.values(state.themes||{})
-    .map(t=>`<option value="${escapeHtml(plannerMode==='bingo'?t.title:t.name)}">`).join('');
+    .map(t=>`<option value="${escapeHtml(t.name)}">`).join('');
 }
 
 // ═══════════════════════════════════════════════
@@ -1145,7 +1164,19 @@ function attachModeListeners(){
   modeListenerRefs.push(venuesRef);
 
   const libraryRef = db.ref(p.library);
-  libraryRef.on('value', snap=>{ rtdbThemes = snap.val()||{}; rebuildThemesState(); }, onListenerError('theme/category library'));
+  libraryRef.on('value', snap=>{
+    const raw = snap.val()||{};
+    // Bingo's own category records use `title`, not `name` — normalize once
+    // here so nothing downstream (the Theme Library table, search, pairing,
+    // the Assign modal) needs to know or guess which mode it's in.
+    if(plannerMode==='bingo'){
+      rtdbThemes = {};
+      Object.entries(raw).forEach(([id,c])=>{ rtdbThemes[id] = { ...c, name: c.name || c.title || '' }; });
+    } else {
+      rtdbThemes = raw;
+    }
+    rebuildThemesState();
+  }, onListenerError('theme/category library'));
   modeListenerRefs.push(libraryRef);
 
   // Venue Menu categories — one listener feeds both: the full list (for the
@@ -1216,10 +1247,10 @@ function attachModeListeners(){
         if(!state.venues[e.venueId]) return; // venue filtered out by location
         if(!nested[e.venueId]) nested[e.venueId] = {};
         const roundIds = e.rounds || e.categoryIds || [];
-        const firstCat = roundIds[0] ? (state.themes||{})[roundIds[0]] : null;
+        const catNames = roundIds.map(id=>(state.themes||{})[id]).filter(Boolean).map(c=>c.name);
         nested[e.venueId][e.date] = {
           themeId: roundIds[0]||null,
-          themeName: firstCat ? firstCat.title : (roundIds.length ? roundIds.length+' round'+(roundIds.length===1?'':'s') : ''),
+          themeName: catNames.join(' + '),
           status: 'planned',
           note: e.notes||'',
           _bingoEntryId: e.id,
@@ -3124,24 +3155,59 @@ function openGigModal(venueId, dateKey){
     .map(([id,v])=>`<option value="${id}" ${id===venueId?'selected':''}>${escapeHtml(v.name||'')}</option>`).join('');
   document.getElementById('gig-date').value = dateKey || toKey(new Date());
   const existing = (dateKey && state.gigs[venueId]) ? state.gigs[venueId][dateKey] : null;
-  document.getElementById('gig-theme-search').value = existing && existing.themeName ? existing.themeName : '';
-  if(existing && existing.themeId){ gigCtx.selectedThemeId = existing.themeId; gigCtx.selectedThemeName = existing.themeName; }
-  document.getElementById('gig-round3-search').value = existing && existing.round3Name ? existing.round3Name : '';
-  if(existing && existing.round3ThemeId){ gigCtx.selectedRound3Id = existing.round3ThemeId; gigCtx.selectedRound3Name = existing.round3Name; }
-  gigCtx.extra = (existing && Array.isArray(existing.extraCategories)) ? existing.extraCategories.slice() : [];
+  document.getElementById('gig-trivia-fields').style.display = plannerMode==='bingo' ? 'none' : '';
+  document.getElementById('gig-bingo-fields').style.display = plannerMode==='bingo' ? 'block' : 'none';
+  if(plannerMode==='bingo'){
+    const rounds = (existing && existing._bingoRounds) || [];
+    const n1 = rounds[0] ? (state.themes[rounds[0]]||{}).name || '' : '';
+    const n2 = rounds[1] ? (state.themes[rounds[1]]||{}).name || '' : '';
+    document.getElementById('gig-bingo-cat1').value = n1;
+    document.getElementById('gig-bingo-cat2').value = n2;
+    document.getElementById('bingo-cat1-suggest').innerHTML = '';
+    document.getElementById('bingo-cat2-suggest').innerHTML = '';
+  } else {
+    document.getElementById('gig-theme-search').value = existing && existing.themeName ? existing.themeName : '';
+    if(existing && existing.themeId){ gigCtx.selectedThemeId = existing.themeId; gigCtx.selectedThemeName = existing.themeName; }
+    document.getElementById('gig-round3-search').value = existing && existing.round3Name ? existing.round3Name : '';
+    if(existing && existing.round3ThemeId){ gigCtx.selectedRound3Id = existing.round3ThemeId; gigCtx.selectedRound3Name = existing.round3Name; }
+    gigCtx.extra = (existing && Array.isArray(existing.extraCategories)) ? existing.extraCategories.slice() : [];
+    document.getElementById('theme-suggest').innerHTML = '';
+    document.getElementById('round3-theme-suggest').innerHTML = '';
+    renderSecondaryArea();
+  }
   document.getElementById('gig-status').value = existing
     ? (existing.status==='cancelled' ? 'cancelled' : (existing.themeName ? 'planned' : 'unplanned'))
     : 'unplanned';
   document.getElementById('gig-note').value = existing ? (existing.note||'') : '';
   document.getElementById('gig-clear-btn').style.display = existing ? 'inline-block' : 'none';
-  document.getElementById('theme-suggest').innerHTML = '';
-  document.getElementById('round3-theme-suggest').innerHTML = '';
-  renderSecondaryArea();
   renderGigWarnings();
   renderGigSchedulePreview();
   openModal('gig-modal-overlay');
 }
 function onGigVenueChange(){ gigCtx.venueId = document.getElementById('gig-venue').value; renderGigWarnings(); renderGigSchedulePreview(); }
+// -- Bingo's two category slots: plain name search over the Bingo category
+//    library, no tiers, no pairing — those are Planner concepts that don't
+//    apply to Bingo categories at all.
+function renderBingoCatSuggest(slot){
+  const input = document.getElementById('gig-bingo-cat'+slot);
+  const box = document.getElementById('bingo-cat'+slot+'-suggest');
+  const q = input.value.trim().toLowerCase();
+  if(!q){ box.innerHTML=''; return; }
+  const matches = Object.entries(state.themes||{})
+    .filter(([id,t])=>(t.name||'').toLowerCase().includes(q))
+    .sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''))
+    .slice(0,25);
+  box.innerHTML = matches.length ? matches.map(([id,t])=>
+    `<div class="theme-opt" onclick="pickBingoCat(${slot},'${id}')">${escapeHtml(t.name)}</div>`
+  ).join('') : '<div class="theme-opt" style="color:var(--text3)">No match — new categories are added in the Bingo app itself.</div>';
+}
+function pickBingoCat(slot, id){
+  const t = state.themes[id];
+  document.getElementById('gig-bingo-cat'+slot).value = t.name;
+  document.getElementById('bingo-cat'+slot+'-suggest').innerHTML = '';
+  const statusEl = document.getElementById('gig-status');
+  if(statusEl.value==='unplanned') statusEl.value = 'planned';
+}
 
 // -- Both category boxes are always visible and you can fill either one first.
 //    Whichever one already has a pick biases the OTHER box's suggestion order:
@@ -3353,11 +3419,16 @@ function saveGig(){
   const dateKey = document.getElementById('gig-date').value;
   const status = document.getElementById('gig-status').value;
   const note = document.getElementById('gig-note').value.trim();
-  const typedName = document.getElementById('gig-theme-search').value.trim();
-  const typedRound3 = plannerMode==='trivia' ? document.getElementById('gig-round3-search').value.trim() : '';
   if(!venueId || !dateKey) return toast('Pick a venue and date.', true);
   setSyncStatus('syncing');
-  if(plannerMode==='bingo'){ saveBingoGig(venueId,dateKey,status,note,typedName); return; }
+  if(plannerMode==='bingo'){
+    const cat1 = document.getElementById('gig-bingo-cat1').value.trim();
+    const cat2 = document.getElementById('gig-bingo-cat2').value.trim();
+    saveBingoGig(venueId,dateKey,status,note,cat1,cat2);
+    return;
+  }
+  const typedName = document.getElementById('gig-theme-search').value.trim();
+  const typedRound3 = document.getElementById('gig-round3-search').value.trim();
   if(status==='unplanned' || (!typedName && !typedRound3 && status!=='cancelled')){
     db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).remove().then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
@@ -3416,17 +3487,25 @@ function saveGig(){
 // Category must be picked from the existing library (typed exactly matching
 // one), same as choosing an existing Trivia theme by name — new categories
 // need an image, so those still get created in the Bingo app's own admin.
-function saveBingoGig(venueId,dateKey,status,note,typedName){
+function saveBingoGig(venueId,dateKey,status,note,typedName1,typedName2){
   const cancelled = status==='cancelled';
   const existingEntryId = ((state.gigs[venueId]||{})[dateKey]||{})._bingoEntryId || null;
   const id = existingEntryId || ('sched_'+Date.now());
-  let catId = null;
-  if(!cancelled && typedName){
-    const found = Object.entries(state.themes||{}).find(([cid,c])=>(c.title||'').trim().toLowerCase()===typedName.toLowerCase());
-    if(found) catId = found[0];
-    else { toast('Pick an existing Bingo category from the list — new ones are added in the Bingo app itself.', true); setSyncStatus('synced'); return; }
+  function resolveCat(typedName){
+    if(!typedName) return null;
+    const found = Object.entries(state.themes||{}).find(([cid,c])=>(c.name||'').trim().toLowerCase()===typedName.toLowerCase());
+    return found ? found[0] : 'NOTFOUND';
   }
-  const rounds = (cancelled || !catId) ? [] : [catId];
+  let rounds = [];
+  if(!cancelled){
+    const c1 = resolveCat(typedName1), c2 = resolveCat(typedName2);
+    if(c1==='NOTFOUND' || c2==='NOTFOUND'){
+      toast('Pick existing Bingo categories from the list — new ones are added in the Bingo app itself.', true);
+      setSyncStatus('synced');
+      return;
+    }
+    rounds = [c1, c2].filter(Boolean);
+  }
   db.ref('bingo/landing/schedule/'+id).set({id, date:dateKey, venueId, rounds, categoryIds:rounds, notes:note, locationId:selectedLocationId}).then(()=>{
     toast('Saved.'); closeModal('gig-modal-overlay');
   });
