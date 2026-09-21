@@ -282,6 +282,7 @@ a{color:inherit}
     <a href="https://belladonnanights.github.io/belladonna-gateway/accounts.html?view=account" class="btn btn-ghost btn-sm" style="text-decoration:none;">My Account</a>
     <button class="btn btn-ghost btn-sm" onclick="gatewaySignOut()">Sign Out</button>
     <button class="btn btn-ghost btn-sm trivia-only-tab" onclick="openModal('import-overlay')">Import Spreadsheet</button>
+    <button class="btn btn-ghost btn-sm trivia-only-tab" onclick="openModal('venue-migrate-overlay')">Migrate Remaining Venue Menu Data</button>
     <span class="sync-dot" id="sync-dot"></span>
     <span class="sync-label" id="sync-label">connecting…</span>
   </div>
@@ -564,6 +565,22 @@ a{color:inherit}
 </div>
 
 <!-- MODALS -->
+<div class="modal-overlay" id="venue-migrate-overlay">
+  <div class="modal wide">
+    <h3>Migrate Remaining Venue Menu Data</h3>
+    <div class="section-sub">Categories and Nights were already migrated. This picks up everything that was missed: main menu settings, seasonal events, availability, the Battles page, filter dimensions, and your actual booking request history. This only copies — nothing is deleted from the old project.</div>
+    <div id="vm2-log" class="import-log" style="display:none"></div>
+    <div id="vm2-preview" style="display:none">
+      <div class="stat-row" id="vm2-stats"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('venue-migrate-overlay')">Close</button>
+      <button class="btn btn-ghost" id="vm2-preview-btn" onclick="vm2RunPreview()">Preview</button>
+      <button class="btn btn-primary" id="vm2-commit-btn" onclick="vm2RunMigration()" style="display:none">Copy Into belladonna-hq</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="import-overlay">
   <div class="modal wide">
     <h3>Import Spreadsheet</h3>
@@ -894,6 +911,97 @@ function toggleLightMode(){
 }
 applyStoredTheme();
 const dbFs = firebase.firestore();
+
+// ═══════════════════════════════════════════════
+//  ONE-TIME (round 2): the rest of the Venue Menu data that the original
+//  migration missed — config docs beyond the four tag lists, and the whole
+//  bookingRequests collection. Deliberately does NOT touch categories or
+//  nights again — those already have Planner-added fields (plannerTier,
+//  pairsWith, linked, usage stats) that the old source project never had,
+//  so re-copying them would blow that away.
+// ═══════════════════════════════════════════════
+let vm2Data = null;
+function vm2Log(msg, isErr){
+  const el = document.getElementById('vm2-log');
+  el.style.display = 'block';
+  const line = document.createElement('div');
+  if(isErr) line.style.color = '#ff9a7a';
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function vm2SourceDb(){
+  const existing = firebase.apps.find(a=>a.name==='venueMenuSrc2');
+  const app = existing || firebase.initializeApp({
+    apiKey: "AIzaSyAQUq6wKgBHIfaVCjxOXa7fpsJ0qmTocqI",
+    authDomain: "belladonnabrainstormtool.firebaseapp.com",
+    projectId: "belladonnabrainstormtool",
+    storageBucket: "belladonnabrainstormtool.firebasestorage.app",
+    messagingSenderId: "981934324501",
+    appId: "1:981934324501:web:9ba85ffde67d2d2b95c71c"
+  }, 'venueMenuSrc2');
+  return app.firestore();
+}
+async function vm2RunPreview(){
+  document.getElementById('vm2-preview-btn').disabled = true;
+  vm2Log('Reading from belladonnabrainstormtool…');
+  try{
+    const srcDb = vm2SourceDb();
+    const [mainMenu, seasonal, avail, battles, filterDim, bookingsSnap] = await Promise.all([
+      srcDb.collection('config').doc('mainMenu').get(),
+      srcDb.collection('config').doc('seasonalEvents').get(),
+      srcDb.collection('config').doc('availability').get(),
+      srcDb.collection('config').doc('battlesPage').get(),
+      srcDb.collection('config').doc('filterDimensions').get(),
+      srcDb.collection('bookingRequests').get()
+    ]);
+    vm2Data = {
+      config: {
+        mainMenu: mainMenu.exists ? mainMenu.data() : null,
+        seasonalEvents: seasonal.exists ? seasonal.data() : null,
+        availability: avail.exists ? avail.data() : null,
+        battlesPage: battles.exists ? battles.data() : null,
+        filterDimensions: filterDim.exists ? filterDim.data() : null
+      },
+      bookingRequests: bookingsSnap.docs.map(d=>({ id: d.id, data: d.data() }))
+    };
+    vm2Log('Found ' + Object.values(vm2Data.config).filter(Boolean).length + ' of 5 config docs, ' + vm2Data.bookingRequests.length + ' booking requests.');
+    document.getElementById('vm2-stats').innerHTML = `
+      <div class="stat-card"><div class="stat-num">${Object.values(vm2Data.config).filter(Boolean).length} / 5</div><div class="stat-lbl">Config docs</div></div>
+      <div class="stat-card"><div class="stat-num">${vm2Data.bookingRequests.length}</div><div class="stat-lbl">Booking requests</div></div>
+    `;
+    document.getElementById('vm2-preview').style.display = 'block';
+    document.getElementById('vm2-commit-btn').style.display = 'inline-block';
+  }catch(err){
+    vm2Log('Preview failed: '+err.message, true);
+    document.getElementById('vm2-preview-btn').disabled = false;
+  }
+}
+async function vm2RunMigration(){
+  if(!vm2Data) return;
+  document.getElementById('vm2-commit-btn').disabled = true;
+  vm2Log('Writing into belladonna-hq…');
+  try{
+    for(const [key,val] of Object.entries(vm2Data.config)){
+      if(val) await dbFs.collection('venueMenuConfig').doc(key).set(val);
+    }
+    vm2Log('Config docs written.');
+    let n=0;
+    for(const b of vm2Data.bookingRequests){
+      await dbFs.collection('venueMenuBookingRequests').doc(b.id).set(b.data);
+      n++;
+      if(n%10===0) vm2Log('  …'+n+' booking requests written');
+    }
+    vm2Log(vm2Data.bookingRequests.length+' booking requests written.');
+    vm2Log("Done. Nothing was deleted from belladonnabrainstormtool — it's still there as a backup.");
+    toast('Remaining Venue Menu data migrated.');
+  }catch(err){
+    vm2Log('Migration failed partway: '+err.message, true);
+    vm2Log('Safe to re-run — writes use the same document IDs, so re-running just overwrites rather than duplicating.', true);
+    document.getElementById('vm2-commit-btn').disabled = false;
+  }
+}
+
 const auth = firebase.auth();
 
 // Checkout's cancel toggle writes to Firestore's `shifts` collection (no login
