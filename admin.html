@@ -169,8 +169,6 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 /* ── RIGHT: TONIGHT'S LINEUP ── */
 .lineup{padding:2rem;display:flex;flex-direction:column;gap:0;background:var(--surface)}
 .lineup-launch-sticky{
-  position:sticky;top:254px;z-index:10;
-  background:var(--surface);
   padding-bottom:1rem;
   margin-bottom:.25rem;
 }
@@ -2027,6 +2025,9 @@ function previewBanner(fieldId, wrapId) {
 }
 
 async function saveCategory() {
+  const saveBtn = document.querySelector('.btn.btn-primary[onclick="saveCategory()"]');
+  if(saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+  const restore = () => { if(saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Category'; } };
   const name       = document.getElementById('f-name').value.trim() || 'Untitled Category';
   const genre      = document.getElementById('f-genre').value.trim();
   const type       = currentCatType;
@@ -2068,9 +2069,11 @@ async function saveCategory() {
     }
     setSyncStatus('synced');
     closeModal();
+    restore();
   } catch(e) {
     setSyncStatus('error');
     toast('Save failed: ' + e.message, true);
+    restore();
   }
 }
 
