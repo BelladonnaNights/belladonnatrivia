@@ -2882,7 +2882,7 @@ function attachSchedListeners() {
           date: dateKey,
           venueId,
           rounds: gig.rounds || (gig.themeName ? [gig.themeName] : []),
-          notes: gig.notes || (gig.themeName ? 'Theme: ' + gig.themeName : ''),
+          notes: gig.notes || '',
           fromPlanner: true,
         });
       });
@@ -3057,52 +3057,83 @@ function renderSchedTimeline() {
   const fEl = document.getElementById('sched-venue-filter');
   const venueFilter = fEl ? fEl.value : 'all';
   const today = new Date().toISOString().split('T')[0];
-  const filtered = venueFilter === 'all' ? triviaScheduleEntries : triviaScheduleEntries.filter(e => e.venueId === venueFilter);
-  if(!filtered.length) { tl.innerHTML = '<div style="font-size:14px;color:var(--text3);font-style:italic;padding:1rem 0">No schedule entries yet. Use Add Entry to plan your nights.</div>'; return; }
+  const thisMonth = today.slice(0, 7);
+  const filtered = (venueFilter === 'all' ? triviaScheduleEntries : triviaScheduleEntries.filter(e => e.venueId === venueFilter))
+    .slice().sort((a,b) => (a.date||'').localeCompare(b.date||'')); // always oldest → newest
+
+  if(!filtered.length) {
+    tl.innerHTML = '<div style="font-size:14px;color:var(--text3);font-style:italic;padding:1rem 0">No schedule entries yet.</div>';
+    return;
+  }
+
+  // Group by month
   const groups = {};
   filtered.forEach(e => { const k = e.date.slice(0,7); if(!groups[k]) groups[k]=[]; groups[k].push(e); });
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  let upcoming = [], past = [];
+
+  let html = '';
   Object.keys(groups).sort().forEach(month => {
     const entries = groups[month];
     const mp = month.split('-');
     const label = monthNames[parseInt(mp[1])-1] + ' ' + mp[0];
-    const isUpcoming = month >= today.slice(0,7);
-    let rows = '';
+    const isPastMonth = month < thisMonth;
+    const isCurrentMonth = month === thisMonth;
+
+    // Month header — mark current month with gold highlight + anchor id
+    const headerColor = isPastMonth ? 'var(--text3)' : 'var(--gold)';
+    const monthId = 'sched-month-' + month;
+    html += `<div id="${monthId}" style="margin-bottom:1.5rem">
+      <div style="font-family:var(--cinzel);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:${headerColor};margin-bottom:4px;padding-bottom:6px;border-bottom:1px solid ${isCurrentMonth?'var(--gold)':'var(--border)'};display:flex;align-items:center;gap:8px">
+        ${label}
+        ${isCurrentMonth ? '<span style="font-size:8px;background:var(--gold);color:#000;border-radius:99px;padding:2px 8px;letter-spacing:.1em">NOW</span>' : ''}
+      </div>`;
+
     entries.forEach(e => {
       const vname = (triviaVenues.find(v => v.id === e.venueId) || {}).name || 'Unknown';
       const rounds = e.rounds || [];
-      // For planner gigs, rounds may be theme names (strings) or category IDs
       const pills = rounds.map((idOrName, ri) => {
-        // Try as category ID first
         const cat = categories.find(x => x.id === idOrName);
-        const label = cat ? cat.name : idOrName; // fall back to raw string (theme name)
-        return `<span style="font-size:11px;background:var(--gold-dim);border:1px solid var(--gold-glow);border-radius:99px;padding:2px 8px;color:var(--gold2);font-family:var(--cinzel);letter-spacing:.04em"><span style="font-size:9px;color:var(--text3);margin-right:3px">R${ri+1}</span>${label}</span>`;
+        const displayName = cat ? cat.name : idOrName;
+        return `<span style="font-size:11px;background:var(--gold-dim);border:1px solid var(--gold-glow);border-radius:99px;padding:2px 8px;color:var(--gold2);font-family:var(--cinzel);letter-spacing:.04em"><span style="font-size:9px;color:var(--text3);margin-right:3px">R${ri+1}</span>${displayName}</span>`;
       }).join('');
       const isPast = e.date < today;
+      const isToday = e.date === today;
       const plannerBadge = e.fromPlanner
         ? '<span style="font-size:8px;background:rgba(52,152,219,.15);border:1px solid rgba(52,152,219,.3);color:#5dade2;border-radius:99px;padding:2px 7px;font-family:var(--cinzel);letter-spacing:.06em;margin-left:6px">PLANNER</span>'
         : '';
-      rows += `<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:.5px solid var(--border);opacity:${isPast?'0.55':'1'}">
-        <div style="min-width:36px;font-size:12px;font-weight:700;color:${isPast?'var(--text3)':'var(--gold)'};font-family:var(--cinzel);padding-top:2px">${e.date.split('-')[2]}</div>
+      const todayHighlight = isToday ? 'background:rgba(201,168,76,.04);border-radius:6px;margin:0 -6px;padding:10px 6px;' : '';
+      // Only show notes that aren't just a theme restatement
+      const showNotes = e.notes && !e.notes.startsWith('Theme:');
+      html += `<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:.5px solid var(--border);opacity:${isPast&&!isToday?'0.5':'1'};${todayHighlight}">
+        <div style="min-width:36px;font-size:12px;font-weight:700;color:${isToday?'var(--gold)':isPast?'var(--text3)':'var(--text)'};font-family:var(--cinzel);padding-top:2px">${e.date.split('-')[2]}${isToday?'<div style="font-size:7px;color:var(--gold);letter-spacing:.1em">TODAY</div>':''}</div>
         <div style="flex:1">
           <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px">${vname}${plannerBadge}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:${e.notes?'4px':'0'}">${pills}</div>
-          ${e.notes?`<div style="font-size:11px;color:var(--gold2);font-style:italic;background:var(--gold-dim);border-radius:4px;padding:2px 6px;display:inline-block;margin-top:2px">📋 ${e.notes}</div>`:''}
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:${showNotes?'4px':'0'}">${pills}</div>
+          ${showNotes?`<div style="font-size:11px;color:var(--gold2);font-style:italic;background:var(--gold-dim);border-radius:4px;padding:2px 6px;display:inline-block;margin-top:2px">📋 ${e.notes}</div>`:''}
         </div>
-        <div style="display:flex;gap:4px;flex-shrink:0">
+        ${!e.fromPlanner ? `<div style="display:flex;gap:4px;flex-shrink:0">
           <button class="btn-sched-accent" onclick="editSchedEntry('${e.id}')" style="font-size:10px;padding:3px 8px">Edit</button>
           <button class="btn btn-ghost btn-sm" onclick="deleteSchedEntry('${e.id}')" style="font-size:10px;padding:3px 8px;color:var(--red)">✕</button>
-        </div>
+        </div>` : ''}
       </div>`;
     });
-    const block = `<div style="margin-bottom:1.5rem"><div style="font-family:var(--cinzel);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:${isUpcoming?'var(--gold)':'var(--text3)'};margin-bottom:4px;padding-bottom:6px;border-bottom:1px solid var(--border)">${label}</div>${rows}</div>`;
-    if(isUpcoming) upcoming.push(block); else past.push(block);
+
+    html += '</div>';
   });
-  let html = '';
-  if(upcoming.length) html += '<div style="margin-bottom:2rem">' + upcoming.join('') + '</div>';
-  if(past.length) html += '<div style="opacity:.8"><div style="font-size:10px;font-family:var(--cinzel);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:12px">Past</div>' + past.join('') + '</div>';
+
   tl.innerHTML = html;
+
+  // Scroll to current month so it's at the top of the visible area
+  const currentMonthEl = document.getElementById('sched-month-' + thisMonth);
+  if(currentMonthEl) {
+    // Scroll the modal-body (parent scroller), not the tl element itself
+    const scroller = tl.closest('.modal-body') || tl.parentElement;
+    if(scroller) {
+      const tlTop = tl.getBoundingClientRect().top;
+      const elTop = currentMonthEl.getBoundingClientRect().top;
+      scroller.scrollTop += (elTop - tlTop) - 8;
+    }
+  }
 }
 
 function renderHostSchedTrivia() {
