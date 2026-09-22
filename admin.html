@@ -870,8 +870,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 </div>
 
 <!-- ADMIN SCHEDULE OVERLAY -->
-<div class="overlay" id="trivia-sched-overlay">
-  <div class="modal" style="max-width:720px">
+<div class="overlay" id="trivia-sched-overlay" style="align-items:flex-start;padding-top:5vh">
+  <div class="modal" style="max-width:720px;width:min(720px,95vw);height:min(82vh,780px);display:flex;flex-direction:column">
     <div class="modal-header">
       <div style="display:flex;align-items:center;gap:12px;flex:1">
         <div class="modal-title">Schedule Manager</div>
@@ -879,7 +879,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
       </div>
       <button class="modal-close" onclick="closeSchedule()">✕</button>
     </div>
-    <div class="modal-body">
+    <div class="modal-body" style="flex:1;overflow-y:auto;min-height:0;padding:1.5rem">
       <div class="sched-tabs">
         <button class="sched-tab active" id="stab-timeline" onclick="switchSchedTab('timeline')">Timeline</button>
         <button class="sched-tab" id="stab-add"      onclick="switchSchedTab('add')">Add Entry</button>
@@ -2846,18 +2846,77 @@ function attachHbListeners() {
 let triviaVenues = [], triviaScheduleEntries = [], triviaVenueEditId = null, triviaSchedBulkParsed = [];
 
 // Firebase listeners for venues + schedule (attached after auth)
+// ─── Schedule data pulled from the Planner ────────────────────────────
+// Venues: trivia/planner/venues  (same source as the venue-select dropdown)
+// Gigs:   trivia/planner/gigs/{venueId}/{dateKey}
+// We do NOT maintain a separate trivia/schedule collection for the timeline —
+// the planner IS the schedule. The Add Entry / Bulk Add tabs still write to
+// trivia/schedule for standalone manual entries that supplement the planner.
+
+let schedPlannerVenues = {};  // venueId -> {name, day, time, status, …}
+let schedPlannerGigs   = {};  // venueId -> { dateKey -> gigObj }
+
 function attachSchedListeners() {
-  db.ref('trivia/venues').on('value', snap => {
+  // Venues — pull from planner (same data source as the venue picker)
+  db.ref('trivia/planner/venues').on('value', snap => {
     const data = snap.val() || {};
-    triviaVenues = Object.entries(data).map(([id,v]) => ({id, ...v})).sort((a,b) => (a.name||'').localeCompare(b.name||''));
+    schedPlannerVenues = data;
+    // Only show venues that are active or seasonal
+    triviaVenues = Object.entries(data)
+      .map(([id,v]) => ({id, ...v}))
+      .filter(v => v.status === 'active' || v.status === 'seasonal' || !v.status)
+      .sort((a,b) => (a.name||'').localeCompare(b.name||''));
     populateSchedVenueDropdowns();
     renderSchedVenueList();
   });
+
+  // Gigs — listen to all gigs across all venues
+  db.ref('trivia/planner/gigs').on('value', snap => {
+    schedPlannerGigs = snap.val() || {};
+    // Build triviaScheduleEntries from planner gigs so renderSchedTimeline works
+    triviaScheduleEntries = [];
+    Object.entries(schedPlannerGigs).forEach(([venueId, days]) => {
+      Object.entries(days).forEach(([dateKey, gig]) => {
+        triviaScheduleEntries.push({
+          id: venueId + '_' + dateKey,
+          date: dateKey,
+          venueId,
+          rounds: gig.rounds || (gig.themeName ? [gig.themeName] : []),
+          notes: gig.notes || (gig.themeName ? 'Theme: ' + gig.themeName : ''),
+          fromPlanner: true,
+        });
+      });
+    });
+
+    // Also merge in any manually added trivia/schedule entries
+    db.ref('trivia/schedule').once('value', snap2 => {
+      const manual = snap2.val() || {};
+      Object.values(manual).forEach(e => {
+        // Don't duplicate if planner already has this date+venue
+        const exists = triviaScheduleEntries.find(x => x.date === e.date && x.venueId === e.venueId);
+        if(!exists) triviaScheduleEntries.push({...e, fromPlanner: false});
+      });
+      triviaScheduleEntries.sort((a,b) => (a.date||'').localeCompare(b.date||''));
+      renderSchedTimeline();
+    });
+  });
+
+  // Also listen to manual schedule entries separately
   db.ref('trivia/schedule').on('value', snap => {
-    const data = snap.val() || {};
-    triviaScheduleEntries = Object.entries(data).map(([id,v]) => ({id, ...v}))
-      .sort((a,b) => (a.date||'').localeCompare(b.date||''));
-    renderSchedTimeline();
+    // Trigger a gig re-merge whenever manual entries change
+    // (the gigs listener above handles the full merge, so we just re-read gigs)
+    // Only act if gigs are already loaded to avoid double-render on first load
+    if(Object.keys(schedPlannerGigs).length > 0) {
+      const manual = snap.val() || {};
+      const manualEntries = Object.values(manual).filter(e => {
+        return !triviaScheduleEntries.find(x => x.date === e.date && x.venueId === e.venueId && x.fromPlanner);
+      });
+      // Rebuild entries: planner gigs + non-duplicate manuals
+      const plannerEntries = triviaScheduleEntries.filter(x => x.fromPlanner);
+      triviaScheduleEntries = [...plannerEntries, ...manualEntries]
+        .sort((a,b) => (a.date||'').localeCompare(b.date||''));
+      renderSchedTimeline();
+    }
   });
 }
 
@@ -2880,8 +2939,10 @@ function switchSchedTab(tab) {
 }
 
 function populateSchedVenueDropdowns() {
-  const opts = '<option value="">— select venue —</option>' + triviaVenues.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
-  const filterOpts = '<option value="all">All venues</option>' + triviaVenues.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  const opts = '<option value="">— select venue —</option>'
+    + triviaVenues.map(v => `<option value="${v.id}">${v.name}${v.day ? ' (' + v.day + (v.time ? ' ' + v.time : '') + ')' : ''}</option>`).join('');
+  const filterOpts = '<option value="all">All venues</option>'
+    + triviaVenues.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
   ['sched-venue-select','host-sched-venue','bulk-venue-select'].forEach(id => {
     const el = document.getElementById(id);
     if(!el) return;
@@ -3011,15 +3072,21 @@ function renderSchedTimeline() {
     entries.forEach(e => {
       const vname = (triviaVenues.find(v => v.id === e.venueId) || {}).name || 'Unknown';
       const rounds = e.rounds || [];
-      const pills = rounds.map((id,ri) => {
-        const c = categories.find(x => x.id === id);
-        return `<span style="font-size:11px;background:var(--gold-dim);border:1px solid var(--gold-glow);border-radius:99px;padding:2px 8px;color:var(--gold2);font-family:var(--cinzel);letter-spacing:.04em"><span style="font-size:9px;color:var(--text3);margin-right:3px">R${ri+1}</span>${c?c.name:id}</span>`;
+      // For planner gigs, rounds may be theme names (strings) or category IDs
+      const pills = rounds.map((idOrName, ri) => {
+        // Try as category ID first
+        const cat = categories.find(x => x.id === idOrName);
+        const label = cat ? cat.name : idOrName; // fall back to raw string (theme name)
+        return `<span style="font-size:11px;background:var(--gold-dim);border:1px solid var(--gold-glow);border-radius:99px;padding:2px 8px;color:var(--gold2);font-family:var(--cinzel);letter-spacing:.04em"><span style="font-size:9px;color:var(--text3);margin-right:3px">R${ri+1}</span>${label}</span>`;
       }).join('');
       const isPast = e.date < today;
+      const plannerBadge = e.fromPlanner
+        ? '<span style="font-size:8px;background:rgba(52,152,219,.15);border:1px solid rgba(52,152,219,.3);color:#5dade2;border-radius:99px;padding:2px 7px;font-family:var(--cinzel);letter-spacing:.06em;margin-left:6px">PLANNER</span>'
+        : '';
       rows += `<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:.5px solid var(--border);opacity:${isPast?'0.55':'1'}">
         <div style="min-width:36px;font-size:12px;font-weight:700;color:${isPast?'var(--text3)':'var(--gold)'};font-family:var(--cinzel);padding-top:2px">${e.date.split('-')[2]}</div>
         <div style="flex:1">
-          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px">${vname}</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px">${vname}${plannerBadge}</div>
           <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:${e.notes?'4px':'0'}">${pills}</div>
           ${e.notes?`<div style="font-size:11px;color:var(--gold2);font-style:italic;background:var(--gold-dim);border-radius:4px;padding:2px 6px;display:inline-block;margin-top:2px">📋 ${e.notes}</div>`:''}
         </div>
@@ -3101,16 +3168,34 @@ function deleteSchedVenue(id) {
 function renderSchedVenueList() {
   const list = document.getElementById('venue-list');
   if(!list) return;
-  if(!triviaVenues.length) { list.innerHTML = '<div style="font-size:13px;color:var(--text3);font-style:italic">No venues yet.</div>'; return; }
-  list.innerHTML = triviaVenues.map(v => {
-    const sub = [v.day ? v.day + (v.time ? ' ' + v.time : '') : '', v.status && v.status !== 'active' ? v.status : ''].filter(Boolean).join(' · ');
-    return `<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 12px;margin-bottom:6px">
-      <div><div style="font-size:13px;color:var(--text)">${v.name}</div>${sub?`<div style="font-size:11px;color:var(--text3);margin-top:2px">${sub}</div>`:''}</div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-ghost btn-sm" onclick="editSchedVenue('${v.id}')">✎</button>
-        <button class="btn btn-ghost btn-sm" onclick="deleteSchedVenue('${v.id}')" style="color:var(--red)">✕</button>
-      </div>
-    </div>`;
+
+  // Show venues from the planner that have trivia scheduled (any gig entry)
+  const venuesWithTrivia = triviaVenues.filter(v => {
+    const gigs = schedPlannerGigs[v.id];
+    return gigs && Object.keys(gigs).length > 0;
+  });
+
+  const allActive = triviaVenues.filter(v => v.status === 'active' || v.status === 'seasonal' || !v.status);
+
+  if(!allActive.length) {
+    list.innerHTML = '<div style="font-size:13px;color:var(--text3);font-style:italic">No venues found in the Planner. Add venues there first.</div>';
+    return;
+  }
+
+  list.innerHTML = allActive.map(v => {
+    const gigCount = schedPlannerGigs[v.id] ? Object.keys(schedPlannerGigs[v.id]).length : 0;
+    const pattern = [v.day, v.time].filter(Boolean).join(' ');
+    const sub = [pattern, gigCount > 0 ? gigCount + ' trivia date' + (gigCount === 1 ? '' : 's') + ' scheduled' : 'no trivia scheduled yet'].filter(Boolean).join(' · ');
+    const hasTrivia = gigCount > 0;
+    return '<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid '
+      + (hasTrivia ? 'var(--gold-glow)' : 'var(--border)')
+      + ';border-radius:var(--radius);padding:10px 14px;margin-bottom:6px">'
+      + '<div>'
+      + '<div style="font-size:13px;color:var(--text);font-family:var(--cinzel);letter-spacing:.04em">' + v.name + '</div>'
+      + '<div style="font-size:11px;color:' + (hasTrivia ? 'var(--gold)' : 'var(--text3)') + ';margin-top:3px">' + sub + '</div>'
+      + '</div>'
+      + (hasTrivia ? '<div style="font-family:var(--cinzel);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);background:var(--gold-dim);border:1px solid var(--gold-glow);border-radius:99px;padding:3px 10px">Trivia</div>' : '')
+      + '</div>';
   }).join('');
 }
 
