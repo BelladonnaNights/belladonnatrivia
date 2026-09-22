@@ -617,12 +617,10 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <div class="nav-title">BELLADONNA <span>TRIVIA</span></div>
   </div>
   <div class="nav-right">
-    <button class="nav-btn nav-btn-ghost nav-btn-sched" onclick="openSchedule()">Schedule</button>
     <span class="sync-label" id="gateway-user-label" style="margin-right:0.4rem;"></span>
+    <button class="nav-btn nav-btn-ghost nav-btn-sched" onclick="openSchedule()">Schedule</button>
     <a href="https://belladonnanights.github.io/belladonna-gateway/accounts.html?view=account" class="nav-btn nav-btn-ghost" style="text-decoration:none;">My Account</a>
     <button class="nav-btn nav-btn-ghost" onclick="gatewaySignOut()">Sign Out</button>
-    <div class="sync-dot" id="sync-dot"></div>
-    <div class="sync-label" id="sync-label">connecting…</div>
     <button class="nav-btn nav-btn-ghost" onclick="openAdminLogin()" id="admin-gear-btn" title="Admin">
       ⚙ Admin
     </button>
@@ -635,6 +633,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <button class="nav-btn nav-btn-ghost" onclick="exitAdminMode()" id="admin-exit-btn" style="display:none;color:var(--red);border-color:rgba(231,76,60,.3)">
       Exit Admin
     </button>
+    <div class="sync-dot" id="sync-dot"></div>
+    <div class="sync-label" id="sync-label">connecting…</div>
   </div>
 </nav>
 
@@ -911,10 +911,26 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
             <label class="field-label">Rounds for this night</label>
             <div style="font-size:11px;color:var(--text3);font-style:italic;margin-bottom:8px">Assign a trivia category to each round. Rounds 4–5 are optional.</div>
             <div style="display:flex;flex-direction:column;gap:8px" id="sched-rounds-wrap">
-              ${[1,2,3,4,5].map(i => `<div style="display:flex;align-items:center;gap:8px">
-                <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${i<=3?'var(--gold)':'var(--text3)'};min-width:60px">Round ${i}</div>
-                <select class="field-input" id="sched-round-${i}" style="flex:1"><option value="">${i<=3?'— pick a category —':'(none)'}</option></select>
-              </div>`).join('')}
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);min-width:60px">Round 1</div>
+                <select class="field-input" id="sched-round-1" style="flex:1"><option value="">— pick a category —</option></select>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);min-width:60px">Round 2</div>
+                <select class="field-input" id="sched-round-2" style="flex:1"><option value="">— pick a category —</option></select>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);min-width:60px">Round 3</div>
+                <select class="field-input" id="sched-round-3" style="flex:1"><option value="">— pick a category —</option></select>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);min-width:60px">Round 4</div>
+                <select class="field-input" id="sched-round-4" style="flex:1"><option value="">(none)</option></select>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);min-width:60px">Round 5</div>
+                <select class="field-input" id="sched-round-5" style="flex:1"><option value="">(none)</option></select>
+              </div>
             </div>
           </div>
           <div style="margin-bottom:.75rem">
@@ -934,19 +950,32 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 
       <!-- VENUES -->
       <div id="spanel-venues" style="display:none">
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1rem;align-items:flex-end">
-          <div style="flex:2;min-width:140px"><label class="field-label">Venue Name</label><input class="field-input" type="text" id="venue-name-input" placeholder="e.g. The Taphouse" onkeydown="if(event.key==='Enter')addSchedVenue()"></div>
-          <div style="flex:1;min-width:80px"><label class="field-label">Day</label>
-            <select class="field-input" id="venue-day-input">
-              <option value="">—</option>
-              <option>Sun</option><option>Mon</option><option>Tue</option><option>Wed</option><option>Thu</option><option>Fri</option><option>Sat</option>
-            </select>
-          </div>
-          <div style="flex:1;min-width:90px"><label class="field-label">Time</label><input class="field-input" type="time" id="venue-time-input"></div>
-          <div style="flex:1;min-width:110px"><label class="field-label">Status</label>
-            <select class="field-input" id="venue-status-input">
-              <option value="active">Active</option><option value="seasonal">Seasonal</option><option value="inactive">Inactive</option>
-            </select>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:1rem">
+          <div style="font-size:12px;font-weight:600;color:var(--gold2);margin-bottom:1rem;font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase" id="venue-form-label">Add Venue</div>
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;align-items:end">
+            <div>
+              <label class="field-label">Venue Name</label>
+              <input class="field-input" type="text" id="venue-name-input" placeholder="e.g. The Taphouse" onkeydown="if(event.key==='Enter')addSchedVenue()">
+            </div>
+            <div>
+              <label class="field-label">Day</label>
+              <select class="field-input" id="venue-day-input">
+                <option value="">—</option>
+                <option>Sun</option><option>Mon</option><option>Tue</option><option>Wed</option><option>Thu</option><option>Fri</option><option>Sat</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">Time</label>
+              <input class="field-input" type="time" id="venue-time-input">
+            </div>
+            <div>
+              <label class="field-label">Status</label>
+              <select class="field-input" id="venue-status-input">
+                <option value="active">Active</option>
+                <option value="seasonal">Seasonal</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
           </div>
           <button class="btn btn-primary" id="venue-add-btn" onclick="addSchedVenue()">Add Venue</button>
         </div>
@@ -968,7 +997,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
               <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">Apr 5 - Round 1: General Trivia, Round 2: Music Trivia</code><br>
               Optional notes after a pipe: <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">| private event</code>
             </div>
-            <textarea class="field-input" id="bulk-text" rows="8" style="font-family:monospace;font-size:12px;line-height:1.6;resize:vertical" placeholder="Apr 5 - Round 1: General Trivia, Round 2: Music Trivia&#10;Apr 12 - Round 1: 90s Pop, Round 2: General Trivia"></textarea>
+            <textarea class="field-input" id="bulk-text" rows="8" style="width:100%;font-family:monospace;font-size:12px;line-height:1.6;resize:vertical" placeholder="Apr 5 - Round 1: General Trivia, Round 2: Music Trivia&#10;Apr 12 - Round 1: 90s Pop, Round 2: General Trivia"></textarea>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-ghost" onclick="bulkSchedParse()">Preview</button>
@@ -2307,10 +2336,10 @@ let _hbListeners = []; // track active listeners so we can re-attach on login
 auth.onAuthStateChanged(function(user) {
   if(!user) return;
   const newPath = 'games/' + user.uid;
-  if(newPath === LIVE_GAME_PATH) return; // same host, no change
+  if(newPath === LIVE_GAME_PATH) return;
   LIVE_GAME_PATH = newPath;
-  // Re-attach all host board Firebase listeners to the correct path
   attachHbListeners();
+  initSchedListeners(); // also attach schedule listeners on login
 });
 
 function liveRef(subpath) {
@@ -3171,11 +3200,20 @@ function bulkSchedClear() {
   triviaSchedBulkParsed = [];
 }
 
-// Attach schedule listeners once db is ready
-// (called after Firebase init — piggybacking the existing auth listener)
-// Wire into existing attachHbListeners or call separately
+// Attach schedule Firebase listeners — called from auth state change
+// so it always runs with a valid db reference after login.
+// The (function waitForDb...) below is a fallback for page load.
+function initSchedListeners() {
+  if(typeof db !== 'undefined' && db && !initSchedListeners._attached) {
+    initSchedListeners._attached = true;
+    attachSchedListeners();
+  }
+}
+initSchedListeners._attached = false;
+
+// Fallback poll in case auth fires before this code runs
 (function waitForDb() {
-  if(typeof db !== 'undefined' && db) { attachSchedListeners(); }
+  if(typeof db !== 'undefined' && db) { initSchedListeners(); }
   else { setTimeout(waitForDb, 300); }
 })();
 
