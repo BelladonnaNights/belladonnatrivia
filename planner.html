@@ -402,6 +402,7 @@ a{color:inherit}
       <button class="pill" data-vf="paused" onclick="setVenueFilter('paused')">Paused</button>
       <button class="pill" data-vf="finished" onclick="setVenueFilter('finished')">Finished</button>
       <span style="flex:1"></span>
+      <button class="btn btn-ghost btn-sm" onclick="sortVenuesAZ()">A–Z</button>
       <button class="btn btn-primary btn-sm" onclick="openVenueModal()">+ Add Venue</button>
     </div>
     <table class="gtable" id="venues-table">
@@ -482,6 +483,7 @@ a{color:inherit}
         </span>
         <button class="pill" id="dup-toggle" onclick="toggleDupView()">Possible Duplicates</button>
         <span style="flex:1"></span>
+        <button class="btn btn-ghost btn-sm" onclick="sortThemesAZ()">A–Z</button>
         <button class="btn btn-primary btn-sm" onclick="openThemeModal()">+ Add Theme</button>
       </div>
       <div class="filter-bar" id="tier-filter-bar"></div>
@@ -1572,6 +1574,10 @@ let venueFilter = 'active';
 let venueSort = {key:'name', dir:1};
 function setVenueFilter(f){ venueFilter=f; document.querySelectorAll('[data-vf]').forEach(p=>p.classList.toggle('active', p.dataset.vf===f)); renderVenues(); }
 function setVenueSort(key){ if(venueSort.key===key) venueSort.dir*=-1; else { venueSort={key,dir:1}; } renderVenues(); }
+// Dedicated A–Z button — forces name-ascending directly, rather than
+// toggling off the current sort state (which could land on Z–A if the
+// table happened to already be sorted by name descending).
+function sortVenuesAZ(){ venueSort = {key:'name', dir:1}; renderVenues(); }
 function sortEntries(list, sortState, valueFn){
   return list.sort((a,b)=>{
     const av = valueFn(a), bv = valueFn(b);
@@ -2475,6 +2481,7 @@ let themeSort = {key:'lastUsedDate', dir:-1};
 let activeTagFilters = new Set();
 let dupViewOpen = false;
 function setThemeSort(key){ if(themeSort.key===key) themeSort.dir*=-1; else themeSort={key,dir:1}; renderThemes(); }
+function sortThemesAZ(){ themeSort = {key:'name', dir:1}; renderThemes(); }
 function toggleDupView(){
   dupViewOpen = !dupViewOpen;
   document.getElementById('dup-toggle').classList.toggle('active', dupViewOpen);
