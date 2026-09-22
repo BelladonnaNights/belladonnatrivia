@@ -536,6 +536,7 @@ a{color:inherit}
       </span>
       <button class="btn btn-ghost btn-sm" id="vm-backfill-btn" onclick="backfillLinkedStatus()" style="display:none">Fix Already-Linked Items</button>
       <button class="btn btn-ghost btn-sm" onclick="openModal('push-to-vm-overlay')">Show My Trivia Categories Here</button>
+      <button class="btn btn-primary btn-sm" onclick="openModal('finish-linking-overlay')">Finish Linking Everything</button>
     </div>
 
     <div class="filter-bar" id="vm-bulk-bar" style="display:none">
@@ -852,6 +853,22 @@ a{color:inherit}
     <h3 id="agenda-title">Day</h3>
     <div id="agenda-body"></div>
     <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('day-agenda-overlay')">Close</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="finish-linking-overlay">
+  <div class="modal wide">
+    <h3>Finish Linking Everything</h3>
+    <div class="section-sub">Finds every category that was copied to the Venue Menu but never actually merged back into one record, and finishes the merge for all of them at once — same safe merge as clicking Link on one at a time (content preserved, gigs repointed, old copy removed), just done in bulk. Anything already properly linked is left alone.</div>
+    <div id="finish-link-log" class="import-log" style="display:none"></div>
+    <div id="finish-link-preview" style="display:none">
+      <div class="stat-row" id="finish-link-stats"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('finish-linking-overlay')">Close</button>
+      <button class="btn btn-ghost" id="finish-link-preview-btn" onclick="finishLinkingPreview()">Preview</button>
+      <button class="btn btn-primary" id="finish-link-commit-btn" onclick="finishLinkingCommit()" style="display:none">Finish Linking</button>
+    </div>
   </div>
 </div>
 
@@ -1214,7 +1231,7 @@ function attachModeListeners(){
 // that doesn't clearly match (Karaoke, Way to Play, Quickies, etc.) is left
 // alone rather than guessed at.
 function inferPlannerTierFromType(typeStr){
-  const t = (typeStr||'').toLowerCase();
+  const t = (Array.isArray(typeStr) ? typeStr.join(' ') : String(typeStr||'')).toLowerCase();
   if(t.includes('mini')) return 'mini-games';
   if(t.includes('sing')) return 'sing-along';
   if(t.includes('bingo')) return 'music-bingo';
@@ -1227,23 +1244,27 @@ let autoTaggedVmIds = new Set();
       const all = {}, tagged = {};
       const toAutoTag = [];
       snap.forEach(d=>{
-        const c = d.data();
-        all[d.id] = c;
-        let tier = c.plannerTier;
-        if(!tier){
-          const inferred = inferPlannerTierFromType(c.type);
-          if(inferred && !autoTaggedVmIds.has(d.id)){
-            autoTaggedVmIds.add(d.id);
-            toAutoTag.push([d.id, inferred]);
-            tier = inferred; // reflect immediately, don't wait on the round-trip
+        try{
+          const c = d.data();
+          all[d.id] = c;
+          let tier = c.plannerTier;
+          if(!tier){
+            const inferred = inferPlannerTierFromType(c.type);
+            if(inferred && !autoTaggedVmIds.has(d.id)){
+              autoTaggedVmIds.add(d.id);
+              toAutoTag.push([d.id, inferred]);
+              tier = inferred; // reflect immediately, don't wait on the round-trip
+            }
           }
-        }
-        if(tier && !c.pushedFromPlannerId){
-          tagged[d.id] = {
-            name: c.name||'', tier, tags: normalizeVmTags(c.tags), pairsWith: c.pairsWith||[],
-            timesUsed: c.timesUsed||0, lastUsedDate: c.lastUsedDate||null, lastUsedVenueId: c.lastUsedVenueId||null,
-            _vmSource: 'category'
-          };
+          if(tier && !c.pushedFromPlannerId){
+            tagged[d.id] = {
+              name: c.name||'', tier, tags: normalizeVmTags(c.tags), pairsWith: c.pairsWith||[],
+              timesUsed: c.timesUsed||0, lastUsedDate: c.lastUsedDate||null, lastUsedVenueId: c.lastUsedVenueId||null,
+              _vmSource: 'category'
+            };
+          }
+        }catch(docErr){
+          console.error('venueMenuCategories doc '+d.id+' failed to process — skipped, rest continue:', docErr);
         }
       });
       toAutoTag.forEach(([id,tier])=>{
@@ -2863,13 +2884,89 @@ function pickLinkTarget(oldId, source){
     const c = state.bingoCategoriesRaw[oldId];
     linkCtx.oldName = name = c.title;
     const usedCount = countBingoScheduleReferences(oldId);
-    summaryText = `This merges "${name}" (Bingo) into the Venue Menu record, repoints ${usedCount} scheduled entr${usedCount===1?'y':'ies'} to use it, and removes the old standalone Bingo category. Can't be undone.`;
+    summaryText = `This merges "${name}" (Bingo) into the Venue Menu record — its song list, image, and genre tags get copied over first — repoints ${usedCount} scheduled entr${usedCount===1?'y':'ies'} to use it, and removes the old standalone Bingo category. Can't be undone.`;
   }
   document.getElementById('link-search').value = name;
   document.getElementById('link-suggest').innerHTML = '';
   document.getElementById('link-summary-text').textContent = summaryText;
   document.getElementById('link-selected-summary').style.display = 'block';
   document.getElementById('link-confirm-btn').disabled = false;
+}
+// -- The actual merge, factored out so both the one-at-a-time Link tool and
+//    the bulk "Finish Linking Everything" tool run the exact same safe path
+//    — no risk of the two ever drifting into subtly different behavior.
+async function performThemeMerge(vmId, oldId, oldSource, collection){
+  const vmRecord = collection==='venueMenuNights' ? state.vmAllNights[vmId] : state.vmAllCategories[vmId];
+  if(!vmRecord) throw new Error('Venue Menu record not found');
+  const rtdbUpdates = {};
+  const firestoreWrites = [];
+
+  if(oldSource==='trivia'){
+    const oldTheme = state.themes[oldId];
+    if(!oldTheme) throw new Error('Planner theme not found');
+    const mergedTier = vmRecord.plannerTier || oldTheme.tier || null;
+    const mergedPairs = Array.from(new Set([...(vmRecord.pairsWith||[]), ...(oldTheme.pairsWith||[])])).filter(id=>id!==oldId);
+    const mergedTimesUsed = (vmRecord.timesUsed||0) + (oldTheme.timesUsed||0);
+    let mergedLastUsed = vmRecord.lastUsedDate||null, mergedLastVenue = vmRecord.lastUsedVenueId||null;
+    if(oldTheme.lastUsedDate && (!mergedLastUsed || oldTheme.lastUsedDate > mergedLastUsed)){
+      mergedLastUsed = oldTheme.lastUsedDate; mergedLastVenue = oldTheme.lastUsedVenueId||null;
+    }
+
+    Object.entries(state.gigs||{}).forEach(([venueId, byDate])=>{
+      Object.entries(byDate||{}).forEach(([dk, g])=>{
+        if(g.themeId===oldId) rtdbUpdates['trivia/planner/gigs/'+venueId+'/'+dk+'/themeId'] = vmId;
+        if(g.round3ThemeId===oldId) rtdbUpdates['trivia/planner/gigs/'+venueId+'/'+dk+'/round3ThemeId'] = vmId;
+      });
+    });
+    Object.entries(state.themes||{}).forEach(([tid,t])=>{
+      if(tid===oldId) return;
+      if((t.pairsWith||[]).includes(oldId)){
+        const newPairs = t.pairsWith.filter(id=>id!==oldId);
+        if(!newPairs.includes(vmId)) newPairs.push(vmId);
+        if(t._vmSource==='night') firestoreWrites.push(dbFs.collection('venueMenuNights').doc(tid).update({pairsWith:newPairs}));
+        else if(t._vmSource) firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(tid).update({pairsWith:newPairs}));
+        else rtdbUpdates['trivia/planner/themes/'+tid+'/pairsWith'] = newPairs;
+      }
+    });
+
+    const mergedFields = {
+      plannerTier: mergedTier, pairsWith: mergedPairs, linked: true, pushedFromPlannerId: null,
+      timesUsed: mergedTimesUsed, lastUsedDate: mergedLastUsed, lastUsedVenueId: mergedLastVenue
+    };
+    if(collection!=='venueMenuNights'){
+      const mergedTags = Array.from(new Set([...safeTags(vmRecord), ...safeTags(oldTheme)]));
+      mergedFields.tags = mergedTags.join(', ');
+    }
+    firestoreWrites.push(dbFs.collection(collection).doc(vmId).update(mergedFields));
+    rtdbUpdates['trivia/planner/themes/'+oldId] = null;
+  } else {
+    // Bingo categories don't have the tier/pairing/usage fields the Planner
+    // invented, but they DO have real content — song list, image, genre,
+    // the Classic Bingo flag — that has nowhere else to live once the RTDB
+    // node is gone. Copy the WHOLE original record onto the Venue Menu doc
+    // first, under bingoData, so nothing is lost even if a field doesn't
+    // map cleanly onto Venue Menu's own schema — then also map the
+    // obviously useful ones (name, image) directly if the Venue Menu side
+    // doesn't already have its own. All of this is queued as a write
+    // before the delete is ever queued, so the content is preserved
+    // regardless of what order Firebase actually executes these in.
+    const bingoCat = state.bingoCategoriesRaw[oldId] || {};
+    const vmUpdate = { linked: true, pushedFromPlannerId: null, bingoData: bingoCat };
+    if(!vmRecord.name && bingoCat.title) vmUpdate.name = bingoCat.title;
+    if(!vmRecord.bannerData && !vmRecord.image && bingoCat.image) vmUpdate.image = bingoCat.image;
+    Object.entries(state.bingoScheduleRaw||{}).forEach(([entryId, entry])=>{
+      if((entry.rounds||[]).includes(oldId)){
+        rtdbUpdates['bingo/landing/schedule/'+entryId+'/rounds'] = entry.rounds.map(id=>id===oldId?vmId:id);
+      }
+      if((entry.categoryIds||[]).includes(oldId)){
+        rtdbUpdates['bingo/landing/schedule/'+entryId+'/categoryIds'] = entry.categoryIds.map(id=>id===oldId?vmId:id);
+      }
+    });
+    firestoreWrites.push(dbFs.collection(collection).doc(vmId).update(vmUpdate));
+    rtdbUpdates['bingo/landing/categories/'+oldId] = null;
+  }
+
+  await Promise.all([db.ref().update(rtdbUpdates), ...firestoreWrites]);
 }
 async function confirmLinkTheme(){
   if(!linkCtx || !linkCtx.oldId) return;
@@ -2882,64 +2979,7 @@ async function confirmLinkTheme(){
   document.getElementById('link-confirm-btn').disabled = true;
   setSyncStatus('syncing');
   try{
-    const rtdbUpdates = {};
-    const firestoreWrites = [];
-
-    if(oldSource==='trivia'){
-      const oldTheme = state.themes[oldId];
-      const mergedTier = vmRecord.plannerTier || oldTheme.tier || null;
-      const mergedPairs = Array.from(new Set([...(vmRecord.pairsWith||[]), ...(oldTheme.pairsWith||[])])).filter(id=>id!==oldId);
-      const mergedTimesUsed = (vmRecord.timesUsed||0) + (oldTheme.timesUsed||0);
-      let mergedLastUsed = vmRecord.lastUsedDate||null, mergedLastVenue = vmRecord.lastUsedVenueId||null;
-      if(oldTheme.lastUsedDate && (!mergedLastUsed || oldTheme.lastUsedDate > mergedLastUsed)){
-        mergedLastUsed = oldTheme.lastUsedDate; mergedLastVenue = oldTheme.lastUsedVenueId||null;
-      }
-
-      Object.entries(state.gigs||{}).forEach(([venueId, byDate])=>{
-        Object.entries(byDate||{}).forEach(([dk, g])=>{
-          if(g.themeId===oldId) rtdbUpdates['trivia/planner/gigs/'+venueId+'/'+dk+'/themeId'] = vmId;
-          if(g.round3ThemeId===oldId) rtdbUpdates['trivia/planner/gigs/'+venueId+'/'+dk+'/round3ThemeId'] = vmId;
-        });
-      });
-      Object.entries(state.themes||{}).forEach(([tid,t])=>{
-        if(tid===oldId) return;
-        if((t.pairsWith||[]).includes(oldId)){
-          const newPairs = t.pairsWith.filter(id=>id!==oldId);
-          if(!newPairs.includes(vmId)) newPairs.push(vmId);
-          if(t._vmSource==='night') firestoreWrites.push(dbFs.collection('venueMenuNights').doc(tid).update({pairsWith:newPairs}));
-          else if(t._vmSource) firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(tid).update({pairsWith:newPairs}));
-          else rtdbUpdates['trivia/planner/themes/'+tid+'/pairsWith'] = newPairs;
-        }
-      });
-
-      const mergedFields = {
-        plannerTier: mergedTier, pairsWith: mergedPairs, linked: true,
-        timesUsed: mergedTimesUsed, lastUsedDate: mergedLastUsed, lastUsedVenueId: mergedLastVenue
-      };
-      if(collection!=='venueMenuNights'){
-        const mergedTags = Array.from(new Set([...safeTags(vmRecord), ...safeTags(oldTheme)]));
-        mergedFields.tags = mergedTags.join(', ');
-      }
-      firestoreWrites.push(dbFs.collection(collection).doc(vmId).update(mergedFields));
-      rtdbUpdates['trivia/planner/themes/'+oldId] = null;
-    } else {
-      // Bingo categories don't have the tier/pairing/usage fields the Planner
-      // invented — adopt whatever the Venue Menu side already has for those,
-      // untouched, and just repoint the schedule references. (Nights never
-      // reach this branch — they only ever link against Theme Night Vault.)
-      Object.entries(state.bingoScheduleRaw||{}).forEach(([entryId, entry])=>{
-        if((entry.rounds||[]).includes(oldId)){
-          rtdbUpdates['bingo/landing/schedule/'+entryId+'/rounds'] = entry.rounds.map(id=>id===oldId?vmId:id);
-        }
-        if((entry.categoryIds||[]).includes(oldId)){
-          rtdbUpdates['bingo/landing/schedule/'+entryId+'/categoryIds'] = entry.categoryIds.map(id=>id===oldId?vmId:id);
-        }
-      });
-      rtdbUpdates['bingo/landing/categories/'+oldId] = null;
-      firestoreWrites.push(dbFs.collection(collection).doc(vmId).update({ linked: true }));
-    }
-
-    await Promise.all([db.ref().update(rtdbUpdates), ...firestoreWrites]);
+    await performThemeMerge(vmId, oldId, oldSource, collection);
     toast('Linked and merged.');
     closeModal('link-theme-overlay');
   }catch(err){
@@ -2948,6 +2988,47 @@ async function confirmLinkTheme(){
     setSyncStatus('synced');
     document.getElementById('link-confirm-btn').disabled = false;
   }
+}
+// -- Bulk-finish everything "Show My Trivia Categories Here" ever created
+//    but never got manually linked. The pairing is already exact (via
+//    pushedFromPlannerId), so there's no searching/matching risk here —
+//    just running the same safe merge for every known pair.
+let finishLinkingPairs = null;
+function findUnfinishedLinks(){
+  return Object.entries(state.vmAllCategories||{})
+    .filter(([id,c]) => c.pushedFromPlannerId && !c.linked && rtdbThemes[c.pushedFromPlannerId])
+    .map(([id,c]) => ({vmId:id, oldId:c.pushedFromPlannerId, name:c.name}));
+}
+function finishLinkingPreview(){
+  document.getElementById('finish-link-preview-btn').disabled = true;
+  finishLinkingPairs = findUnfinishedLinks();
+  document.getElementById('finish-link-stats').innerHTML =
+    `<div class="stat-card"><div class="stat-num">${finishLinkingPairs.length}</div><div class="stat-lbl">Pairs to finish linking</div></div>`;
+  document.getElementById('finish-link-preview').style.display = 'block';
+  document.getElementById('finish-link-commit-btn').style.display = finishLinkingPairs.length ? 'inline-block' : 'none';
+  document.getElementById('finish-link-preview-btn').disabled = false;
+}
+async function finishLinkingCommit(){
+  if(!finishLinkingPairs || !finishLinkingPairs.length) return;
+  document.getElementById('finish-link-commit-btn').disabled = true;
+  const el = document.getElementById('finish-link-log');
+  el.style.display = 'block';
+  function log(msg){ const l=document.createElement('div'); l.textContent=msg; el.appendChild(l); el.scrollTop=el.scrollHeight; }
+  log('Finishing '+finishLinkingPairs.length+' links…');
+  let n=0, failed=0;
+  for(const pair of finishLinkingPairs){
+    try{
+      await performThemeMerge(pair.vmId, pair.oldId, 'trivia', 'venueMenuCategories');
+      n++;
+      if(n%5===0) log('  …'+n+' done');
+    }catch(err){
+      failed++;
+      log('  Failed on "'+(pair.name||pair.vmId)+'": '+(err.code||err.message));
+    }
+  }
+  log('Done — '+n+' linked'+(failed?', '+failed+' failed (see above)':'')+'.');
+  toast('Finished linking '+n+' categories.');
+  document.getElementById('finish-link-commit-btn').disabled = false;
 }
 
 function bulkDeleteThemes(){
@@ -3072,10 +3153,15 @@ function saveTheme(){
   const name = document.getElementById('t-name').value.trim();
   if(!name) return toast('Theme needs a name.', true);
   const isNew = !editingThemeId;
-  const themeId = editingThemeId || db.ref('trivia/planner/themes').push().key;
+  const tier = document.getElementById('t-tier').value;
+  // Brand new themes with a tier that has a real Venue Menu equivalent are
+  // created directly as one unified record from the start — no separate
+  // "push" then "link" dance needed. It's just one category, visible and
+  // editable from both apps, from the moment it's created.
+  const createDirectlyInVm = isNew && tier && TIER_TO_VM_TYPE[tier];
+  const themeId = editingThemeId || (createDirectlyInVm ? dbFs.collection('venueMenuCategories').doc().id : db.ref('trivia/planner/themes').push().key);
   const existing = editingThemeId ? state.themes[editingThemeId] : {};
   const isVm = !isNew && existing._vmSource;
-  const tier = document.getElementById('t-tier').value;
   const newPairs = canPair(tier) ? editingThemePairs.slice() : [];
   const oldPairs = existing.pairsWith || [];
   const commonFields = {
@@ -3098,6 +3184,11 @@ function saveTheme(){
     const vmFields = { ...commonFields, plannerTier: tier || null, pairsWith: canPair(tier) ? newPairs : null };
     if(!isNight) vmFields.tags = editingThemeTags.join(', '); // Nights don't have a tags field
     firestoreWrites.push(dbFs.collection(isNight ? 'venueMenuNights' : 'venueMenuCategories').doc(themeId).update(vmFields));
+  } else if(createDirectlyInVm){
+    firestoreWrites.push(dbFs.collection('venueMenuCategories').doc(themeId).set({
+      ...commonFields, type: TIER_TO_VM_TYPE[tier], plannerTier: tier,
+      tags: editingThemeTags.join(', '), pairsWith: newPairs, linked: true
+    }));
   } else {
     rtdbUpdates['trivia/planner/themes/'+themeId] = { ...commonFields, tags: editingThemeTags, tier: tier || null, pairsWith: canPair(tier) ? newPairs : null };
   }
