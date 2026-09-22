@@ -600,6 +600,13 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-confirm-btns{display:flex;gap:8px}
 .hb-confirm-btns button{flex:1}
 
+/* ── SCHEDULE ── */
+.nav-btn-sched{font-size:12px;padding:5px 14px;letter-spacing:.06em}
+.sched-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:1.25rem}
+.sched-tab{padding:8px 16px;font-size:10px;cursor:pointer;border:none;background:none;color:var(--text2);border-bottom:2px solid transparent;font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;transition:all .15s}
+.sched-tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.btn-sched-accent{background:var(--gold-dim);border:1px solid var(--gold-glow);color:var(--gold);font-size:10px;padding:5px 12px;border-radius:var(--radius);font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:all .15s}
+.btn-sched-accent:hover{background:rgba(201,168,76,.2)}
 </style>
 </head>
 <body>
@@ -610,6 +617,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <div class="nav-title">BELLADONNA <span>TRIVIA</span></div>
   </div>
   <div class="nav-right">
+    <button class="nav-btn nav-btn-ghost nav-btn-sched" onclick="openSchedule()">Schedule</button>
     <span class="sync-label" id="gateway-user-label" style="margin-right:0.4rem;"></span>
     <a href="https://belladonnanights.github.io/belladonna-gateway/accounts.html?view=account" class="nav-btn nav-btn-ghost" style="text-decoration:none;">My Account</a>
     <button class="nav-btn nav-btn-ghost" onclick="gatewaySignOut()">Sign Out</button>
@@ -857,6 +865,144 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <div class="hb-confirm-btns">
       <button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button>
       <button class="btn btn-danger" id="hb-confirm-ok" onclick="runConfirmedAction()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN SCHEDULE OVERLAY -->
+<div class="overlay" id="trivia-sched-overlay">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:12px;flex:1">
+        <div class="modal-title">Schedule Manager</div>
+        <select class="field-input" id="sched-venue-filter" onchange="renderSchedTimeline()" style="max-width:180px;font-size:12px;padding:5px 10px"></select>
+      </div>
+      <button class="modal-close" onclick="closeSchedule()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="sched-tabs">
+        <button class="sched-tab active" id="stab-timeline" onclick="switchSchedTab('timeline')">Timeline</button>
+        <button class="sched-tab" id="stab-add"      onclick="switchSchedTab('add')">Add Entry</button>
+        <button class="sched-tab" id="stab-bulk"     onclick="switchSchedTab('bulk')">Bulk Add</button>
+        <button class="sched-tab" id="stab-venues"   onclick="switchSchedTab('venues')">Venues</button>
+      </div>
+
+      <!-- TIMELINE -->
+      <div id="spanel-timeline"><div id="sched-timeline-content"></div></div>
+
+      <!-- ADD ENTRY -->
+      <div id="spanel-add" style="display:none">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:1rem">
+          <div style="font-size:12px;font-weight:600;color:var(--gold2);margin-bottom:1rem;font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase" id="sched-form-label">Add Schedule Entry</div>
+          <input type="hidden" id="sched-edit-id">
+          <div style="display:flex;gap:12px;margin-bottom:1rem;flex-wrap:wrap">
+            <div style="flex:1;min-width:140px">
+              <label class="field-label">Date</label>
+              <input class="field-input" type="date" id="sched-date" onchange="updateSchedRecentHint()">
+            </div>
+            <div style="flex:1;min-width:140px">
+              <label class="field-label">Venue</label>
+              <select class="field-input" id="sched-venue-select" onchange="updateSchedRecentHint()">
+                <option value="">— select venue —</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-bottom:1rem">
+            <label class="field-label">Rounds for this night</label>
+            <div style="font-size:11px;color:var(--text3);font-style:italic;margin-bottom:8px">Assign a trivia category to each round. Rounds 4–5 are optional.</div>
+            <div style="display:flex;flex-direction:column;gap:8px" id="sched-rounds-wrap">
+              ${[1,2,3,4,5].map(i => `<div style="display:flex;align-items:center;gap:8px">
+                <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${i<=3?'var(--gold)':'var(--text3)'};min-width:60px">Round ${i}</div>
+                <select class="field-input" id="sched-round-${i}" style="flex:1"><option value="">${i<=3?'— pick a category —':'(none)'}</option></select>
+              </div>`).join('')}
+            </div>
+          </div>
+          <div style="margin-bottom:.75rem">
+            <label class="field-label">Notes <span style="color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+            <input class="field-input" type="text" id="sched-notes" placeholder="e.g. Private event, special night…">
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary" onclick="saveSchedEntry()">Save Entry</button>
+            <button class="btn btn-ghost btn-sm" onclick="resetSchedForm()" id="sched-cancel-btn" style="display:none">Cancel Edit</button>
+          </div>
+        </div>
+        <div id="recent-hint-wrap" style="display:none">
+          <div class="field-label" style="margin-bottom:8px">Recent history at this venue</div>
+          <div id="recent-hint-list"></div>
+        </div>
+      </div>
+
+      <!-- VENUES -->
+      <div id="spanel-venues" style="display:none">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1rem;align-items:flex-end">
+          <div style="flex:2;min-width:140px"><label class="field-label">Venue Name</label><input class="field-input" type="text" id="venue-name-input" placeholder="e.g. The Taphouse" onkeydown="if(event.key==='Enter')addSchedVenue()"></div>
+          <div style="flex:1;min-width:80px"><label class="field-label">Day</label>
+            <select class="field-input" id="venue-day-input">
+              <option value="">—</option>
+              <option>Sun</option><option>Mon</option><option>Tue</option><option>Wed</option><option>Thu</option><option>Fri</option><option>Sat</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:90px"><label class="field-label">Time</label><input class="field-input" type="time" id="venue-time-input"></div>
+          <div style="flex:1;min-width:110px"><label class="field-label">Status</label>
+            <select class="field-input" id="venue-status-input">
+              <option value="active">Active</option><option value="seasonal">Seasonal</option><option value="inactive">Inactive</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="venue-add-btn" onclick="addSchedVenue()">Add Venue</button>
+        </div>
+        <div id="venue-list"></div>
+      </div>
+
+      <!-- BULK ADD -->
+      <div id="spanel-bulk" style="display:none">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:1rem">
+          <div style="font-size:12px;font-weight:600;color:var(--gold2);margin-bottom:.75rem;font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase">Bulk Schedule Import</div>
+          <div style="margin-bottom:.75rem">
+            <label class="field-label">Venue</label>
+            <select class="field-input" id="bulk-venue-select" style="margin-bottom:.5rem"><option value="">— select venue —</option></select>
+          </div>
+          <div style="margin-bottom:.75rem">
+            <label class="field-label">Paste your schedule</label>
+            <div style="font-size:11px;color:var(--text3);font-style:italic;margin-bottom:6px;line-height:1.6">
+              One entry per line. Format:<br>
+              <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">Apr 5 - Round 1: General Trivia, Round 2: Music Trivia</code><br>
+              Optional notes after a pipe: <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">| private event</code>
+            </div>
+            <textarea class="field-input" id="bulk-text" rows="8" style="font-family:monospace;font-size:12px;line-height:1.6;resize:vertical" placeholder="Apr 5 - Round 1: General Trivia, Round 2: Music Trivia&#10;Apr 12 - Round 1: 90s Pop, Round 2: General Trivia"></textarea>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost" onclick="bulkSchedParse()">Preview</button>
+            <button class="btn btn-primary" id="bulk-save-btn" onclick="bulkSchedSave()" style="display:none">Save all entries</button>
+            <button class="btn btn-ghost btn-sm" onclick="bulkSchedClear()" style="color:var(--text3)">Clear</button>
+          </div>
+        </div>
+        <div id="bulk-preview"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HOST SCHEDULE OVERLAY -->
+<div class="overlay" id="trivia-host-sched-overlay">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <div class="modal-title">Tonight's Schedule</div>
+      <button class="modal-close" onclick="document.getElementById('trivia-host-sched-overlay').classList.remove('show')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:12px;margin-bottom:1.25rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:130px">
+          <label class="field-label">Date</label>
+          <input class="field-input" type="date" id="host-sched-date" onchange="renderHostSchedTrivia()">
+        </div>
+        <div style="flex:1;min-width:130px">
+          <label class="field-label">Your venue</label>
+          <select class="field-input" id="host-sched-venue" onchange="renderHostSchedTrivia()">
+            <option value="">— select your venue —</option>
+          </select>
+        </div>
+      </div>
+      <div id="host-sched-results"></div>
     </div>
   </div>
 </div>
@@ -2665,6 +2811,382 @@ function attachHbListeners() {
 
 // ═══════════════════════════════════════════════
 // ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+//  SCHEDULE
+// ═══════════════════════════════════════════════
+let triviaVenues = [], triviaScheduleEntries = [], triviaVenueEditId = null, triviaSchedBulkParsed = [];
+
+// Firebase listeners for venues + schedule (attached after auth)
+function attachSchedListeners() {
+  db.ref('trivia/venues').on('value', snap => {
+    const data = snap.val() || {};
+    triviaVenues = Object.entries(data).map(([id,v]) => ({id, ...v})).sort((a,b) => (a.name||'').localeCompare(b.name||''));
+    populateSchedVenueDropdowns();
+    renderSchedVenueList();
+  });
+  db.ref('trivia/schedule').on('value', snap => {
+    const data = snap.val() || {};
+    triviaScheduleEntries = Object.entries(data).map(([id,v]) => ({id, ...v}))
+      .sort((a,b) => (a.date||'').localeCompare(b.date||''));
+    renderSchedTimeline();
+  });
+}
+
+function openSchedule() {
+  document.getElementById('trivia-sched-overlay').classList.add('show');
+  renderSchedTimeline();
+  renderSchedCatDropdowns();
+}
+function closeSchedule() { document.getElementById('trivia-sched-overlay').classList.remove('show'); }
+
+function switchSchedTab(tab) {
+  ['timeline','add','bulk','venues'].forEach(t => {
+    document.getElementById('spanel-' + t).style.display = t === tab ? '' : 'none';
+    const btn = document.getElementById('stab-' + t);
+    if(btn) btn.classList.toggle('active', t === tab);
+  });
+  if(tab === 'add')    renderSchedCatDropdowns();
+  if(tab === 'venues') renderSchedVenueList();
+  if(tab === 'bulk')   bulkSchedPopulateVenue();
+}
+
+function populateSchedVenueDropdowns() {
+  const opts = '<option value="">— select venue —</option>' + triviaVenues.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  const filterOpts = '<option value="all">All venues</option>' + triviaVenues.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  ['sched-venue-select','host-sched-venue','bulk-venue-select'].forEach(id => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    const cur = el.value; el.innerHTML = opts; if(cur) el.value = cur;
+  });
+  const fEl = document.getElementById('sched-venue-filter');
+  if(fEl) { const cur = fEl.value; fEl.innerHTML = filterOpts; if(cur) fEl.value = cur; }
+}
+
+function renderSchedCatDropdowns() {
+  const opts = '<option value="">— pick a category —</option>' + categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  const optsOpt = '<option value="">(none)</option>' + categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  const editId = document.getElementById('sched-edit-id')?.value;
+  const entry = editId ? triviaScheduleEntries.find(e => e.id === editId) : null;
+  const rounds = entry ? (entry.rounds || []) : [];
+  [1,2,3].forEach((i,idx) => {
+    const el = document.getElementById('sched-round-' + i);
+    if(el) { el.innerHTML = opts; el.value = rounds[idx] || ''; }
+  });
+  [4,5].forEach((i,idx) => {
+    const el = document.getElementById('sched-round-' + i);
+    if(el) { el.innerHTML = optsOpt; el.value = rounds[idx+3] || ''; }
+  });
+}
+
+function updateSchedRecentHint() {
+  const venueId = document.getElementById('sched-venue-select').value;
+  const wrap = document.getElementById('recent-hint-wrap');
+  const list = document.getElementById('recent-hint-list');
+  if(!venueId || !wrap) { if(wrap) wrap.style.display = 'none'; return; }
+  const recent = triviaScheduleEntries.filter(e => e.venueId === venueId).slice(-5).reverse();
+  if(!recent.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  const today = new Date().toISOString().split('T')[0];
+  list.innerHTML = recent.map(e => {
+    const rounds = e.rounds || [];
+    const pills = rounds.map((id,i) => {
+      const cat = categories.find(c => c.id === id);
+      return `<span style="color:var(--gold);font-size:10px;font-family:var(--cinzel);letter-spacing:.05em">R${i+1}:</span> ${cat ? cat.name : '—'}`;
+    }).join(' · ');
+    const isPast = e.date < today;
+    return `<div style="font-size:12px;padding:7px 10px;background:var(--surface2);border-radius:var(--radius);margin-bottom:4px;border-left:3px solid ${isPast?'var(--border2)':'var(--gold)'}">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:${pills?'4px':'0'}">
+        <span style="color:${isPast?'var(--text2)':'var(--gold)'};font-weight:600">${schedFormatDate(e.date)}</span>
+        ${e.notes ? `<span style="color:var(--text3);font-style:italic;font-size:11px"> — ${e.notes}</span>` : ''}
+      </div>
+      ${pills ? `<div style="color:var(--text);line-height:1.6;font-size:11px">${pills}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function saveSchedEntry() {
+  const date = document.getElementById('sched-date').value;
+  const venueId = document.getElementById('sched-venue-select').value;
+  if(!date) { toast('Pick a date', true); return; }
+  if(!venueId) { toast('Pick a venue', true); return; }
+  const rounds = [1,2,3,4,5].map(i => document.getElementById('sched-round-'+i)?.value || '').filter(Boolean);
+  if(!rounds.length) { toast('Pick at least one round category', true); return; }
+  const notes = document.getElementById('sched-notes').value.trim();
+  const editId = document.getElementById('sched-edit-id').value;
+  const id = editId || 'sched_' + Date.now();
+  db.ref('trivia/schedule/' + id).set({id, date, venueId, rounds, notes, updatedAt: Date.now()});
+  resetSchedForm();
+  toast(editId ? 'Entry updated!' : 'Entry added!');
+}
+
+function editSchedEntry(id) {
+  const e = triviaScheduleEntries.find(x => x.id === id);
+  if(!e) return;
+  document.getElementById('sched-edit-id').value = id;
+  document.getElementById('sched-date').value = e.date;
+  document.getElementById('sched-venue-select').value = e.venueId;
+  document.getElementById('sched-notes').value = e.notes || '';
+  document.getElementById('sched-form-label').textContent = 'Editing Entry';
+  document.getElementById('sched-cancel-btn').style.display = '';
+  switchSchedTab('add');
+  renderSchedCatDropdowns();
+  const rounds = e.rounds || [];
+  [1,2,3,4,5].forEach((i,idx) => {
+    const el = document.getElementById('sched-round-' + i);
+    if(el && rounds[idx]) el.value = rounds[idx];
+  });
+  updateSchedRecentHint();
+}
+function deleteSchedEntry(id) {
+  if(!confirm('Delete this schedule entry?')) return;
+  db.ref('trivia/schedule/' + id).remove();
+  toast('Entry removed');
+}
+function resetSchedForm() {
+  document.getElementById('sched-edit-id').value = '';
+  document.getElementById('sched-date').value = '';
+  document.getElementById('sched-venue-select').value = '';
+  document.getElementById('sched-notes').value = '';
+  document.getElementById('sched-form-label').textContent = 'Add Schedule Entry';
+  document.getElementById('sched-cancel-btn').style.display = 'none';
+  const wrap = document.getElementById('recent-hint-wrap');
+  if(wrap) wrap.style.display = 'none';
+  renderSchedCatDropdowns();
+}
+
+function schedFormatDate(dateStr) {
+  if(!dateStr) return '';
+  const parts = dateStr.split('-');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[parseInt(parts[1])-1] + ' ' + parseInt(parts[2]) + ', ' + parts[0];
+}
+
+function renderSchedTimeline() {
+  const tl = document.getElementById('sched-timeline-content');
+  if(!tl) return;
+  const fEl = document.getElementById('sched-venue-filter');
+  const venueFilter = fEl ? fEl.value : 'all';
+  const today = new Date().toISOString().split('T')[0];
+  const filtered = venueFilter === 'all' ? triviaScheduleEntries : triviaScheduleEntries.filter(e => e.venueId === venueFilter);
+  if(!filtered.length) { tl.innerHTML = '<div style="font-size:14px;color:var(--text3);font-style:italic;padding:1rem 0">No schedule entries yet. Use Add Entry to plan your nights.</div>'; return; }
+  const groups = {};
+  filtered.forEach(e => { const k = e.date.slice(0,7); if(!groups[k]) groups[k]=[]; groups[k].push(e); });
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  let upcoming = [], past = [];
+  Object.keys(groups).sort().forEach(month => {
+    const entries = groups[month];
+    const mp = month.split('-');
+    const label = monthNames[parseInt(mp[1])-1] + ' ' + mp[0];
+    const isUpcoming = month >= today.slice(0,7);
+    let rows = '';
+    entries.forEach(e => {
+      const vname = (triviaVenues.find(v => v.id === e.venueId) || {}).name || 'Unknown';
+      const rounds = e.rounds || [];
+      const pills = rounds.map((id,ri) => {
+        const c = categories.find(x => x.id === id);
+        return `<span style="font-size:11px;background:var(--gold-dim);border:1px solid var(--gold-glow);border-radius:99px;padding:2px 8px;color:var(--gold2);font-family:var(--cinzel);letter-spacing:.04em"><span style="font-size:9px;color:var(--text3);margin-right:3px">R${ri+1}</span>${c?c.name:id}</span>`;
+      }).join('');
+      const isPast = e.date < today;
+      rows += `<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:.5px solid var(--border);opacity:${isPast?'0.55':'1'}">
+        <div style="min-width:36px;font-size:12px;font-weight:700;color:${isPast?'var(--text3)':'var(--gold)'};font-family:var(--cinzel);padding-top:2px">${e.date.split('-')[2]}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px">${vname}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:${e.notes?'4px':'0'}">${pills}</div>
+          ${e.notes?`<div style="font-size:11px;color:var(--gold2);font-style:italic;background:var(--gold-dim);border-radius:4px;padding:2px 6px;display:inline-block;margin-top:2px">📋 ${e.notes}</div>`:''}
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          <button class="btn-sched-accent" onclick="editSchedEntry('${e.id}')" style="font-size:10px;padding:3px 8px">Edit</button>
+          <button class="btn btn-ghost btn-sm" onclick="deleteSchedEntry('${e.id}')" style="font-size:10px;padding:3px 8px;color:var(--red)">✕</button>
+        </div>
+      </div>`;
+    });
+    const block = `<div style="margin-bottom:1.5rem"><div style="font-family:var(--cinzel);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:${isUpcoming?'var(--gold)':'var(--text3)'};margin-bottom:4px;padding-bottom:6px;border-bottom:1px solid var(--border)">${label}</div>${rows}</div>`;
+    if(isUpcoming) upcoming.push(block); else past.push(block);
+  });
+  let html = '';
+  if(upcoming.length) html += '<div style="margin-bottom:2rem">' + upcoming.join('') + '</div>';
+  if(past.length) html += '<div style="opacity:.8"><div style="font-size:10px;font-family:var(--cinzel);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:12px">Past</div>' + past.join('') + '</div>';
+  tl.innerHTML = html;
+}
+
+function renderHostSchedTrivia() {
+  const res = document.getElementById('host-sched-results');
+  if(!res) return;
+  const date = document.getElementById('host-sched-date').value;
+  const venueId = document.getElementById('host-sched-venue').value;
+  if(!date || !venueId) { res.innerHTML = '<div style="font-size:14px;color:var(--text3);font-style:italic;text-align:center;padding:1rem">Select a date and venue.</div>'; return; }
+  const entries = triviaScheduleEntries.filter(e => e.date === date && e.venueId === venueId);
+  if(!entries.length) { res.innerHTML = '<div style="font-size:14px;color:var(--text3);font-style:italic;text-align:center;padding:1rem">Nothing scheduled for this date and venue.</div>'; return; }
+  let html = '';
+  entries.forEach(entry => {
+    if(entry.notes) html += `<div style="background:var(--gold-dim);border:1px solid var(--gold-glow);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text2)">📋 ${entry.notes}</div>`;
+    const rounds = entry.rounds || [];
+    rounds.forEach((catId, i) => {
+      const c = categories.find(x => x.id === catId);
+      if(!c) return;
+      html += `<div style="margin-bottom:12px">
+        <div style="font-family:var(--cinzel);font-size:9px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:4px">Round ${i+1}</div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 14px;display:flex;align-items:center;justify-content:space-between">
+          <div style="font-family:var(--cinzel);font-size:13px;font-weight:600;letter-spacing:.06em;color:var(--text)">${c.name}</div>
+          <div style="font-size:11px;color:var(--text3)">${c.tabName||c.type||''}</div>
+        </div>
+      </div>`;
+    });
+  });
+  res.innerHTML = html || '<div style="font-size:14px;color:var(--text3);font-style:italic;text-align:center;padding:1rem">Nothing found.</div>';
+}
+
+// ── Venues ──
+function addSchedVenue() {
+  const name = document.getElementById('venue-name-input').value.trim();
+  const day = document.getElementById('venue-day-input').value;
+  const time = document.getElementById('venue-time-input').value;
+  const status = document.getElementById('venue-status-input').value;
+  if(!name) return;
+  const id = triviaVenueEditId || ('venue_' + Date.now());
+  db.ref('trivia/venues/' + id).set({id, name, day, time, status});
+  document.getElementById('venue-name-input').value = '';
+  document.getElementById('venue-day-input').value = '';
+  document.getElementById('venue-time-input').value = '';
+  document.getElementById('venue-status-input').value = 'active';
+  document.getElementById('venue-add-btn').textContent = 'Add Venue';
+  const wasEdit = !!triviaVenueEditId;
+  triviaVenueEditId = null;
+  toast(wasEdit ? 'Venue updated!' : 'Venue added!');
+}
+function editSchedVenue(id) {
+  const v = triviaVenues.find(x => x.id === id);
+  if(!v) return;
+  triviaVenueEditId = id;
+  document.getElementById('venue-name-input').value = v.name || '';
+  document.getElementById('venue-day-input').value = v.day || '';
+  document.getElementById('venue-time-input').value = v.time || '';
+  document.getElementById('venue-status-input').value = v.status || 'active';
+  document.getElementById('venue-add-btn').textContent = 'Save Changes';
+}
+function deleteSchedVenue(id) {
+  if(!confirm('Remove this venue?')) return;
+  db.ref('trivia/venues/' + id).remove();
+  toast('Venue removed');
+}
+function renderSchedVenueList() {
+  const list = document.getElementById('venue-list');
+  if(!list) return;
+  if(!triviaVenues.length) { list.innerHTML = '<div style="font-size:13px;color:var(--text3);font-style:italic">No venues yet.</div>'; return; }
+  list.innerHTML = triviaVenues.map(v => {
+    const sub = [v.day ? v.day + (v.time ? ' ' + v.time : '') : '', v.status && v.status !== 'active' ? v.status : ''].filter(Boolean).join(' · ');
+    return `<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 12px;margin-bottom:6px">
+      <div><div style="font-size:13px;color:var(--text)">${v.name}</div>${sub?`<div style="font-size:11px;color:var(--text3);margin-top:2px">${sub}</div>`:''}</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="editSchedVenue('${v.id}')">✎</button>
+        <button class="btn btn-ghost btn-sm" onclick="deleteSchedVenue('${v.id}')" style="color:var(--red)">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Bulk ──
+function bulkSchedPopulateVenue() {
+  const sel = document.getElementById('bulk-venue-select');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— select venue —</option>' + triviaVenues.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  if(cur) sel.value = cur;
+}
+function bulkSchedParse() {
+  const venueId = document.getElementById('bulk-venue-select').value;
+  const text = document.getElementById('bulk-text').value.trim();
+  const preview = document.getElementById('bulk-preview');
+  const saveBtn = document.getElementById('bulk-save-btn');
+  if(!venueId) { preview.innerHTML = '<div style="color:var(--red);font-size:13px;padding:.5rem 0">Pick a venue first.</div>'; return; }
+  if(!text) { preview.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:.5rem 0">Paste some schedule entries above.</div>'; return; }
+  const vname = (triviaVenues.find(v => v.id === venueId)||{}).name||'';
+  const year = new Date().getFullYear();
+  const monthMap = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11,january:0,february:1,march:2,april:3,june:5,july:6,august:7,september:8,october:9,november:10,december:11};
+  triviaSchedBulkParsed = [];
+  const errors = [];
+  text.split('\n').map(l=>l.trim()).filter(Boolean).forEach((line, li) => {
+    const [main, noteRaw] = line.split('|');
+    const notes = noteRaw ? noteRaw.trim() : '';
+    const dashIdx = main.indexOf('-');
+    if(dashIdx === -1) { errors.push('Line ' + (li+1) + ': no dash found after date'); return; }
+    const datePart = main.slice(0, dashIdx).trim();
+    const roundsPart = main.slice(dashIdx+1).trim();
+    const dateTokens = datePart.replace(',','').split(/\s+/);
+    let parsedDate = null;
+    if(dateTokens.length >= 2) {
+      const mKey = dateTokens[0].toLowerCase().slice(0,3);
+      const mNum = monthMap[mKey];
+      const day = parseInt(dateTokens[1]);
+      const yr = dateTokens[2] ? parseInt(dateTokens[2]) : year;
+      if(mNum !== undefined && !isNaN(day)) parsedDate = yr + '-' + String(mNum+1).padStart(2,'0') + '-' + String(day).padStart(2,'0');
+    }
+    if(!parsedDate) { errors.push('Line ' + (li+1) + ': could not parse date "' + datePart + '"'); return; }
+    const rounds = roundsPart.split(',').map(seg => {
+      seg = seg.trim();
+      const colonIdx = seg.indexOf(':');
+      if(colonIdx === -1) return null;
+      const catName = seg.slice(colonIdx+1).trim().toLowerCase();
+      let match = categories.find(c => c.name.toLowerCase() === catName);
+      if(!match) match = categories.find(c => c.name.toLowerCase().includes(catName) || catName.includes(c.name.toLowerCase()));
+      return { raw: seg.slice(colonIdx+1).trim(), catId: match ? match.id : null, catTitle: match ? match.name : null };
+    }).filter(Boolean);
+    if(!rounds.length) { errors.push('Line ' + (li+1) + ': no rounds found'); return; }
+    triviaSchedBulkParsed.push({ date: parsedDate, venueId, rounds, notes, raw: line });
+  });
+  let html = '';
+  if(errors.length) { html += '<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--radius);padding:10px 14px;margin-bottom:1rem"><div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:6px;font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase">Parse errors</div>' + errors.map(e=>`<div style="font-size:12px;color:var(--red);margin-bottom:2px">⚠ ${e}</div>`).join('') + '</div>'; }
+  if(triviaSchedBulkParsed.length) {
+    html += `<div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">${triviaSchedBulkParsed.length} entr${triviaSchedBulkParsed.length===1?'y':'ies'} ready for ${vname}</div><div style="display:flex;flex-direction:column;gap:6px">`;
+    triviaSchedBulkParsed.forEach(entry => {
+      const hasErr = entry.rounds.some(r=>!r.catId);
+      const roundsHTML = entry.rounds.map((r,i) => `<span style="font-size:11px;${r.catId?'color:var(--text)':'color:var(--red);text-decoration:line-through'}"><span style="color:var(--gold);font-family:var(--cinzel);font-size:9px">R${i+1}:</span> ${r.catId?r.catTitle:r.raw+' ⚠ not found'}</span>`).join(' · ');
+      html += `<div style="background:${hasErr?'rgba(220,60,60,.06)':'var(--surface2)'};border:1px solid ${hasErr?'rgba(220,60,60,.2)':'var(--border)'};border-radius:var(--radius);padding:8px 12px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-family:var(--cinzel);font-size:11px;font-weight:600;color:var(--gold);min-width:72px">${schedFormatDate(entry.date)}</span><span>${roundsHTML}</span>${entry.notes?`<span style="font-size:11px;color:var(--text3);font-style:italic;margin-left:auto">📋 ${entry.notes}</span>`:''}</div></div>`;
+    });
+    html += '</div>';
+    const allOk = triviaSchedBulkParsed.every(e => e.rounds.every(r=>r.catId));
+    saveBtn.style.display = '';
+    saveBtn.textContent = 'Save ' + triviaSchedBulkParsed.length + ' entr' + (triviaSchedBulkParsed.length===1?'y':'ies') + (allOk?'':' (some unmatched)');
+  } else { saveBtn.style.display = 'none'; }
+  preview.innerHTML = html;
+}
+function bulkSchedSave() {
+  if(!triviaSchedBulkParsed.length) return;
+  let saved = 0;
+  triviaSchedBulkParsed.forEach(entry => {
+    const rounds = entry.rounds.filter(r=>r.catId).map(r=>r.catId);
+    if(!rounds.length) return;
+    const id = 'sched_' + Date.now() + '_' + Math.floor(Math.random()*9999);
+    db.ref('trivia/schedule/' + id).set({id, date:entry.date, venueId:entry.venueId, rounds, notes:entry.notes, createdAt:Date.now()});
+    saved++;
+  });
+  toast(saved + ' entr' + (saved===1?'y':'ies') + ' saved!');
+  bulkSchedClear();
+  switchSchedTab('timeline');
+}
+function bulkSchedClear() {
+  document.getElementById('bulk-text').value = '';
+  document.getElementById('bulk-preview').innerHTML = '';
+  document.getElementById('bulk-save-btn').style.display = 'none';
+  triviaSchedBulkParsed = [];
+}
+
+// Attach schedule listeners once db is ready
+// (called after Firebase init — piggybacking the existing auth listener)
+// Wire into existing attachHbListeners or call separately
+(function waitForDb() {
+  if(typeof db !== 'undefined' && db) { attachSchedListeners(); }
+  else { setTimeout(waitForDb, 300); }
+})();
+
+// ESC closes schedule overlays
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') {
+    closeSchedule();
+    document.getElementById('trivia-host-sched-overlay')?.classList.remove('show');
+  }
+});
+
 function driveViewUrl(url) {
   if(!url) return url;
   const fm = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
