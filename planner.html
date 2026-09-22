@@ -693,10 +693,17 @@ a{color:inherit}
     <h3 id="venue-modal-title">Add Venue</h3>
     <label class="form-label">Name</label>
     <input type="text" class="form-input" id="v-name">
-    <label class="form-label">Group under (same physical place, e.g. multiple nights) — leave blank to use the name above</label>
-    <input type="text" class="form-input" id="v-group" placeholder="Same as name" list="group-name-list">
-    <datalist id="group-name-list"></datalist>
-    <div class="form-row2">
+    <input type="hidden" id="v-group">
+
+    <!-- ADD mode: multiple day/time slots for this venue, created together -->
+    <div id="v-slots-section">
+      <label class="form-label">Days &amp; Times <span style="opacity:.6">(add one row per gig night at this venue)</span></label>
+      <div id="v-slots-list" style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:0.6rem;"></div>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="addVenueSlotRow()">+ Add Night</button>
+    </div>
+
+    <!-- EDIT mode: this one slot's day/time, exactly as before -->
+    <div class="form-row2" id="v-single-daytime" style="display:none;">
       <div><label class="form-label">Day</label>
         <select class="form-select" id="v-day">
           <option value="">—</option><option>Mon</option><option>Tue</option><option>Wed</option>
@@ -704,6 +711,7 @@ a{color:inherit}
         </select></div>
       <div><label class="form-label">Time</label><input type="text" class="form-input" id="v-time" placeholder="7:00pm"></div>
     </div>
+
     <div class="form-row2">
       <div><label class="form-label">Pay Amount</label><input type="text" class="form-input" id="v-pay-amount" placeholder="175"></div>
       <div><label class="form-label">Pay Method</label>
@@ -728,6 +736,7 @@ a{color:inherit}
     <input type="text" class="form-input" id="v-host" placeholder="Eddy, Miguel…">
     <label class="form-label">Notes</label>
     <textarea class="form-textarea" id="v-notes" rows="2"></textarea>
+    <div style="font-size:11px;color:var(--text3);margin:0.4rem 0;" id="v-slots-hint">Pay, status, source, host and notes apply to every night added here — edit an individual night afterward if one needs to be different.</div>
     <div class="modal-actions">
       <button class="btn btn-danger btn-sm" id="venue-delete-btn" onclick="deleteVenue()" style="display:none">Delete</button>
       <span style="flex:1"></span>
@@ -2418,16 +2427,37 @@ async function submitBulkFill(){
 //  VENUE MODAL
 // ═══════════════════════════════════════════════
 let editingVenueId = null;
+function addVenueSlotRow(day,time){
+  const wrap=document.getElementById('v-slots-list');
+  const rowId='vslot_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+  const div=document.createElement('div');
+  div.id=rowId;
+  div.className='form-row2';
+  div.style.cssText='align-items:flex-end;';
+  div.innerHTML=`
+    <div><select class="form-select v-slot-day">
+      <option value="">—</option>
+      ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<option ${day===d?'selected':''}>${d}</option>`).join('')}
+    </select></div>
+    <div style="display:flex;gap:0.4rem;">
+      <input type="text" class="form-input v-slot-time" placeholder="7:00pm" value="${(time||'').replace(/"/g,'&quot;')}" style="flex:1;">
+      <button class="btn btn-ghost btn-sm" type="button" onclick="document.getElementById('${rowId}').remove()">✕</button>
+    </div>
+  `;
+  wrap.appendChild(div);
+}
+function collectVenueSlots(){
+  return [...document.querySelectorAll('#v-slots-list > div')].map(row=>({
+    day:row.querySelector('.v-slot-day').value,
+    time:row.querySelector('.v-slot-time').value.trim()
+  })).filter(s=>s.day||s.time);
+}
 function openVenueModal(id){
   editingVenueId = id || null;
   const v = id ? state.venues[id] : {};
   document.getElementById('venue-modal-title').textContent = id ? 'Edit Venue' : 'Add Venue';
   document.getElementById('v-name').value = v.name||'';
   document.getElementById('v-group').value = v.groupName||'';
-  document.getElementById('group-name-list').innerHTML = [...new Set(Object.values(state.venues||{}).map(x=>x.groupName||x.name).filter(Boolean))]
-    .map(n=>`<option value="${escapeHtml(n)}">`).join('');
-  document.getElementById('v-day').value = v.day||'';
-  document.getElementById('v-time').value = v.time||'';
   document.getElementById('v-pay-amount').value = (v.pay&&v.pay.amount)||'';
   document.getElementById('v-pay-method').value = (v.pay&&v.pay.method)||'';
   document.getElementById('v-status').value = v.status||'active';
@@ -2435,15 +2465,27 @@ function openVenueModal(id){
   document.getElementById('v-host').value = v.host||'';
   document.getElementById('v-notes').value = v.notes||'';
   document.getElementById('venue-delete-btn').style.display = id ? 'inline-block' : 'none';
+  if(id){
+    // Editing one existing night — same single day/time it's always been.
+    document.getElementById('v-single-daytime').style.display='';
+    document.getElementById('v-slots-section').style.display='none';
+    document.getElementById('v-slots-hint').style.display='none';
+    document.getElementById('v-day').value = v.day||'';
+    document.getElementById('v-time').value = v.time||'';
+  }else{
+    // New venue — one or more nights added together, each becomes its own linked record.
+    document.getElementById('v-single-daytime').style.display='none';
+    document.getElementById('v-slots-section').style.display='';
+    document.getElementById('v-slots-hint').style.display='';
+    document.getElementById('v-slots-list').innerHTML='';
+    addVenueSlotRow();
+  }
   openModal('venue-modal-overlay');
 }
 function saveVenue(){
   const name = document.getElementById('v-name').value.trim();
   if(!name) return toast('Venue needs a name.', true);
-  const data = {
-    name, groupName: document.getElementById('v-group').value.trim() || name,
-    day: document.getElementById('v-day').value,
-    time: document.getElementById('v-time').value.trim(),
+  const shared = {
     pay: { amount: parseInt(document.getElementById('v-pay-amount').value)||null, method: document.getElementById('v-pay-method').value },
     status: document.getElementById('v-status').value,
     source: document.getElementById('v-source').value,
@@ -2452,9 +2494,27 @@ function saveVenue(){
     cadence: 'weekly',
     locationId: selectedLocationId
   };
-  const id = editingVenueId || db.ref(MODE_PATHS[plannerMode].venues).push().key;
   setSyncStatus('syncing');
-  db.ref(MODE_PATHS[plannerMode].venues+'/'+id).update(data).then(()=>{ toast('Venue saved.'); closeModal('venue-modal-overlay'); });
+  if(editingVenueId){
+    // Editing one existing night in place — untouched from how this always worked.
+    const data = Object.assign({name}, shared, {
+      day: document.getElementById('v-day').value,
+      time: document.getElementById('v-time').value.trim()
+    });
+    db.ref(MODE_PATHS[plannerMode].venues+'/'+editingVenueId).update(data).then(()=>{ toast('Venue saved.'); closeModal('venue-modal-overlay'); });
+    return;
+  }
+  const slots = collectVenueSlots();
+  if(!slots.length) return toast('Add at least one night.', true);
+  const updates = {};
+  slots.forEach(slot=>{
+    const id = db.ref(MODE_PATHS[plannerMode].venues).push().key;
+    updates[MODE_PATHS[plannerMode].venues+'/'+id] = Object.assign({name, groupName:name}, shared, {day:slot.day, time:slot.time});
+  });
+  db.ref().update(updates).then(()=>{
+    toast(slots.length>1?`Venue saved — ${slots.length} nights added.`:'Venue saved.');
+    closeModal('venue-modal-overlay');
+  });
 }
 function deleteVenue(){
   if(!editingVenueId) return;
