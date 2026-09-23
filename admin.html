@@ -2881,22 +2881,17 @@ function attachSchedListeners() {
       // Note: we don't skip unknown venueIds here because venues may load after gigs.
       // Unknown venues are filtered at render time in renderSchedTimeline.
       Object.entries(days).forEach(([dateKey, gig]) => {
-        // Build a rich rounds array from whatever the planner saved
+        // Build rounds array from the actual planner gig fields:
+        // R1: themeId / themeName  (primary trivia theme)
+        // R2: round3ThemeId / round3Name  (music/secondary round)
+        // Extra: extraCategories[] (any additional rounds)
         let rounds = [];
-
-        if(gig.rounds && gig.rounds.length) {
-          // Already has a rounds array (manual schedule entries merged in)
-          rounds = gig.rounds;
-        } else if(gig.selectedPairings && gig.selectedPairings.length) {
-          // Theme-night mode: one or more selected pairings
-          // Optionally prefix with the theme name
-          if(gig.themeName) rounds.push({ label: gig.themeName, type: 'Theme Night', isTheme: true });
-          gig.selectedPairings.forEach(p => rounds.push({ label: p.name || p, type: p.type || '' }));
-        } else {
-          // Simple mode: triviaCategory + musicCategory
-          if(gig.triviaCategory) rounds.push({ label: gig.triviaCategory, type: 'Trivia' });
-          if(gig.musicCategory)  rounds.push({ label: gig.musicCategory,  type: 'Music'  });
-          if(!rounds.length && gig.themeName) rounds.push({ label: gig.themeName, type: 'Theme' });
+        if(gig.themeName)   rounds.push({ label: gig.themeName,   id: gig.themeId      || null });
+        if(gig.round3Name)  rounds.push({ label: gig.round3Name,  id: gig.round3ThemeId|| null });
+        if(Array.isArray(gig.extraCategories)) {
+          gig.extraCategories.forEach(ec => {
+            if(ec && ec.name) rounds.push({ label: ec.name, id: ec.id || null });
+          });
         }
 
         triviaScheduleEntries.push({
@@ -3116,25 +3111,8 @@ function renderSchedTimeline() {
       const vname = (triviaVenues.find(v => v.id === e.venueId) || {}).name || 'Unknown';
       const rounds = e.rounds || [];
       const pills = rounds.map((round, ri) => {
-        // round may be a string (category ID or name) or an object {label, type, isTheme}
-        let displayName, typeLabel, isTheme = false;
-        if(typeof round === 'object' && round !== null) {
-          displayName = round.label || '';
-          typeLabel   = round.type  || '';
-          isTheme     = !!round.isTheme;
-        } else {
-          // plain string — try as category ID first
-          const cat = categories.find(x => x.id === round);
-          displayName = cat ? cat.name : round;
-          typeLabel   = '';
-        }
-        const bg     = isTheme ? 'rgba(52,152,219,.12)' : 'var(--gold-dim)';
-        const border = isTheme ? 'rgba(52,152,219,.35)'  : 'var(--gold-glow)';
-        const color  = isTheme ? '#5dade2'                : 'var(--gold2)';
-        const prefix = isTheme
-          ? `<span style="font-size:8px;color:#5dade2;margin-right:4px;letter-spacing:.1em">THEME</span>`
-          : `<span style="font-size:9px;color:var(--text3);margin-right:4px">R${ri+1}</span>`;
-        return `<div style="margin-bottom:3px"><span style="font-size:11px;background:${bg};border:1px solid ${border};border-radius:99px;padding:2px 10px;color:${color};font-family:var(--cinzel);letter-spacing:.04em">${prefix}${displayName}</span></div>`;
+        const displayName = (typeof round === 'object' && round !== null) ? (round.label || '') : round;
+        return `<div style="margin-bottom:3px"><span style="font-size:11px;background:var(--gold-dim);border:1px solid var(--gold-glow);border-radius:99px;padding:2px 10px;color:var(--gold2);font-family:var(--cinzel);letter-spacing:.04em"><span style="font-size:9px;color:var(--text3);margin-right:4px">R${ri+1}</span>${displayName}</span></div>`;
       }).join('');
       const isPast = e.date < today;
       const isToday = e.date === today;
