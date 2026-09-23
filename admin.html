@@ -2877,6 +2877,8 @@ function attachSchedListeners() {
     // Build triviaScheduleEntries from planner gigs so renderSchedTimeline works
     triviaScheduleEntries = [];
     Object.entries(schedPlannerGigs).forEach(([venueId, days]) => {
+      // Skip gigs for venues that don't exist in the venues list (orphan/deleted venues)
+      if(!schedPlannerVenues[venueId]) return;
       Object.entries(days).forEach(([dateKey, gig]) => {
         // Build a rich rounds array from whatever the planner saved
         let rounds = [];
@@ -3137,19 +3139,12 @@ function renderSchedTimeline() {
       }).join('');
       const isPast = e.date < today;
       const isToday = e.date === today;
-      const plannerBadge = e.fromPlanner
-        ? '<span style="font-size:8px;background:rgba(52,152,219,.15);border:1px solid rgba(52,152,219,.3);color:#5dade2;border-radius:99px;padding:2px 7px;font-family:var(--cinzel);letter-spacing:.06em;margin-left:6px">PLANNER</span>'
-        : '';
-      const statusBadge = e.status && e.status !== 'Unplanned'
-        ? `<span style="font-size:8px;background:${e.status==='Planned'?'rgba(46,204,113,.12)':'rgba(201,168,76,.1)'};border:1px solid ${e.status==='Planned'?'rgba(46,204,113,.3)':'var(--gold-glow)'};color:${e.status==='Planned'?'var(--green)':'var(--gold)'};border-radius:99px;padding:2px 7px;font-family:var(--cinzel);letter-spacing:.06em;margin-left:5px">${e.status.toUpperCase()}</span>`
-        : '';
       const todayHighlight = isToday ? 'background:rgba(201,168,76,.04);border-radius:6px;margin:0 -6px;padding:10px 6px;' : '';
-      // Only show notes that aren't just a theme restatement
       const showNotes = e.notes && !e.notes.startsWith('Theme:');
-      html += `<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:.5px solid var(--border);opacity:${isPast&&!isToday?'0.5':'1'};${todayHighlight}">
+      html += `<div id="sched-entry-${e.date}-${e.venueId}" style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:.5px solid var(--border);opacity:${isPast&&!isToday?'0.5':'1'};${todayHighlight}">
         <div style="min-width:36px;font-size:12px;font-weight:700;color:${isToday?'var(--gold)':isPast?'var(--text3)':'var(--text)'};font-family:var(--cinzel);padding-top:2px">${e.date.split('-')[2]}${isToday?'<div style="font-size:7px;color:var(--gold);letter-spacing:.1em">TODAY</div>':''}</div>
         <div style="flex:1">
-          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px">${vname}${plannerBadge}${statusBadge}</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px">${vname}</div>
           <div style="display:flex;flex-direction:column;margin-bottom:${showNotes?'4px':'0'}">${pills}</div>
           ${showNotes?`<div style="font-size:11px;color:var(--gold2);font-style:italic;background:var(--gold-dim);border-radius:4px;padding:2px 6px;display:inline-block;margin-top:2px">📋 ${e.notes}</div>`:''}
         </div>
@@ -3165,15 +3160,19 @@ function renderSchedTimeline() {
 
   tl.innerHTML = html;
 
-  // Scroll to current month so it's at the top of the visible area
-  const currentMonthEl = document.getElementById('sched-month-' + thisMonth);
-  if(currentMonthEl) {
-    // Scroll the modal-body (parent scroller), not the tl element itself
-    const scroller = tl.closest('.modal-body') || tl.parentElement;
-    if(scroller) {
-      const tlTop = tl.getBoundingClientRect().top;
-      const elTop = currentMonthEl.getBoundingClientRect().top;
-      scroller.scrollTop += (elTop - tlTop) - 8;
+  // Scroll to today's first entry (not just the month header)
+  const scroller = tl.closest('.modal-body') || tl.parentElement;
+  if(scroller) {
+    // Try today entry first, then fall back to current month header
+    const todayEntry = tl.querySelector('[id^="sched-entry-' + today + '"]');
+    const fallback   = document.getElementById('sched-month-' + thisMonth);
+    const target     = todayEntry || fallback;
+    if(target) {
+      requestAnimationFrame(() => {
+        const scrollerRect = scroller.getBoundingClientRect();
+        const targetRect   = target.getBoundingClientRect();
+        scroller.scrollTop += (targetRect.top - scrollerRect.top) - 16;
+      });
     }
   }
 }
