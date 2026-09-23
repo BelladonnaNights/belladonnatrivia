@@ -783,6 +783,10 @@ a{color:inherit}
     <input type="date" class="form-input" id="t-last-used">
     <div class="modal-actions">
       <button class="btn btn-danger btn-sm" id="theme-delete-btn" onclick="deleteTheme()" style="display:none">Delete</button>
+      <button class="btn btn-ghost btn-sm" id="theme-link-btn" onclick="createLinkedCategory()" style="display:none;gap:4px">
+        <span id="theme-link-icon">🔗</span>
+        <span id="theme-link-label">Create Linked Category</span>
+      </button>
       <span style="flex:1"></span>
       <button class="btn btn-ghost" onclick="closeModal('theme-modal-overlay')">Cancel</button>
       <button class="btn btn-primary" onclick="saveTheme()">Save</button>
@@ -3148,6 +3152,27 @@ function openThemeModal(id){
   document.getElementById('t-times-used').value = t.timesUsed||0;
   document.getElementById('t-last-used').value = t.lastUsedDate||'';
   document.getElementById('theme-delete-btn').style.display = id ? 'inline-block' : 'none';
+
+  // Link button — only shown for existing RTDB-only themes (not already VM-linked)
+  const linkBtn = document.getElementById('theme-link-btn');
+  const linkIcon = document.getElementById('theme-link-icon');
+  const linkLabel = document.getElementById('theme-link-label');
+  if(linkBtn) {
+    const isExisting = !!id;
+    const isRtdbOnly = isExisting && !t._vmSource; // VM themes are already linked
+    linkBtn.style.display = isRtdbOnly ? 'inline-flex' : 'none';
+    if(isRtdbOnly) {
+      const alreadyLinked = !!t.linkedTriviaCatId || !!t.linkedBingoCatId;
+      linkIcon.textContent = alreadyLinked ? '🔗' : '🔗';
+      linkLabel.textContent = alreadyLinked ? '✓ Already Linked' : 'Create Linked Category';
+      linkBtn.disabled = alreadyLinked;
+      linkBtn.style.opacity = alreadyLinked ? '0.5' : '1';
+      linkBtn.title = alreadyLinked
+        ? 'This theme is already linked to a category in the app'
+        : 'Create a category in the trivia or bingo app linked to this theme';
+    }
+  }
+
   renderTagChips();
   renderPairsWithSection();
   openModal('theme-modal-overlay');
@@ -3170,7 +3195,73 @@ function suggestTagsForModal(){
   renderTagChips();
   if(!suggested.length) toast('No keyword matches — add tags manually.');
 }
-// -- Pairing, shown for all three pairing-capable tiers. What the search box
+// ── Create Linked Category ───────────────────────────────────────────
+// Maps planner tiers to trivia app category types
+const TIER_TO_TRIVIA_TYPE = {
+  'evergreen-topic':    'trivia',
+  'coordinating-music': 'music',
+  'featured':           'trivia',
+  'feature-trivia':     'trivia',
+  'mini-games':         'trivia',
+  'sing-along':         'trivia',
+  'battle':             'trivia',
+  'music-bingo':        null,   // belongs to bingo app, not trivia
+  'theme-night':        null,
+};
+
+async function createLinkedCategory(){
+  if(!editingThemeId) return;
+  const t = state.themes[editingThemeId];
+  if(!t) return;
+
+  if(t.linkedTriviaCatId || t.linkedBingoCatId){
+    toast('This theme is already linked to a category.', true);
+    return;
+  }
+
+  const tier = normTier(t.tier) || '';
+  const isBingo = tier === 'music-bingo';
+
+  if(isBingo){
+    toast('Bingo categories are managed in the Bingo app directly — link it there.', true);
+    return;
+  }
+
+  const triviaType = TIER_TO_TRIVIA_TYPE[tier] || 'trivia';
+  const name = t.name || document.getElementById('t-name').value.trim();
+  if(!name){ toast('Save the theme first.', true); return; }
+
+  const confirm_ = confirm(
+    `Create a "${name}" category in the Trivia app as type "${triviaType}"?\n\n` +
+    `It will be linked to this planner theme so they stay connected.`
+  );
+  if(!confirm_) return;
+
+  try {
+    // Write to trivia/categories (the trivia admin's category library)
+    const newCatRef = db.ref('trivia/categories').push();
+    const catId = newCatRef.key;
+    await newCatRef.set({
+      id: catId,
+      name,
+      type: triviaType,
+      genre: tier === 'coordinating-music' ? 'Music Trivia' : 'Full Trivia',
+      plannerThemeId: editingThemeId,  // back-link to planner theme
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    // Mark the planner theme as linked
+    await db.ref('trivia/planner/themes/' + editingThemeId + '/linkedTriviaCatId').set(catId);
+    toast(`Category "${name}" created in Trivia app ✓`);
+    // Update button state
+    const linkLabel = document.getElementById('theme-link-label');
+    const linkBtn = document.getElementById('theme-link-btn');
+    if(linkLabel) linkLabel.textContent = '✓ Already Linked';
+    if(linkBtn) { linkBtn.disabled = true; linkBtn.style.opacity = '0.5'; }
+  } catch(e) {
+    toast('Failed to create linked category: ' + e.message, true);
+  }
+}
 //    matches against depends on which tier we're editing:
 //    Evergreen  -> only Music themes
 //    Music      -> only Evergreen themes
