@@ -3159,17 +3159,42 @@ function openThemeModal(id){
   const linkLabel = document.getElementById('theme-link-label');
   if(linkBtn) {
     const isExisting = !!id;
-    const isRtdbOnly = isExisting && !t._vmSource; // VM themes are already linked
+    const isRtdbOnly = isExisting && !t._vmSource;
     linkBtn.style.display = isRtdbOnly ? 'inline-flex' : 'none';
     if(isRtdbOnly) {
-      const alreadyLinked = !!t.linkedTriviaCatId || !!t.linkedBingoCatId;
-      linkIcon.textContent = alreadyLinked ? '🔗' : '🔗';
-      linkLabel.textContent = alreadyLinked ? '✓ Already Linked' : 'Create Linked Category';
-      linkBtn.disabled = alreadyLinked;
-      linkBtn.style.opacity = alreadyLinked ? '0.5' : '1';
-      linkBtn.title = alreadyLinked
-        ? 'This theme is already linked to a category in the app'
-        : 'Create a category in the trivia or bingo app linked to this theme';
+      const linkedId = t.linkedTriviaCatId || t.linkedBingoCatId || null;
+      if(linkedId) {
+        // Verify the linked category still exists — if deleted, reset the link
+        const checkPath = t.linkedTriviaCatId
+          ? 'trivia/categories/' + t.linkedTriviaCatId
+          : 'bingo/landing/categories/' + t.linkedBingoCatId;
+        db.ref(checkPath).once('value', snap => {
+          if(snap.exists()) {
+            // Still linked
+            linkLabel.textContent = '✓ Already Linked';
+            linkBtn.disabled = true;
+            linkBtn.style.opacity = '0.5';
+            linkBtn.title = 'This theme is already linked to a category in the app';
+          } else {
+            // Category was deleted — clear the stale link and reset button
+            const clearField = t.linkedTriviaCatId ? 'linkedTriviaCatId' : 'linkedBingoCatId';
+            db.ref('trivia/planner/themes/' + id + '/' + clearField).remove();
+            linkLabel.textContent = 'Create Linked Category';
+            linkBtn.disabled = false;
+            linkBtn.style.opacity = '1';
+            linkBtn.title = 'The previously linked category was deleted — create a new one';
+          }
+        });
+        // Show interim state while checking
+        linkLabel.textContent = 'Checking link…';
+        linkBtn.disabled = true;
+        linkBtn.style.opacity = '0.6';
+      } else {
+        linkLabel.textContent = 'Create Linked Category';
+        linkBtn.disabled = false;
+        linkBtn.style.opacity = '1';
+        linkBtn.title = 'Create a category in the trivia or bingo app linked to this theme';
+      }
     }
   }
 
