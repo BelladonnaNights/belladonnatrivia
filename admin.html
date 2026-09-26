@@ -792,6 +792,16 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
       </div>
     </div>
 
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <button class="filter-more-btn" id="archived-toggle-btn" onclick="toggleShowArchived()">Show Hidden (<span id="archived-count">0</span>)</button>
+      <button class="filter-more-btn" id="bulk-archive-toggle-btn" onclick="toggleBulkArchiveMode()">Select Multiple to Hide</button>
+    </div>
+    <div id="bulk-archive-bar" style="display:none;align-items:center;gap:10px;margin-bottom:10px;padding:8px 12px;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.3);border-radius:8px">
+      <span id="bulk-archive-count" style="font-size:12px;color:var(--text2)">0 selected</span>
+      <button class="add-btn" style="padding:4px 12px;font-size:12px" onclick="archiveSelected()">Hide Selected</button>
+      <button class="filter-more-btn" style="padding:4px 12px;font-size:12px" onclick="cancelBulkArchive()">Cancel</button>
+    </div>
+
     <div class="cat-grid" id="cat-grid">
       <div class="empty-library">
         <div class="empty-icon">✦</div>
@@ -1579,6 +1589,12 @@ let lineupTimed   = [false, false, false, false, false];
 let activeGenres = new Set(); // empty = show all
 let editingId = null;
 let dragCardId = null;
+// Hide-from-list (never delete) — additive `archived` flag on the real
+// category doc. Archiving never touches Firebase data beyond that one
+// flag, and it's fully reversible from the Archived view.
+let showArchived = false;
+let bulkArchiveMode = false;
+let selectedForArchive = new Set();
 
 // ═══════════════════════════════════════════════
 //  FIREBASE LISTENERS
@@ -1694,7 +1710,13 @@ function renderLibrary() {
   const grid = document.getElementById('cat-grid');
   const searchVal = (document.getElementById('search-input')?.value||'').toLowerCase().trim();
 
-  let filtered = categories;
+  const archivedCountEl = document.getElementById('archived-count');
+  if (archivedCountEl) archivedCountEl.textContent = categories.filter(c => c.archived).length;
+
+  // Hidden ("archived") categories are never in the normal view and never
+  // in the Hidden view at the same time — this only ever changes which
+  // list you're looking at, never what's actually in Firebase.
+  let filtered = categories.filter(c => showArchived ? !!c.archived : !c.archived);
 
   // Filter by tags (show categories that match ANY selected tag)
   if(activeGenres.size > 0) {
@@ -1717,7 +1739,7 @@ function renderLibrary() {
   if(!filtered.length) {
     grid.innerHTML = `<div class="empty-library">
       <div class="empty-icon">✦</div>
-      <div class="empty-text">${categories.length ? 'No categories match' : 'No categories yet — add your first one'}</div>
+      <div class="empty-text">${showArchived ? 'Nothing hidden right now' : (categories.length ? 'No categories match' : 'No categories yet — add your first one')}</div>
     </div>`;
     return;
   }
@@ -1736,16 +1758,20 @@ function renderLibrary() {
     const noteHtml       = cat.notes ? '<div style="font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;margin-top:4px">' + cat.notes + '</div>' : '';
     const editBtn        = adminMode ? '<button class="cat-action-btn cat-action-edit" onclick="event.stopPropagation();openModal(\'' + cat.id + '\')">&#9998;</button>' : '';
     const delBtn         = adminMode ? '<button class="cat-action-btn cat-action-del" onclick="event.stopPropagation();confirmDelete(\'' + cat.id + '\')">&#215;</button>' : '';
-    return '<div class="cat-card" draggable="true" data-id="' + cat.id + '"'
+    const hideBtn        = (adminMode && !bulkArchiveMode) ? '<button class="filter-more-btn" style="padding:2px 9px;font-size:10px;margin-top:6px" onclick="event.stopPropagation();toggleArchiveOne(\'' + cat.id + '\')">' + (cat.archived ? 'Unhide' : 'Hide from list') + '</button>' : '';
+    const bulkCheckbox    = bulkArchiveMode ? '<div style="position:absolute;top:8px;left:8px;z-index:5;background:rgba(0,0,0,.5);border-radius:5px;padding:3px;" onclick="event.stopPropagation()"><input type="checkbox" ' + (selectedForArchive.has(cat.id)?'checked':'') + ' style="width:18px;height:18px;cursor:pointer;display:block" onchange="toggleSelectForArchive(\'' + cat.id + '\')"></div>' : '';
+    return '<div class="cat-card" draggable="' + (!bulkArchiveMode) + '" data-id="' + cat.id + '"'
       + ' ondragstart="onCardDragStart(event,\'' + cat.id + '\')"'
       + ' ondragend="onCardDragEnd(event)"'
       + ' ondragover="onCardDragOver(event,\'' + cat.id + '\')"'
       + ' ondragleave="onCardDragLeave(event)"'
       + ' ondrop="onCardDrop(event,\'' + cat.id + '\')">'
+      + bulkCheckbox
       + bannerHtml
       + '<div class="cat-body">'
       + '<div class="cat-title">' + (cat.name||'Untitled') + '</div>'
       + '<div class="cat-meta">' + musicBadge + slideshowBadge + canvaBadge + tagPills + '</div>'
+      + hideBtn
       + noteHtml
       + '</div>'
       + '<div class="cat-actions">' + editBtn + delBtn + '</div>'
@@ -1753,6 +1779,70 @@ function renderLibrary() {
       + '<div class="drag-hint">' + (adminMode ? 'drag to reorder or drop into round &rarr;' : 'drag to round &rarr;') + '</div>'
       + '</div>';
   }).join('');
+}
+
+// ═══════════════════════════════════════════════
+//  HIDE / UNHIDE (never delete)
+// ═══════════════════════════════════════════════
+// All of this only ever touches one additive field — `archived` — on the
+// real trivia/categories doc. It never removes a category, never touches
+// any other field, and is reversible any time from the "Show Hidden" view.
+function toggleShowArchived() {
+  showArchived = !showArchived;
+  document.getElementById('archived-toggle-btn').classList.toggle('active', showArchived);
+  if (bulkArchiveMode) cancelBulkArchive();
+  renderLibrary();
+}
+function toggleBulkArchiveMode() {
+  bulkArchiveMode = !bulkArchiveMode;
+  selectedForArchive.clear();
+  const bar = document.getElementById('bulk-archive-bar');
+  if (bar) bar.style.display = bulkArchiveMode ? 'flex' : 'none';
+  const btn = document.getElementById('bulk-archive-toggle-btn');
+  if (btn) btn.classList.toggle('active', bulkArchiveMode);
+  updateBulkArchiveCount();
+  renderLibrary();
+}
+function cancelBulkArchive() {
+  bulkArchiveMode = false;
+  selectedForArchive.clear();
+  const bar = document.getElementById('bulk-archive-bar');
+  if (bar) bar.style.display = 'none';
+  const btn = document.getElementById('bulk-archive-toggle-btn');
+  if (btn) btn.classList.remove('active');
+  renderLibrary();
+}
+function updateBulkArchiveCount() {
+  const el = document.getElementById('bulk-archive-count');
+  if (el) el.textContent = selectedForArchive.size + ' selected';
+}
+function toggleSelectForArchive(id) {
+  if (selectedForArchive.has(id)) selectedForArchive.delete(id); else selectedForArchive.add(id);
+  updateBulkArchiveCount();
+}
+async function archiveSelected() {
+  if (!selectedForArchive.size) { toast('Nothing selected.', true); return; }
+  const nextState = !showArchived; // in the normal view this hides; in the Hidden view this un-hides
+  const verb = nextState ? 'Hide' : 'Unhide';
+  if (!confirm(`${verb} ${selectedForArchive.size} categories from this list? Nothing is deleted from Firebase — this only hides them here, and you can bring them back anytime from "Show Hidden".`)) return;
+  const updates = {};
+  selectedForArchive.forEach(id => { updates['trivia/categories/' + id + '/archived'] = nextState; });
+  try {
+    await db.ref().update(updates);
+    categories.forEach(c => { if (selectedForArchive.has(c.id)) c.archived = nextState; });
+    toast(`${verb === 'Hide' ? 'Hid' : 'Unhid'} ${selectedForArchive.size} categories.`);
+  } catch (e) {
+    toast('Could not update: ' + e.message, true);
+  }
+  cancelBulkArchive();
+}
+function toggleArchiveOne(id) {
+  const cat = categories.find(c => c.id === id);
+  if (!cat) return;
+  const next = !cat.archived;
+  db.ref('trivia/categories/' + id + '/archived').set(next);
+  cat.archived = next;
+  renderLibrary();
 }
 
 function parseTags(genreStr) {
