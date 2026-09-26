@@ -2236,13 +2236,17 @@ async function saveCategory() {
   const data = {name, genre, type, sheetUrl, tabName, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, attributions, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, updatedAt: Date.now()};
 
   try {
+    let catId = editingId;
     if(editingId) {
       await db.ref(`trivia/categories/${editingId}`).update(data);
       toast('Category updated!');
     } else {
-      await db.ref('trivia/categories').push({...data, createdAt: Date.now()});
+      const newRef = db.ref('trivia/categories').push();
+      catId = newRef.key;
+      await newRef.set({...data, createdAt: Date.now()});
       toast('Category added!');
     }
+    syncCategoryToVm(catId, data); // fire-and-forget — mirror into Venue Menu/Planner
     setSyncStatus('synced');
     closeModal();
     restore();
@@ -2250,6 +2254,38 @@ async function saveCategory() {
     setSyncStatus('error');
     toast('Save failed: ' + e.message, true);
     restore();
+  }
+}
+
+// ═══════════════════════════════════════════════
+// VENUE MENU / PLANNER LINK SYNC
+// ─────────────────────────────────────────────
+// Categories here also show up in the Venue Menu (customer-facing) and
+// Planner (scheduling) apps, which both live in Firestore's
+// venueMenuCategories collection. The first time a category is saved
+// here without a link yet, a companion Firestore doc is created and the
+// two are linked (vmCatId here, triviaCatId there). Every later save
+// pushes name/genre/cover-image down onto that linked doc. Venue Menu
+// carries the matching push-down half when IT edits a linked category.
+async function syncCategoryToVm(catId, data) {
+  try {
+    const local = categories.find(c => c.id === catId);
+    const vmCatId = local && local.vmCatId ? local.vmCatId : null;
+    if(vmCatId) {
+      await dbFs.collection('venueMenuCategories').doc(vmCatId).update({
+        name: data.name, tags: data.genre || '', image: data.bgImage || ''
+      });
+    } else {
+      const newDoc = dbFs.collection('venueMenuCategories').doc();
+      await newDoc.set({
+        name: data.name, type: 'Trivia', tags: data.genre || '', image: data.bgImage || '',
+        plannerTier: null, linked: true, triviaCatId: catId,
+        createdAt: Date.now(), updatedAt: Date.now()
+      });
+      await db.ref(`trivia/categories/${catId}/vmCatId`).set(newDoc.id);
+    }
+  } catch(e) {
+    console.error('Venue Menu sync failed for', catId, e);
   }
 }
 
