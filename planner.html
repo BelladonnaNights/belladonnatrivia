@@ -484,6 +484,7 @@ a{color:inherit}
         <button class="pill" id="dup-toggle" onclick="toggleDupView()">Possible Duplicates</button>
         <span style="flex:1"></span>
         <button class="btn btn-ghost btn-sm" onclick="sortThemesAZ()">A–Z</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportThemeNamesList()">Export List</button>
         <button class="btn btn-primary btn-sm" onclick="openThemeModal()">+ Add Theme</button>
       </div>
       <div class="filter-bar" id="tier-filter-bar"></div>
@@ -1310,6 +1311,34 @@ let autoTaggedVmIds = new Set();
       rebuildThemesState();
       if(activeTab==='venuemenu') renderVenueMenuTab();
     }, err=>{ console.error('venueMenuNights listener failed:', err); });
+
+    // ── Trivia Admin link sync (name only) ─────────────────────────────────
+    // createLinkedCategory() creates a one-off record in trivia/categories
+    // (Trivia Admin's own RTDB store — separate from venueMenuCategories)
+    // and stamps the planner theme with linkedTriviaCatId. That's a one-time
+    // copy, not a merge, so the two records can drift. This listener watches
+    // every trivia/categories record that points back at a planner theme
+    // (via plannerThemeId) and pulls a renamed category's new name down onto
+    // its planner theme automatically. The push-the-other-way half (planner
+    // rename -> trivia/categories) happens in saveTheme() below.
+    const triviaCatsRef = db.ref('trivia/categories');
+    triviaCatsRef.on('value', snap=>{
+      const raw = snap.val()||{};
+      const nameUpdates = {};
+      Object.entries(raw).forEach(([catId,cat])=>{
+        const themeId = cat && cat.plannerThemeId;
+        if(!themeId) return;
+        const theme = rtdbThemes[themeId];
+        // Only trust this pairing if the planner theme still points back at
+        // this exact category — guards against a stale/reused id.
+        if(!theme || theme.linkedTriviaCatId !== catId) return;
+        if(cat.name && cat.name !== theme.name){
+          nameUpdates['trivia/planner/themes/'+themeId+'/name'] = cat.name;
+        }
+      });
+      if(Object.keys(nameUpdates).length) db.ref().update(nameUpdates);
+    }, err=>{ console.error('trivia/categories link-sync listener failed:', err); });
+    modeListenerRefs.push(triviaCatsRef);
   } else {
     if(vmAllCategoriesUnsub){ vmAllCategoriesUnsub(); vmAllCategoriesUnsub = null; }
     if(vmAllNightsUnsub){ vmAllNightsUnsub(); vmAllNightsUnsub = null; }
@@ -2546,6 +2575,46 @@ let activeTagFilters = new Set();
 let dupViewOpen = false;
 function setThemeSort(key){ if(themeSort.key===key) themeSort.dir*=-1; else themeSort={key,dir:1}; renderThemes(); }
 function sortThemesAZ(){ themeSort = {key:'name', dir:1}; renderThemes(); }
+// Exports every theme/category currently loaded (whichever mode — trivia or
+// bingo — is active) as a plain-text list, grouped by type in TIER_LABELS'
+// own order (Untagged last), alphabetized within each group.
+function exportThemeNamesList(){
+  const groups = {};
+  Object.values(state.themes||{}).forEach(t=>{
+    if(!t || !t.name) return;
+    const tier = normTier(t.tier) || '';
+    const label = TIER_LABELS[tier] || 'Untagged';
+    (groups[label] = groups[label] || []).push(t.name);
+  });
+  if(!Object.keys(groups).length){ toast('No categories to export yet.', true); return; }
+  const orderedLabels = Object.values(TIER_LABELS);
+  const labels = Object.keys(groups).sort((a,b)=>{
+    const ai = orderedLabels.indexOf(a), bi = orderedLabels.indexOf(b);
+    if(ai===-1 && bi===-1) return a.localeCompare(b);
+    if(ai===-1) return 1;
+    if(bi===-1) return -1;
+    return ai-bi;
+  });
+  const modeLabel = plannerMode==='bingo' ? 'Music Bingo' : 'Trivia';
+  let out = `Category Names — ${modeLabel} — ${new Date().toLocaleDateString()}\n`;
+  let total = 0;
+  labels.forEach(label=>{
+    const names = groups[label].slice().sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
+    total += names.length;
+    out += `\n${label} (${names.length})\n${'-'.repeat(label.length)}\n`;
+    names.forEach(n=>{ out += n + '\n'; });
+  });
+  const blob = new Blob([out], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `category-names-${plannerMode}-${new Date().toISOString().slice(0,10)}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast(`Exported ${total} category name${total===1?'':'s'}.`);
+}
 function toggleDupView(){
   dupViewOpen = !dupViewOpen;
   document.getElementById('dup-toggle').classList.toggle('active', dupViewOpen);
@@ -3373,7 +3442,20 @@ function saveTheme(){
       tags: editingThemeTags.join(', '), pairsWith: newPairs, linked: true
     }));
   } else {
-    rtdbUpdates['trivia/planner/themes/'+themeId] = { ...commonFields, tags: editingThemeTags, tier: tier || null, pairsWith: canPair(tier) ? newPairs : null };
+    // Spread the existing node first — this is a multi-location update, and
+    // Firebase replaces the ENTIRE subtree at this path with whatever object
+    // is given, not just the keys listed. Without ...existing here, every
+    // ordinary save was silently wiping out linkedTriviaCatId (and any other
+    // field not re-listed below), which is why a theme could look linked,
+    // then show "Create Linked Category" again after any unrelated edit —
+    // and clicking it again created a duplicate trivia/categories record.
+    rtdbUpdates['trivia/planner/themes/'+themeId] = { ...existing, ...commonFields, tags: editingThemeTags, tier: tier || null, pairsWith: canPair(tier) ? newPairs : null };
+    // Push a rename down to the linked Trivia Admin category too, so the
+    // name doesn't drift out of sync in that direction either.
+    if(existing.linkedTriviaCatId && name !== existing.name){
+      rtdbUpdates['trivia/categories/'+existing.linkedTriviaCatId+'/name'] = name;
+      rtdbUpdates['trivia/categories/'+existing.linkedTriviaCatId+'/updatedAt'] = Date.now();
+    }
   }
 
   // Reciprocal pairing — the "other side" of each add/remove might live in
@@ -3398,8 +3480,35 @@ function saveTheme(){
   });
 
   Promise.all([db.ref().update(rtdbUpdates), ...firestoreWrites])
-    .then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); })
+    .then(()=>{
+      toast('Theme saved.');
+      closeModal('theme-modal-overlay');
+      // A brand-new Trivia/Bingo-typed theme just became a unified Venue
+      // Menu record — also give it a companion record in whichever app
+      // actually runs that category (Trivia Admin or the Bingo app), so
+      // it's usable the moment it's created, not just visible.
+      if(createDirectlyInVm) createSpokeForNewVmTheme(themeId, TIER_TO_VM_TYPE[tier], name, editingThemeTags.join(', '));
+    })
     .catch(err=>{ console.error('Save theme failed:', err); toast('Save failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
+}
+// Creates the matching native record in Trivia Admin (trivia/categories) or
+// the Bingo app (bingo/landing/categories) for a category that was just
+// created directly as a unified Venue Menu record, and links the two both
+// ways (triviaCatId/bingoCatId on the VM doc, vmCatId on the native record).
+// Mini Game / Sing-A-Long / Battles have no native third app, so nothing to do.
+function createSpokeForNewVmTheme(vmId, vmType, name, tagsStr){
+  if(vmType==='Trivia'){
+    const newRef = db.ref('trivia/categories').push();
+    newRef.set({ name, genre: tagsStr, type:'trivia', vmCatId: vmId, createdAt: Date.now(), updatedAt: Date.now() })
+      .then(()=> dbFs.collection('venueMenuCategories').doc(vmId).update({ triviaCatId: newRef.key }))
+      .catch(err=> console.error('Trivia Admin spoke creation failed:', err));
+  } else if(vmType==='Bingo'){
+    const newRef = db.ref('bingo/landing/categories').push();
+    const genresArr = tagsStr ? tagsStr.split(',').map(s=>s.trim()).filter(Boolean) : [];
+    newRef.set({ id: newRef.key, title:name, genre:genresArr[0]||'', genres:genresArr, status:'live', order:0, vmCatId: vmId })
+      .then(()=> dbFs.collection('venueMenuCategories').doc(vmId).update({ bingoCatId: newRef.key }))
+      .catch(err=> console.error('Bingo app spoke creation failed:', err));
+  }
 }
 function deleteTheme(){
   if(!editingThemeId) return;
