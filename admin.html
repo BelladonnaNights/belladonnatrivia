@@ -1350,6 +1350,14 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         </div>
       </div>
 
+      <!-- WHERE THIS SHOWS — read-only cross-app reference. This is the
+           same doc everywhere, so this is just telling you where else it's
+           already living, not a separate setting. -->
+      <div id="where-shows-box" style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--border)">
+        <div class="field-label" style="margin-bottom:.5rem;font-size:10px;letter-spacing:.15em;color:var(--gold)">WHERE THIS SHOWS</div>
+        <div id="where-shows-list" style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text2)"></div>
+      </div>
+
     </div>
     <div class="modal-footer">
       <button class="btn btn-danger" id="modal-delete-btn" style="display:none;margin-right:auto" onclick="deleteCategory()">Delete</button>
@@ -2147,8 +2155,31 @@ function openModal(id) {
   previewBanner('f-bg','banner-preview-wrap');
   previewBanner('f-bg-intro','intro-preview-wrap');
   previewBanner('f-bg-question','question-preview-wrap');
+  renderWhereShows(cat);
   document.getElementById('modal-overlay').classList.add('show');
   document.getElementById('f-name').focus();
+}
+
+// Read-only cross-app reference — this doc IS the category everywhere, so
+// this just tells you which other apps are already reading it and how it
+// labels itself there. It never writes anything; it's derived purely from
+// fields already on the doc (type, plannerTier, venueMenu.show).
+function triviaSubtypeLabel(cat) {
+  return (cat && (cat.type === 'music' || cat.plannerTier === 'music-bingo' || cat.plannerTier === 'coordinating-music'))
+    ? 'Music Trivia' : 'Evergreen Trivia';
+}
+function renderWhereShows(cat) {
+  const box = document.getElementById('where-shows-box');
+  const list = document.getElementById('where-shows-list');
+  if (!cat) { box.style.display = 'none'; return; }
+  const subtype = triviaSubtypeLabel(cat);
+  const rows = [`Planner — as ${subtype}`];
+  if (cat.venueMenu && cat.venueMenu.show) {
+    rows.push(`Venue Menu admin — as ${subtype}`);
+    rows.push('Venue Menu (public) — as a Trivia category');
+  }
+  box.style.display = 'block';
+  list.innerHTML = rows.map(r => '<div>&#8226; ' + r + '</div>').join('');
 }
 
 const CANVA_WORKER = 'https://canva-slides.belladonnaaudioalchemies.workers.dev';
