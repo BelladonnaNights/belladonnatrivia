@@ -2083,7 +2083,7 @@ function vdInlineSave(row, dk){
       if(found) round3Id = found[0];
       else if(!noCreateMode){
         const newId = db.ref('trivia/categories').push().key;
-        await db.ref('trivia/categories/'+newId).set({name:musicName, type:'music', plannerTier:'coordinating-music', tags:suggestTags(musicName), createdAt:Date.now()});
+        await db.ref('trivia/categories/'+newId).set({name:musicName, type:'music', plannerTier:'coordinating-music', tags:suggestTags(musicName), createdAt:Date.now(), unified:true});
         round3Id = newId;
       }
     }
@@ -2111,8 +2111,8 @@ function resolveThemeIdByName(name){
   const libPath = MODE_PATHS[plannerMode].library;
   const newId = db.ref(libPath).push().key;
   const data = plannerMode==='bingo'
-    ? { title:name.trim(), genre:'', status:'coming', createdAt:Date.now() }
-    : { name:name.trim(), type:'trivia', tags:suggestTags(name), notes:'Created from Planner — add sheets/images/music in Trivia Admin.', createdAt:Date.now() };
+    ? { title:name.trim(), genre:'', status:'coming', createdAt:Date.now(), unified:true }
+    : { name:name.trim(), type:'trivia', tags:suggestTags(name), notes:'Created from Planner — add sheets/images/music in Trivia Admin.', createdAt:Date.now(), unified:true };
   return db.ref(libPath+'/'+newId).set(data).then(()=>newId);
 }
 function bumpThemeUsage(themeId, dk){
@@ -2641,8 +2641,11 @@ function saveTheme(){
 
   if(isNew){
     // Brand-new category, created directly and fully in trivia/categories —
-    // ready for Trivia Admin to add real content to whenever.
-    rtdbUpdates[libPath+'/'+themeId] = { ...commonFields, type: 'trivia', createdAt: Date.now(),
+    // ready for Trivia Admin to add real content to whenever. unified:true
+    // so it also shows up in Trivia Admin's own library view (which only
+    // lists categories that have been through the unification process —
+    // a category made fresh here counts as one).
+    rtdbUpdates[libPath+'/'+themeId] = { ...commonFields, type: 'trivia', createdAt: Date.now(), unified: true,
       notes: 'Created from the Planner — add sheets/images/music in Trivia Admin.' };
   } else {
     // Editing an existing category — update only the Planner-owned fields,
@@ -3114,7 +3117,7 @@ function saveGig(){
           const primaryTier = themeId ? (state.themes[themeId]||{}).tier : null;
           const newTier = primaryTier==='coordinating-music' ? 'evergreen-topic' : 'coordinating-music';
           const newId = db.ref('trivia/categories').push().key;
-          await db.ref('trivia/categories/'+newId).set({name:typedRound3, type: newTier==='coordinating-music' ? 'music' : 'trivia', plannerTier:newTier, tags:suggestTags(typedRound3), createdAt:Date.now()});
+          await db.ref('trivia/categories/'+newId).set({name:typedRound3, type: newTier==='coordinating-music' ? 'music' : 'trivia', plannerTier:newTier, tags:suggestTags(typedRound3), createdAt:Date.now(), unified:true});
           round3Id = newId;
         }
       }
@@ -3413,7 +3416,7 @@ async function commitImport(){
       // Brand new name with no existing match — create it as a real,
       // full category so it shows up in Trivia Admin too, ready for content.
       updates['trivia/categories/'+info.id] = {
-        name: info.name, type:'trivia', tags: info.tags||[], createdAt: Date.now(),
+        name: info.name, type:'trivia', tags: info.tags||[], createdAt: Date.now(), unified: true,
         notes: 'Created from a Planner spreadsheet import — add sheets/images/music in Trivia Admin.',
         plannerUsage: { timesUsed: info.timesUsed, lastUsedDate: info.lastUsedDate, lastUsedVenueId: info.lastUsedVenueId||null }
       };
