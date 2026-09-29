@@ -160,6 +160,27 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 }
 .cat-card:hover .drag-hint{opacity:1}
 
+.cat-badge-themeset{
+  font-size:9px;background:rgba(155,89,182,.12);border-radius:99px;
+  padding:2px 9px;border:1px solid rgba(155,89,182,.35);
+  font-family:var(--cinzel);letter-spacing:.06em;text-transform:uppercase;color:#b98fd1;
+}
+.cat-see-pairs-btn{
+  font-size:9px;font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--text3);background:none;border:1px solid var(--border2);border-radius:99px;
+  padding:2px 9px;cursor:pointer;transition:all .15s;
+}
+.cat-see-pairs-btn:hover{color:var(--gold2);border-color:var(--gold-glow)}
+.cat-see-pairs-btn.open{color:var(--gold2);border-color:var(--gold-glow2);background:var(--gold-dim)}
+.cat-pairs-dropdown{margin-top:9px;border-top:1px solid var(--border);padding-top:9px;display:flex;flex-direction:column;gap:7px}
+.cat-pair-row{display:flex;align-items:center;gap:8px}
+.cat-pair-thumb{width:46px;height:26px;object-fit:cover;border-radius:5px;flex-shrink:0;background:var(--surface3)}
+.cat-pair-thumb-placeholder{width:46px;height:26px;border-radius:5px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--surface2),var(--surface3));
+  display:flex;align-items:center;justify-content:center;font-size:7px;color:var(--text3);text-align:center;overflow:hidden;padding:1px}
+.cat-pair-name{font-size:12px;color:var(--text2);font-family:var(--font)}
+.cat-pairs-empty{font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic}
+
 .empty-library{
   grid-column:1/-1;text-align:center;padding:4rem 1rem;
 }
@@ -1293,10 +1314,6 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="field-hint">Links rules from Settings to the Rules slide</div>
       </div>
       <div class="field">
-        <div class="field-label">Notes (optional)</div>
-        <input class="field-input" id="f-notes" placeholder="Any notes about this category…"/>
-      </div>
-      <div class="field">
         <div class="field-label">Attributions</div>
         <textarea class="field-input" id="f-attributions" rows="3" style="resize:vertical;line-height:1.5;font-family:var(--font)"
           placeholder="Credit sources, image/music licenses, etc. (not yet shown in the trivia player — for your records)"></textarea>
@@ -1325,37 +1342,9 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         </label>
       </div>
 
-      <!-- VENUE MENU — venue-facing fields. Same doc, no separate copy —
-           this is what venue.html/venue-menu-index.html will show once
-           they're reading trivia/categories directly. -->
-      <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--border)">
-        <div class="field-label" style="margin-bottom:.75rem;font-size:10px;letter-spacing:.15em;color:var(--gold)">VENUE MENU</div>
-        <label style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;cursor:pointer">
-          <input type="checkbox" id="f-vm-show" style="accent-color:var(--gold);width:13px;height:13px"/>
-          <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Show this category on the Venue Menu</span>
-        </label>
-        <div class="field">
-          <div class="field-label">Description for venues</div>
-          <textarea class="field-input" id="f-vm-description" rows="3" style="resize:vertical;line-height:1.5;font-family:var(--font)"
-            placeholder="What venues see on the menu — a short pitch for this category…"></textarea>
-        </div>
-        <div class="field">
-          <div class="field-label">Shows / Titles Featured — one per line (optional)</div>
-          <textarea class="field-input" id="f-vm-shows" rows="3" style="resize:vertical;line-height:1.5;font-family:var(--font)"
-            placeholder="Vampire Diaries&#10;Charmed&#10;Sabrina"></textarea>
-        </div>
-        <div class="field">
-          <div class="field-label">Venue Menu Banner URL</div>
-          <input class="field-input" id="f-vm-banner" placeholder="https://… image shown on the Venue Menu (leave blank to reuse the Admin Banner above)"/>
-        </div>
-      </div>
-
-      <!-- WHERE THIS SHOWS — read-only cross-app reference. This is the
-           same doc everywhere, so this is just telling you where else it's
-           already living, not a separate setting. -->
-      <div id="where-shows-box" style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--border)">
-        <div class="field-label" style="margin-bottom:.5rem;font-size:10px;letter-spacing:.15em;color:var(--gold)">WHERE THIS SHOWS</div>
-        <div id="where-shows-list" style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text2)"></div>
+      <div class="field" style="margin-top:1.25rem">
+        <div class="field-label">Notes (optional)</div>
+        <input class="field-input" id="f-notes" placeholder="Any notes about this category…"/>
       </div>
 
     </div>
@@ -1577,6 +1566,7 @@ function setSyncStatus(status) {
 //  STATE
 // ═══════════════════════════════════════════════
 let categories = [];       // full library from Firebase
+let openPairsIds = new Set(); // card ids whose "See Pairs" dropdown is expanded
 let lineup = [null, null, null, null, null]; // tonight's 5 slots
 let lineupAnswers = [false, false, false, false, false];
 let lineupMainRound = [false, false, false, false, false];
@@ -1695,6 +1685,16 @@ db.ref('trivia/categories').on('value', snap => {
 // Lineup is local only — resets on refresh, each host manages their own
 renderLineup();
 
+// Expands/collapses a Theme Set card's "See Pairs" dropdown, showing every
+// category paired with it in the Planner (via that category's pairsWith
+// array). State lives in openPairsIds so it survives the full re-render
+// that happens on every Firebase snapshot.
+function togglePairs(id) {
+  if (openPairsIds.has(id)) openPairsIds.delete(id);
+  else openPairsIds.add(id);
+  renderLibrary();
+}
+
 // ═══════════════════════════════════════════════
 //  RENDER LIBRARY
 // ═══════════════════════════════════════════════
@@ -1702,12 +1702,7 @@ function renderLibrary() {
   const grid = document.getElementById('cat-grid');
   const searchVal = (document.getElementById('search-input')?.value||'').toLowerCase().trim();
 
-  // Only show categories that have gone through category-unification.html
-  // (created there, or matched/merged there) — that flag is `unified`.
-  // Nothing is deleted or hidden per-item; a category that predates the
-  // unification project just doesn't show here until it's been through
-  // that tool. Nothing here touches Firebase.
-  let filtered = categories.filter(c => c.unified === true);
+  let filtered = categories;
 
   // Filter by tags (show categories that match ANY selected tag)
   if(activeGenres.size > 0) {
@@ -1730,7 +1725,7 @@ function renderLibrary() {
   if(!filtered.length) {
     grid.innerHTML = `<div class="empty-library">
       <div class="empty-icon">✦</div>
-      <div class="empty-text">${categories.length ? 'No unified categories yet — run category-unification.html to bring your existing categories in' : 'No categories yet — add your first one'}</div>
+      <div class="empty-text">${categories.length ? 'No categories match' : 'No categories yet — add your first one'}</div>
     </div>`;
     return;
   }
@@ -1746,9 +1741,27 @@ function renderLibrary() {
     const musicBadge     = cat.type === 'music'     ? '<span class="cat-genre" style="background:rgba(46,204,113,.12);color:#2ecc71;border-color:rgba(46,204,113,.25)">&#127925; Music</span>' : '';
     const slideshowBadge = cat.type === 'slideshow' ? '<span class="cat-genre" style="background:rgba(201,168,76,.08);color:var(--gold)">&#128444; Slideshow</span>' : '';
     const canvaBadge     = cat.type === 'canva'     ? '<span class="cat-genre" style="background:rgba(201,168,76,.08);color:var(--gold)">&#127912; Canva</span>' : '';
-    const noteHtml       = cat.notes ? '<div style="font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic;margin-top:4px">' + cat.notes + '</div>' : '';
+    const isThemeSet      = cat.plannerTier === 'featured';
+    const themeSetBadge   = isThemeSet ? '<span class="cat-badge-themeset">&#9733; Theme Set</span>' : '';
+    const isPairsOpen     = openPairsIds.has(cat.id);
+    const pairedCats      = isThemeSet ? (cat.pairsWith||[]).map(pid => categories.find(c=>c.id===pid)).filter(Boolean) : [];
+    const seePairsBtn     = isThemeSet
+      ? '<button class="cat-see-pairs-btn' + (isPairsOpen?' open':'') + '" onclick="event.stopPropagation();togglePairs(\'' + cat.id + '\')">'
+        + (isPairsOpen ? 'Hide Pairs &#9652;' : 'See Pairs (' + pairedCats.length + ') &#9662;') + '</button>'
+      : '';
+    const pairsDropdown   = (isThemeSet && isPairsOpen)
+      ? '<div class="cat-pairs-dropdown">' + (pairedCats.length
+          ? pairedCats.map(pc => {
+              const thumb = pc.bgImage
+                ? '<img class="cat-pair-thumb" src="' + pc.bgImage + '" onerror="this.outerHTML=\'<div class=cat-pair-thumb-placeholder>' + (pc.name||'') + '</div>\'">'
+                : '<div class="cat-pair-thumb-placeholder">' + (pc.name||'') + '</div>';
+              return '<div class="cat-pair-row">' + thumb + '<span class="cat-pair-name">' + (pc.name||'Untitled') + '</span></div>';
+            }).join('')
+          : '<div class="cat-pairs-empty">No pairings saved in the Planner yet.</div>')
+        + '</div>'
+      : '';
     const editBtn        = adminMode ? '<button class="cat-action-btn cat-action-edit" onclick="event.stopPropagation();openModal(\'' + cat.id + '\')">&#9998;</button>' : '';
-    const delBtn         = adminMode ? '<button class="cat-action-btn cat-action-del" onclick="event.stopPropagation();confirmDelete(\'' + cat.id + '\')">&#215;</button>' : '';
+    const delBtn          = adminMode ? '<button class="cat-action-btn cat-action-del" onclick="event.stopPropagation();confirmDelete(\'' + cat.id + '\')">&#215;</button>' : '';
     return '<div class="cat-card" draggable="true" data-id="' + cat.id + '"'
       + ' ondragstart="onCardDragStart(event,\'' + cat.id + '\')"'
       + ' ondragend="onCardDragEnd(event)"'
@@ -1758,8 +1771,8 @@ function renderLibrary() {
       + bannerHtml
       + '<div class="cat-body">'
       + '<div class="cat-title">' + (cat.name||'Untitled') + '</div>'
-      + '<div class="cat-meta">' + musicBadge + slideshowBadge + canvaBadge + tagPills + '</div>'
-      + noteHtml
+      + '<div class="cat-meta">' + themeSetBadge + musicBadge + slideshowBadge + canvaBadge + tagPills + seePairsBtn + '</div>'
+      + pairsDropdown
       + '</div>'
       + '<div class="cat-actions">' + editBtn + delBtn + '</div>'
       + '<button class="cat-action-add" onclick="event.stopPropagation();addToNextRound(\'' + cat.id + '\')" title="Add to next open round">+</button>'
@@ -2138,10 +2151,6 @@ function openModal(id) {
   document.getElementById('f-canva-bg').value     = cat?.canvaBgUrl     || '';
   document.getElementById('f-notes').value       = cat?.notes      || '';
   document.getElementById('f-attributions').value = cat?.attributions || '';
-  document.getElementById('f-vm-show').checked       = !!cat?.venueMenu?.show;
-  document.getElementById('f-vm-description').value  = cat?.venueMenu?.description || '';
-  document.getElementById('f-vm-shows').value        = (cat?.venueMenu?.shows||[]).join('\n');
-  document.getElementById('f-vm-banner').value       = cat?.venueMenu?.bannerUrl || '';
   renderCatTypeDropdown();
   document.getElementById('f-cattype').value     = cat?.catType    || '';
   // Default round settings
@@ -2155,33 +2164,8 @@ function openModal(id) {
   previewBanner('f-bg','banner-preview-wrap');
   previewBanner('f-bg-intro','intro-preview-wrap');
   previewBanner('f-bg-question','question-preview-wrap');
-  renderWhereShows(cat);
   document.getElementById('modal-overlay').classList.add('show');
   document.getElementById('f-name').focus();
-}
-
-// Read-only cross-app reference — this doc IS the category everywhere, so
-// this just tells you which other apps are already reading it and how it
-// labels itself there. It never writes anything; it's derived purely from
-// fields already on the doc (type, plannerTier, venueMenu.show).
-function triviaSubtypeLabel(cat) {
-  return (cat && (cat.type === 'music' || cat.plannerTier === 'music-bingo' || cat.plannerTier === 'coordinating-music'))
-    ? 'Music Trivia' : 'Evergreen Trivia';
-}
-function renderWhereShows(cat) {
-  const box = document.getElementById('where-shows-box');
-  const list = document.getElementById('where-shows-list');
-  if (!cat) { box.style.display = 'none'; return; }
-  const subtype = triviaSubtypeLabel(cat);
-  // Venue Menu admin shows EVERY live category regardless of the "show on
-  // Venue Menu" checkbox — that checkbox only controls the public venue.html
-  // — so "Venue Menu admin" always applies; only the public row is conditional.
-  const rows = [`Planner — as ${subtype}`, `Venue Menu admin — as ${subtype}`];
-  if (cat.venueMenu && cat.venueMenu.show) {
-    rows.push('Venue Menu (public) — as a Trivia category');
-  }
-  box.style.display = 'block';
-  list.innerHTML = rows.map(r => '<div>&#8226; ' + r + '</div>').join('');
 }
 
 const CANVA_WORKER = 'https://canva-slides.belladonnaaudioalchemies.workers.dev';
@@ -2298,28 +2282,22 @@ async function saveCategory() {
   const defaultShowAnswers = document.getElementById('f-default-showanswers')?.checked || false;
   const defaultTwoPass     = document.getElementById('f-default-twopass')?.checked || false;
   const defaultTimed       = document.getElementById('f-default-timed')?.checked || false;
-  const venueMenu = {
-    show: document.getElementById('f-vm-show')?.checked || false,
-    description: document.getElementById('f-vm-description')?.value.trim() || '',
-    shows: (document.getElementById('f-vm-shows')?.value || '').split('\n').map(s=>s.trim()).filter(Boolean),
-    bannerUrl: document.getElementById('f-vm-banner')?.value.trim() || ''
-  };
 
   setSyncStatus('syncing');
-  const data = {name, genre, type, sheetUrl, tabName, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, attributions, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, venueMenu, updatedAt: Date.now()};
+  const data = {name, genre, type, sheetUrl, tabName, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, attributions, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, updatedAt: Date.now()};
 
   try {
+    let catId = editingId;
     if(editingId) {
       await db.ref(`trivia/categories/${editingId}`).update(data);
       toast('Category updated!');
     } else {
-      // unified:true so a brand-new category shows up in this same library
-      // view immediately — that view only shows categories that have been
-      // through the unification process, and a category made fresh here
-      // counts as one.
-      await db.ref('trivia/categories').push({...data, createdAt: Date.now(), unified: true});
+      const newRef = db.ref('trivia/categories').push();
+      catId = newRef.key;
+      await newRef.set({...data, createdAt: Date.now()});
       toast('Category added!');
     }
+    syncCategoryToVm(catId, data); // fire-and-forget — mirror into Venue Menu/Planner
     setSyncStatus('synced');
     closeModal();
     restore();
@@ -2327,6 +2305,38 @@ async function saveCategory() {
     setSyncStatus('error');
     toast('Save failed: ' + e.message, true);
     restore();
+  }
+}
+
+// ═══════════════════════════════════════════════
+// VENUE MENU / PLANNER LINK SYNC
+// ─────────────────────────────────────────────
+// Categories here also show up in the Venue Menu (customer-facing) and
+// Planner (scheduling) apps, which both live in Firestore's
+// venueMenuCategories collection. The first time a category is saved
+// here without a link yet, a companion Firestore doc is created and the
+// two are linked (vmCatId here, triviaCatId there). Every later save
+// pushes name/genre/cover-image down onto that linked doc. Venue Menu
+// carries the matching push-down half when IT edits a linked category.
+async function syncCategoryToVm(catId, data) {
+  try {
+    const local = categories.find(c => c.id === catId);
+    const vmCatId = local && local.vmCatId ? local.vmCatId : null;
+    if(vmCatId) {
+      await dbFs.collection('venueMenuCategories').doc(vmCatId).update({
+        name: data.name, tags: data.genre || '', image: data.bgImage || ''
+      });
+    } else {
+      const newDoc = dbFs.collection('venueMenuCategories').doc();
+      await newDoc.set({
+        name: data.name, type: 'Trivia', tags: data.genre || '', image: data.bgImage || '',
+        plannerTier: null, linked: true, triviaCatId: catId,
+        createdAt: Date.now(), updatedAt: Date.now()
+      });
+      await db.ref(`trivia/categories/${catId}/vmCatId`).set(newDoc.id);
+    }
+  } catch(e) {
+    console.error('Venue Menu sync failed for', catId, e);
   }
 }
 
