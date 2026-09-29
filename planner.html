@@ -483,8 +483,7 @@ a{color:inherit}
         <button class="pill" id="dup-toggle" onclick="toggleDupView()">Possible Duplicates</button>
         <span style="flex:1"></span>
         <button class="btn btn-ghost btn-sm" onclick="sortThemesAZ()">A–Z</button>
-        <button class="btn btn-ghost btn-sm bingo-only-tab" style="display:none" onclick="exportThemeNamesList()">Export List</button>
-        <button class="btn btn-ghost btn-sm bingo-only-tab" style="display:none" id="repair-bingo-btn" onclick="repairBingoLinks()" title="Restores any Bingo category whose live record was deleted by an old link/merge tool, at its original ID, so existing guest QR codes/links work again">Repair Bingo Links</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportThemeNamesList()">Export List</button>
         <button class="btn btn-primary btn-sm" onclick="openThemeModal()">+ Add Theme</button>
       </div>
       <div class="filter-bar" id="tier-filter-bar"></div>
@@ -1181,7 +1180,6 @@ function setPlannerMode(mode, el){
   if(el) el.classList.add('active');
   // Trivia-only power features — hide rather than half-support in Bingo mode
   document.querySelectorAll('.trivia-only-tab').forEach(t=>{ t.style.display = mode==='trivia' ? '' : 'none'; });
-  document.querySelectorAll('.bingo-only-tab').forEach(t=>{ t.style.display = mode==='bingo' ? '' : 'none'; });
   document.getElementById('theme-tab-label').textContent = 'Theme Library';
   state.venues={}; state.themes={}; state.gigs={}; state.sequences={}; libraryRaw={};
   attachModeListeners();
@@ -2402,49 +2400,6 @@ function exportThemeNamesList(){
   a.remove();
   URL.revokeObjectURL(url);
   toast(`Exported ${total} category name${total===1?'':'s'}.`);
-}
-// One-time repair for Bingo categories whose live bingo/landing/categories
-// record got deleted by an old link/merge tool elsewhere in the Belladonna
-// apps (it used to copy a category's data onto a Venue Menu Firestore doc
-// under a bingoData field, then delete the original RTDB record — breaking
-// any guest QR code/link already pointing at that ID with "Playlist not
-// found"). This file doesn't run that merge itself, but the Firebase
-// project is shared, so past damage from any version can still be sitting
-// in Firestore. This reads venueMenuCategories directly (no ongoing link
-// to that system is created or kept), finds every doc with a bingoData
-// snapshot whose original RTDB record is now missing, and recreates it at
-// its ORIGINAL id so existing printed QR codes/links start resolving
-// again. Never touches a record that's still there. Safe to run more than
-// once — does its own fresh reads every time, and doesn't write anything
-// back to venueMenuCategories except a courtesy vmCatId cross-reference.
-async function repairBingoLinks(){
-  const btn = document.getElementById('repair-bingo-btn');
-  if(btn){ btn.disabled = true; btn.textContent = 'Checking…'; }
-  try{
-    const snap = await dbFs.collection('venueMenuCategories').get();
-    const candidates = [];
-    snap.forEach(d=>{ const c = d.data(); if(c.bingoData && c.bingoData.id) candidates.push({vmId:d.id, c}); });
-    if(!candidates.length){ toast('No orphaned Bingo categories found — nothing to repair.'); return; }
-    let restored = 0, alreadyOk = 0, failed = 0;
-    for(const {vmId, c} of candidates){
-      const bingoId = c.bingoData.id;
-      try{
-        const rtdbSnap = await db.ref('bingo/landing/categories/'+bingoId).once('value');
-        if(rtdbSnap.exists()){ alreadyOk++; continue; }
-        await db.ref('bingo/landing/categories/'+bingoId).set({ ...c.bingoData, vmCatId: vmId });
-        await dbFs.collection('venueMenuCategories').doc(vmId).update({ bingoCatId: bingoId }).catch(()=>{});
-        restored++;
-      }catch(err){ console.error('Repair failed for bingo category', bingoId, err); failed++; }
-    }
-    toast(`Restored ${restored} Bingo categor${restored===1?'y':'ies'}`
-      + (alreadyOk ? `, ${alreadyOk} already fine` : '')
-      + (failed ? `, ${failed} failed — check console` : '') + '.', failed>0);
-  } catch(err){
-    console.error('Repair Bingo Links failed:', err);
-    toast('Repair failed: '+(err.code||err.message), true);
-  } finally {
-    if(btn){ btn.disabled = false; btn.textContent = 'Repair Bingo Links'; }
-  }
 }
 function toggleDupView(){
   dupViewOpen = !dupViewOpen;
