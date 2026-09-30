@@ -1006,7 +1006,35 @@ auth.onAuthStateChanged(function(user){
     loadPlannerLocations();
   });
   loadShiftsCancelled();
+  attachBingoPairLibraryListener();
 });
+// A read-only, always-on mirror of the real Bingo category library, kept
+// separate from state.themes (which only ever holds the CURRENT mode's
+// library) so that while editing a Trivia category, "Pairs With" can also
+// offer real Bingo categories — not just the Trivia-side "Music Bingo" tier,
+// which is a different thing (a Trivia category merely tagged for a bingo
+// round, not an actual bingo/landing/categories record).
+let bingoPairLibraryRaw = {};
+function attachBingoPairLibraryListener(){
+  db.ref('bingo/landing/categories').on('value', snap=>{
+    bingoPairLibraryRaw = snap.val()||{};
+    const searchBox = document.getElementById('t-pairs-search');
+    if(searchBox && searchBox.value.trim()) renderPairsSuggest();
+  }, err=>{ console.warn('Planner: bingo cross-pair library listener failed:', err); });
+}
+// Resolves a Pairs With id that may point into either library. Cross-library
+// refs are prefixed 'bingo:<id>' (added when a Trivia category pairs with a
+// real Bingo category) — a bare id always means "this mode's own library",
+// so every pairsWith array already saved before this feature keeps working
+// exactly as it did.
+function resolveCrossPairTheme(id){
+  if(typeof id==='string' && id.indexOf('bingo:')===0){
+    const bid = id.slice(6);
+    const b = bingoPairLibraryRaw[bid];
+    return b ? { name: b.name||b.title||'(untitled)', tier:'music-bingo', _crossLibrary:'bingo' } : null;
+  }
+  return state.themes[id] || null;
+}
 function onDataChange(){ clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner(); renderActiveTab(); }
 function updateThemeDatalist(){
   document.getElementById('theme-name-list').innerHTML = Object.values(state.themes||{})
@@ -2630,8 +2658,9 @@ function renderPairsWithSection(){
     : 'Pairs With (Evergreen or Music Trivia)';
   document.getElementById('t-pairs-label').textContent = label;
   document.getElementById('t-pairs-chips').innerHTML = editingThemePairs.map((id,i)=>{
-    const t = state.themes[id];
-    return `<span class="tag-chip">${escapeHtml(t?t.name:'(deleted theme)')}<span class="x" onclick="removePairChip(${i})">×</span></span>`;
+    const t = resolveCrossPairTheme(id);
+    const label = t ? (t.name + (t._crossLibrary==='bingo' ? ' (Bingo)' : '')) : '(deleted theme)';
+    return `<span class="tag-chip">${escapeHtml(label)}<span class="x" onclick="removePairChip(${i})">×</span></span>`;
   }).join('') || '<span style="color:var(--text3);font-size:12px">No pairings yet — search below to add one</span>';
   document.getElementById('t-pairs-suggest').innerHTML = '';
   document.getElementById('t-pairs-search').value = '';
@@ -2643,10 +2672,28 @@ function renderPairsSuggest(){
   const tier = document.getElementById('t-tier').value;
   const scope = pairScopeFor(tier);
   if(!q || !scope){ box.innerHTML=''; return; }
+  // Matches on the category's own name OR any of its tags, so searching a
+  // tag like "halloween" surfaces every category tagged with it, not just
+  // one literally named "Halloween".
+  const matchTag = (t)=> (t.tags||[]).some(tag=>(tag||'').toLowerCase().includes(q));
   const matches = Object.entries(state.themes||{})
-    .filter(([id,t])=> id!==editingThemeId && scope(t) && !editingThemePairs.includes(id) && (t.name||'').toLowerCase().includes(q))
+    .filter(([id,t])=> id!==editingThemeId && scope(t) && !editingThemePairs.includes(id)
+      && ((t.name||'').toLowerCase().includes(q) || matchTag(t)))
     .slice(0,20);
-  box.innerHTML = matches.map(([id,t])=>`<div class="theme-opt" onclick="addPairChip('${id}')">${escapeHtml(t.name)}<small>${TIER_LABELS[normTier(t.tier)]||''}</small></div>`).join('')
+  // Real Bingo categories (bingo/landing/categories) matched by name — they
+  // don't carry Planner tags, so this is name-only, and results are added
+  // with a 'bingo:' prefix so saveTheme() knows to write the reciprocal
+  // pairing onto the Bingo record instead of a trivia/categories one.
+  const bingoMatches = Object.entries(bingoPairLibraryRaw||{})
+    .filter(([id,b])=> !editingThemePairs.includes('bingo:'+id) && ((b.name||b.title||'').toLowerCase().includes(q)))
+    .slice(0,10);
+  box.innerHTML = matches.map(([id,t])=>{
+    const nameHit = (t.name||'').toLowerCase().includes(q);
+    const hitTag = !nameHit ? (t.tags||[]).find(tag=>(tag||'').toLowerCase().includes(q)) : null;
+    return `<div class="theme-opt" onclick="addPairChip('${id}')">${escapeHtml(t.name)}<small>${TIER_LABELS[normTier(t.tier)]||''}${hitTag?' · tag: '+escapeHtml(hitTag):''}</small></div>`;
+  }).concat(bingoMatches.map(([id,b])=>
+    `<div class="theme-opt" onclick="addPairChip('bingo:${id}')">${escapeHtml(b.name||b.title||'')}<small>Bingo</small></div>`
+  )).join('')
     || '<div class="theme-opt" style="color:var(--text3)">No match — tag the other category\'s type first.</div>';
 }
 function addPairChip(id){
@@ -2698,26 +2745,78 @@ function saveTheme(){
     rtdbUpdates[libPath+'/'+themeId+'/plannerUsage'] = commonFields.plannerUsage;
   }
 
-  // Reciprocal pairing — keep both sides of a Pairs With relationship in sync.
+  // Reciprocal pairing — keep both sides of a Pairs With relationship in
+  // sync. otherId is either a bare trivia/categories id, or a cross-library
+  // 'bingo:<id>' ref (see resolveCrossPairTheme) — the reciprocal write goes
+  // to whichever collection actually owns that record.
   function writeOtherPairs(otherId, pairsArr){
-    if(!state.themes[otherId]) return;
-    rtdbUpdates[libPath+'/'+otherId+'/pairsWith'] = pairsArr;
+    if(typeof otherId==='string' && otherId.indexOf('bingo:')===0){
+      const bid = otherId.slice(6);
+      if(!bingoPairLibraryRaw[bid]) return;
+      rtdbUpdates['bingo/landing/categories/'+bid+'/pairsWith'] = pairsArr;
+    } else {
+      if(!state.themes[otherId]) return;
+      rtdbUpdates[libPath+'/'+otherId+'/pairsWith'] = pairsArr;
+    }
+  }
+  function existingPairsOf(otherId){
+    if(typeof otherId==='string' && otherId.indexOf('bingo:')===0){
+      const bid = otherId.slice(6);
+      return (bingoPairLibraryRaw[bid]||{}).pairsWith || [];
+    }
+    return (state.themes[otherId]||{}).pairsWith || [];
   }
   newPairs.filter(id=>!oldPairs.includes(id)).forEach(otherId=>{
-    const other = state.themes[otherId];
-    if(!other) return;
-    const otherPairs = (other.pairsWith||[]).slice();
-    if(!otherPairs.includes(themeId)){ otherPairs.push(themeId); writeOtherPairs(otherId, otherPairs); }
+    const isBingo = typeof otherId==='string' && otherId.indexOf('bingo:')===0;
+    if(isBingo ? !bingoPairLibraryRaw[otherId.slice(6)] : !state.themes[otherId]) return;
+    const myRef = isBingo ? 'trivia:'+themeId : themeId;
+    const otherPairs = existingPairsOf(otherId).slice();
+    if(!otherPairs.includes(myRef)){ otherPairs.push(myRef); writeOtherPairs(otherId, otherPairs); }
   });
   oldPairs.filter(id=>!newPairs.includes(id)).forEach(otherId=>{
-    const other = state.themes[otherId];
-    if(!other) return;
-    writeOtherPairs(otherId, (other.pairsWith||[]).filter(id=>id!==themeId));
+    const isBingo = typeof otherId==='string' && otherId.indexOf('bingo:')===0;
+    if(isBingo ? !bingoPairLibraryRaw[otherId.slice(6)] : !state.themes[otherId]) return;
+    const myRef = isBingo ? 'trivia:'+themeId : themeId;
+    writeOtherPairs(otherId, existingPairsOf(otherId).filter(id=>id!==myRef));
   });
 
-  db.ref().update(rtdbUpdates)
-    .then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); })
-    .catch(err=>{ console.error('Save theme failed:', err); toast('Save failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
+  // ── THEME NIGHT <-> VENUE MENU NIGHT LINK ──────────────────────────────
+  // Mirrors createLinkedCategoryForNight/syncLinkedCategoryFromNight in the
+  // Venue Menu admin (index.html): the two are kept as one linked pair, each
+  // side auto-creating or updating the other's record on save. See the
+  // comment there for the full picture.
+  const finishSave = () => {
+    db.ref().update(rtdbUpdates)
+      .then(()=>{
+        if(tier==='theme-night') return syncOrCreateLinkedNight(themeId, existing, commonFields);
+      })
+      .then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); })
+      .catch(err=>{ console.error('Save theme failed:', err); toast('Save failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
+  };
+  finishSave();
+}
+function toNightId(name){
+  return name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80)
+    + '-' + Math.abs(name.split('').reduce((a,c)=>(a<<5)-a+c.charCodeAt(0)|0,0)).toString(36);
+}
+async function syncOrCreateLinkedNight(themeId, existing, fields){
+  try{
+    const nightId = existing.linkedNightId || null;
+    if(!nightId){
+      const newId = toNightId(fields.name);
+      await dbFs.collection('venueMenuNights').doc(newId).set({
+        name: fields.name,
+        categoryIds: [], enhancements: [], filterTags: [], nightTagsList: [],
+        genre:'', tone:'', era:'', audience:'',
+        bannerData: null, bannerColor: '',
+        published: false, description: '', adminNotes: '',
+        linkedCategoryId: themeId
+      });
+      await db.ref(MODE_PATHS.trivia.library+'/'+themeId+'/linkedNightId').set(newId);
+    } else {
+      await dbFs.collection('venueMenuNights').doc(nightId).set({ name: fields.name }, {merge:true});
+    }
+  }catch(e){ console.warn('Could not sync linked Venue Menu Night:', e); }
 }
 function deleteTheme(){
   if(!editingThemeId) return;
