@@ -1013,6 +1013,7 @@ auth.onAuthStateChanged(function(user){
     loadPlannerLocations();
   });
   loadShiftsCancelled();
+  attachTriviaMirrorListener();
   attachBingoPairLibraryListener();
   attachVenueMenuPairLibraryListener();
 });
@@ -1026,8 +1027,8 @@ let bingoPairLibraryRaw = {};
 function attachBingoPairLibraryListener(){
   db.ref('bingo/landing/categories').on('value', snap=>{
     bingoPairLibraryRaw = snap.val()||{};
-    const searchBox = document.getElementById('t-pairs-search');
-    if(searchBox && searchBox.value.trim()) renderPairsSuggest();
+    recomputeVmPairLib();
+    refreshLibraryViews();
   }, err=>{ console.warn('Planner: bingo cross-pair library listener failed:', err); });
 }
 // A read-only, always-on mirror of the Venue Menu's own category library
@@ -1045,28 +1046,112 @@ function vmPairType(c){
   if(t.includes('mini')) return 'Mini Games';
   return null;
 }
+// ── COMPLETE LIBRARY MIRRORS ──
+// The Theme Library tab shows EVERY category regardless of Trivia/Bingo mode:
+//   trivia/categories (RTDB)  +  bingo/landing/categories (RTDB)
+//   +  Firestore venueMenuCategories (Karaoke, Sing-Along, Mini Games, etc.)
+// Each is one real record, read by its own ID — the same IDs Trivia Admin,
+// Bingo Admin and the Venue Menu index read. Always-on, independent of mode.
+let triviaLibMirrorRaw = {};
+let vmAllRaw = {};
+function normLibName(n){ return (n||'').toLowerCase().trim().replace(/\s+/g,' '); }
+// Same suppression rule the Venue Menu index Library uses, so both apps list
+// exactly the same set: skip docs already folded into a live Trivia/Bingo
+// record (_migratedTo), Planner's own Firestore shadow of a karaoke theme
+// (_plannerMirror), and anything whose name matches a live record.
+function recomputeVmPairLib(){
+  const liveNames = new Set();
+  Object.values(triviaLibMirrorRaw||{}).forEach(c=>{ if(c) liveNames.add(normLibName(c.name||c.title)); });
+  Object.values(bingoPairLibraryRaw||{}).forEach(c=>{ if(c) liveNames.add(normLibName(c.name||c.title)); });
+  const out = {};
+  Object.entries(vmAllRaw||{}).forEach(([id,data])=>{
+    if(data._migratedTo || data._plannerMirror) return;
+    if(liveNames.has(normLibName(data.name))) return;
+    out[id] = data;
+  });
+  vmPairLibraryRaw = out;
+}
+function refreshLibraryViews(){
+  const searchBox = document.getElementById('t-pairs-search');
+  if(searchBox && searchBox.value.trim()) renderPairsSuggest();
+  if(activeTab==='themes') renderThemes();
+}
+function attachTriviaMirrorListener(){
+  db.ref('trivia/categories').on('value', snap=>{
+    triviaLibMirrorRaw = snap.val()||{};
+    recomputeVmPairLib();
+    refreshLibraryViews();
+  }, err=>{ console.warn('Planner: trivia library mirror listener failed:', err); });
+}
 function attachVenueMenuPairLibraryListener(){
   dbFs.collection('venueMenuCategories').onSnapshot(snap=>{
     const out = {};
-    // Names of Planner-native karaoke themes, so a mirror doc saved before
-    // _plannerMirror existed (or any future one that somehow lost the flag)
-    // still gets caught by matching name, not just the flag.
-    const nativeKaraokeNames = new Set(
-      Object.values(state.themes||{}).filter(t=>t.plannerTier==='karaoke').map(t=>(t.name||'').toLowerCase().trim())
-    );
-    snap.forEach(doc=>{
-      const data = doc.data();
-      // Skip our own mirror of a Planner-native karaoke theme — the real
-      // theme already appears in the "Pairs With" search via state.themes,
-      // so listing the mirror too would show the same category twice.
-      if(data._plannerMirror || nativeKaraokeNames.has((data.name||'').toLowerCase().trim())) return;
-      if(vmPairType(data)) out[doc.id] = data;
-    });
-    vmPairLibraryRaw = out;
-    const searchBox = document.getElementById('t-pairs-search');
-    if(searchBox && searchBox.value.trim()) renderPairsSuggest();
+    snap.forEach(doc=>{ out[doc.id] = doc.data(); });
+    vmAllRaw = out;
+    recomputeVmPairLib();
+    refreshLibraryViews();
   }, err=>{ console.warn('Planner: Venue Menu cross-pair library listener failed:', err); });
 }
+// ── UNIFIED LIBRARY RECORDS ──
+// One normalized shape for a category from any of the three stores.
+// key = '<source>:<id>' where source is 'trivia' | 'bingo' | 'vm'.
+function vmTierFor(c){
+  const t = vmPairType(c);
+  return t==='Karaoke' ? 'karaoke' : t==='Sing-Along' ? 'sing-along' : t==='Mini Games' ? 'mini-games' : null;
+}
+function libRecord(source, id, c){
+  const usage = c.plannerUsage || {};
+  const tier = source==='trivia' ? (c.plannerTier||null)
+             : source==='bingo'  ? (c.plannerTier||'music-bingo')
+             : vmTierFor(c);
+  return {
+    key: source+':'+id, source, id,
+    name: c.name || c.title || '',
+    tier,
+    typeLabel: source==='vm' ? (c.type||'') : '',
+    tags: normalizeVmTags(c.tags),
+    pairsWith: Array.isArray(c.pairsWith) ? c.pairsWith : [],
+    karaokeSongs: Array.isArray(c.karaokeSongs) ? c.karaokeSongs : [],
+    timesUsed: usage.timesUsed || c.timesUsed || 0,
+    lastUsedDate: usage.lastUsedDate || c.lastUsedDate || null,
+    lastUsedVenueId: usage.lastUsedVenueId || c.lastUsedVenueId || null,
+    linkedNightId: c.linkedNightId || null,
+    linkedBundleNames: c.linkedBundleNames || null
+  };
+}
+function getAllLibrary(){
+  const out = [];
+  Object.entries(triviaLibMirrorRaw||{}).forEach(([id,c])=>{ if(c) out.push(libRecord('trivia', id, c)); });
+  Object.entries(bingoPairLibraryRaw||{}).forEach(([id,c])=>{ if(c) out.push(libRecord('bingo', id, c)); });
+  Object.entries(vmPairLibraryRaw||{}).forEach(([id,c])=>{ if(c) out.push(libRecord('vm', id, c)); });
+  return out;
+}
+function getLibRecord(key){
+  if(!key) return null;
+  const i = key.indexOf(':');
+  const source = key.slice(0,i), id = key.slice(i+1);
+  const raw = source==='trivia' ? triviaLibMirrorRaw[id] : source==='bingo' ? bingoPairLibraryRaw[id] : source==='vm' ? vmPairLibraryRaw[id] : null;
+  return raw ? libRecord(source, id, raw) : null;
+}
+// Pairs With refs are canonical as: bare id (or 'trivia:id') = trivia record,
+// 'bingo:id' = bingo record, 'vm:id' = Venue Menu record. Records outside
+// trivia/categories store trivia refs as 'trivia:<id>' (existing convention);
+// everything is normalized to bare-for-trivia while editing.
+function normRef(r){ return (typeof r==='string' && r.indexOf('trivia:')===0) ? r.slice(7) : r; }
+function storeRef(r, targetSource){
+  const n = normRef(r);
+  const isTrivia = !(n.indexOf('bingo:')===0 || n.indexOf('vm:')===0);
+  return (isTrivia && targetSource!=='trivia') ? 'trivia:'+n : n;
+}
+function refOf(source, id){ return source==='trivia' ? id : source+':'+id; }
+function refToKey(r){
+  const n = normRef(r);
+  if(n.indexOf('bingo:')===0) return 'bingo:'+n.slice(6);
+  if(n.indexOf('vm:')===0) return 'vm:'+n.slice(3);
+  return 'trivia:'+n;
+}
+function resolveRefAny(r){ return getLibRecord(refToKey(r)); }
+function jsq(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 // Resolves a Pairs With id that may point into any of three libraries.
 // Cross-library refs are prefixed 'bingo:<id>' (a real Bingo category) or
 // 'vm:<id>' (a real Venue Menu category — Karaoke/Sing-Along/Mini Games) —
@@ -1074,17 +1159,11 @@ function attachVenueMenuPairLibraryListener(){
 // every pairsWith array saved before this feature keeps working exactly as
 // it did.
 function resolveCrossPairTheme(id){
-  if(typeof id==='string' && id.indexOf('bingo:')===0){
-    const bid = id.slice(6);
-    const b = bingoPairLibraryRaw[bid];
-    return b ? { name: b.name||b.title||'(untitled)', tier:'music-bingo', _crossLibrary:'bingo' } : null;
-  }
-  if(typeof id==='string' && id.indexOf('vm:')===0){
-    const vid = id.slice(3);
-    const v = vmPairLibraryRaw[vid];
-    return v ? { name: v.name||'(untitled)', tier:null, _crossLibrary:'vm', _vmType: vmPairType(v) } : null;
-  }
-  return state.themes[id] || null;
+  // Resolves against the always-on mirrors of all three stores, so it works
+  // the same in Trivia and Bingo mode.
+  const r = resolveRefAny(id);
+  if(!r) return null;
+  return { name: r.name||'(untitled)', tier: r.tier, _crossLibrary: r.source==='trivia' ? null : r.source, _vmType: r.typeLabel };
 }
 function onDataChange(){ clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner(); renderActiveTab(); }
 function updateThemeDatalist(){
@@ -1387,8 +1466,8 @@ function renderActiveTab(){
   else if(activeTab==='planning') renderPlanning();
   else if(activeTab==='venues') renderVenues();
   else if(activeTab==='themes') {
-    if(plannerMode==='bingo') renderBingoCategoriesReadOnly();
-    else { renderThemes(); renderSequences(); }
+    // Theme Library is the complete, all-types library in BOTH modes.
+    renderThemes(); renderSequences();
   }
   renderNeedsBadge();
 }
@@ -2492,10 +2571,10 @@ function sortThemesAZ(){ themeSort = {key:'name', dir:1}; renderThemes(); }
 // own order (Untagged last), alphabetized within each group.
 function exportThemeNamesList(){
   const groups = {};
-  Object.values(state.themes||{}).forEach(t=>{
+  getAllLibrary().forEach(t=>{
     if(!t || !t.name) return;
     const tier = normTier(t.tier) || '';
-    const label = TIER_LABELS[tier] || 'Untagged';
+    const label = TIER_LABELS[tier] || t.typeLabel || 'Untagged';
     (groups[label] = groups[label] || []).push(t.name);
   });
   if(!Object.keys(groups).length){ toast('No categories to export yet.', true); return; }
@@ -2507,7 +2586,7 @@ function exportThemeNamesList(){
     if(bi===-1) return -1;
     return ai-bi;
   });
-  const modeLabel = plannerMode==='bingo' ? 'Music Bingo' : 'Trivia';
+  const modeLabel = 'All Categories';
   let out = `Category Names — ${modeLabel} — ${new Date().toLocaleDateString()}\n`;
   let total = 0;
   labels.forEach(label=>{
@@ -2520,7 +2599,7 @@ function exportThemeNamesList(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `category-names-${plannerMode}-${new Date().toISOString().slice(0,10)}.txt`;
+  a.download = `category-names-all-${new Date().toISOString().slice(0,10)}.txt`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -2536,7 +2615,7 @@ function toggleDupView(){
 }
 function normalizeThemeName(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' '); }
 function renderDupView(){
-  const entries = Object.entries(state.themes||{});
+  const entries = getAllLibrary().map(t=>[t.key, t]);
   const buckets = {};
   entries.forEach(([id,t])=>{
     const norm = normalizeThemeName(t.name);
@@ -2559,7 +2638,7 @@ function renderDupView(){
   });
   document.getElementById('dup-view').innerHTML = clusters.length
     ? clusters.map(cl=>`<div class="dup-cluster"><div class="dup-cluster-title">Possibly the same theme</div>${
-        cl.map(([id,t])=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0"><span>${escapeHtml(t.name)}</span><span style="display:flex;gap:6px"><span style="color:var(--text3);font-size:11px">used ${t.timesUsed||0}×</span><button class="btn btn-ghost btn-sm" onclick="openThemeModal('${id}')">Edit</button></span></div>`).join('')
+        cl.map(([id,t])=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0"><span>${escapeHtml(t.name)}</span><span style="display:flex;gap:6px"><span style="color:var(--text3);font-size:11px">used ${t.timesUsed||0}×</span><button class="btn btn-ghost btn-sm" onclick="openThemeModal('${jsq(id)}')">Edit</button></span></div>`).join('')
       }</div>`).join('')
     : '<div class="empty-state">No likely duplicates found by name similarity.</div>';
 }
@@ -2577,7 +2656,9 @@ function levenshtein(a,b){
 }
 
 function renderThemes(){
-  const list0 = Object.entries(state.themes||{});
+  // Complete library: Trivia + Bingo + Venue Menu categories, every type.
+  const list0 = getAllLibrary().map(t=>[t.key, t]);
+  const hasOtherTypes = list0.some(([k,t])=>!normTier(t.tier) && t.typeLabel);
   const total = list0.length, unused = list0.filter(([id,t])=>!t.timesUsed).length;
   // Dedupe tags case-insensitively — "Comedy" and "comedy" are the same tag.
   // First casing seen wins for display; matching/filtering always ignores case.
@@ -2593,7 +2674,8 @@ function renderThemes(){
     `<button class="pill" onclick="clearThemeFilters()">Clear</button>`
     + Object.keys(TIER_LABELS).map(tier=>
       `<button class="pill ${activeTierFilters.has(tier)?'active':''}" onclick="setTierFilter('${tier}')">${TIER_LABELS[tier]}</button>`
-    ).join('');
+    ).join('')
+    + (hasOtherTypes ? `<button class="pill ${activeTierFilters.has('__other')?'active':''}" onclick="setTierFilter('__other')">Other Types</button>` : '');
   document.getElementById('tag-filter-bar').innerHTML = allTags.map(([key,label])=>
     `<button class="tag-pill ${activeTagFilters.has(key)?'active':''}" onclick="setTagFilter('${key.replace(/'/g,"\\'")}')">${escapeHtml(label)}</button>`
   ).join('');
@@ -2608,25 +2690,26 @@ function renderThemes(){
   let list = list0;
   if(q) list = list.filter(([id,t])=>(t.name||'').toLowerCase().includes(q));
   if(activeTagFilters.size) list = list.filter(([id,t])=>safeTags(t).some(tag=>activeTagFilters.has((tag||'').toLowerCase())));
-  if(activeTierFilters.size) list = list.filter(([id,t])=>activeTierFilters.has(normTier(t.tier)));
+  if(activeTierFilters.size) list = list.filter(([id,t])=>activeTierFilters.has(normTier(t.tier) || (t.typeLabel ? '__other' : '')));
   list = sortEntries(list, themeSort, ([id,t])=>themeSort.key==='timesUsed' ? (t.timesUsed||0) : t[themeSort.key]);
 
   document.getElementById('themes-rows').innerHTML = list.map(([id,t])=>{
     const venueName = t.lastUsedVenueId && state.venues[t.lastUsedVenueId] ? state.venues[t.lastUsedVenueId].name : '—';
     const nt = normTier(t.tier);
-    const tierBadge = nt ? `<span class="badge ${TIER_BADGE[nt]||'badge-empty'}">${TIER_LABELS[nt]||nt}</span>` : '';
+    const tierBadge = nt ? `<span class="badge ${TIER_BADGE[nt]||'badge-empty'}">${TIER_LABELS[nt]||nt}</span>`
+      : (t.typeLabel ? `<span class="badge badge-empty">${escapeHtml(t.typeLabel)}</span>` : '');
     return `<tr>
-      <td><input type="checkbox" class="theme-row-check" data-id="${id}" ${selectedThemeIds.has(id)?'checked':''} onchange="toggleThemeSelection('${id}', this.checked)"></td>
+      <td><input type="checkbox" class="theme-row-check" data-id="${escapeHtml(id)}" ${selectedThemeIds.has(id)?'checked':''} onchange="toggleThemeSelection('${jsq(id)}', this.checked)"></td>
       <td>${escapeHtml(t.name||'')} ${tierBadge}</td>
       <td>${safeTags(t).map(tag=>`<span class="tag-chip">${escapeHtml(tag)}</span>`).join('')||'<span style="color:var(--text3)">—</span>'}</td>
       <td>${t.timesUsed||0}</td>
       <td>${fmtMDY(t.lastUsedDate)}</td>
-      <td>${venueName!=='—' ? `<span class="theme-link" onclick="openHistoryModal('${id}')">${escapeHtml(venueName)}</span>` : '—'}</td>
-      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openThemeModal('${id}')">Edit</button></td>
+      <td>${venueName!=='—' ? `<span class="theme-link" onclick="openHistoryModal('${jsq(id)}')">${escapeHtml(venueName)}</span>` : '—'}</td>
+      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openThemeModal('${jsq(id)}')">Edit</button></td>
     </tr>`;
   }).join('');
   // drop selections for themes deleted elsewhere (not just filtered out of view)
-  Array.from(selectedThemeIds).forEach(id=>{ if(!state.themes[id]) selectedThemeIds.delete(id); });
+  Array.from(selectedThemeIds).forEach(id=>{ if(!getLibRecord(id)) selectedThemeIds.delete(id); });
   document.getElementById('theme-select-all').checked = list.length>0 && list.every(([id])=>selectedThemeIds.has(id));
   updateThemeBulkBar();
 }
@@ -2669,20 +2752,26 @@ function updateThemeBulkBar(){
 function bulkDeleteThemes(){
   const n = selectedThemeIds.size;
   if(!n) return;
-  const ids = Array.from(selectedThemeIds);
-  if(!confirm(`Delete ${n} categor${n===1?'y':'ies'} everywhere — Trivia Admin, the Venue Menu, scheduling — not just from this list? This can't be undone.`)) return;
+  // Only Trivia-library categories can be deleted from the Planner — Bingo
+  // categories (with images) and Venue Menu categories are deleted in the
+  // app that owns them, so a stray click here can't wipe them.
+  const allIds = Array.from(selectedThemeIds);
+  const ids = allIds.filter(k=>k.indexOf('trivia:')===0).map(k=>k.slice(7));
+  const skipped = allIds.length - ids.length;
+  if(!ids.length){ return toast('Bingo and Venue Menu categories are deleted in Bingo Admin / the Venue Menu.', true); }
+  if(!confirm(`Delete ${ids.length} categor${ids.length===1?'y':'ies'} everywhere — Trivia Admin, the Venue Menu, scheduling — not just from this list? This can't be undone.${skipped?`\n\n(${skipped} Bingo/Venue Menu categor${skipped===1?'y':'ies'} in your selection will be left alone.)`:''}`)) return;
   setSyncStatus('syncing');
   const rtdbUpdates = {};
   const karaokeIdsToUnmirror = [];
   ids.forEach(id=>{
     rtdbUpdates[MODE_PATHS.trivia.library+'/'+id] = null;
-    const t = state.themes[id];
+    const t = triviaLibMirrorRaw[id];
     if(t && t.plannerTier==='karaoke') karaokeIdsToUnmirror.push(toVmCategoryId(t.name));
   });
   db.ref().update(rtdbUpdates).then(()=>{
     return Promise.all(karaokeIdsToUnmirror.map(vmId => dbFs.collection('venueMenuCategories').doc(vmId).delete().catch(()=>{})));
   }).then(()=>{
-    toast(`Deleted ${n} categor${n===1?'y':'ies'}.`);
+    toast(`Deleted ${ids.length} categor${ids.length===1?'y':'ies'}.`);
     selectedThemeIds.clear();
   }).catch(err=>{
     console.error('Bulk delete failed:', err);
@@ -2691,13 +2780,18 @@ function bulkDeleteThemes(){
   });
 }
 
-function openHistoryModal(themeId){
-  const t = state.themes[themeId]; if(!t) return;
+function openHistoryModal(key){
+  const t = getLibRecord(key); if(!t) return;
+  const themeId = t.id;
   document.getElementById('hist-modal-title').textContent = 'Usage History — ' + t.name;
   const rows = [];
-  Object.entries(state.gigs||{}).forEach(([vid,dates])=>{
-    Object.entries(dates||{}).forEach(([dk,g])=>{ if(g.themeId===themeId) rows.push({dk, venueName:(state.venues[vid]||{}).name||'?'}); });
-  });
+  // Gigs/venues are loaded per mode, so history is only available for
+  // categories belonging to the mode currently open.
+  if(t.source === plannerMode){
+    Object.entries(state.gigs||{}).forEach(([vid,dates])=>{
+      Object.entries(dates||{}).forEach(([dk,g])=>{ if(g.themeId===themeId) rows.push({dk, venueName:(state.venues[vid]||{}).name||'?'}); });
+    });
+  }
   rows.sort((a,b)=>b.dk.localeCompare(a.dk));
   document.getElementById('hist-modal-body').innerHTML = rows.length
     ? rows.slice(0,40).map(r=>`<div class="hist-row">${fmtMDY(r.dk)} — ${escapeHtml(r.venueName)}</div>`).join('')
@@ -2706,19 +2800,34 @@ function openHistoryModal(themeId){
 }
 
 // -- Theme modal --
+// editingThemeKey = '<source>:<id>' of the record being edited (null = new
+// Trivia-library category). editingThemeId is the raw id inside its own store,
+// editingThemeSource is 'trivia' | 'bingo' | 'vm'.
+let editingThemeKey = null, editingThemeSource = 'trivia';
 let editingThemeId = null, editingThemeTags = [], editingThemePairs = [];
-function openThemeModal(id){
-  editingThemeId = id||null;
-  const t = id ? state.themes[id] : {};
-  editingThemeTags = safeTags(t).slice();
-  editingThemePairs = (t.pairsWith||[]).slice();
-  document.getElementById('theme-modal-title').textContent = id ? 'Edit Theme' : 'Add Theme';
-  document.getElementById('t-name').value = t.name||'';
-  document.getElementById('t-tier').value = normTier(t.tier)||'';
-  document.getElementById('t-times-used').value = t.timesUsed||0;
-  document.getElementById('t-last-used').value = t.lastUsedDate||'';
-  document.getElementById('t-karaoke-songs').value = (t.karaokeSongs||[]).join('\n');
-  document.getElementById('theme-delete-btn').style.display = id ? 'inline-block' : 'none';
+function openThemeModal(key){
+  const t = key ? getLibRecord(key) : null;
+  if(key && !t) return toast('That category is no longer in the library.', true);
+  editingThemeKey = key||null;
+  editingThemeSource = t ? t.source : 'trivia';
+  editingThemeId = t ? t.id : null;
+  const rec = t || {};
+  editingThemeTags = safeTags(rec).slice();
+  editingThemePairs = (rec.pairsWith||[]).map(normRef);
+  const ownerLabel = editingThemeSource==='bingo' ? ' (Bingo library)' : editingThemeSource==='vm' ? ' (Venue Menu library)' : '';
+  document.getElementById('theme-modal-title').textContent = (key ? 'Edit Theme' : 'Add Theme') + ownerLabel;
+  document.getElementById('t-name').value = rec.name||'';
+  document.getElementById('t-name').disabled = (editingThemeSource!=='trivia');
+  document.getElementById('t-tier').value = normTier(rec.tier)||'';
+  // A Venue Menu record's type (Karaoke / Sing-Along / Mini Games…) is set by
+  // its own Type field in the Venue Menu, so the tier selector is read-only there.
+  document.getElementById('t-tier').disabled = (editingThemeSource==='vm');
+  document.getElementById('t-times-used').value = rec.timesUsed||0;
+  document.getElementById('t-last-used').value = rec.lastUsedDate||'';
+  document.getElementById('t-karaoke-songs').value = (rec.karaokeSongs||[]).join('\n');
+  // Delete stays Trivia-only (Bingo categories carry images; Venue Menu ones
+  // are managed in the Venue Menu) — see bulkDeleteThemes.
+  document.getElementById('theme-delete-btn').style.display = (key && editingThemeSource==='trivia') ? 'inline-block' : 'none';
 
   renderTagChips();
   renderPairsWithSection();
@@ -2765,11 +2874,11 @@ function renderPairsWithSection(){
     : tier==='coordinating-music' ? 'Pairs With (suggested Evergreen Trivia — also searches Bingo, Karaoke, Sing-Along, Mini Games)'
     : 'Pairs With (Evergreen or Music Trivia — also searches Bingo, Karaoke, Sing-Along, Mini Games)';
   document.getElementById('t-pairs-label').textContent = label;
-  document.getElementById('t-pairs-chips').innerHTML = editingThemePairs.map((id,i)=>{
-    const t = resolveCrossPairTheme(id);
-    const tag = t ? (t._crossLibrary==='bingo' ? ' (Bingo)' : t._crossLibrary==='vm' ? ' (' + t._vmType + ')' : '') : '';
-    const label = t ? (t.name + tag) : '(deleted theme)';
-    return `<span class="tag-chip">${escapeHtml(label)}<span class="x" onclick="removePairChip(${i})">×</span></span>`;
+  document.getElementById('t-pairs-chips').innerHTML = editingThemePairs.map((ref,i)=>{
+    const t = resolveRefAny(ref);
+    const tag = t ? (t.source==='bingo' ? ' (Bingo)' : t.source==='vm' ? ' (' + (t.typeLabel||'Venue Menu') + ')' : '') : '';
+    const lbl = t ? (t.name + tag) : '(deleted theme)';
+    return `<span class="tag-chip">${escapeHtml(lbl)}<span class="x" onclick="removePairChip(${i})">×</span></span>`;
   }).join('') || '<span style="color:var(--text3);font-size:12px">No pairings yet — search below to add one</span>';
   document.getElementById('t-pairs-suggest').innerHTML = '';
   document.getElementById('t-pairs-search').value = '';
@@ -2779,156 +2888,107 @@ function renderPairsSuggest(){
   const q = document.getElementById('t-pairs-search').value.trim().toLowerCase();
   const box = document.getElementById('t-pairs-suggest');
   const tier = document.getElementById('t-tier').value;
-  const scope = pairScopeFor(tier);
-  if(!q || !scope){ box.innerHTML=''; return; }
-  // Matches on the category's own name OR any of its tags, so searching a
-  // tag like "halloween" surfaces every category tagged with it, not just
-  // one literally named "Halloween".
-  const matchTag = (t)=> (t.tags||[]).some(tag=>(tag||'').toLowerCase().includes(q));
-  const matches = Object.entries(state.themes||{})
-    .filter(([id,t])=> id!==editingThemeId && scope(t) && !editingThemePairs.includes(id)
-      && ((t.name||'').toLowerCase().includes(q) || matchTag(t)))
-    .slice(0,20);
-  // Real Bingo categories (bingo/landing/categories) matched by name — they
-  // don't carry Planner tags, so this is name-only, and results are added
-  // with a 'bingo:' prefix so saveTheme() knows to write the reciprocal
-  // pairing onto the Bingo record instead of a trivia/categories one.
-  const bingoMatches = Object.entries(bingoPairLibraryRaw||{})
-    .filter(([id,b])=> !editingThemePairs.includes('bingo:'+id) && ((b.name||b.title||'').toLowerCase().includes(q)))
-    .slice(0,10);
-  // Real Venue Menu categories (Karaoke / Sing-Along / Mini Games) — same
-  // name-only matching, added with a 'vm:' prefix.
-  const vmMatches = Object.entries(vmPairLibraryRaw||{})
-    .filter(([id,v])=> !editingThemePairs.includes('vm:'+id) && ((v.name||'').toLowerCase().includes(q)))
-    .slice(0,10);
-  box.innerHTML = matches.map(([id,t])=>{
-    const nameHit = (t.name||'').toLowerCase().includes(q);
-    const hitTag = !nameHit ? (t.tags||[]).find(tag=>(tag||'').toLowerCase().includes(q)) : null;
-    return `<div class="theme-opt" onclick="addPairChip('${id}')">${escapeHtml(t.name)}<small>${TIER_LABELS[normTier(t.tier)]||''}${hitTag?' · tag: '+escapeHtml(hitTag):''}</small></div>`;
-  }).concat(bingoMatches.map(([id,b])=>
-    `<div class="theme-opt" onclick="addPairChip('bingo:${id}')">${escapeHtml(b.name||b.title||'')}<small>Bingo</small></div>`
-  )).concat(vmMatches.map(([id,v])=>
-    `<div class="theme-opt" onclick="addPairChip('vm:${id}')">${escapeHtml(v.name||'')}<small>${escapeHtml(vmPairType(v)||'')}</small></div>`
-  )).join('')
-    || '<div class="theme-opt" style="color:var(--text3)">No match — tag the other category\'s type first.</div>';
+  if(!q || !canPair(tier)){ box.innerHTML=''; return; }
+  // Searches the whole unified library (Trivia, Bingo, Venue Menu) by name or tag.
+  const matches = getAllLibrary()
+    .filter(r=> r.key!==editingThemeKey && !editingThemePairs.includes(refOf(r.source, r.id))
+      && ((r.name||'').toLowerCase().includes(q) || (r.tags||[]).some(tag=>(tag||'').toLowerCase().includes(q))))
+    .sort((x,y)=>(x.name||'').localeCompare(y.name||''))
+    .slice(0,30);
+  box.innerHTML = matches.map(r=>{
+    const nameHit = (r.name||'').toLowerCase().includes(q);
+    const hitTag = !nameHit ? (r.tags||[]).find(tag=>(tag||'').toLowerCase().includes(q)) : null;
+    const typeTxt = r.source==='bingo' ? 'Bingo' : r.source==='vm' ? (r.typeLabel||'Venue Menu') : (TIER_LABELS[normTier(r.tier)]||'');
+    return `<div class="theme-opt" onclick="addPairChip('${jsq(refOf(r.source, r.id))}')">${escapeHtml(r.name)}<small>${escapeHtml(typeTxt)}${hitTag?' · tag: '+escapeHtml(hitTag):''}</small></div>`;
+  }).join('') || '<div class="theme-opt" style="color:var(--text3)">No match — tag the other category\'s type first.</div>';
 }
-function addPairChip(id){
-  if(!editingThemePairs.includes(id)) editingThemePairs.push(id);
+function addPairChip(ref){
+  ref = normRef(ref);
+  if(!editingThemePairs.includes(ref)) editingThemePairs.push(ref);
   renderPairsWithSection();
 }
 function saveTheme(){
-  // Only reachable in Trivia mode — Bingo's library is edited in Bingo Admin
-  // (see renderBingoCategoriesReadOnly). Writes straight to trivia/categories,
-  // the same doc Trivia Admin edits — an edit here IS an edit there.
-  const name = document.getElementById('t-name').value.trim();
+  // Source-aware: edits the record in whichever store owns it (Trivia RTDB,
+  // Bingo RTDB, or Venue Menu Firestore) — one record, one id, no copies.
+  // Only Planner-owned fields are written; content fields are never touched.
+  const source = editingThemeSource;
+  const name = (source==='trivia') ? document.getElementById('t-name').value.trim()
+    : ((getLibRecord(editingThemeKey)||{}).name || document.getElementById('t-name').value.trim());
   if(!name) return toast('Theme needs a name.', true);
   const isNew = !editingThemeId;
-  const tier = document.getElementById('t-tier').value;
+  const tier = source==='vm' ? (vmTierFor(vmPairLibraryRaw[editingThemeId]||{})||'') : document.getElementById('t-tier').value;
   const libPath = MODE_PATHS.trivia.library;
   const themeId = editingThemeId || db.ref(libPath).push().key;
-  const existing = editingThemeId ? state.themes[editingThemeId] : {};
-  const newPairs = canPair(tier) ? editingThemePairs.slice() : [];
-  const oldPairs = existing.pairsWith || [];
+  const existing = isNew ? {} : (getLibRecord(editingThemeKey) || {});
+  const myRef = refOf(source, themeId);
+  const newPairs = canPair(tier) ? editingThemePairs.map(normRef) : [];
+  const oldPairs = (existing.pairsWith || []).map(normRef);
   const karaokeSongs = tier==='karaoke'
     ? document.getElementById('t-karaoke-songs').value.split(/[\n|]/).map(s=>s.trim()).filter(Boolean)
     : null;
+  const usage = {
+    timesUsed: parseInt(document.getElementById('t-times-used').value)||0,
+    lastUsedDate: document.getElementById('t-last-used').value || null,
+    lastUsedVenueId: existing.lastUsedVenueId || null
+  };
   const commonFields = {
     name,
     tags: editingThemeTags,
     plannerTier: tier || null,
-    pairsWith: canPair(tier) ? newPairs : null,
+    pairsWith: canPair(tier) ? newPairs.map(r=>storeRef(r, source)) : null,
     karaokeSongs,
-    plannerUsage: {
-      timesUsed: parseInt(document.getElementById('t-times-used').value)||0,
-      lastUsedDate: document.getElementById('t-last-used').value || null,
-      lastUsedVenueId: existing.lastUsedVenueId || null
-    }
+    plannerUsage: usage
   };
   setSyncStatus('syncing');
   const rtdbUpdates = {};
+  const fsUpdates = []; // [{id, data}]
+  const bPath = 'bingo/landing/categories';
 
-  if(isNew){
-    // Brand-new category, created directly and fully in trivia/categories —
-    // ready for Trivia Admin to add real content to whenever. unified:true
-    // so it also shows up in Trivia Admin's own library view (which only
-    // lists categories that have been through the unification process —
-    // a category made fresh here counts as one).
-    rtdbUpdates[libPath+'/'+themeId] = { ...commonFields, type: 'trivia', createdAt: Date.now(), unified: true,
-      notes: 'Created from the Planner — add sheets/images/music in Trivia Admin.' };
+  if(source==='trivia'){
+    if(isNew){
+      rtdbUpdates[libPath+'/'+themeId] = { ...commonFields, type: 'trivia', createdAt: Date.now(), unified: true,
+        notes: 'Created from the Planner — add sheets/images/music in Trivia Admin.' };
+    } else {
+      ['name','tags','plannerTier','pairsWith','karaokeSongs','plannerUsage'].forEach(f=>{ rtdbUpdates[libPath+'/'+themeId+'/'+f] = commonFields[f]; });
+    }
+  } else if(source==='bingo'){
+    rtdbUpdates[bPath+'/'+themeId+'/tags'] = commonFields.tags;
+    rtdbUpdates[bPath+'/'+themeId+'/plannerTier'] = commonFields.plannerTier;
+    rtdbUpdates[bPath+'/'+themeId+'/pairsWith'] = commonFields.pairsWith;
+    rtdbUpdates[bPath+'/'+themeId+'/plannerUsage'] = commonFields.plannerUsage;
   } else {
-    // Editing an existing category — update only the Planner-owned fields,
-    // never touch sheets/images/music/notes that live on the same doc.
-    rtdbUpdates[libPath+'/'+themeId+'/name'] = commonFields.name;
-    rtdbUpdates[libPath+'/'+themeId+'/tags'] = commonFields.tags;
-    rtdbUpdates[libPath+'/'+themeId+'/plannerTier'] = commonFields.plannerTier;
-    rtdbUpdates[libPath+'/'+themeId+'/pairsWith'] = commonFields.pairsWith;
-    rtdbUpdates[libPath+'/'+themeId+'/karaokeSongs'] = commonFields.karaokeSongs;
-    rtdbUpdates[libPath+'/'+themeId+'/plannerUsage'] = commonFields.plannerUsage;
+    fsUpdates.push({ id: themeId, data: { tags: editingThemeTags.join(', '), pairsWith: commonFields.pairsWith || [] } });
   }
 
-  // Reciprocal pairing — keep both sides of a Pairs With relationship in
-  // sync. otherId is a bare trivia/categories id, or a cross-library
-  // 'bingo:<id>' / 'vm:<id>' ref (see resolveCrossPairTheme) — the
-  // reciprocal write goes to whichever collection actually owns that
-  // record. Venue Menu categories live in Firestore, not RTDB, so those
-  // writes get queued separately (fsUpdates) from the RTDB batch.
-  const fsUpdates = []; // [{id, pairsWith}]
-  function otherKind(otherId){
-    if(typeof otherId==='string' && otherId.indexOf('bingo:')===0) return 'bingo';
-    if(typeof otherId==='string' && otherId.indexOf('vm:')===0) return 'vm';
-    return 'trivia';
+  // Reciprocal pairing — both sides of a Pairs With link stay in sync, writing
+  // to whichever store owns the other record (refs stored in that store's format).
+  function writeOtherPairs(otherRef, arr){
+    const o = resolveRefAny(otherRef); if(!o) return;
+    const stored = arr.map(r=>storeRef(r, o.source));
+    if(o.source==='bingo') rtdbUpdates[bPath+'/'+o.id+'/pairsWith'] = stored;
+    else if(o.source==='vm') fsUpdates.push({ id: o.id, data: { pairsWith: stored } });
+    else rtdbUpdates[libPath+'/'+o.id+'/pairsWith'] = stored;
   }
-  function otherExists(otherId){
-    const kind = otherKind(otherId);
-    if(kind==='bingo') return !!bingoPairLibraryRaw[otherId.slice(6)];
-    if(kind==='vm') return !!vmPairLibraryRaw[otherId.slice(3)];
-    return !!state.themes[otherId];
-  }
-  function writeOtherPairs(otherId, pairsArr){
-    const kind = otherKind(otherId);
-    if(!otherExists(otherId)) return;
-    if(kind==='bingo') rtdbUpdates['bingo/landing/categories/'+otherId.slice(6)+'/pairsWith'] = pairsArr;
-    else if(kind==='vm') fsUpdates.push({ id: otherId.slice(3), pairsWith: pairsArr });
-    else rtdbUpdates[libPath+'/'+otherId+'/pairsWith'] = pairsArr;
-  }
-  function existingPairsOf(otherId){
-    const kind = otherKind(otherId);
-    if(kind==='bingo') return (bingoPairLibraryRaw[otherId.slice(6)]||{}).pairsWith || [];
-    if(kind==='vm') return (vmPairLibraryRaw[otherId.slice(3)]||{}).pairsWith || [];
-    return (state.themes[otherId]||{}).pairsWith || [];
-  }
-  newPairs.filter(id=>!oldPairs.includes(id)).forEach(otherId=>{
-    if(!otherExists(otherId)) return;
-    const myRef = otherKind(otherId)==='trivia' ? themeId : 'trivia:'+themeId;
-    const otherPairs = existingPairsOf(otherId).slice();
-    if(!otherPairs.includes(myRef)){ otherPairs.push(myRef); writeOtherPairs(otherId, otherPairs); }
+  newPairs.filter(r=>!oldPairs.includes(r)).forEach(otherRef=>{
+    const o = resolveRefAny(otherRef); if(!o) return;
+    const cur = (o.pairsWith||[]).map(normRef);
+    if(!cur.includes(myRef)) writeOtherPairs(otherRef, cur.concat(myRef));
   });
-  oldPairs.filter(id=>!newPairs.includes(id)).forEach(otherId=>{
-    if(!otherExists(otherId)) return;
-    const myRef = otherKind(otherId)==='trivia' ? themeId : 'trivia:'+themeId;
-    writeOtherPairs(otherId, existingPairsOf(otherId).filter(id=>id!==myRef));
+  oldPairs.filter(r=>!newPairs.includes(r)).forEach(otherRef=>{
+    const o = resolveRefAny(otherRef); if(!o) return;
+    writeOtherPairs(otherRef, (o.pairsWith||[]).map(normRef).filter(r=>r!==myRef));
   });
 
-  // ── THEME NIGHT <-> VENUE MENU NIGHT LINK ──────────────────────────────
-  // A Theme-Night-tier category is purely the night's title/shell — its
-  // Pairs With list is the actual lineup (Trivia/Bingo/Karaoke/Sing-Along/
-  // Mini Game options), synced into the linked venueMenuNights doc's
-  // categoryIds by syncOrCreateLinkedNight below. The Venue Menu admin
-  // (venue-menu-index.html) doesn't know anything about this link on its own
-  // — it just edits the resulting Night doc like any other — so this is a
-  // one-way push from Planner, merged (never replaced outright) so anything
-  // added by hand over there survives.
-  const finishSave = () => {
-    Promise.all(fsUpdates.map(u => dbFs.collection('venueMenuCategories').doc(u.id).set({ pairsWith: u.pairsWith }, { merge: true })))
-      .then(() => db.ref().update(rtdbUpdates))
-      .then(()=>{
-        if(tier==='theme-night') return syncOrCreateLinkedNight(themeId, existing, commonFields);
-        if(tier==='karaoke') return syncKaraokeThemeToVenueMenu(name, karaokeSongs||[], isNew);
-      })
-      .then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); })
-      .catch(err=>{ console.error('Save theme failed:', err); toast('Save failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
-  };
-  finishSave();
+  // Theme Night <-> Venue Menu Night link and karaoke mirror are Trivia-record features.
+  Promise.all(fsUpdates.map(u => dbFs.collection('venueMenuCategories').doc(u.id).set(u.data, { merge: true })))
+    .then(() => db.ref().update(rtdbUpdates))
+    .then(()=>{
+      if(source!=='trivia') return;
+      if(tier==='theme-night') return syncOrCreateLinkedNight(themeId, existing, commonFields);
+      if(tier==='karaoke') return syncKaraokeThemeToVenueMenu(name, karaokeSongs||[], isNew);
+    })
+    .then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); })
+    .catch(err=>{ console.error('Save theme failed:', err); toast('Save failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
 }
 function toNightId(name){
   return name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80)
@@ -2941,7 +3001,7 @@ async function syncOrCreateLinkedNight(themeId, existing, fields){
     // category's own name is just the night's title/shell, never one of the
     // round options itself.
     const bundleNames = (fields.pairsWith || [])
-      .map(id => { const t = resolveCrossPairTheme(id); return t && t.name; })
+      .map(id => { const t = resolveRefAny(id); return t && t.name; })
       .filter(Boolean);
     const uniqueBundle = [...new Set(bundleNames)];
     const nightId = existing.linkedNightId || null;
@@ -2977,12 +3037,12 @@ async function syncOrCreateLinkedNight(themeId, existing, fields){
   }catch(e){ console.warn('Could not sync linked Venue Menu Night:', e); }
 }
 function deleteTheme(){
-  if(!editingThemeId) return;
+  if(!editingThemeId || editingThemeSource!=='trivia') return;
   // This deletes the real category everywhere — Trivia Admin and the Venue
   // Menu too, once it reads the same record — not just from this list.
   if(!confirm('Delete this category everywhere — Trivia Admin, the Venue Menu, scheduling — not just from this list? This can\'t be undone.')) return;
   setSyncStatus('syncing');
-  const deletedTheme = state.themes[editingThemeId] || {};
+  const deletedTheme = triviaLibMirrorRaw[editingThemeId] || {};
   db.ref(MODE_PATHS.trivia.library+'/'+editingThemeId).remove()
     .then(()=>{
       // Karaoke themes also exist as a mirrored Firestore doc (see
