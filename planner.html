@@ -1048,8 +1048,18 @@ function vmPairType(c){
 function attachVenueMenuPairLibraryListener(){
   dbFs.collection('venueMenuCategories').onSnapshot(snap=>{
     const out = {};
+    // Names of Planner-native karaoke themes, so a mirror doc saved before
+    // _plannerMirror existed (or any future one that somehow lost the flag)
+    // still gets caught by matching name, not just the flag.
+    const nativeKaraokeNames = new Set(
+      Object.values(state.themes||{}).filter(t=>t.plannerTier==='karaoke').map(t=>(t.name||'').toLowerCase().trim())
+    );
     snap.forEach(doc=>{
       const data = doc.data();
+      // Skip our own mirror of a Planner-native karaoke theme — the real
+      // theme already appears in the "Pairs With" search via state.themes,
+      // so listing the mirror too would show the same category twice.
+      if(data._plannerMirror || nativeKaraokeNames.has((data.name||'').toLowerCase().trim())) return;
       if(vmPairType(data)) out[doc.id] = data;
     });
     vmPairLibraryRaw = out;
@@ -1432,11 +1442,15 @@ function updateThemeKaraokeVisibility(){
 async function syncKaraokeThemeToVenueMenu(name, songs, isNew){
   try{
     const id = toVmCategoryId(name);
+    // _plannerMirror marks this doc as the Firestore shadow of a
+    // Planner-native theme, not an independent Venue-Menu-made category —
+    // Venue Menu Admin and Planner's own "Pairs With" search both need to
+    // hide it so the one real category doesn't show up twice.
     const data = isNew
       ? { name, type: 'Karaoke', karaokeSongs: songs, shows: [], notes: '', tags: '',
           publishedTabs: [], published: false, alsoSee: [], miniGameImage: null,
-          miniSection: null, addonPrice: null, bannerData: null }
-      : { name, type: 'Karaoke', karaokeSongs: songs };
+          miniSection: null, addonPrice: null, bannerData: null, _plannerMirror: true }
+      : { name, type: 'Karaoke', karaokeSongs: songs, _plannerMirror: true };
     await dbFs.collection('venueMenuCategories').doc(id).set(data, { merge: true });
   }catch(err){ console.warn('Could not mirror karaoke theme to Venue Menu:', err); }
 }
