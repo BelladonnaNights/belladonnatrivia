@@ -1007,6 +1007,7 @@ auth.onAuthStateChanged(function(user){
   });
   loadShiftsCancelled();
   attachBingoPairLibraryListener();
+  attachVenueMenuPairLibraryListener();
 });
 // A read-only, always-on mirror of the real Bingo category library, kept
 // separate from state.themes (which only ever holds the CURRENT mode's
@@ -1022,16 +1023,49 @@ function attachBingoPairLibraryListener(){
     if(searchBox && searchBox.value.trim()) renderPairsSuggest();
   }, err=>{ console.warn('Planner: bingo cross-pair library listener failed:', err); });
 }
-// Resolves a Pairs With id that may point into either library. Cross-library
-// refs are prefixed 'bingo:<id>' (added when a Trivia category pairs with a
-// real Bingo category) — a bare id always means "this mode's own library",
-// so every pairsWith array already saved before this feature keeps working
-// exactly as it did.
+// A read-only, always-on mirror of the Venue Menu's own category library
+// (Firestore venueMenuCategories) — same idea as bingoPairLibraryRaw above,
+// but for Karaoke, Sing-Along, and Mini Game categories, which only ever
+// live in the Venue Menu (there's no dedicated admin app for those like
+// there is for Trivia/Bingo). Filtered client-side to just those three
+// types so the pairing search doesn't also surface stray old Trivia/Bingo
+// docs that predate the Trivia/Bingo unification.
+let vmPairLibraryRaw = {};
+function vmPairType(c){
+  const t = (c.type||'').toLowerCase();
+  if(t.includes('karaoke')) return 'Karaoke';
+  if(t.includes('sing')) return 'Sing-Along';
+  if(t.includes('mini')) return 'Mini Games';
+  return null;
+}
+function attachVenueMenuPairLibraryListener(){
+  dbFs.collection('venueMenuCategories').onSnapshot(snap=>{
+    const out = {};
+    snap.forEach(doc=>{
+      const data = doc.data();
+      if(vmPairType(data)) out[doc.id] = data;
+    });
+    vmPairLibraryRaw = out;
+    const searchBox = document.getElementById('t-pairs-search');
+    if(searchBox && searchBox.value.trim()) renderPairsSuggest();
+  }, err=>{ console.warn('Planner: Venue Menu cross-pair library listener failed:', err); });
+}
+// Resolves a Pairs With id that may point into any of three libraries.
+// Cross-library refs are prefixed 'bingo:<id>' (a real Bingo category) or
+// 'vm:<id>' (a real Venue Menu category — Karaoke/Sing-Along/Mini Games) —
+// a bare id always means "this mode's own library" (trivia/categories), so
+// every pairsWith array saved before this feature keeps working exactly as
+// it did.
 function resolveCrossPairTheme(id){
   if(typeof id==='string' && id.indexOf('bingo:')===0){
     const bid = id.slice(6);
     const b = bingoPairLibraryRaw[bid];
     return b ? { name: b.name||b.title||'(untitled)', tier:'music-bingo', _crossLibrary:'bingo' } : null;
+  }
+  if(typeof id==='string' && id.indexOf('vm:')===0){
+    const vid = id.slice(3);
+    const v = vmPairLibraryRaw[vid];
+    return v ? { name: v.name||'(untitled)', tier:null, _crossLibrary:'vm', _vmType: vmPairType(v) } : null;
   }
   return state.themes[id] || null;
 }
@@ -2653,13 +2687,15 @@ function renderPairsWithSection(){
   const section = document.getElementById('t-pairs-section');
   section.style.display = canPair(tier) ? 'block' : 'none';
   if(!canPair(tier)) return;
-  const label = tier==='evergreen-topic' ? 'Pairs With (suggested Music Trivia)'
-    : tier==='coordinating-music' ? 'Pairs With (suggested Evergreen Trivia)'
-    : 'Pairs With (Evergreen or Music Trivia)';
+  const label = tier==='theme-night' ? 'Pairs With (Trivia, Bingo, Karaoke, Sing-Along, or Mini Game options — this becomes the night\'s lineup on the Venue Menu)'
+    : tier==='evergreen-topic' ? 'Pairs With (suggested Music Trivia — also searches Bingo, Karaoke, Sing-Along, Mini Games)'
+    : tier==='coordinating-music' ? 'Pairs With (suggested Evergreen Trivia — also searches Bingo, Karaoke, Sing-Along, Mini Games)'
+    : 'Pairs With (Evergreen or Music Trivia — also searches Bingo, Karaoke, Sing-Along, Mini Games)';
   document.getElementById('t-pairs-label').textContent = label;
   document.getElementById('t-pairs-chips').innerHTML = editingThemePairs.map((id,i)=>{
     const t = resolveCrossPairTheme(id);
-    const label = t ? (t.name + (t._crossLibrary==='bingo' ? ' (Bingo)' : '')) : '(deleted theme)';
+    const tag = t ? (t._crossLibrary==='bingo' ? ' (Bingo)' : t._crossLibrary==='vm' ? ' (' + t._vmType + ')' : '') : '';
+    const label = t ? (t.name + tag) : '(deleted theme)';
     return `<span class="tag-chip">${escapeHtml(label)}<span class="x" onclick="removePairChip(${i})">×</span></span>`;
   }).join('') || '<span style="color:var(--text3);font-size:12px">No pairings yet — search below to add one</span>';
   document.getElementById('t-pairs-suggest').innerHTML = '';
@@ -2687,12 +2723,19 @@ function renderPairsSuggest(){
   const bingoMatches = Object.entries(bingoPairLibraryRaw||{})
     .filter(([id,b])=> !editingThemePairs.includes('bingo:'+id) && ((b.name||b.title||'').toLowerCase().includes(q)))
     .slice(0,10);
+  // Real Venue Menu categories (Karaoke / Sing-Along / Mini Games) — same
+  // name-only matching, added with a 'vm:' prefix.
+  const vmMatches = Object.entries(vmPairLibraryRaw||{})
+    .filter(([id,v])=> !editingThemePairs.includes('vm:'+id) && ((v.name||'').toLowerCase().includes(q)))
+    .slice(0,10);
   box.innerHTML = matches.map(([id,t])=>{
     const nameHit = (t.name||'').toLowerCase().includes(q);
     const hitTag = !nameHit ? (t.tags||[]).find(tag=>(tag||'').toLowerCase().includes(q)) : null;
     return `<div class="theme-opt" onclick="addPairChip('${id}')">${escapeHtml(t.name)}<small>${TIER_LABELS[normTier(t.tier)]||''}${hitTag?' · tag: '+escapeHtml(hitTag):''}</small></div>`;
   }).concat(bingoMatches.map(([id,b])=>
     `<div class="theme-opt" onclick="addPairChip('bingo:${id}')">${escapeHtml(b.name||b.title||'')}<small>Bingo</small></div>`
+  )).concat(vmMatches.map(([id,v])=>
+    `<div class="theme-opt" onclick="addPairChip('vm:${id}')">${escapeHtml(v.name||'')}<small>${escapeHtml(vmPairType(v)||'')}</small></div>`
   )).join('')
     || '<div class="theme-opt" style="color:var(--text3)">No match — tag the other category\'s type first.</div>';
 }
@@ -2746,47 +2789,60 @@ function saveTheme(){
   }
 
   // Reciprocal pairing — keep both sides of a Pairs With relationship in
-  // sync. otherId is either a bare trivia/categories id, or a cross-library
-  // 'bingo:<id>' ref (see resolveCrossPairTheme) — the reciprocal write goes
-  // to whichever collection actually owns that record.
+  // sync. otherId is a bare trivia/categories id, or a cross-library
+  // 'bingo:<id>' / 'vm:<id>' ref (see resolveCrossPairTheme) — the
+  // reciprocal write goes to whichever collection actually owns that
+  // record. Venue Menu categories live in Firestore, not RTDB, so those
+  // writes get queued separately (fsUpdates) from the RTDB batch.
+  const fsUpdates = []; // [{id, pairsWith}]
+  function otherKind(otherId){
+    if(typeof otherId==='string' && otherId.indexOf('bingo:')===0) return 'bingo';
+    if(typeof otherId==='string' && otherId.indexOf('vm:')===0) return 'vm';
+    return 'trivia';
+  }
+  function otherExists(otherId){
+    const kind = otherKind(otherId);
+    if(kind==='bingo') return !!bingoPairLibraryRaw[otherId.slice(6)];
+    if(kind==='vm') return !!vmPairLibraryRaw[otherId.slice(3)];
+    return !!state.themes[otherId];
+  }
   function writeOtherPairs(otherId, pairsArr){
-    if(typeof otherId==='string' && otherId.indexOf('bingo:')===0){
-      const bid = otherId.slice(6);
-      if(!bingoPairLibraryRaw[bid]) return;
-      rtdbUpdates['bingo/landing/categories/'+bid+'/pairsWith'] = pairsArr;
-    } else {
-      if(!state.themes[otherId]) return;
-      rtdbUpdates[libPath+'/'+otherId+'/pairsWith'] = pairsArr;
-    }
+    const kind = otherKind(otherId);
+    if(!otherExists(otherId)) return;
+    if(kind==='bingo') rtdbUpdates['bingo/landing/categories/'+otherId.slice(6)+'/pairsWith'] = pairsArr;
+    else if(kind==='vm') fsUpdates.push({ id: otherId.slice(3), pairsWith: pairsArr });
+    else rtdbUpdates[libPath+'/'+otherId+'/pairsWith'] = pairsArr;
   }
   function existingPairsOf(otherId){
-    if(typeof otherId==='string' && otherId.indexOf('bingo:')===0){
-      const bid = otherId.slice(6);
-      return (bingoPairLibraryRaw[bid]||{}).pairsWith || [];
-    }
+    const kind = otherKind(otherId);
+    if(kind==='bingo') return (bingoPairLibraryRaw[otherId.slice(6)]||{}).pairsWith || [];
+    if(kind==='vm') return (vmPairLibraryRaw[otherId.slice(3)]||{}).pairsWith || [];
     return (state.themes[otherId]||{}).pairsWith || [];
   }
   newPairs.filter(id=>!oldPairs.includes(id)).forEach(otherId=>{
-    const isBingo = typeof otherId==='string' && otherId.indexOf('bingo:')===0;
-    if(isBingo ? !bingoPairLibraryRaw[otherId.slice(6)] : !state.themes[otherId]) return;
-    const myRef = isBingo ? 'trivia:'+themeId : themeId;
+    if(!otherExists(otherId)) return;
+    const myRef = otherKind(otherId)==='trivia' ? themeId : 'trivia:'+themeId;
     const otherPairs = existingPairsOf(otherId).slice();
     if(!otherPairs.includes(myRef)){ otherPairs.push(myRef); writeOtherPairs(otherId, otherPairs); }
   });
   oldPairs.filter(id=>!newPairs.includes(id)).forEach(otherId=>{
-    const isBingo = typeof otherId==='string' && otherId.indexOf('bingo:')===0;
-    if(isBingo ? !bingoPairLibraryRaw[otherId.slice(6)] : !state.themes[otherId]) return;
-    const myRef = isBingo ? 'trivia:'+themeId : themeId;
+    if(!otherExists(otherId)) return;
+    const myRef = otherKind(otherId)==='trivia' ? themeId : 'trivia:'+themeId;
     writeOtherPairs(otherId, existingPairsOf(otherId).filter(id=>id!==myRef));
   });
 
   // ── THEME NIGHT <-> VENUE MENU NIGHT LINK ──────────────────────────────
-  // Mirrors createLinkedCategoryForNight/syncLinkedCategoryFromNight in the
-  // Venue Menu admin (index.html): the two are kept as one linked pair, each
-  // side auto-creating or updating the other's record on save. See the
-  // comment there for the full picture.
+  // A Theme-Night-tier category is purely the night's title/shell — its
+  // Pairs With list is the actual lineup (Trivia/Bingo/Karaoke/Sing-Along/
+  // Mini Game options), synced into the linked venueMenuNights doc's
+  // categoryIds by syncOrCreateLinkedNight below. The Venue Menu admin
+  // (venue-menu-index.html) doesn't know anything about this link on its own
+  // — it just edits the resulting Night doc like any other — so this is a
+  // one-way push from Planner, merged (never replaced outright) so anything
+  // added by hand over there survives.
   const finishSave = () => {
-    db.ref().update(rtdbUpdates)
+    Promise.all(fsUpdates.map(u => dbFs.collection('venueMenuCategories').doc(u.id).set({ pairsWith: u.pairsWith }, { merge: true })))
+      .then(() => db.ref().update(rtdbUpdates))
       .then(()=>{
         if(tier==='theme-night') return syncOrCreateLinkedNight(themeId, existing, commonFields);
       })
@@ -2801,12 +2857,20 @@ function toNightId(name){
 }
 async function syncOrCreateLinkedNight(themeId, existing, fields){
   try{
+    // The bundle is purely what this theme-night category is paired with
+    // (Trivia/Bingo/Karaoke/Sing-Along/Mini Game options) — the theme-night
+    // category's own name is just the night's title/shell, never one of the
+    // round options itself.
+    const bundleNames = (fields.pairsWith || [])
+      .map(id => { const t = resolveCrossPairTheme(id); return t && t.name; })
+      .filter(Boolean);
+    const uniqueBundle = [...new Set(bundleNames)];
     const nightId = existing.linkedNightId || null;
     if(!nightId){
       const newId = toNightId(fields.name);
       await dbFs.collection('venueMenuNights').doc(newId).set({
         name: fields.name,
-        categoryIds: [], enhancements: [], filterTags: [], nightTagsList: [],
+        categoryIds: uniqueBundle, enhancements: [], filterTags: [], nightTagsList: [],
         genre:'', tone:'', era:'', audience:'',
         bannerData: null, bannerColor: '',
         published: false, description: '', adminNotes: '',
@@ -2814,8 +2878,23 @@ async function syncOrCreateLinkedNight(themeId, existing, fields){
       });
       await db.ref(MODE_PATHS.trivia.library+'/'+themeId+'/linkedNightId').set(newId);
     } else {
-      await dbFs.collection('venueMenuNights').doc(nightId).set({ name: fields.name }, {merge:true});
+      // Merge Planner's current bundle into whatever categoryIds the Venue
+      // Menu admin already has — never replace the list outright. We only
+      // know what's "ours" to add or drop by comparing against what Planner
+      // itself contributed last time (linkedBundleNames); anything else in
+      // the Night's categoryIds was added by hand in venue-menu-index.html
+      // and is left alone, even if it's since been removed from Planner.
+      const snap = await dbFs.collection('venueMenuNights').doc(nightId).get();
+      const existingIds = (snap.exists && Array.isArray(snap.data().categoryIds)) ? snap.data().categoryIds : [];
+      const prevBundle = Array.isArray(existing.linkedBundleNames) ? existing.linkedBundleNames : [];
+      const kept = existingIds.filter(n => !prevBundle.includes(n) || uniqueBundle.includes(n));
+      const merged = [...new Set([...kept, ...uniqueBundle])];
+      await dbFs.collection('venueMenuNights').doc(nightId).set({ name: fields.name, categoryIds: merged }, {merge:true});
     }
+    // Remember exactly what Planner contributed this save, so next time we
+    // can tell "Planner removed this pairing" apart from "admin added this
+    // by hand" — see the merge comment above.
+    await db.ref(MODE_PATHS.trivia.library+'/'+themeId+'/linkedBundleNames').set(uniqueBundle);
   }catch(e){ console.warn('Could not sync linked Venue Menu Night:', e); }
 }
 function deleteTheme(){
