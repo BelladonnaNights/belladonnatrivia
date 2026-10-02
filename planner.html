@@ -112,6 +112,7 @@ a{color:inherit}
 .badge-mini{background:rgba(26,188,156,.14);color:#4ecdc4}
 .badge-bingo{background:rgba(233,30,99,.14);color:#f06a9c}
 .badge-singa{background:rgba(52,152,219,.14);color:#6ab4e8}
+.badge-karaoke{background:rgba(201,168,76,.16);color:#C9A84C}
 .badge-battle{background:rgba(192,57,43,.16);color:#ff7461}
 
 .theme-link{color:var(--text2);cursor:pointer;text-decoration:none;border-bottom:1px dashed var(--border3)}
@@ -510,16 +511,6 @@ a{color:inherit}
         <tbody id="themes-rows"></tbody>
       </table>
 
-      <!-- Karaoke categories — fully editable here, unlike Bingo's read-only
-           list above, since Karaoke doesn't need an image the way Bingo does.
-           These write straight to the same Firestore venueMenuCategories
-           docs the Venue Menu admin edits. -->
-      <div class="section-sub" style="margin-top:1.75rem;">Karaoke Categories<span style="font-weight:normal;color:var(--text3);"> — shared with the Venue Menu</span></div>
-      <div class="filter-bar">
-        <span style="flex:1"></span>
-        <button class="btn btn-primary btn-sm" onclick="openKaraokeModal()">+ Add Karaoke</button>
-      </div>
-      <div id="karaoke-cats-list"></div>
     </div>
 
     <div id="theme-sequences-view" style="display:none">
@@ -716,7 +707,7 @@ a{color:inherit}
     <label class="form-label">Theme Name</label>
     <input type="text" class="form-input" id="t-name">
     <label class="form-label">Category Type</label>
-    <select class="form-select" id="t-tier" onchange="renderPairsWithSection()">
+    <select class="form-select" id="t-tier" onchange="renderPairsWithSection();updateThemeKaraokeVisibility();">
       <option value="">— Unassigned / legacy —</option>
       <option value="general-knowledge">General Knowledge</option>
       <option value="evergreen-topic">Evergreen Trivia</option>
@@ -727,8 +718,13 @@ a{color:inherit}
       <option value="mini-games">Mini Games</option>
       <option value="music-bingo">Music Bingo</option>
       <option value="sing-along">Sing-Along</option>
+      <option value="karaoke">Karaoke</option>
       <option value="battle">Battle</option>
     </select>
+    <div id="t-karaoke-wrap" style="display:none">
+      <label class="form-label">Themed Song List <span style="font-weight:normal;color:var(--text3);">— optional, leave blank for plain regular karaoke. One song per line.</span></label>
+      <textarea class="form-textarea" id="t-karaoke-songs" rows="6" placeholder="Buffy Theme Song&#10;I'll Never Tell (Once More, With Feeling)&#10;Goodbye to You"></textarea>
+    </div>
     <div id="t-pairs-section" style="display:none">
       <label class="form-label" id="t-pairs-label">Pairs With</label>
       <div id="t-pairs-chips"></div>
@@ -750,24 +746,6 @@ a{color:inherit}
       <span style="flex:1"></span>
       <button class="btn btn-ghost" onclick="closeModal('theme-modal-overlay')">Cancel</button>
       <button class="btn btn-primary" onclick="saveTheme()">Save</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="karaoke-modal-overlay">
-  <div class="modal">
-    <h3 id="karaoke-modal-title">Add Karaoke Category</h3>
-    <label class="form-label">Category Name</label>
-    <input type="text" class="form-input" id="k-name" placeholder="e.g. Buffy Karaoke">
-    <label class="form-label">Type</label>
-    <input type="text" class="form-input" id="k-type" placeholder="e.g. Karaoke, Spooky">
-    <label class="form-label">Themed Song List <span style="font-weight:normal;color:var(--text3);">— optional, leave blank for plain regular karaoke. One song per line.</span></label>
-    <textarea class="form-textarea" id="k-songs" rows="6" placeholder="Buffy Theme Song&#10;I'll Never Tell (Once More, With Feeling)&#10;Goodbye to You"></textarea>
-    <div class="modal-actions">
-      <button class="btn btn-danger btn-sm" id="karaoke-delete-btn" onclick="deleteKaraokeCategory()" style="display:none">Delete</button>
-      <span style="flex:1"></span>
-      <button class="btn btn-ghost" onclick="closeModal('karaoke-modal-overlay')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveKaraokeCategory()">Save</button>
     </div>
   </div>
 </div>
@@ -1077,7 +1055,6 @@ function attachVenueMenuPairLibraryListener(){
     vmPairLibraryRaw = out;
     const searchBox = document.getElementById('t-pairs-search');
     if(searchBox && searchBox.value.trim()) renderPairsSuggest();
-    if(activeTab==='themes' && plannerMode!=='bingo') renderKaraokeCatsList();
   }, err=>{ console.warn('Planner: Venue Menu cross-pair library listener failed:', err); });
 }
 // Resolves a Pairs With id that may point into any of three libraries.
@@ -1341,6 +1318,7 @@ const TIER_LABELS = {
   'mini-games': 'Mini Games',
   'music-bingo': 'Music Bingo',
   'sing-along': 'Sing-Along',
+  'karaoke': 'Karaoke',
   'battle': 'Battle'
 };
 const TIER_BADGE = {
@@ -1353,6 +1331,7 @@ const TIER_BADGE = {
   'mini-games': 'badge-mini',
   'music-bingo': 'badge-bingo',
   'sing-along': 'badge-singa',
+  'karaoke': 'badge-karaoke',
   'battle': 'badge-battle'
 };
 // Eight pairing-capable tiers beyond General Knowledge:
@@ -1374,7 +1353,7 @@ function normalizeVmTags(raw){
 // Defensive fallback used anywhere .tags gets iterated — a malformed tags
 // field on any one record should never be able to crash the whole render.
 function safeTags(t){ return Array.isArray(t && t.tags) ? t.tags : []; }
-function canPair(tier){ return tier==='evergreen-topic' || tier==='coordinating-music' || tier==='featured' || tier==='theme-night' || tier==='feature-trivia' || tier==='mini-games' || tier==='music-bingo' || tier==='sing-along' || tier==='battle'; }
+function canPair(tier){ return tier==='evergreen-topic' || tier==='coordinating-music' || tier==='featured' || tier==='theme-night' || tier==='feature-trivia' || tier==='mini-games' || tier==='music-bingo' || tier==='sing-along' || tier==='karaoke' || tier==='battle'; }
 let activeTierFilters = new Set();
 function setTierFilter(tier){
   if(activeTierFilters.has(tier)) activeTierFilters.delete(tier); else activeTierFilters.add(tier);
@@ -1399,7 +1378,7 @@ function renderActiveTab(){
   else if(activeTab==='venues') renderVenues();
   else if(activeTab==='themes') {
     if(plannerMode==='bingo') renderBingoCategoriesReadOnly();
-    else { renderThemes(); renderSequences(); renderKaraokeCatsList(); }
+    else { renderThemes(); renderSequences(); }
   }
   renderNeedsBadge();
 }
@@ -1437,73 +1416,29 @@ function toVmCategoryId(name){
   return name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80)
     + '-' + Math.abs(name.split('').reduce((a,c)=>(a<<5)-a+c.charCodeAt(0)|0,0)).toString(36);
 }
-function renderKaraokeCatsList(){
-  const el = document.getElementById('karaoke-cats-list');
-  if(!el) return;
-  const cats = Object.entries(vmPairLibraryRaw||{})
-    .filter(([id,c])=>vmPairType(c)==='Karaoke')
-    .sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''));
-  el.innerHTML = cats.length ? cats.map(([id,c])=>{
-    const songCount = Array.isArray(c.karaokeSongs) ? c.karaokeSongs.length : 0;
-    return `<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:6px;">
-        <span style="font-size:13px;color:var(--text);flex:1;">${escapeHtml(c.name||'(untitled)')}</span>
-        ${songCount ? `<span style="font-size:10px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase;">Themed list · ${songCount} songs</span>` : `<span style="font-size:10px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;">Regular karaoke</span>`}
-        <button class="btn btn-ghost btn-sm" onclick="openKaraokeModal('${id}')">Edit</button>
-      </div>`;
-  }).join('') : '<div style="font-size:13px;color:var(--text3);font-style:italic;">No Karaoke categories yet.</div>';
+function updateThemeKaraokeVisibility(){
+  const tier = document.getElementById('t-tier').value;
+  document.getElementById('t-karaoke-wrap').style.display = tier === 'karaoke' ? '' : 'none';
 }
-let editingKaraokeId = null;
-function openKaraokeModal(id){
-  editingKaraokeId = id || null;
-  const c = id ? (vmPairLibraryRaw[id]||{}) : {};
-  document.getElementById('karaoke-modal-title').textContent = id ? 'Edit Karaoke Category' : 'Add Karaoke Category';
-  document.getElementById('k-name').value = c.name || '';
-  document.getElementById('k-type').value = c.type || 'Karaoke';
-  document.getElementById('k-songs').value = (c.karaokeSongs||[]).join('\n');
-  document.getElementById('karaoke-delete-btn').style.display = id ? 'inline-block' : 'none';
-  openModal('karaoke-modal-overlay');
-}
-async function saveKaraokeCategory(){
-  const name = document.getElementById('k-name').value.trim();
-  if(!name) return toast('Category needs a name.', true);
-  const typeVal = document.getElementById('k-type').value.trim() || 'Karaoke';
-  const songs = document.getElementById('k-songs').value.split(/[\n|]/).map(s=>s.trim()).filter(Boolean);
-  const isNew = !editingKaraokeId;
-  const id = editingKaraokeId || toVmCategoryId(name);
-  const existing = editingKaraokeId ? (vmPairLibraryRaw[editingKaraokeId]||{}) : {};
-  setSyncStatus('syncing');
+// Karaoke categories made here live in trivia/categories just like every
+// other tier (so they get the same type/pill-filter treatment as Sing-Along
+// and Mini Games) — but the Venue Menu's own Night-linking only recognizes a
+// round type off a real Firestore `.type` field (see isKaraoke() in
+// venue-menu-index.html / venue.html), which a plain RTDB trivia doc doesn't
+// carry. So a karaoke-tier theme also gets mirrored into the same Firestore
+// venueMenuCategories doc Venue Menu Admin edits — same id-by-name scheme
+// the old standalone Karaoke section used — keeping it linkable into a
+// Themed Night exactly like a Karaoke category made directly in Venue Menu.
+async function syncKaraokeThemeToVenueMenu(name, songs, isNew){
   try{
-    // New categories start unpublished — finish the banner/pricing/tab
-    // placement in Venue Menu Admin, then publish from there when ready.
-    // Editing an existing one only touches the fields this modal owns,
-    // same promise saveTheme() makes for its own fields.
+    const id = toVmCategoryId(name);
     const data = isNew
-      ? { name, type: typeVal, karaokeSongs: songs, shows: [], notes: '', tags: '',
+      ? { name, type: 'Karaoke', karaokeSongs: songs, shows: [], notes: '', tags: '',
           publishedTabs: [], published: false, alsoSee: [], miniGameImage: null,
           miniSection: null, addonPrice: null, bannerData: null }
-      : { name, type: typeVal, karaokeSongs: songs };
+      : { name, type: 'Karaoke', karaokeSongs: songs };
     await dbFs.collection('venueMenuCategories').doc(id).set(data, { merge: true });
-    toast('Karaoke category saved.');
-    closeModal('karaoke-modal-overlay');
-  }catch(err){
-    console.error('Save karaoke category failed:', err);
-    toast('Save failed: '+(err.code||err.message), true);
-  }
-  setSyncStatus('synced');
-}
-async function deleteKaraokeCategory(){
-  if(!editingKaraokeId) return;
-  if(!confirm('Delete this Karaoke category everywhere — the Venue Menu too, and any Theme Nights paired with it? This can\'t be undone.')) return;
-  setSyncStatus('syncing');
-  try{
-    await dbFs.collection('venueMenuCategories').doc(editingKaraokeId).delete();
-    toast('Karaoke category deleted.');
-    closeModal('karaoke-modal-overlay');
-  }catch(err){
-    console.error('Delete karaoke category failed:', err);
-    toast('Delete failed: '+(err.code||err.message), true);
-  }
-  setSyncStatus('synced');
+  }catch(err){ console.warn('Could not mirror karaoke theme to Venue Menu:', err); }
 }
 
 // ═══════════════════════════════════════════════
@@ -2724,8 +2659,15 @@ function bulkDeleteThemes(){
   if(!confirm(`Delete ${n} categor${n===1?'y':'ies'} everywhere — Trivia Admin, the Venue Menu, scheduling — not just from this list? This can't be undone.`)) return;
   setSyncStatus('syncing');
   const rtdbUpdates = {};
-  ids.forEach(id=>{ rtdbUpdates[MODE_PATHS.trivia.library+'/'+id] = null; });
+  const karaokeIdsToUnmirror = [];
+  ids.forEach(id=>{
+    rtdbUpdates[MODE_PATHS.trivia.library+'/'+id] = null;
+    const t = state.themes[id];
+    if(t && t.plannerTier==='karaoke') karaokeIdsToUnmirror.push(toVmCategoryId(t.name));
+  });
   db.ref().update(rtdbUpdates).then(()=>{
+    return Promise.all(karaokeIdsToUnmirror.map(vmId => dbFs.collection('venueMenuCategories').doc(vmId).delete().catch(()=>{})));
+  }).then(()=>{
     toast(`Deleted ${n} categor${n===1?'y':'ies'}.`);
     selectedThemeIds.clear();
   }).catch(err=>{
@@ -2761,10 +2703,12 @@ function openThemeModal(id){
   document.getElementById('t-tier').value = normTier(t.tier)||'';
   document.getElementById('t-times-used').value = t.timesUsed||0;
   document.getElementById('t-last-used').value = t.lastUsedDate||'';
+  document.getElementById('t-karaoke-songs').value = (t.karaokeSongs||[]).join('\n');
   document.getElementById('theme-delete-btn').style.display = id ? 'inline-block' : 'none';
 
   renderTagChips();
   renderPairsWithSection();
+  updateThemeKaraokeVisibility();
   openModal('theme-modal-overlay');
 }
 function renderTagChips(){
@@ -2871,11 +2815,15 @@ function saveTheme(){
   const existing = editingThemeId ? state.themes[editingThemeId] : {};
   const newPairs = canPair(tier) ? editingThemePairs.slice() : [];
   const oldPairs = existing.pairsWith || [];
+  const karaokeSongs = tier==='karaoke'
+    ? document.getElementById('t-karaoke-songs').value.split(/[\n|]/).map(s=>s.trim()).filter(Boolean)
+    : null;
   const commonFields = {
     name,
     tags: editingThemeTags,
     plannerTier: tier || null,
     pairsWith: canPair(tier) ? newPairs : null,
+    karaokeSongs,
     plannerUsage: {
       timesUsed: parseInt(document.getElementById('t-times-used').value)||0,
       lastUsedDate: document.getElementById('t-last-used').value || null,
@@ -2900,6 +2848,7 @@ function saveTheme(){
     rtdbUpdates[libPath+'/'+themeId+'/tags'] = commonFields.tags;
     rtdbUpdates[libPath+'/'+themeId+'/plannerTier'] = commonFields.plannerTier;
     rtdbUpdates[libPath+'/'+themeId+'/pairsWith'] = commonFields.pairsWith;
+    rtdbUpdates[libPath+'/'+themeId+'/karaokeSongs'] = commonFields.karaokeSongs;
     rtdbUpdates[libPath+'/'+themeId+'/plannerUsage'] = commonFields.plannerUsage;
   }
 
@@ -2960,6 +2909,7 @@ function saveTheme(){
       .then(() => db.ref().update(rtdbUpdates))
       .then(()=>{
         if(tier==='theme-night') return syncOrCreateLinkedNight(themeId, existing, commonFields);
+        if(tier==='karaoke') return syncKaraokeThemeToVenueMenu(name, karaokeSongs||[], isNew);
       })
       .then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); })
       .catch(err=>{ console.error('Save theme failed:', err); toast('Save failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
@@ -3018,7 +2968,16 @@ function deleteTheme(){
   // Menu too, once it reads the same record — not just from this list.
   if(!confirm('Delete this category everywhere — Trivia Admin, the Venue Menu, scheduling — not just from this list? This can\'t be undone.')) return;
   setSyncStatus('syncing');
+  const deletedTheme = state.themes[editingThemeId] || {};
   db.ref(MODE_PATHS.trivia.library+'/'+editingThemeId).remove()
+    .then(()=>{
+      // Karaoke themes also exist as a mirrored Firestore doc (see
+      // syncKaraokeThemeToVenueMenu) — clean that up too so it doesn't
+      // linger in the Venue Menu after the Planner side is gone.
+      if(deletedTheme.plannerTier==='karaoke') {
+        return dbFs.collection('venueMenuCategories').doc(toVmCategoryId(deletedTheme.name)).delete().catch(()=>{});
+      }
+    })
     .then(()=>{ toast('Category deleted.'); closeModal('theme-modal-overlay'); })
     .catch(err=>{ console.error('Delete theme failed:', err); toast('Delete failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
 }
