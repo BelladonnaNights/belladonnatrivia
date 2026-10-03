@@ -1229,6 +1229,13 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         </div>
       </div>
 
+      <!-- QUESTION VAULT LINK -->
+      <div id="vault-field" class="field" style="margin-bottom:1rem">
+        <div class="field-label">Question Vault Category</div>
+        <select class="field-input" id="f-vault"><option value="">— not linked (use the Google Sheet below) —</option></select>
+        <div class="field-hint">Linked categories load their questions from the Question Vault by name-of-field, so you can rearrange Vault columns freely. The sheet below is only used as a backup.</div>
+      </div>
+
       <!-- TRIVIA FIELDS -->
       <div id="trivia-fields">
         <div class="field" style="margin-bottom:1rem">
@@ -1678,6 +1685,7 @@ db.ref('trivia/categories').on('value', snap => {
   const data = snap.val() || {};
   categories = Object.entries(data).map(([id, v]) => ({id, ...v}));
   migrateMiniGamesTag();
+  autoLinkVault();
   renderLibrary();
   renderFilterBar();
   setSyncStatus('synced');
@@ -1686,6 +1694,44 @@ db.ref('trivia/categories').on('value', snap => {
   setSyncStatus('error');
   toast('Could not connect to Firebase. Check your database rules.', true);
 });
+
+// ═══════════════════════════════════════════════
+//  QUESTION VAULT LINK — each trivia/music category points at a Vault
+//  category by its permanent ID (so renaming either side never breaks it).
+//  Categories with no link yet are auto-linked when their name matches a
+//  Vault category exactly; an explicit "not linked" choice is respected.
+// ═══════════════════════════════════════════════
+let vaultCats = [];
+const _vaultAutoLinked = new Set();
+function vaultNormName(s){ return String(s||'').toLowerCase().replace(/[‘’]/g,"'").replace(/\s+/g,' ').trim(); }
+function fillVaultSelect(selected) {
+  const sel = document.getElementById('f-vault');
+  if(!sel) return;
+  const known = vaultCats.some(v => v.id === selected);
+  sel.innerHTML = '<option value="">— not linked (use the Google Sheet below) —</option>'
+    + vaultCats.map(v => `<option value="${v.id}">${String(v.name).replace(/</g,'&lt;')}${v.questionCount != null ? ' ('+v.questionCount+')' : ''}</option>`).join('')
+    + (selected && !known ? `<option value="${selected}">(missing Vault category)</option>` : '');
+  sel.value = selected || '';
+}
+function autoLinkVault() {
+  if(!vaultCats.length || !categories.length) return;
+  const byName = {};
+  vaultCats.forEach(v => { const k = vaultNormName(v.name); (byName[k] = byName[k] || []).push(v); });
+  categories.forEach(c => {
+    if(c.vaultCatId !== undefined || _vaultAutoLinked.has(c.id)) return;
+    if(c.type && c.type !== 'trivia' && c.type !== 'music') return;
+    const hits = byName[vaultNormName(c.name)] || [];
+    if(hits.length !== 1) return;
+    _vaultAutoLinked.add(c.id);
+    db.ref(`trivia/categories/${c.id}/vaultCatId`).set(hits[0].id).catch(()=>{});
+  });
+}
+dbFs.collection('triviaCategories').onSnapshot(snap => {
+  vaultCats = [];
+  snap.forEach(d => { const v = d.data(); if(!v.archived) vaultCats.push({ id:d.id, name:v.name||'', questionCount:v.questionCount }); });
+  vaultCats.sort((x,y)=>x.name.localeCompare(y.name));
+  autoLinkVault();
+}, err => console.warn('Question Vault categories unavailable', err));
 
 // Lineup is local only — resets on refresh, each host manages their own
 renderLineup();
@@ -2155,6 +2201,7 @@ function openModal(id) {
   document.getElementById('f-canva-id').value    = cat?.canvaDesignId || '';
   document.getElementById('f-canva-bg').value     = cat?.canvaBgUrl     || '';
   document.getElementById('f-notes').value       = cat?.notes      || '';
+  fillVaultSelect(cat?.vaultCatId || '');
   document.getElementById('f-attributions').value = cat?.attributions || '';
   renderCatTypeDropdown();
   document.getElementById('f-cattype').value     = cat?.catType    || '';
@@ -2226,6 +2273,7 @@ function setCatType(type) {
   document.getElementById('canva-fields').style.display = type === 'canva' ? 'block' : 'none';
   document.getElementById('music-fields').style.display = type === 'music' ? 'block' : 'none';
   document.getElementById('intro-bg-field').style.display = (type === 'trivia' || type === 'music') ? 'block' : 'none';
+  { const vf = document.getElementById('vault-field'); if(vf) vf.style.display = (type === 'trivia' || type === 'music') ? 'block' : 'none'; }
   document.getElementById('question-bg-field').style.display = (type === 'trivia' || type === 'music') ? 'block' : 'none';
 
   ['trivia','slideshow','canva','music'].forEach(t => {
@@ -2289,7 +2337,8 @@ async function saveCategory() {
   const defaultTimed       = document.getElementById('f-default-timed')?.checked || false;
 
   setSyncStatus('syncing');
-  const data = {name, genre, type, sheetUrl, tabName, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, attributions, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, updatedAt: Date.now()};
+  const vaultCatId = (type === 'trivia' || type === 'music') ? (document.getElementById('f-vault')?.value || '') : '';
+  const data = {name, genre, type, sheetUrl, tabName, vaultCatId, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, attributions, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, updatedAt: Date.now()};
 
   try {
     let catId = editingId;
@@ -2386,6 +2435,7 @@ function launchTrivia() {
   params.set('rounds', activeRounds.length);
   activeRounds.forEach(({cat, slotIndex}, i) => {
     params.set(`r${i}_url`, cat.sheetUrl||'');
+    params.set(`r${i}_vault`, cat.vaultCatId||'');
     params.set(`r${i}_tab`, cat.tabName||'');
     params.set(`r${i}_type`, cat.type||'trivia');
     params.set(`r${i}_folder`, cat.folderUrl||'');
