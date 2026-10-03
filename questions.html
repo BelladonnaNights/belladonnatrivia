@@ -142,6 +142,31 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 table#grid{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}
 #grid th{position:sticky;top:0;z-index:4;background:var(--surface2);text-align:left;font-family:var(--cinzel);font-weight:600;letter-spacing:.12em;text-transform:uppercase;font-size:9px;color:var(--text3);padding:12px 10px;border-bottom:1px solid var(--border2);border-right:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
 #grid th.num,#grid th.act{cursor:default}
+td.fb,th.fb{position:sticky;left:52px;z-index:2;width:104px;min-width:104px;max-width:104px;background:var(--surface)!important;white-space:nowrap;padding:6px 6px!important;font-size:12px;vertical-align:top}
+th.fb{z-index:6;background:var(--surface2)!important;cursor:default}
+td.fb .star{background:none;border:0;cursor:pointer;color:var(--gold2);font-size:15px;line-height:1;padding:2px 3px;margin-right:2px}
+td.fb .star:hover{color:#fff}
+td.fb .fbup,td.fb .fbdn{color:var(--text2);margin-right:5px}
+td.fb .fbdn.has{color:var(--red)}
+#notesBtn .nb{display:inline-block;min-width:18px;padding:0 6px;margin-left:6px;border-radius:99px;background:var(--gold);color:#080808;font-weight:700;font-size:11px;text-align:center}
+#notesBtn .nb.zero{display:none}
+tr.flash td{background:rgba(201,168,76,.28)!important;transition:background 1s}
+.nrCat{font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin:16px 0 6px}
+.nrCard{border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--surface2)}
+.nrQ{font-weight:600;font-size:14px}
+.nrA{color:var(--text2);font-size:13px;margin-top:2px}
+.nrMeta{display:flex;gap:10px;align-items:center;margin-top:6px;font-size:12px;color:var(--text3);flex-wrap:wrap}
+.nrNote{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;border-top:1px solid var(--border);margin-top:8px;padding-top:8px;font-size:13px;color:var(--text)}
+.nrNote small{display:block;color:var(--text3);font-size:11px;margin-top:2px}
+#grid th.dragging{opacity:.4}
+#grid th.dropL{box-shadow:inset 3px 0 0 var(--gold)}
+#grid th.dropR{box-shadow:inset -3px 0 0 var(--gold)}
+.list .item.dragging{opacity:.4}
+.list .item.dropT{box-shadow:0 -2px 0 var(--gold)}
+.list .item .grab{cursor:grab;color:var(--text3);padding:0 8px 0 2px;user-select:none}
+.list .item .mv{background:none;border:1px solid var(--border2);color:var(--text2);border-radius:6px;width:26px;height:26px;cursor:pointer;margin-left:4px}
+.list .item .mv:hover:not(:disabled){color:var(--gold2);border-color:var(--gold)}
+.list .item .mv:disabled{opacity:.3;cursor:default}
 #grid th:hover:not(.num):not(.act){color:var(--gold2)}
 #grid td{padding:0;border-bottom:1px solid var(--border);border-right:1px solid var(--border);vertical-align:top;background:var(--bg)}
 #grid tbody tr:nth-child(even) td{background:var(--zebra)}
@@ -156,7 +181,7 @@ table#grid{border-collapse:separate;border-spacing:0;width:max-content;min-width
 #grid td .thumb[data-v='']{opacity:.3}
 td.num,th.num{position:sticky;left:0;z-index:2;width:52px;min-width:52px;text-align:right;color:var(--text3);padding:9px 8px 0 4px!important;font-size:12px;background:var(--surface)!important;white-space:nowrap}
 th.num{z-index:6}
-td.stickyQ,th.stickyQ{position:sticky;left:52px;z-index:2;box-shadow:2px 0 0 var(--border2)}
+td.stickyQ,th.stickyQ{position:sticky;left:156px;z-index:2;box-shadow:2px 0 0 var(--border2)}
 th.stickyQ{z-index:6}
 tbody{counter-reset:r}
 td.num .n::before{counter-increment:r;content:counter(r)}
@@ -249,6 +274,7 @@ table.pv tr.hit:hover td{background:var(--gold-dim)}
     </div>
     <div class="nav-right">
       <span class="sync-label" id="userLabel" style="margin-right:.5rem"></span>
+      <button class="btn ghost sm" id="notesBtn" title="Host notes waiting for review">★ Notes to review<span class="nb zero" id="notesBadge">0</span></button>
       <button class="btn ghost sm" id="themeBtn">☀ Light Mode</button>
       <a class="btn ghost sm" href="https://belladonnanights.github.io/belladonna-gateway/accounts.html?view=account">My Account</a>
       <button class="btn ghost sm" id="signOutBtn">Sign Out</button>
@@ -289,6 +315,7 @@ table.pv tr.hit:hover td{background:var(--gold-dim)}
               <button class="pill on" data-d="0">All</button><button class="pill" data-d="1">1</button><button class="pill" data-d="2">2</button><button class="pill" data-d="3">3</button>
             </div>
             <label class="chk"><input type="checkbox" id="showArch"> Archived</label>
+            <button class="btn ghost hidden" id="resetOrderBtn" title="Put the columns back in their saved order">Reset column order</button>
             <button class="btn ghost" id="colsBtn">Columns</button>
             <button class="btn ghost" id="importBtn">Import CSVs</button>
             <button class="btn primary" id="addBtn">+ Add question</button>
@@ -324,6 +351,7 @@ const firebaseConfig = {
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getDatabase, ref as rref, onChildAdded, onChildChanged, onChildRemoved, remove as rremove } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
   collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, onSnapshot,
@@ -537,7 +565,7 @@ try { db = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
 catch (e) { db = initializeFirestore(app, { localCache: memoryLocalCache() }); }
 
 const S = {
-  user: null, cats: new Map(), custom: [], types: null, curId: null, unsubQ: null,
+  user: null, cats: new Map(), fb: new Map(), custom: [], order: null, tempOrder: null, types: null, curId: null, unsubQ: null,
   rows: new Map(), maxOrder: 0, sort: { key:'order', dir:1 }, filter: { q:'', diff:0, tags:new Set() },
   hidden: new Set(LS.get('hiddenCols', [])), collapsed: new Set(LS.get('collapsed', [])),
   pending: 0, listening: false, unsubs: [], firstQ: true
@@ -654,6 +682,7 @@ function confirmBox({ title, message, ok = 'Confirm', danger }){
 function startListeners(){
   if (S.listening) { renderSide(); return; }
   S.listening = true;
+  startFeedback();
   S.unsubs.push(onSnapshot(collection(db, 'triviaCategories'), snap => {
     S.cats = new Map(snap.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
     if (!S.pending) setSync('synced', 'connected');
@@ -668,11 +697,25 @@ function startListeners(){
   }, () => {}));
   S.unsubs.push(onSnapshot(doc(db, 'triviaConfig', 'columns'), snap => {
     S.custom = snap.exists() ? (snap.data().custom || []) : [];
+    S.order = snap.exists() ? (snap.data().order || null) : null;
     if (S.curId) renderAll();
   }, () => {}));
 }
 
-const allCols = () => [...BUILTIN, ...S.custom.filter(c => !BUILTIN.some(b => b.key === c.key)).map(c => ({ ...c, w: c.w || CUSTOM_W[c.type] || 170 }))];
+const baseCols = () => [...BUILTIN, ...S.custom.filter(c => !BUILTIN.some(b => b.key === c.key)).map(c => ({ ...c, w: c.w || CUSTOM_W[c.type] || 170 }))];
+// Column order: Question is always first (pinned). Then the permanent order saved in Firestore (shared by all
+// devices), or a temporary drag-and-drop order for this session if one is active. Columns not in the saved
+// order (newly added ones) follow in their default position.
+function orderCols(ord){
+  const base = baseCols();
+  if (!ord || !ord.length) return base;
+  const by = new Map(base.map(c => [c.key, c])), out = [];
+  const q = by.get('question'); if (q){ out.push(q); by.delete('question'); }
+  for (const k of ord){ if (by.has(k)){ out.push(by.get(k)); by.delete(k); } }
+  for (const c of base) if (by.has(c.key)) out.push(c);
+  return out;
+}
+const allCols = () => orderCols(S.tempOrder || S.order);
 const visibleCols = () => allCols().filter(c => c.key === 'question' || !S.hidden.has(c.key));
 
 /* ═══════════════════════════════════════════════════════════
@@ -858,18 +901,40 @@ function insertSorted(r){
 
 function renderAll(){
   const cols = visibleCols();
-  thead.innerHTML = '<tr><th class="num">#</th>' + cols.map(c =>
-    `<th data-key="${c.key}" class="${c.key === 'question' ? 'stickyQ' : ''}" style="min-width:${c.w}px;width:${c.w}px">${esc(c.label)} <span class="sortInd">${S.sort.key === c.key ? (S.sort.dir === 1 ? '▲' : '▼') : ''}</span></th>`).join('') + '<th class="act"></th></tr>';
+  thead.innerHTML = '<tr><th class="num">#</th><th class="fb" title="Host feedback from live games: ★ = notes to review, then 👍 / 👎 counts">Feedback</th>' + cols.map(c =>
+    `<th data-key="${c.key}" ${c.key === 'question' ? '' : 'draggable="true"'} title="${c.key === 'question' ? 'Click to sort' : 'Click to sort · drag to move this column for now'}" class="${c.key === 'question' ? 'stickyQ' : ''}" style="min-width:${c.w}px;width:${c.w}px">${esc(c.label)} <span class="sortInd">${S.sort.key === c.key ? (S.sort.dir === 1 ? '▲' : '▼') : ''}</span></th>`).join('') + '<th class="act"></th></tr>';
   tbody.innerHTML = '';
   const persisted = [...S.rows.values()].filter(r => r.persisted).sort(cmpRows);
   const drafts = [...S.rows.values()].filter(r => !r.persisted);
   const frag = document.createDocumentFragment();
   [...persisted, ...drafts].forEach(r => { r.tr = buildRow(r); frag.appendChild(r.tr); });
   tbody.appendChild(frag);
+  $('#resetOrderBtn').classList.toggle('hidden', !S.tempOrder);
   document.body.classList.toggle('showArch', $('#showArch').checked);
   applyFilter(); refreshDupes(); updateCount(); renderTagBar();
   requestAnimationFrame(() => autosizeAll($$('textarea', tbody)));
 }
+/* ── Drag a column header to move it for this session only (Columns ▸ Move columns to make it permanent) ── */
+let dragKey = null;
+const clearDrop = () => $$('#grid th.dropL,#grid th.dropR,#grid th.dragging').forEach(t => t.classList.remove('dropL', 'dropR', 'dragging'));
+thead.addEventListener('dragstart', e => {
+  const th = e.target.closest('th[data-key]'); if (!th || th.dataset.key === 'question') { e.preventDefault(); return; }
+  dragKey = th.dataset.key; th.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragKey); } catch (_) {}
+});
+thead.addEventListener('dragover', e => {
+  if (!dragKey) return; const th = e.target.closest('th[data-key]'); if (!th || th.dataset.key === dragKey) return;
+  e.preventDefault(); $$('#grid th.dropL,#grid th.dropR').forEach(t => t.classList.remove('dropL', 'dropR'));
+  const r = th.getBoundingClientRect(); th.classList.add(e.clientX < r.left + r.width / 2 ? 'dropL' : 'dropR');
+});
+thead.addEventListener('drop', e => {
+  if (!dragKey) return; const th = e.target.closest('th[data-key]'); if (!th) return; e.preventDefault();
+  const r = th.getBoundingClientRect(), after = e.clientX >= r.left + r.width / 2, target = th.dataset.key;
+  const keys = allCols().map(c => c.key).filter(k => k !== 'question' && k !== dragKey);
+  if (target === 'question') keys.unshift(dragKey); else { const i = keys.indexOf(target); keys.splice(i + (after ? 1 : 0), 0, dragKey); }
+  dragKey = null; clearDrop(); S.tempOrder = keys; renderAll();
+});
+thead.addEventListener('dragend', () => { dragKey = null; clearDrop(); });
+$('#resetOrderBtn').addEventListener('click', () => { S.tempOrder = null; renderAll(); });
 thead.addEventListener('click', e => {
   const th = e.target.closest('th[data-key]'); if (!th) return;
   const k = th.dataset.key;
@@ -888,11 +953,90 @@ function cellHTML(c, v){
     default:       return `<input type="text" ${key} value="${esc(v)}" autocomplete="off">`;
   }
 }
+/* ═══════════════════════════════════════════════════════════
+   FEEDBACK — host 👍 / 👎 and notes from live games. Stored by the trivia app in the realtime database at
+   trivia/questionFeedback/<key>; for Vault questions the key is vault__<categoryId>__<questionId>.
+   ═══════════════════════════════════════════════════════════ */
+let rtdb = null, fbRedraw = null, fbWarned = false;
+const fbKeyOf = r => 'vault__' + ((r.data && r.data.categoryId) || S.curId) + '__' + r.id;
+const fbNotes = rec => Object.entries((rec && rec.notes) || {}).map(([id, n]) => ({ id, ...n })).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+function fbHTML(r){
+  const rec = S.fb.get(fbKeyOf(r)); if (!rec) return '';
+  const n = fbNotes(rec).length, up = rec.thumbsUp || 0, dn = rec.thumbsDown || 0;
+  return (n ? `<button class="star" data-fbnotes title="${n} note${n > 1 ? 's' : ''} to review — click to read">★</button>` : '') +
+         (up || dn ? `<span class="fbup" title="Thumbs up">👍 ${up}</span><span class="fbdn ${dn ? 'has' : ''}" title="Thumbs down">👎 ${dn}</span>` : '');
+}
+function fbRefreshRow(key){
+  const m = /^vault__(.+?)__(.+)$/.exec(key); if (!m) return;
+  const st = SUBS.get(m[1]), r = st && st.rows.get(m[2]); if (!r || !r.tr) return;
+  const td = r.tr.querySelector('td.fb'); if (td) td.innerHTML = fbHTML(r);
+}
+function fbUpdateBadge(){
+  const n = [...S.fb.values()].filter(rec => fbNotes(rec).length).length;
+  const b = $('#notesBadge'); if (b){ b.textContent = n; b.classList.toggle('zero', !n); }
+}
+function fbSet(key, val){ S.fb.set(key, val); fbRefreshRow(key); fbUpdateBadge(); if (fbRedraw) fbRedraw(); }
+function fbDel(key){ S.fb.delete(key); fbRefreshRow(key); fbUpdateBadge(); if (fbRedraw) fbRedraw(); }
+function startFeedback(){
+  S.fb.clear();
+  try {
+    rtdb = rtdb || getDatabase(app);
+    const f = rref(rtdb, 'trivia/questionFeedback');
+    const err = e => { if (!fbWarned){ fbWarned = true; toast('Can’t read host feedback: ' + (e && e.message || e)); } };
+    S.unsubs.push(onChildAdded(f, s => fbSet(s.key, s.val()), err));
+    S.unsubs.push(onChildChanged(f, s => fbSet(s.key, s.val()), err));
+    S.unsubs.push(onChildRemoved(f, s => fbDel(s.key), err));
+  } catch (e){ console.warn('Feedback unavailable', e); }
+}
+const fbPath = (key, sub) => rref(rtdb, 'trivia/questionFeedback/' + key + (sub ? '/' + sub : ''));
+
+function jumpToQuestion(catId, qid){
+  closeModal(); if (S.cats.has(catId)) selectCategory(catId);
+  let tries = 0; const t = setInterval(() => {
+    const r = S.rows.get(qid); tries++;
+    if (r && r.tr){ clearInterval(t); r.tr.scrollIntoView({ block: 'center' }); r.tr.classList.add('flash'); setTimeout(() => r.tr.classList.remove('flash'), 2600); }
+    else if (tries > 30) clearInterval(t);
+  }, 150);
+}
+
+function openNotesReview(onlyKey){
+  const body = document.createElement('div');
+  const when = ts => ts ? new Date(ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const draw = () => {
+    let items = [...S.fb.entries()].map(([key, rec]) => ({ key, rec, notes: fbNotes(rec) })).filter(x => x.notes.length && (!onlyKey || x.key === onlyKey));
+    if (!items.length){ body.innerHTML = `<p class="hint" style="margin:0">${onlyKey ? 'No notes on this question.' : 'Nothing to review — no host notes waiting. 🎉'}</p>`; return; }
+    const groups = new Map();
+    for (const x of items){
+      const m = /^vault__(.+?)__(.+)$/.exec(x.key);
+      x.catId = m ? m[1] : null; x.qid = m ? m[2] : null;
+      const label = m ? (S.cats.get(m[1])?.name || 'Deleted category') : ('Old sheet' + (x.rec.tabName ? ' · ' + x.rec.tabName : ''));
+      if (!groups.has(label)) groups.set(label, []); groups.get(label).push(x);
+    }
+    body.innerHTML = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([label, list]) =>
+      `<div class="nrCat">${esc(label)}</div>` + list.map(x => `<div class="nrCard" data-key="${esc(x.key)}">
+        <div class="nrQ">${esc(x.rec.question || '(question text unavailable)')}</div>
+        <div class="nrA">Answer: ${esc(x.rec.answer || '—')}</div>
+        <div class="nrMeta"><span>👍 ${x.rec.thumbsUp || 0}</span><span>👎 ${x.rec.thumbsDown || 0}</span>
+          ${x.catId ? `<button class="linkbtn" data-go="${esc(x.catId)}:${esc(x.qid)}">Go to question</button>` : ''}
+          <button class="linkbtn" data-clearnotes="${esc(x.key)}">Done — clear all notes</button></div>
+        ${x.notes.map(n => `<div class="nrNote"><div>${esc(n.text)}<small>${when(n.ts)}</small></div><button class="btn ghost sm" data-delnote="${esc(x.key)}:${esc(n.id)}">Delete</button></div>`).join('')}
+      </div>`).join('')).join('');
+  };
+  draw(); fbRedraw = draw;
+  body.addEventListener('click', async e => {
+    const g = e.target.closest('[data-go]'); if (g){ const [c, q] = g.dataset.go.split(':'); jumpToQuestion(c, q); return; }
+    const dn = e.target.closest('[data-delnote]'); if (dn){ const i = dn.dataset.delnote.lastIndexOf(':'); const key = dn.dataset.delnote.slice(0, i), id = dn.dataset.delnote.slice(i + 1); await run(() => rremove(fbPath(key, 'notes/' + id))); return; }
+    const cn = e.target.closest('[data-clearnotes]'); if (cn){ await run(() => rremove(fbPath(cn.dataset.clearnotes, 'notes'))); }
+  });
+  openModal({ title: onlyKey ? 'Notes on this question' : 'Host notes to review', body, wide: !onlyKey, actions: [{ label: 'Close', primary: true, onClick: closeModal }], onClose: () => { fbRedraw = null; } });
+}
+$('#notesBtn').addEventListener('click', () => openNotesReview());
+
 function buildRow(r){
   const tr = document.createElement('tr'); tr.dataset.id = r.id;
   if (!r.persisted) tr.classList.add('draft');
   if (r.data.archived) tr.classList.add('arch');
-  let h = '<td class="num"><span class="dot"></span><span class="n"></span></td>';
+  let h = '<td class="num"><span class="dot"></span><span class="n"></span></td><td class="fb">' + fbHTML(r) + '</td>';
   for (const c of visibleCols()) h += `<td class="c-${c.type}${c.key === 'question' ? ' stickyQ' : ''}">${cellHTML(c, r.data[c.key])}</td>`;
   h += r.data.archived
     ? '<td class="act"><button class="ico" data-act="restore" tabindex="-1" title="Restore">↺</button><button class="ico del" data-act="delete" tabindex="-1" title="Delete forever">🗑</button></td>'
@@ -973,6 +1117,7 @@ tbody.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); moveDown(el); }
 });
 tbody.addEventListener('click', async e => {
+  const st = e.target.closest('[data-fbnotes]'); if (st){ const rr = S.rows.get(st.closest('tr').dataset.id); if (rr) openNotesReview(fbKeyOf(rr)); return; }
   const th = e.target.closest('.thumb');
   if (th){ const r = rowOf(th); const cur = th.dataset.v; const nx = cur === '' ? 'up' : cur === 'up' ? 'down' : ''; th.dataset.v = nx; th.textContent = nx === 'up' ? '👍' : nx === 'down' ? '👎' : '·'; r.data[th.dataset.key] = nx; saveField(r, th.dataset.key, nx); return; }
   const b = e.target.closest('[data-act]'); if (!b) return;
@@ -1199,16 +1344,20 @@ function exportCSV(){
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
-async function saveCustom(list){ await setDoc(doc(db, 'triviaConfig', 'columns'), { custom: list, updatedAt: serverTimestamp() }); }
+async function saveCustom(list){ await setDoc(doc(db, 'triviaConfig', 'columns'), { custom: list, updatedAt: serverTimestamp() }, { merge: true }); }
+async function saveOrder(keys){ S.order = keys; await setDoc(doc(db, 'triviaConfig', 'columns'), { order: keys, updatedAt: serverTimestamp() }, { merge: true }); }
 
 $('#colsBtn').addEventListener('click', openColumns);
 function openColumns(){
   const body = document.createElement('div');
   const draw = () => {
     body.innerHTML = `<p class="hint">Tick the columns you want to see. Custom columns you add here become a field on every question.</p>
-      <div class="list">` + allCols().map(c => {
+      ${S.tempOrder ? `<div class="hint" style="margin:0 0 10px;padding:8px 10px;border:1px solid var(--gold-glow);border-radius:8px">You've rearranged the columns on the main page for now. <button class="linkbtn" id="makePerm">Make this arrangement permanent</button></div>` : ''}
+      <p class="hint" style="margin-top:0">Drag ⠿ or use ▲ ▼ to set the permanent column order — it's saved for everyone and every device. Question always stays first.</p>
+      <div class="list" id="colList">` + orderCols(S.order).map((c, i, arr) => {
         const custom = S.custom.some(x => x.key === c.key) && !BUILTIN.some(b => b.key === c.key);
-        return `<div class="item"><label style="display:flex;gap:10px;align-items:center;flex:1"><input type="checkbox" data-vis="${c.key}" ${c.key === 'question' ? 'checked disabled' : (S.hidden.has(c.key) ? '' : 'checked')}><span class="lb">${esc(c.label)}${custom ? ` <small>${CUSTOM_TYPES[c.type] || ''}</small>` : ''}</span></label>${custom ? `<button class="linkbtn" data-ren="${c.key}">Rename</button><button class="linkbtn" data-rm="${c.key}">Remove</button>` : ''}</div>`;
+        const pinned = c.key === 'question';
+        return `<div class="item" data-k="${c.key}" ${pinned ? '' : 'draggable="true"'}><span class="grab" title="${pinned ? 'Pinned first' : 'Drag to move'}">${pinned ? '📌' : '⠿'}</span><label style="display:flex;gap:10px;align-items:center;flex:1"><input type="checkbox" data-vis="${c.key}" ${c.key === 'question' ? 'checked disabled' : (S.hidden.has(c.key) ? '' : 'checked')}><span class="lb">${esc(c.label)}${custom ? ` <small>${CUSTOM_TYPES[c.type] || ''}</small>` : ''}</span></label>${custom ? `<button class="linkbtn" data-ren="${c.key}">Rename</button><button class="linkbtn" data-rm="${c.key}">Remove</button>` : ''}${pinned ? '' : `<button class="mv" data-mv="-1:${c.key}" ${i <= 1 ? 'disabled' : ''} title="Move left">▲</button><button class="mv" data-mv="1:${c.key}" ${i === arr.length - 1 ? 'disabled' : ''} title="Move right">▼</button>`}</div>`;
       }).join('') + `</div>
       <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
         <label class="fld">Add a column<input type="text" id="ncolName" placeholder="e.g. Host notes" autocomplete="off"></label>
@@ -1220,6 +1369,24 @@ function openColumns(){
   draw();
   openModal({ title: 'Columns', body, actions: [{ label: 'Done', primary: true, onClick: closeModal }], onClose: () => renderAll() });
   body.addEventListener('change', e => { const k = e.target.dataset.vis; if (!k) return; e.target.checked ? S.hidden.delete(k) : S.hidden.add(k); LS.set('hiddenCols', [...S.hidden]); });
+  const permKeys = () => orderCols(S.order).map(c => c.key).filter(k => k !== 'question');
+  const commitOrder = async keys => { S.tempOrder = null; await run(() => saveOrder(keys)); draw(); };
+  body.addEventListener('click', async e => {
+    if (e.target.id === 'makePerm'){ await commitOrder(allCols().map(c => c.key).filter(k => k !== 'question')); return; }
+    const mv = e.target.dataset.mv; if (!mv) return;
+    const [d, k] = mv.split(':'), keys = permKeys(), i = keys.indexOf(k), j = i + (+d);
+    if (i < 0 || j < 0 || j >= keys.length) return;
+    keys.splice(j, 0, keys.splice(i, 1)[0]); await commitOrder(keys);
+  });
+  let dragK = null;
+  body.addEventListener('dragstart', e => { const it = e.target.closest('.item[data-k]'); if (!it || it.dataset.k === 'question') return; dragK = it.dataset.k; it.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragK); } catch (_) {} });
+  body.addEventListener('dragover', e => { if (!dragK) return; const it = e.target.closest('.item[data-k]'); if (!it || it.dataset.k === dragK) return; e.preventDefault(); $$('.item.dropT', body).forEach(x => x.classList.remove('dropT')); it.classList.add('dropT'); });
+  body.addEventListener('drop', async e => {
+    if (!dragK) return; const it = e.target.closest('.item[data-k]'); if (!it) return; e.preventDefault();
+    const keys = permKeys().filter(k => k !== dragK), t = it.dataset.k, i = t === 'question' ? 0 : keys.indexOf(t);
+    keys.splice(i, 0, dragK); dragK = null; await commitOrder(keys);
+  });
+  body.addEventListener('dragend', () => { dragK = null; $$('.item.dragging,.item.dropT', body).forEach(x => x.classList.remove('dragging', 'dropT')); });
   body.addEventListener('click', async e => {
     const rn = e.target.dataset.ren, rm = e.target.dataset.rm;
     if (rn){ const c = S.custom.find(x => x.key === rn); const t = await askText({ title: 'Rename column', label: 'Column name', value: c.label }); if (t) await run(async () => { await saveCustom(S.custom.map(x => x.key === rn ? { ...x, label: t } : x)); setTimeout(draw, 250); }); }
