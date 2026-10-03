@@ -749,6 +749,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <span class="hb-timed-label">⏱ Timed (10s)</span>
         <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()"></div>
       </div>
+      <button class="hb-btn hb-btn-ghost" id="hb-intro-btn" onclick="toggleHostIntro()">Play Intro Slides</button>
+      <div class="hb-timed-row">
+        <span class="hb-timed-label">Join QR on Intro</span>
+        <div class="hb-toggle" id="hb-intro-qr-toggle" onclick="toggleHostIntroQR()"></div>
+      </div>
       <button class="hb-btn hb-btn-ghost" id="hb-lb-btn" onclick="toggleLbAdmin()">Show Leaderboard</button>
       <button class="hb-btn hb-btn-gold" id="hb-give-scores-btn" onclick="giveScores()" style="display:none">Give Scores →</button>
       <button class="hb-btn hb-btn-ghost" onclick="openHistory()">Game History</button>
@@ -2472,6 +2477,19 @@ function toggleHostTimed() {
   liveRef('timedOverride').set(hostTimedOn);
 }
 
+// Play/stop the intro-slide screensaver on trivia.html, and toggle its
+// bottom-right Join QR box. introPlaying/introQrVisible come back from
+// trivia.html itself (see attachHbListeners) so the button/toggle stay
+// in sync even if a host dismisses the slides by hand on the TV.
+let hostIntroOn = false;
+let hostIntroQrOn = false;
+function toggleHostIntro() {
+  sendHostCommand(hostIntroOn ? 'stop-intro' : 'play-intro');
+}
+function toggleHostIntroQR() {
+  sendHostCommand('toggle-intro-qr');
+}
+
 function toggleLbAdmin() {
   lbAdminVisible = !lbAdminVisible;
   liveRef('leaderboardVisible').set(lbAdminVisible);
@@ -2827,6 +2845,19 @@ function attachHbListeners() {
   const label = document.getElementById('hb-live-label');
   if(label) label.textContent = isLive ? 'Game Live' : 'No game active';
 });
+
+  const introPlayingRef = liveRef('introPlaying'); _hbRefs.push(introPlayingRef);
+  introPlayingRef.on('value', snap => {
+    hostIntroOn = !!snap.val();
+    const btn = document.getElementById('hb-intro-btn');
+    if(btn) btn.textContent = hostIntroOn ? 'Stop Intro Slides' : 'Play Intro Slides';
+  });
+
+  const introQrRef = liveRef('introQrVisible'); _hbRefs.push(introQrRef);
+  introQrRef.on('value', snap => {
+    hostIntroQrOn = !!snap.val();
+    document.getElementById('hb-intro-qr-toggle')?.classList.toggle('on', hostIntroQrOn);
+  });
 
   const slideStateRef = liveRef('slideState'); _hbRefs.push(slideStateRef); slideStateRef.on('value', snap => {
   const s = snap.val();
