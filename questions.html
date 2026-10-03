@@ -626,7 +626,9 @@ async function enter(user){
   try {
     const s = await getDoc(doc(db, 'users', user.uid));
     p = s.exists() ? s.data() : {};
-    if (p.role !== 'admin'){ showGate('denied', 'This account isn\u2019t set up as an admin, so it can\u2019t edit the question bank.'); return; }
+    // Same rule as the Trivia Admin: a Trivia admin (adminAccess.trivia, set in HQ's Accounts tab) or a full admin.
+    if (p.status === 'banned'){ showGate('denied', 'This account is currently restricted.'); return; }
+    if (!(p.role === 'admin' || (p.adminAccess && p.adminAccess.trivia))){ showGate('denied', 'This account doesn\u2019t have Trivia Admin access, so it can\u2019t edit the question bank. Ask Belladonna to turn on Trivia under Admin Access in HQ\u2019s Accounts tab.'); return; }
   } catch (e) { showGate('denied', 'Couldn\u2019t verify your account right now. Check your connection and try again.'); return; }
   $('#userLabel').textContent = p.name || user.email || '';
   showScreen('app');
