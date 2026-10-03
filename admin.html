@@ -121,6 +121,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 }
 .cat-banner-placeholder span{font-family:var(--display);font-size:18px;letter-spacing:.12em;color:var(--text3)}
 .cat-body{padding:11px 14px 13px}
+.cat-alt{font-family:var(--cinzel);font-size:13px;font-weight:600;letter-spacing:.07em;color:var(--text);margin-bottom:2px}
+.cat-title-indent{padding-left:14px;font-size:11px;font-weight:400;color:var(--text2)}
 .cat-title{font-family:var(--cinzel);font-size:13px;font-weight:600;letter-spacing:.07em;color:var(--text);margin-bottom:5px}
 .cat-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .cat-genre{
@@ -1213,6 +1215,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <input class="field-input" id="f-name" placeholder="e.g. General Knowledge"/>
       </div>
       <div class="field">
+        <div class="field-label">Secondary Name <span style="opacity:.6;text-transform:none;letter-spacing:0">(optional — the true theme)</span></div>
+        <input class="field-input" id="f-alt" placeholder="e.g. Buffy the Vampire Slayer Trivia"/>
+        <div class="field-hint">Internal only: shown small under the name in the Planner, searchable everywhere, never sent to the Venue Menu or shown to players.</div>
+      </div>
+      <div class="field">
         <div class="field-label">Tags (comma separated)</div>
         <input class="field-input" id="f-genre" placeholder="e.g. Pop Culture, Music, 90s"/>
         <div class="field-hint">Add multiple tags separated by commas</div>
@@ -1767,6 +1774,7 @@ function renderLibrary() {
   if(searchVal) {
     filtered = filtered.filter(c =>
       (c.name||'').toLowerCase().includes(searchVal) ||
+      (c.altName||'').toLowerCase().includes(searchVal) ||
       (c.genre||'').toLowerCase().includes(searchVal) ||
       (c.tabName||'').toLowerCase().includes(searchVal) ||
       (c.notes||'').toLowerCase().includes(searchVal)
@@ -1821,7 +1829,7 @@ function renderLibrary() {
       + ' ondrop="onCardDrop(event,\'' + cat.id + '\')">'
       + bannerHtml
       + '<div class="cat-body">'
-      + '<div class="cat-title">' + (cat.name||'Untitled') + '</div>'
+      + (cat.altName ? '<div class="cat-alt">' + cat.altName + '</div><div class="cat-title cat-title-indent">' + (cat.name||'Untitled') + '</div>' : '<div class="cat-title">' + (cat.name||'Untitled') + '</div>')
       + '<div class="cat-meta">' + themeSetBadge + musicBadge + slideshowBadge + canvaBadge + tagPills + seePairsBtn + '</div>'
       + pairsDropdown
       + '</div>'
@@ -2003,6 +2011,7 @@ function renderLineup() {
         +   thumb
         +   '<div class="round-slot-card-info">'
         +     '<div class="round-slot-card-name">' + cat.name + '</div>'
+        +     (cat.altName ? '<div class="round-slot-card-tab" style="font-style:italic">' + cat.altName + '</div>' : '')
         +     '<div class="round-slot-card-tab">' + tabLabel + '</div>'
         +   '</div>'
         +   '<button class="round-slot-remove" onclick="removeFromSlot(' + i + ')">×</button>'
@@ -2188,6 +2197,7 @@ function openModal(id) {
   setCatType(type);
 
   document.getElementById('f-name').value    = cat?.name     || '';
+  document.getElementById('f-alt').value     = cat?.altName  || '';
   document.getElementById('f-genre').value   = cat?.genre    || '';
   document.getElementById('f-sheet').value   = cat?.sheetUrl || '';
   document.getElementById('f-tab').value     = cat?.tabName  || '';
@@ -2309,6 +2319,7 @@ async function saveCategory() {
   if(saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
   const restore = () => { if(saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Category'; } };
   const name       = document.getElementById('f-name').value.trim() || 'Untitled Category';
+  const altName    = document.getElementById('f-alt').value.trim();
   const genre      = document.getElementById('f-genre').value.trim();
   const type       = currentCatType;
   const sheetUrl   = type === 'music'
@@ -2338,7 +2349,7 @@ async function saveCategory() {
 
   setSyncStatus('syncing');
   const vaultCatId = (type === 'trivia' || type === 'music') ? (document.getElementById('f-vault')?.value || '') : '';
-  const data = {name, genre, type, sheetUrl, tabName, vaultCatId, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, attributions, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, updatedAt: Date.now()};
+  const data = {name, altName, genre, type, sheetUrl, tabName, vaultCatId, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, attributions, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, updatedAt: Date.now()};
 
   try {
     let catId = editingId;
@@ -3139,8 +3150,8 @@ function populateSchedVenueDropdowns() {
 }
 
 function renderSchedCatDropdowns() {
-  const opts = '<option value="">— pick a category —</option>' + categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-  const optsOpt = '<option value="">(none)</option>' + categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  const opts = '<option value="">— pick a category —</option>' + categories.map(c => `<option value="${c.id}">${c.name}${c.altName ? ' — ' + c.altName : ''}</option>`).join('');
+  const optsOpt = '<option value="">(none)</option>' + categories.map(c => `<option value="${c.id}">${c.name}${c.altName ? ' — ' + c.altName : ''}</option>`).join('');
   const editId = document.getElementById('sched-edit-id')?.value;
   const entry = editId ? triviaScheduleEntries.find(e => e.id === editId) : null;
   const rounds = entry ? (entry.rounds || []) : [];
