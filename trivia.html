@@ -309,6 +309,64 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   background:rgba(255,255,255,.06);border:1px solid var(--border2);
   border-radius:4px;padding:2px 6px;font-size:9px;color:var(--text2);
 }
+.hud-fb-btn{
+  background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text2);
+  border-radius:99px;padding:4px 10px;font-size:10px;font-family:var(--cinzel);
+  letter-spacing:.08em;cursor:pointer;transition:all .15s;
+}
+.hud-fb-btn:hover{background:rgba(201,168,76,.15);border-color:var(--gold-glow);color:var(--gold)}
+.hud-fb-btn.active{background:rgba(201,168,76,.22);border-color:var(--gold);color:var(--gold)}
+
+/* FEEDBACK NOTE BOX (host writes a note about the current question) */
+#feedback-note-box{
+  position:fixed;bottom:4.2rem;left:50%;transform:translateX(-50%);
+  z-index:860;display:none;flex-direction:column;gap:8px;
+  background:rgba(8,8,8,.95);backdrop-filter:blur(12px);
+  border:1px solid var(--border2);border-radius:12px;
+  padding:14px 16px;width:min(360px,86vw);
+}
+#feedback-note-box.show{display:flex}
+#feedback-note-box textarea{
+  width:100%;min-height:64px;resize:vertical;background:rgba(255,255,255,.04);
+  border:1px solid var(--border2);border-radius:8px;color:var(--text);
+  font-family:var(--font);font-size:12px;padding:8px;
+}
+#feedback-note-box .fnb-row{display:flex;gap:8px;justify-content:flex-end}
+#feedback-note-box .fnb-label{font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
+
+/* HOST-NOTE STAR — shows on the question slide when the sheet's Notes column has text */
+.q-note-star{
+  position:fixed;left:1.2rem;bottom:1.2rem;z-index:840;cursor:pointer;
+  font-size:22px;color:var(--gold);opacity:.8;filter:drop-shadow(0 0 6px rgba(201,168,76,.5));
+  animation:qNoteStarPulse 2.4s ease-in-out infinite;
+}
+.q-note-star:hover{opacity:1}
+@keyframes qNoteStarPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+
+#note-popup{
+  position:fixed;inset:0;z-index:2500;display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.72);backdrop-filter:blur(4px);
+}
+#note-popup.show{display:flex}
+#note-popup-card{
+  background:#111;border:1px solid rgba(201,168,76,.4);border-radius:14px;
+  padding:1.4rem 1.6rem;max-width:min(480px,86vw);box-shadow:0 8px 40px rgba(0,0,0,.8);
+}
+#note-popup-card .np-label{font-family:var(--cinzel);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:.6rem}
+#note-popup-card .np-text{font-family:var(--serif);font-size:15px;line-height:1.5;color:var(--text);white-space:pre-wrap}
+#note-popup-card .np-close{margin-top:1rem;background:transparent;border:1px solid var(--gold-glow);color:var(--gold);border-radius:8px;padding:6px 16px;cursor:pointer;font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
+
+/* JOIN QR — bottom-right corner box shown over the intro-slide screensaver */
+#ss-join-qr{
+  position:absolute;right:2.2rem;bottom:2.2rem;width:30%;max-width:280px;min-width:160px;
+  display:none;flex-direction:column;align-items:center;gap:.6rem;
+  background:rgba(255,255,255,.96);border-radius:16px;padding:1rem;
+  box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:2010;
+}
+#ss-join-qr.show{display:flex}
+#ss-join-qr-label{font-family:var(--cinzel);font-size:clamp(11px,1.4vw,15px);letter-spacing:.1em;text-transform:uppercase;color:#111;text-align:center}
+#ss-join-qr-code{width:100%;aspect-ratio:1/1;line-height:0;display:flex;align-items:center;justify-content:center}
+#ss-join-qr-code img,#ss-join-qr-code canvas{width:100% !important;height:100% !important}
 
 /* TOAST */
 #toast{
@@ -491,8 +549,8 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="setup-sub" id="setup-sub-text">Let's play some trivia.</div>
   <div class="setup-rounds-grid" id="setup-rounds-grid"></div>
   <button class="setup-launch-btn" id="setup-launch-btn" onclick="launchFromSetup()" style="display:none">Launch Trivia Night →</button>
-  <button class="setup-launch-btn" id="setup-preview-btn" onclick="startPreview()" style="display:none;margin-top:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:11px;padding:10px 32px">Preview Intro Slides</button>
-  <button class="setup-launch-btn" id="setup-join-btn" onclick="toggleJoinPopup()" style="display:none;margin-top:8px;background:transparent;border:1px solid var(--gold-glow);color:var(--gold);font-size:11px;padding:10px 32px">📱 Show Join QR Code</button>
+  <button class="setup-launch-btn" id="setup-preview-btn" onclick="startPreview()" style="display:none;margin-top:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:11px;padding:10px 32px">Play Intro Slides</button>
+  <button class="setup-launch-btn" id="setup-join-btn" onclick="toggleJoinPopup()" style="display:none;margin-top:8px;background:transparent;border:1px solid var(--gold-glow);color:var(--gold);font-size:11px;padding:10px 32px">Show Join QR Code</button>
   <div id="join-panel" style="display:none;text-align:center;margin-top:12px;padding:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;max-width:360px;width:100%">
     <div style="font-family:var(--cinzel);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#3498db;margin-bottom:8px">Players — scan or visit:</div>
     <div id="join-url" style="font-family:var(--font);font-size:12px;color:var(--text2);word-break:break-all;margin-bottom:10px"></div>
@@ -509,6 +567,10 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div id="ss-slide-a" style="position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;opacity:0;transition:opacity 1.5s ease"></div>
   <div id="ss-slide-b" style="position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;opacity:0;transition:opacity 1.5s ease"></div>
   <div style="position:absolute;bottom:2rem;width:100%;text-align:center;font-family:var(--cinzel);font-size:11px;letter-spacing:.2em;color:rgba(255,255,255,.4)">CLICK OR PRESS ANY KEY TO DISMISS</div>
+  <div id="ss-join-qr" onclick="event.stopPropagation()">
+    <div id="ss-join-qr-label">Join the Game Here:</div>
+    <div id="ss-join-qr-code"></div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════
@@ -553,6 +615,31 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div class="hud-item"><span class="hud-key">J+1</span> jump</div>
   <div class="hud-sep"></div>
   <div class="hud-item"><span class="hud-key">Esc</span> exit</div>
+  <div class="hud-sep" id="hud-fb-sep" style="display:none"></div>
+  <div class="hud-item" id="hud-fb-group" style="display:none;gap:6px">
+    <button class="hud-fb-btn" id="hud-thumb-up" onclick="sendQuestionThumb('up')" title="Good question">👍</button>
+    <button class="hud-fb-btn" id="hud-thumb-down" onclick="sendQuestionThumb('down')" title="Flag this question">👎</button>
+    <button class="hud-fb-btn" id="hud-note-btn" onclick="toggleFeedbackNoteBox()" title="Leave a note about this question">✎ Note</button>
+  </div>
+</div>
+
+<!-- FEEDBACK NOTE BOX — host writes a note about the current question -->
+<div id="feedback-note-box">
+  <div class="fnb-label">Note about this question</div>
+  <textarea id="feedback-note-text" placeholder="Misspelling, bad answer, anything you want to flag…"></textarea>
+  <div class="fnb-row">
+    <button class="hud-fb-btn" onclick="toggleFeedbackNoteBox()">Cancel</button>
+    <button class="hud-fb-btn active" onclick="submitFeedbackNoteBox()">Submit</button>
+  </div>
+</div>
+
+<!-- HOST NOTE POPUP — pre-written note from the sheet's Notes column -->
+<div id="note-popup" onclick="if(event.target===this)closeNotePopup()">
+  <div id="note-popup-card">
+    <div class="np-label">★ Host Note</div>
+    <div class="np-text" id="note-popup-text"></div>
+    <button class="np-close" onclick="closeNotePopup()">Close</button>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -717,6 +804,9 @@ if(db) {
       case 'back':    retreatSlide(); break;
       case 'reveal':  advanceSlide(); break;
       case 'rerandomize-next': rerandomizeNextQuestion(); break;
+      case 'play-intro': startPreview(); break;
+      case 'stop-intro':  stopPreview(); break;
+      case 'toggle-intro-qr': setScreensaverQRVisible(!ssQrVisible); break;
       case 'audio':
         // Try music play button first, then regular audio button
         const musicBtn = document.getElementById('music-play-btn');
@@ -918,8 +1008,8 @@ async function loadSheetQuestions(sheetUrl, tabName, count) {
   const sheetId = extractSheetId(sheetUrl);
   if(!sheetId) throw new Error('Could not extract Sheet ID from URL.');
 
-  // Fetch A:I (cols 1–9)
-  const range = encodeURIComponent(`${tabName}!A2:I`);
+  // Fetch A:J (cols 1–10 — col J is the Notes column)
+  const range = encodeURIComponent(`${tabName}!A2:J`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${API_KEY}`;
 
   const res = await fetch(url);
@@ -928,7 +1018,9 @@ async function loadSheetQuestions(sheetUrl, tabName, count) {
     throw new Error(err?.error?.message || `HTTP ${res.status}`);
   }
   const data = await res.json();
-  const rows = (data.values || []).map(parseRow).filter(Boolean);
+  // Row 2 in the sheet is index 0 here — rowIndex is the real sheet row number,
+  // used later to key host feedback (thumbs/notes) to this exact cell.
+  const rows = (data.values || []).map((r,i)=>parseRow(r,i+2)).filter(Boolean);
   if(!rows.length) throw new Error('No valid rows found.');
   return { questions: pickByDifficultySequence(rows, count), pool: rows };
 }
@@ -951,7 +1043,7 @@ function extractSheetId(ref) {
   return m ? m[1] : String(ref).trim();
 }
 
-function parseRow(r) {
+function parseRow(r, rowIndex) {
   const q = safe(r[0]).trim();
   const a = safe(r[1]).trim();
   if(!q || !a) return null;
@@ -963,12 +1055,14 @@ function parseRow(r) {
   const mcOptions = [r[5],r[6],r[7],r[8]]
     .map(v=>safe(v).trim()).filter(v=>v.length>0);
 
+  const notes = safe(r[9]).trim(); // Col J — host-only notes (trap question, answer specifics, etc.)
+
   const au = a.toUpperCase();
   const type = (au==='TRUE'||au==='FALSE') ? 'tf'
              : mcOptions.length > 0 ? 'mc'
              : 'standard';
 
-  return {question:q, answer:a, difficulty:diff, imageUrl:img, audioUrl:audio, type, mcOptions};
+  return {question:q, answer:a, difficulty:diff, imageUrl:img, audioUrl:audio, type, mcOptions, notes, rowIndex};
 }
 
 // Music rounds: Col A = song title, Col B = artist, Col C = audio URL
@@ -1155,6 +1249,80 @@ function currentQuestion() {
   return currentRound().questions[qIndex];
 }
 
+// ═══════════════════════════════════════════════════════
+//  QUESTION FEEDBACK — thumbs up/down + host notes, logged to Firebase
+//  keyed to the exact spreadsheet cell (sheetId + tab + row) so it's
+//  stable no matter which category/gig re-launches that sheet. Viewable
+//  in HQ under trivia/questionFeedback.
+// ═══════════════════════════════════════════════════════
+function feedbackKeyFor(round, q) {
+  if(!round || !q || q.rowIndex == null) return null;
+  const sheetId = extractSheetId(round.sheetUrl || '');
+  const tab = String(round.tabName || '').trim().replace(/[.#$\[\]\/\s]+/g, '_');
+  if(!sheetId || !tab) return null;
+  return `${sheetId}__${tab}__r${q.rowIndex}`;
+}
+
+function sendQuestionThumb(dir) {
+  if(!db) { toast('Not connected — feedback not saved'); return; }
+  const round = currentRound();
+  const q = currentQuestion();
+  const key = feedbackKeyFor(round, q);
+  if(!key) { toast('Could not identify this question'); return; }
+  const ref = db.ref('trivia/questionFeedback/' + key);
+  ref.update({
+    question: q.question, answer: q.answer,
+    sheetUrl: round.sheetUrl || '', tabName: round.tabName || '', rowIndex: q.rowIndex,
+    lastFeedbackAt: Date.now(),
+  });
+  ref.child(dir === 'up' ? 'thumbsUp' : 'thumbsDown').transaction(v => (v||0) + 1);
+  const btn = document.getElementById(dir === 'up' ? 'hud-thumb-up' : 'hud-thumb-down');
+  if(btn) { btn.classList.add('active'); setTimeout(()=>btn.classList.remove('active'), 900); }
+  toast(dir === 'up' ? '👍 Thanks — noted' : '👎 Flagged for review');
+}
+
+function toggleFeedbackNoteBox() {
+  const box = document.getElementById('feedback-note-box');
+  if(!box) return;
+  box.classList.toggle('show');
+  if(box.classList.contains('show')) {
+    const ta = document.getElementById('feedback-note-text');
+    ta.value = '';
+    requestAnimationFrame(()=>ta.focus());
+  }
+}
+
+function submitFeedbackNoteBox() {
+  const text = (document.getElementById('feedback-note-text')?.value || '').trim();
+  if(!text) { toggleFeedbackNoteBox(); return; }
+  if(!db) { toast('Not connected — note not saved'); return; }
+  const round = currentRound();
+  const q = currentQuestion();
+  const key = feedbackKeyFor(round, q);
+  if(!key) { toast('Could not identify this question'); toggleFeedbackNoteBox(); return; }
+  const ref = db.ref('trivia/questionFeedback/' + key);
+  ref.update({
+    question: q.question, answer: q.answer,
+    sheetUrl: round.sheetUrl || '', tabName: round.tabName || '', rowIndex: q.rowIndex,
+    lastFeedbackAt: Date.now(),
+  });
+  ref.child('notes').push({ text, ts: Date.now() });
+  toast('Note saved');
+  toggleFeedbackNoteBox();
+}
+
+// Pre-written note from the sheet's own Notes column (col J) — read-only, host-facing
+function showQuestionNote(e) {
+  if(e) e.stopPropagation();
+  const q = currentQuestion();
+  if(!q || !q.notes) return;
+  document.getElementById('note-popup-text').textContent = q.notes;
+  document.getElementById('note-popup').classList.add('show');
+}
+function closeNotePopup() {
+  document.getElementById('note-popup').classList.remove('show');
+}
+
 function advanceSlide() {
   const type = slideType();
   if(type === S_JUMP) return;
@@ -1321,6 +1489,16 @@ function renderCurrentSlide() {
     document.getElementById('hud-q').textContent = '—';
   }
 
+  // Feedback controls (thumbs/note) only make sense on an actual trivia question slide
+  const fbGroup = document.getElementById('hud-fb-group');
+  const fbSep = document.getElementById('hud-fb-sep');
+  const showFb = type === S_QUESTION && round.type !== 'music' && round.type !== 'slideshow' && round.type !== 'canva';
+  if(fbGroup) fbGroup.style.display = showFb ? 'flex' : 'none';
+  if(fbSep) fbSep.style.display = showFb ? 'block' : 'none';
+  if(!showFb) {
+    document.getElementById('feedback-note-box')?.classList.remove('show');
+  }
+
   // Render
   const container = document.getElementById('slide-container');
   container.innerHTML = '';
@@ -1389,6 +1567,8 @@ let ssIndex = 0;
 let ssImages = [];
 let ssActive = false; // which div is currently showing (false=A, true=B)
 
+let ssQrVisible = false;
+
 function startPreview() {
   // Collect all bgIntro images from pending rounds, fall back to bgQuestion
   ssImages = pendingRounds
@@ -1408,6 +1588,29 @@ function startPreview() {
   document.getElementById('screensaver').style.display = 'block';
   document.documentElement.requestFullscreen?.().catch(()=>{});
   ssShowNext();
+  if(ssQrVisible) renderScreensaverQR();
+  if(db) db.ref('trivia/liveGame/introPlaying').set(true);
+}
+
+function renderScreensaverQR() {
+  const box = document.getElementById('ss-join-qr');
+  const codeEl = document.getElementById('ss-join-qr-code');
+  if(!box || !codeEl) return;
+  box.classList.add('show');
+  codeEl.innerHTML = '';
+  const url = joinUrlCached || window.location.href.replace(/\/[^/?#]*([?#].*)?$/, '/play.html');
+  if(typeof QRCode === 'undefined') { setTimeout(renderScreensaverQR, 300); return; }
+  const size = Math.max(100, Math.min(box.clientWidth - 32, 260));
+  new QRCode(codeEl, {text:url, width:size, height:size, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
+}
+
+function setScreensaverQRVisible(show) {
+  ssQrVisible = !!show;
+  const box = document.getElementById('ss-join-qr');
+  if(!box) return;
+  if(ssQrVisible) renderScreensaverQR();
+  else box.classList.remove('show');
+  if(db) db.ref('trivia/liveGame/introQrVisible').set(ssQrVisible);
 }
 
 function ssShowNext() {
@@ -1442,7 +1645,9 @@ function stopPreview() {
   document.getElementById('screensaver').style.display = 'none';
   document.getElementById('ss-slide-a').style.opacity = '0';
   document.getElementById('ss-slide-b').style.opacity = '0';
+  document.getElementById('ss-join-qr')?.classList.remove('show');
   document.exitFullscreen?.().catch(()=>{});
+  if(db) db.ref('trivia/liveGame/introPlaying').set(false);
 }
 
 // Also stop on any keypress
@@ -1696,6 +1901,7 @@ function renderQuestion(container, round) {
       ${imageHtml}
     </div>
     ${answerOverlay}
+    ${q.notes ? `<div class="q-note-star" onclick="showQuestionNote(event)" title="Host note available">★</div>` : ''}
   `;
   container.appendChild(el);
 
@@ -2456,6 +2662,105 @@ function dismissVenueIntro(){
 }
 initVenueIntro();
 
+// ═══════════════════════════════════════════════════════
+//  STANDALONE AUTO-LOAD — opening trivia.html on its own, with no launch
+//  params at all, still auto-loads tonight's scheduled rounds for whichever
+//  venue this was last launched for (remembered from either Tonight or
+//  admin.html's own "Launch Trivia" button — both pass ?venue=). Same
+//  per-category sheetUrl/tabName lookup admin.html's launchTrivia() uses,
+//  just run here directly against Firebase instead of via URL params.
+// ═══════════════════════════════════════════════════════
+(function rememberTriviaVenue(){
+  const p = new URLSearchParams(window.location.search);
+  const v = p.get('venue');
+  if(v){
+    try{
+      localStorage.setItem('trivia-last-venue', v);
+      localStorage.setItem('trivia-last-venueName', p.get('venueName')||'');
+    }catch(e){}
+  }
+})();
+function todayKeyTrivia(){
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+async function tryStandaloneAutoLoad(){
+  const p = new URLSearchParams(window.location.search);
+  if(p.get('rounds') || p.get('venue')) return; // already handled by checkUrlParams()/initVenueIntro() above
+  let venueId, venueName;
+  try{
+    venueId = localStorage.getItem('trivia-last-venue');
+    venueName = localStorage.getItem('trivia-last-venueName') || "tonight's venue";
+  }catch(e){ return; }
+  if(!venueId || !db) return;
+  const gigDate = todayKeyTrivia();
+  let gig;
+  try{
+    const snap = await db.ref('trivia/planner/gigs/'+venueId+'/'+gigDate).once('value');
+    gig = snap.val();
+  }catch(e){ return; }
+  if(!gig || !gig.themeName) return; // nothing scheduled there tonight — leave the setup screen as-is
+
+  const rounds = [];
+  if(gig.themeName)  rounds.push({label:gig.themeName,  id:gig.themeId||null});
+  if(gig.round3Name) rounds.push({label:gig.round3Name, id:gig.round3ThemeId||null});
+  if(Array.isArray(gig.extraCategories)){
+    gig.extraCategories.forEach(ec=>{ if(ec&&ec.name) rounds.push({label:ec.name,id:ec.id||null}); });
+  }
+  if(!rounds.length) return;
+
+  let catMap = {};
+  try{
+    const catSnap = await db.ref('trivia/categories').once('value');
+    catMap = catSnap.val() || {};
+  }catch(e){ return; }
+  function resolveCat(round){
+    if(round.id && catMap[round.id]) return catMap[round.id];
+    const key = (round.label||'').trim().toLowerCase();
+    if(!key) return null;
+    return Object.values(catMap).find(c=>(c.name||'').trim().toLowerCase()===key) || null;
+  }
+  const usable = rounds.map(r=>({round:r,cat:resolveCat(r)})).filter(r=>r.cat && r.cat.sheetUrl);
+  if(!usable.length) return;
+
+  pendingRounds = usable.map(({round,cat})=>({
+    sheetUrl:cat.sheetUrl||'', tabName:cat.tabName||'',
+    type:cat.type||'trivia', folderUrl:cat.folderUrl||'', canvaDesignId:cat.canvaDesignId||'',
+    bgImage:cat.bgImage||'', bgIntro:cat.bgIntro||cat.bgImage||'',
+    bgQuestion:(cat.type==='canva'?cat.canvaBgUrl:null)||cat.bgQuestion||cat.bgImage||'',
+    bgPlain:cat.bgPlain||'', thankYouUrl:cat.thankYouUrl||'', catType:cat.catType||'',
+    title:cat.name||round.label||'Round', questionCount:20, showAnswers:false, twoPass:false, timed:false,
+    isMainRound:false, segmentSize:5, segmentStart:0, slides:[]
+  }));
+
+  // Same round-card rendering checkUrlParams() does, driving the same
+  // Launch/Preview/Join buttons it already wires up.
+  const grid = document.getElementById('setup-rounds-grid');
+  grid.innerHTML = pendingRounds.map((r,i) => {
+    const thumb = r.bgIntro || r.bgImage;
+    const imgHtml = thumb
+      ? `<img class="setup-round-card-thumb" src="${thumb}" onerror="this.outerHTML='<div class=setup-round-card-thumb-placeholder></div>'">`
+      : `<div class="setup-round-card-thumb-placeholder"></div>`;
+    return `<div class="setup-round-card">
+      ${imgHtml}
+      <div class="setup-round-card-body">
+        <div class="setup-round-num">Round ${i+1}</div>
+        <div class="setup-round-name">${r.title}</div>
+        <div class="setup-round-tab">${r.tabName}</div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('setup-sub-text').textContent = `${pendingRounds.length} round${pendingRounds.length>1?'s':''} ready to go — auto-loaded for tonight at ${venueName}.`;
+  document.getElementById('setup-launch-btn').style.display = 'block';
+  document.getElementById('setup-preview-btn').style.display = 'block';
+  document.getElementById('setup-join-btn').style.display = 'block';
+  joinUrlCached = window.location.href.replace(/\/[^/?#]*([?#].*)?$/, '/play.html');
+  const joinUrl = window.location.href.replace(/\/[^/]*$/, '/play.html');
+  document.getElementById('join-url').textContent = joinUrl;
+  generateQR(joinUrl);
+}
+tryStandaloneAutoLoad();
+
 // ── JOIN QR POPUP ─────────────────────────────────────────────────────
 
 function toggleJoinPopup() {
@@ -2463,7 +2768,7 @@ function toggleJoinPopup() {
   const btn = document.getElementById('setup-join-btn');
   joinPopupOpen = !joinPopupOpen;
   popup.style.display = joinPopupOpen ? 'flex' : 'none';
-  if(btn) btn.innerHTML = joinPopupOpen ? '📱 Hide Join QR Code' : '📱 Show Join QR Code';
+  if(btn) btn.innerHTML = joinPopupOpen ? 'Hide Join QR Code' : 'Show Join QR Code';
   if(joinPopupOpen && joinUrlCached) {
     requestAnimationFrame(() => generateQR(joinUrlCached));
   }
