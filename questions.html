@@ -146,6 +146,7 @@ table.pv th{text-align:left;color:var(--gold);font-weight:500;font-size:11px;let
 table.pv td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
 table.pv input,table.pv select{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:6px;padding:5px 8px;color:var(--text);font:inherit;outline:none}
 table.pv input:focus{border-color:var(--gold)}
+table.pv input.bad{border-color:var(--danger)}
 table.pv .bad{color:var(--danger)}
 table.pv .good{color:var(--ok)}
 .list{display:flex;flex-direction:column;gap:6px}
@@ -275,7 +276,7 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
   collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, onSnapshot,
-  query, where, writeBatch, increment, serverTimestamp, getCountFromServer
+  query, where, limit, writeBatch, increment, serverTimestamp, getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 /* ═══════════════════════════════════════════════════════════
@@ -313,10 +314,17 @@ const normQ = s => {
   return t || String(s ?? '').trim().toLowerCase();
 };
 
+const GENERIC_TAB = /^(sheet|tab|page|worksheet)\s*\d*$/i;
+const isGenericName = s => GENERIC_TAB.test(String(s ?? '').trim());
+// Google names downloads "Workbook name - Tab name.csv". Each of your categories is its own
+// workbook with one generic tab ("Sheet1"), so the category is the workbook name, not the tab.
 function nameFromFile(fn){
-  let n = String(fn).replace(/\.csv$/i, '').replace(/\s\(\d+\)$/, '');
+  let n = String(fn).replace(/\.csv$/i, '').replace(/\s\(\d+\)$/, '').trim();
   const i = n.lastIndexOf(' - ');
-  if (i >= 0) n = n.slice(i + 3);
+  if (i >= 0){
+    const book = n.slice(0, i).trim(), tab = n.slice(i + 3).trim();
+    n = (GENERIC_TAB.test(tab) && book) ? book : tab;
+  }
   return n.trim();
 }
 
@@ -945,16 +953,52 @@ $('#catMenuBtn').addEventListener('click', () => {
   const body = document.createElement('div'); body.className = 'menuList';
   body.innerHTML = `<button class="btn" data-a="export">Export this category as CSV</button>
     <button class="btn" data-a="recount">Recount questions</button>
-    <button class="btn ${c.archived ? '' : 'danger'}" data-a="archive">${c.archived ? 'Restore this category' : 'Archive this category'}</button>
-    <p class="hint" style="margin:6px 0 0">Archiving hides the category from the list. Its questions are kept.</p>`;
+    <button class="btn" data-a="archive">${c.archived ? 'Restore this category' : 'Archive this category'}</button>
+    <p class="hint" style="margin:0 0 6px">Archiving hides the category from the list. Its questions are kept.</p>
+    <button class="btn danger" data-a="delete">Delete this category and all its questions…</button>`;
   openModal({ title: c.name, body, actions: [{ label: 'Close', onClick: closeModal }] });
   body.addEventListener('click', async e => {
     const b = e.target.closest('[data-a]'); if (!b) return;
     if (b.dataset.a === 'export'){ closeModal(); exportCSV(); }
     if (b.dataset.a === 'recount'){ closeModal(); await run(async () => { const snap = await getCountFromServer(query(qColl(), where('categoryId', '==', c.id), where('archived', '==', false))); await updateDoc(catRef(c.id), { questionCount: snap.data().count }); toast(`Recounted: ${snap.data().count} questions`); }); }
     if (b.dataset.a === 'archive'){ closeModal(); await run(() => updateDoc(catRef(c.id), { archived: !c.archived, updatedAt: serverTimestamp() })); }
+    if (b.dataset.a === 'delete'){ closeModal(); askDeleteCategory(c); }
   });
 });
+
+function askDeleteCategory(c){
+  const body = document.createElement('div');
+  body.innerHTML = `<p class="hint">This permanently deletes <strong style="color:var(--text)">${esc(c.name)}</strong> and <strong style="color:var(--text)">every question in it</strong>, including archived ones. It can’t be undone.</p>
+    <label class="fld">Type the category name to confirm<input type="text" id="delConfirm" autocomplete="off"></label>
+    <div class="msg" id="delMsg"></div>`;
+  const actions = [{ label: 'Cancel', onClick: closeModal }, { label: 'Delete forever', danger: true, onClick: () => go() }];
+  openModal({ title: 'Delete category?', body, actions });
+  const cancel = actions[0].el, btn = actions[1].el; btn.disabled = true;
+  $('#delConfirm').focus();
+  $('#delConfirm').addEventListener('input', e => { btn.disabled = normName(e.target.value) !== normName(c.name); });
+  async function go(){
+    btn.disabled = true; cancel.disabled = true;
+    const msg = $('#delMsg'); msg.className = 'msg ok'; msg.textContent = 'Deleting…';
+    if (S.unsubQ){ S.unsubQ(); S.unsubQ = null; }
+    if (S.curId === c.id){ S.curId = null; S.rows = new Map(); LS.set('lastCat', null); showEditor(false); renderSide(); }
+    let n = 0;
+    try {
+      for (;;){
+        const snap = await getDocs(query(qColl(), where('categoryId', '==', c.id), limit(400)));
+        if (snap.empty) break;
+        const batch = writeBatch(db); snap.docs.forEach(d => batch.delete(d.ref)); await batch.commit();
+        n += snap.size; msg.textContent = `Deleted ${n.toLocaleString()} questions…`;
+      }
+      await deleteDoc(catRef(c.id));
+      msg.textContent = `Done — removed the category and ${n.toLocaleString()} question${n === 1 ? '' : 's'}.`;
+      btn.textContent = 'Close'; btn.classList.remove('danger'); btn.classList.add('primary'); btn.disabled = false; btn.onclick = closeModal;
+    } catch (err){
+      console.error(err); msg.className = 'msg';
+      msg.textContent = (/permission/i.test(err.message) ? 'Firestore blocked the delete — check the rules are published.' : 'Stopped: ' + err.message) + ` (${n.toLocaleString()} questions removed so far — run it again to finish.)`;
+      cancel.disabled = false; btn.disabled = false;
+    }
+  }
+}
 
 function exportCSV(){
   const c = S.cats.get(S.curId); if (!c) return;
@@ -1054,28 +1098,35 @@ function openImport(){
       }
       const g = seen.get(key);
       for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)) en.dupCount++; else { g.set.add(k); en.toAdd.push(rec); } }
-      en.status = cat ? `Adds to existing` : g.used ? 'Merges with file above' : 'New category';
+      en.status = isGenericName(en.name) ? 'Needs a real category name' : cat ? `Adds to existing` : g.used ? 'Merges with file above' : 'New category';
       g.used = true;
     }
     if (my !== st.ver) return;
     drawPreview();
   }
   function drawPreview(){
+    const act = document.activeElement;
+    const keep = act && act.dataset && act.dataset.f === 'name' ? { i: act.dataset.i, s: act.selectionStart, e: act.selectionEnd } : null;
     const types = typeList();
     const ok = st.entries.filter(e => !e.parsed.error);
     const newQ = ok.reduce((n, e) => n + e.toAdd.length, 0), dups = ok.reduce((n, e) => n + e.dupCount, 0);
     $('#impPv').innerHTML = st.entries.length ? `<table class="pv"><thead><tr><th>File</th><th>Category name</th><th style="width:140px">Type</th><th>New</th><th>Skipped</th><th>Status</th><th></th></tr></thead><tbody>` +
       st.entries.map((e, i) => `<tr><td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.file)}">${esc(e.file)}</td>
-        <td><input data-i="${i}" data-f="name" value="${esc(e.name)}"></td>
+        <td><input data-i="${i}" data-f="name" class="${isGenericName(e.name) ? 'bad' : ''}" value="${esc(e.name)}"></td>
         <td><select data-i="${i}" data-f="type">${types.map(t => `<option ${t === e.type ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></td>
         <td class="${e.parsed.error ? 'bad' : 'good'}">${e.parsed.error ? '—' : e.toAdd.length}</td>
         <td class="muted" title="duplicates / blank rows / rows without a question">${e.parsed.error ? '' : (e.dupCount + e.parsed.blank + e.parsed.noQ)}</td>
-        <td class="${e.parsed.error ? 'bad' : ''}">${esc(e.status)}</td>
+        <td class="${e.parsed.error || isGenericName(e.name) ? 'bad' : ''}">${esc(e.status)}</td>
         <td><button class="linkbtn" data-rm="${i}">remove</button></td></tr>`).join('') + `</tbody></table>` : '';
     const newCols = [...new Map(ok.flatMap(e => e.parsed.newCols).map(c => [c.key, c])).values()];
+    const generic = ok.filter(e => isGenericName(e.name)).length;
+    const merging = ok.filter(e => e.status === 'Merges with file above').length;
     $('#impNote').innerHTML = st.entries.length ? `<strong>${ok.length}</strong> file${ok.length === 1 ? '' : 's'} · <strong>${newQ.toLocaleString()}</strong> new questions · ${dups.toLocaleString()} duplicates skipped` +
-      (newCols.length ? `<br>Extra columns found: ${newCols.map(c => `<strong>${esc(c.label)}</strong>`).join(', ')} — they'll be added as custom columns.` : '') : '';
-    importBtn.disabled = !newQ && !newCols.length;
+      (newCols.length ? `<br>Extra columns found: ${newCols.map(c => `<strong>${esc(c.label)}</strong>`).join(', ')} — they'll be added as custom columns.` : '') +
+      (merging ? `<br><span style="color:var(--gold2)">${merging} file${merging === 1 ? '' : 's'} share a category name with another file and will be merged into it. If that's not what you want, rename them.</span>` : '') +
+      (generic ? `<br><span style="color:var(--danger)">${generic} file${generic === 1 ? ' has' : 's have'} a generic name like "Sheet1". Type the real category name before importing.</span>` : '') : '';
+    importBtn.disabled = (!newQ && !newCols.length) || generic > 0;
+    if (keep){ const el = $(`#impPv input[data-f="name"][data-i="${keep.i}"]`); if (el){ el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} } }
   }
   $('#impPv').addEventListener('input', e => { const i = e.target.dataset.i; if (i === undefined) return; if (e.target.dataset.f === 'name') { st.entries[i].name = e.target.value; clearTimeout(st.t); st.t = setTimeout(recompute, 450); } });
   $('#impPv').addEventListener('change', e => { const i = e.target.dataset.i; if (i !== undefined && e.target.dataset.f === 'type') st.entries[i].type = e.target.value; });
