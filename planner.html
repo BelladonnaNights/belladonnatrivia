@@ -1168,12 +1168,31 @@ let plannerMode = 'trivia';
 // Realtime DB project (HQ writes it; this Planner only ever reads it). Not
 // mode-dependent, so it's attached once, not detached/reattached on toggle.
 let hostRoster = {};
+let hostRosterRtdb = {}, hostRosterFs = {};
+function refreshHostRoster(){
+  // HQ's real roster lives in Firestore (hq_data/host-roster); the Realtime DB
+  // copy is only a mirror and silently fails to write if rules block it. Use
+  // whichever has hosts, preferring Firestore (the source of truth).
+  hostRoster = Object.keys(hostRosterFs).length ? hostRosterFs : hostRosterRtdb;
+  const open = document.getElementById('gig-modal-overlay');
+  if(open && open.classList.contains('open')) renderGigHostOptions(document.getElementById('gig-host').value);
+}
 function attachHostRosterListener(){
   db.ref('hosts/roster').on('value', snap=>{
-    hostRoster = snap.val()||{};
-    const open = document.getElementById('gig-modal-overlay');
-    if(open && open.classList.contains('open')) renderGigHostOptions(document.getElementById('gig-host').value);
+    hostRosterRtdb = snap.val()||{};
+    refreshHostRoster();
   }, function(err){ console.error('Planner: host roster listener failed:', err); });
+  try{
+    dbFs.collection('hq_data').doc('host-roster').onSnapshot(snap=>{
+      const m = {};
+      try{
+        const arr = snap.exists ? JSON.parse(snap.data().value) : [];
+        (Array.isArray(arr)?arr:[]).forEach(h=>{ if(h && h.name) m[h.id||h.name] = {name:h.name, retired:!!h.retired}; });
+      }catch(e){ console.error('Planner: host roster parse failed:', e); }
+      hostRosterFs = m;
+      refreshHostRoster();
+    }, err=>console.error('Planner: Firestore host roster failed:', err));
+  }catch(e){ console.error(e); }
 }
 const MODE_PATHS = {
   trivia: { venues:'trivia/planner/venues', gigs:'trivia/planner/gigs', library:'trivia/categories', sequences:'trivia/planner/sequences' },
@@ -2705,7 +2724,7 @@ function renderThemes(){
       <td>${t.timesUsed||0}</td>
       <td>${fmtMDY(t.lastUsedDate)}</td>
       <td>${venueName!=='—' ? `<span class="theme-link" onclick="openHistoryModal('${jsq(id)}')">${escapeHtml(venueName)}</span>` : '—'}</td>
-      <td style="text-align:right">${t.source==='vm'?'':`<button class="btn btn-primary btn-sm" onclick="assignThemeFromLibrary('${jsq(id)}')" style="margin-right:6px">Assign</button>`}<button class="btn btn-ghost btn-sm" onclick="openThemeModal('${jsq(id)}')">Edit</button></td>
+      <td style="text-align:right"><div style="display:inline-flex;gap:10px;align-items:center;justify-content:flex-end">${t.source==='vm'?'':`<button class="btn btn-primary btn-sm" onclick="assignThemeFromLibrary('${jsq(id)}')">Assign</button>`}<button class="btn btn-ghost btn-sm" onclick="openThemeModal('${jsq(id)}')">Edit</button></div></td>
     </tr>`;
   }).join('');
   // drop selections for themes deleted elsewhere (not just filtered out of view)
@@ -3262,7 +3281,7 @@ function openGigModal(venueId, dateKey){
     if(gigCtx.regularTrivia){
       while(gigCtx.rounds.length<3) gigCtx.rounds.push({name:'',themeId:null});
       if(gigCtx.rounds.length>3) gigCtx.rounds = gigCtx.rounds.slice(0,3);
-      if(!gigCtx.rounds[0].name) gigCtx.rounds[0]={name:'General Knowledge',themeId:null};
+      if(!gigCtx.rounds[0].name) gigCtx.rounds[0]=gkTheme();
     }
     document.getElementById('gig-regular-toggle').checked = gigCtx.regularTrivia;
     renderRoundsUI();
@@ -3350,6 +3369,12 @@ function pickBingoCat(slot, id){
 // On disk nothing changed: round 0 still saves as themeId/themeName, round 1
 // as round3ThemeId/round3Name, and anything past that as extraCategories —
 // the exact shape HQ, Tonight, and everything else downstream already reads.
+function gkTheme(){
+  const ents = Object.entries(state.themes||{});
+  let f = ents.find(([id,t])=>t.tier==='general-knowledge');
+  if(!f) f = ents.find(([id,t])=>(t.name||'').toLowerCase().includes('general knowledge'));
+  return f ? {name:f[1].name, themeId:f[0]} : {name:'General Knowledge', themeId:null};
+}
 function recomputeRoundThemeId(r){
   const key = (r.name||'').trim().toLowerCase();
   if(!key){ r.themeId=null; return; }
@@ -3361,8 +3386,30 @@ function onRegularToggleChange(){
   if(gigCtx.regularTrivia){
     while(gigCtx.rounds.length<3) gigCtx.rounds.push({name:'',themeId:null});
     if(gigCtx.rounds.length>3) gigCtx.rounds = gigCtx.rounds.slice(0,3);
-    if(!gigCtx.rounds[0].name) gigCtx.rounds[0]={name:'General Knowledge',themeId:null};
+    // Checking the box always puts General Knowledge in Round 1.
+    gigCtx.rounds[0] = gkTheme();
   }
+  renderRoundsUI();
+  renderGigWarnings();
+}
+function regularPairsHtml(i){
+  if(i!==1) return '';
+  const r = gigCtx.rounds[1];
+  const t = r && r.themeId ? state.themes[r.themeId] : null;
+  if(!t) return '';
+  const ids = new Set((t.pairsWith||[]).filter(id=>state.themes[id]));
+  Object.entries(state.themes||{}).forEach(([id,o])=>{ if(id!==r.themeId && (o.pairsWith||[]).includes(r.themeId)) ids.add(id); });
+  ids.delete(r.themeId);
+  const cur = gigCtx.rounds[2] && gigCtx.rounds[2].themeId;
+  const rows = [...ids].map(id=>{ const p=state.themes[id];
+    return `<div class="theme-opt${cur===id?' active-pick':''}" onclick="pickRegularPair('${jsq(id)}')">${escapeHtml(p.name)} <span style="color:var(--text3)">· ${TIER_LABELS[p.tier]||'untagged'}</span>${altLine(p)}</div>`; }).join('');
+  return `<div style="margin:-2px 0 10px 66px;"><div class="section-sub" style="margin-bottom:4px;font-size:11px;">Paired with this category — click one to use it for Round 3, or type your own:</div>${rows||'<div class="theme-opt" style="color:var(--text3)">No saved pairings for this category yet.</div>'}</div>`;
+}
+function pickRegularPair(id){
+  const t = state.themes[id]; if(!t) return;
+  while(gigCtx.rounds.length<3) gigCtx.rounds.push({name:'',themeId:null});
+  gigCtx.rounds[2] = {name:t.name, themeId:id};
+  maybeAutoPlan();
   renderRoundsUI();
   renderGigWarnings();
 }
@@ -3383,7 +3430,7 @@ function renderRoundsUI(){
   const container = document.getElementById('gig-rounds-container');
   if(!container) return;
   if(gigCtx.regularTrivia){
-    container.innerHTML = `<div id="gig-rounds-list">${gigCtx.rounds.map((r,i)=>roundRowHtml(r,i,{removable:false,draggable:false})).join('')}</div>`;
+    container.innerHTML = `<div id="gig-rounds-list">${gigCtx.rounds.map((r,i)=>roundRowHtml(r,i,{removable:false,draggable:false})+(i===1?`<div id="regular-pairs-holder">${regularPairsHtml(1)}</div>`:'')).join('')}</div>`;
   }else{
     container.innerHTML = `
       <div id="gig-round-suggest-area" style="display:none;margin-bottom:.75rem;">
@@ -3403,6 +3450,14 @@ function onRoundInput(i,val){
   maybeAutoPlan();
   renderRoundInputSuggest(i);
   if(i===0 && !gigCtx.regularTrivia) renderRoundSuggestPanel();
+  if(i===1 && gigCtx.regularTrivia) refreshRegularPairs();
+}
+function refreshRegularPairs(){
+  const list = document.getElementById('gig-rounds-list'); if(!list) return;
+  const rows = list.querySelectorAll('.round-row');
+  let holder = document.getElementById('regular-pairs-holder');
+  if(!holder && rows[1]){ holder = document.createElement('div'); holder.id='regular-pairs-holder'; rows[1].after(holder); }
+  if(holder) holder.innerHTML = regularPairsHtml(1);
 }
 function renderRoundInputSuggest(i){
   const input = document.getElementById('round-input-'+i);
