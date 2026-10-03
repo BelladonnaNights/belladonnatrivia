@@ -562,6 +562,8 @@ a{color:inherit}
     <select class="form-select" id="gig-venue" onchange="onGigVenueChange()"></select>
     <label class="form-label">Date</label>
     <input type="date" class="form-input" id="gig-date" onchange="renderGigWarnings()">
+    <label class="form-label">Host <span style="opacity:.6;font-weight:normal">(saved straight to this gig — the same record HQ and this Planner both read)</span></label>
+    <select class="form-select" id="gig-host"></select>
     <div id="gig-trivia-fields">
     <div class="form-row2">
       <div>
@@ -1002,15 +1004,18 @@ auth.onAuthStateChanged(function(user){
       myLocationId=profile.locationId||null;
       myAllLocations=!!profile.allLocations;
       loadPlannerLocations();
+      attachHostRosterListener();
     }).catch(function(err){
       console.error('Planner: could not load user profile:', err);
       showErrorBanner('Could not load your account profile ('+(err.code||err.message)+'). Using defaults — some venues may be hidden by location.');
       loadPlannerLocations();
+      attachHostRosterListener();
     });
   }).catch(function(err){
     console.error('Planner: could not refresh sign-in token:', err);
     showErrorBanner('Could not refresh your sign-in ('+(err.code||err.message)+'). Try signing out and back in.');
     loadPlannerLocations();
+    attachHostRosterListener();
   });
   loadShiftsCancelled();
   attachTriviaMirrorListener();
@@ -1180,6 +1185,17 @@ function updateThemeDatalist(){
 //  on write, which branch by mode into each app's real, native format.
 // ═══════════════════════════════════════════════
 let plannerMode = 'trivia';
+// Host roster — mirrored from HQ's own Firestore roster into this same
+// Realtime DB project (HQ writes it; this Planner only ever reads it). Not
+// mode-dependent, so it's attached once, not detached/reattached on toggle.
+let hostRoster = {};
+function attachHostRosterListener(){
+  db.ref('hosts/roster').on('value', snap=>{
+    hostRoster = snap.val()||{};
+    const open = document.getElementById('gig-modal-overlay');
+    if(open && open.classList.contains('open')) renderGigHostOptions(document.getElementById('gig-host').value);
+  }, function(err){ console.error('Planner: host roster listener failed:', err); });
+}
 const MODE_PATHS = {
   trivia: { venues:'trivia/planner/venues', gigs:'trivia/planner/gigs', library:'trivia/categories', sequences:'trivia/planner/sequences' },
   bingo:  { venues:'bingo/landing/venues',  gigs:'bingo/landing/schedule', library:'bingo/landing/categories', sequences:null }
@@ -1308,6 +1324,7 @@ function attachModeListeners(){
           themeName: catNames.join(' + '),
           status: 'planned',
           note: e.notes||'',
+          host: e.host||null,
           _bingoEntryId: e.id,
           _bingoRounds: roundIds
         };
@@ -1906,7 +1923,8 @@ async function gridPaste(){
     if(!addr || !addr.dateKey){ skipped++; continue; }
     if(!cell.themeName){ updates['trivia/planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null; continue; }
     const themeId = await resolveThemeIdByName(cell.themeName);
-    updates['trivia/planner/gigs/'+addr.venueId+'/'+addr.dateKey] = { themeId, themeName:cell.themeName, status:cell.status||'planned', note:'' };
+    const existingDest = (state.gigs[addr.venueId]||{})[addr.dateKey]||{};
+    updates['trivia/planner/gigs/'+addr.venueId+'/'+addr.dateKey] = { themeId, themeName:cell.themeName, status:cell.status||'planned', note:'', host:existingDest.host||null };
     bumpThemeUsageForVenue(themeId, addr.dateKey, addr.venueId);
   }
   if(clipboard.mode==='cut'){
@@ -2015,7 +2033,8 @@ async function submitApplySequenceAt(){
   for(const themeName of (s.themes||[])){
     const dk = toKey(d);
     const themeId = await resolveThemeIdByName(themeName);
-    updates['trivia/planner/gigs/'+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:''};
+    const existingDk = (state.gigs[venueId]||{})[dk]||{};
+    updates['trivia/planner/gigs/'+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:'', host:existingDk.host||null};
     bumpThemeUsageForVenue(themeId, dk, venueId);
     d = addDays(d,7);
   }
@@ -2275,7 +2294,7 @@ function vdInlineSave(row, dk){
     return;
   }
   if(status==='cancelled'){
-    db.ref('trivia/planner/gigs/'+id+'/'+dk).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, status:'cancelled', note:existing.note||''});
+    db.ref('trivia/planner/gigs/'+id+'/'+dk).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, status:'cancelled', note:existing.note||'', host:existing.host||null});
     flashSaved(row);
     return;
   }
@@ -2293,7 +2312,7 @@ function vdInlineSave(row, dk){
         round3Id = newId;
       }
     }
-    await db.ref('trivia/planner/gigs/'+id+'/'+dk).set({themeId, themeName:triviaName||null, round3ThemeId:round3Id, round3Name:musicName||null, status:'planned', note:existing.note||''});
+    await db.ref('trivia/planner/gigs/'+id+'/'+dk).set({themeId, themeName:triviaName||null, round3ThemeId:round3Id, round3Name:musicName||null, status:'planned', note:existing.note||'', host:existing.host||null});
     if(themeId) bumpThemeUsage(themeId, dk);
     if(round3Id) bumpThemeUsage(round3Id, dk);
     flashSaved(row);
@@ -2385,7 +2404,8 @@ function submitQuickBulk(){
     for(const name of themeNames){
       const dk = toKey(d);
       const themeId = noCreateMode ? findThemeIdByNameOnly(name) : await resolveThemeIdByName(name);
-      updates['trivia/planner/gigs/'+id+'/'+dk] = {themeId, themeName:name, status:'planned', note:''};
+      const existingDk = (state.gigs[id]||{})[dk]||{};
+      updates['trivia/planner/gigs/'+id+'/'+dk] = {themeId, themeName:name, status:'planned', note:'', host:existingDk.host||null};
       if(themeId) bumpThemeUsage(themeId, dk);
       d = addDays(d,7);
     }
@@ -2438,7 +2458,8 @@ async function submitBulkFill(){
     const d = addDays(start, i*7);
     const dk = toKey(d);
     const themeId = noCreateMode ? findThemeIdByNameOnly(themeNames[i]) : await resolveThemeIdByName(themeNames[i]);
-    updates['trivia/planner/gigs/'+id+'/'+dk] = {themeId, themeName:themeNames[i], status:'planned', note:''};
+    const existingDk = (state.gigs[id]||{})[dk]||{};
+    updates['trivia/planner/gigs/'+id+'/'+dk] = {themeId, themeName:themeNames[i], status:'planned', note:'', host:existingDk.host||null};
     if(themeId) bumpThemeUsage(themeId, dk);
   }
   await db.ref().update(updates);
@@ -3138,7 +3159,8 @@ async function submitApplySequence(){
   for(const themeName of (s.themes||[])){
     const dk = toKey(d);
     const themeId = await resolveThemeIdByName(themeName);
-    updates['trivia/planner/gigs/'+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:''};
+    const existingDk = (state.gigs[venueId]||{})[dk]||{};
+    updates['trivia/planner/gigs/'+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:'', host:existingDk.host||null};
     bumpThemeUsageForVenue(themeId, dk, venueId);
     d = addDays(d,7);
   }
@@ -3176,6 +3198,12 @@ function openGigModal(venueId, dateKey){
     .map(([id,v])=>`<option value="${id}" ${id===venueId?'selected':''}>${escapeHtml(v.name||'')}</option>`).join('');
   document.getElementById('gig-date').value = dateKey || toKey(new Date());
   const existing = (dateKey && state.gigs[venueId]) ? state.gigs[venueId][dateKey] : null;
+  const v = state.venues[venueId];
+  // Default to the venue's usual host when this specific date has never had
+  // one set — but a host already set on this date always wins, since that's
+  // the whole point of being able to swap one occurrence without touching
+  // the venue's regular assignment.
+  renderGigHostOptions((existing && existing.host) || (v && v.host) || '');
   document.getElementById('gig-trivia-fields').style.display = plannerMode==='bingo' ? 'none' : '';
   document.getElementById('gig-bingo-fields').style.display = plannerMode==='bingo' ? 'block' : 'none';
   if(plannerMode==='bingo'){
@@ -3205,7 +3233,30 @@ function openGigModal(venueId, dateKey){
   renderGigSchedulePreview();
   openModal('gig-modal-overlay');
 }
-function onGigVenueChange(){ gigCtx.venueId = document.getElementById('gig-venue').value; renderGigWarnings(); renderGigSchedulePreview(); }
+function onGigVenueChange(){
+  gigCtx.venueId = document.getElementById('gig-venue').value;
+  const existing = (gigCtx.dateKey && state.gigs[gigCtx.venueId]) ? state.gigs[gigCtx.venueId][gigCtx.dateKey] : null;
+  const v = state.venues[gigCtx.venueId];
+  renderGigHostOptions((existing && existing.host) || (v && v.host) || '');
+  renderGigWarnings(); renderGigSchedulePreview();
+}
+// Host select: active roster names first (mirrored from HQ), with whatever
+// name is currently on this gig kept selected even if it's an old free-text
+// name from before the roster existed, or a retired host — never silently
+// dropped just because it's not in the active list.
+function renderGigHostOptions(currentName){
+  const sel = document.getElementById('gig-host');
+  const names = Object.values(hostRoster||{}).filter(h=>h&&h.name&&!h.retired).map(h=>h.name);
+  const nameSet = new Set(names);
+  let opts = ['<option value="">— Unassigned —</option>'];
+  names.sort((a,b)=>a.localeCompare(b)).forEach(n=>{
+    opts.push(`<option value="${escapeHtml(n)}"${n===currentName?' selected':''}>${escapeHtml(n)}</option>`);
+  });
+  if(currentName && !nameSet.has(currentName)){
+    opts.push(`<option value="${escapeHtml(currentName)}" selected>${escapeHtml(currentName)} (not on current roster)</option>`);
+  }
+  sel.innerHTML = opts.join('');
+}
 // -- Bingo's two category slots: plain name search over the Bingo category
 //    library, no tiers, no pairing — those are Planner concepts that don't
 //    apply to Bingo categories at all.
@@ -3440,12 +3491,13 @@ function saveGig(){
   const dateKey = document.getElementById('gig-date').value;
   const status = document.getElementById('gig-status').value;
   const note = document.getElementById('gig-note').value.trim();
+  const host = document.getElementById('gig-host').value||null;
   if(!venueId || !dateKey) return toast('Pick a venue and date.', true);
   setSyncStatus('syncing');
   if(plannerMode==='bingo'){
     const cat1 = document.getElementById('gig-bingo-cat1').value.trim();
     const cat2 = document.getElementById('gig-bingo-cat2').value.trim();
-    saveBingoGig(venueId,dateKey,status,note,cat1,cat2);
+    saveBingoGig(venueId,dateKey,status,note,cat1,cat2,host);
     return;
   }
   const typedName = document.getElementById('gig-theme-search').value.trim();
@@ -3455,7 +3507,7 @@ function saveGig(){
     return;
   }
   if(status==='cancelled'){
-    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, extraCategories:null, status:'cancelled', note, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, extraCategories:null, status:'cancelled', note, host, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
   // Either box may have been filled first — resolve each independently.
@@ -3495,7 +3547,7 @@ function saveGig(){
     const extraCategories = gigCtx.extra.length ? gigCtx.extra.map(e=>({id:e.id, name:e.name})) : null;
     await db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({
       themeId, themeName: typedName||null, round3ThemeId: round3Id, round3Name: typedRound3||null,
-      extraCategories, status:'planned', note, locationId:selectedLocationId
+      extraCategories, status:'planned', note, host, locationId:selectedLocationId
     });
     if(themeId) bumpThemeUsageForVenue(themeId, dateKey, venueId);
     if(round3Id) bumpThemeUsageForVenue(round3Id, dateKey, venueId);
@@ -3508,7 +3560,7 @@ function saveGig(){
 // Category must be picked from the existing library (typed exactly matching
 // one), same as choosing an existing Trivia theme by name — new categories
 // need an image, so those still get created in the Bingo app's own admin.
-function saveBingoGig(venueId,dateKey,status,note,typedName1,typedName2){
+function saveBingoGig(venueId,dateKey,status,note,typedName1,typedName2,host){
   const cancelled = status==='cancelled';
   const existingEntryId = ((state.gigs[venueId]||{})[dateKey]||{})._bingoEntryId || null;
   const id = existingEntryId || ('sched_'+Date.now());
@@ -3527,7 +3579,7 @@ function saveBingoGig(venueId,dateKey,status,note,typedName1,typedName2){
     }
     rounds = [c1, c2].filter(Boolean);
   }
-  db.ref('bingo/landing/schedule/'+id).set({id, date:dateKey, venueId, rounds, categoryIds:rounds, notes:note, locationId:selectedLocationId}).then(()=>{
+  db.ref('bingo/landing/schedule/'+id).set({id, date:dateKey, venueId, rounds, categoryIds:rounds, notes:note, host:host||null, locationId:selectedLocationId}).then(()=>{
     toast('Saved.'); closeModal('gig-modal-overlay');
   });
 }
