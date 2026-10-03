@@ -264,7 +264,7 @@ table.pv tr.hit:hover td{background:var(--gold-dim)}
         <button class="linkbtn" id="tagSearchBtn">Search all categories by tag…</button>
       </div>
       <div id="catList"></div>
-      <div class="sideFoot"><label><input type="checkbox" id="showArchCats"> Show archived categories</label></div>
+      <div class="sideFoot" style="display:flex;flex-direction:column;gap:8px"><label><input type="checkbox" id="showArchCats"> Show archived categories</label><button class="linkbtn" id="manageTypesBtn">Manage category types…</button></div>
     </aside>
 
     <main>
@@ -434,8 +434,27 @@ function convert(c, raw){
   }
 }
 
+// Music sheets have no "Question" column: Song Title / Artist / Audio URL / Start / End / Album Art.
+// For those, song -> Question, artist -> Answer, audio -> SOUND URL, album art -> IMG URL, and start/end
+// times become custom columns (Start Time / End Time) that the trivia app reads for music rounds.
+const MUSIC_MAP = {
+  song:'question', songtitle:'question', songname:'question', title:'question', track:'question', trackname:'question', tracktitle:'question',
+  artist:'answer', artists:'answer', performer:'answer', band:'answer', singer:'answer', artistname:'answer',
+  audio:'soundUrl', audiourl:'soundUrl', url:'soundUrl', link:'soundUrl', songurl:'soundUrl', mp3:'soundUrl', preview:'soundUrl', previewurl:'soundUrl', file:'soundUrl', fileurl:'soundUrl',
+  albumart:'imgUrl', albumarturl:'imgUrl', art:'imgUrl', cover:'imgUrl', albumcover:'imgUrl', coverart:'imgUrl', artwork:'imgUrl', albumimage:'imgUrl',
+  start:{ key:'startTime', label:'Start Time' }, starttime:{ key:'startTime', label:'Start Time' }, startat:{ key:'startTime', label:'Start Time' }, clipstart:{ key:'startTime', label:'Start Time' },
+  end:{ key:'endTime', label:'End Time' }, endtime:{ key:'endTime', label:'End Time' }, endat:{ key:'endTime', label:'End Time' }, clipend:{ key:'endTime', label:'End Time' }
+};
+const MUSIC_POSITIONAL = ['question', 'answer', 'soundUrl', { key:'startTime', label:'Start Time' }, { key:'endTime', label:'End Time' }, 'imgUrl'];
+
+function customColFor(def, ctx){
+  return ctx.custom.find(c => c.key === def.key) || ctx.pending.get(norm(def.label)) ||
+    (() => { const col = { key:def.key, label:def.label, type:'text', isNew:true }; ctx.pending.set(norm(def.label), col); return col; })();
+}
+function colFromSpec(spec, ctx){ return typeof spec === 'string' ? BUILTIN.find(c => c.key === spec) : customColFor(spec, ctx); }
+
 // ctx = { custom: [existing custom cols], pending: Map(normLabel -> new col) }
-function mapHeaders(headerRow, ctx){
+function mapHeaders(headerRow, ctx, extraMap){
   const map = [], seen = new Set();
   headerRow.forEach((h, i) => {
     const n = norm(h);
@@ -443,6 +462,7 @@ function mapHeaders(headerRow, ctx){
     let col = null;
     const bk = HEADER_MAP[n];
     if (bk) col = BUILTIN.find(c => c.key === bk);
+    else if (extraMap && extraMap[n]) col = colFromSpec(extraMap[n], ctx);
     else {
       col = ctx.custom.find(c => norm(c.label) === n) || ctx.pending.get(n);
       if (!col){
@@ -460,8 +480,18 @@ function mapHeaders(headerRow, ctx){
 function recordsFromCSV(rows, ctx){
   const out = { records: [], blank: 0, noQ: 0, newCols: [], error: '' };
   if (!rows.length){ out.error = 'Empty file'; return out; }
-  const map = mapHeaders(rows[0], ctx);
-  if (!map.some(c => c && c.key === 'question')){ out.error = 'No "Question" column found'; return out; }
+  let map = mapHeaders(rows[0], ctx);
+  if (!map.some(c => c && c.key === 'question')){
+    // Not a regular question sheet — treat it as a music sheet.
+    map = mapHeaders(rows[0], ctx, MUSIC_MAP);
+    out.layout = 'music';
+    const hasQ = map.some(c => c && c.key === 'question'), hasA = map.some(c => c && c.key === 'answer');
+    if (!hasQ || !hasA){
+      // Headers weren't recognizable: use the music sheet's fixed order (A song, B artist, C audio, D start, E end, F album art).
+      map = rows[0].map((_, i) => MUSIC_POSITIONAL[i] ? colFromSpec(MUSIC_POSITIONAL[i], ctx) : null);
+      out.layout = 'music (by column order)';
+    }
+  }
   out.newCols = [...new Set(map.filter(c => c && c.isNew))];
   for (let r = 1; r < rows.length; r++){
     const row = rows[r];
@@ -498,7 +528,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const LS = { get:(k,d)=>{ try{ const v=localStorage.getItem('qv_'+k); return v===null?d:JSON.parse(v);}catch(e){return d;} },
              set:(k,v)=>{ try{ localStorage.setItem('qv_'+k, JSON.stringify(v)); }catch(e){} } };
 const SESSION_MS = 6 * 60 * 60 * 1000;
-const DEFAULT_TYPES = ['Evergreen', 'Music', 'Feature'];
+const DEFAULT_TYPES = ['Evergreen', 'Music', 'Mini Games', 'Feature'];
 
 const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -507,7 +537,7 @@ try { db = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
 catch (e) { db = initializeFirestore(app, { localCache: memoryLocalCache() }); }
 
 const S = {
-  user: null, cats: new Map(), custom: [], curId: null, unsubQ: null,
+  user: null, cats: new Map(), custom: [], types: null, curId: null, unsubQ: null,
   rows: new Map(), maxOrder: 0, sort: { key:'order', dir:1 }, filter: { q:'', diff:0, tags:new Set() },
   hidden: new Set(LS.get('hiddenCols', [])), collapsed: new Set(LS.get('collapsed', [])),
   pending: 0, listening: false, unsubs: [], firstQ: true
@@ -632,6 +662,10 @@ function startListeners(){
   }, err => {
     $('#catList').innerHTML = `<p class="hint" style="padding:12px">Can't read categories yet.<br>${/permission/i.test(err.message) ? 'Publish the updated Firestore rules, then refresh.' : esc(err.message)}</p>`;
   }));
+  S.unsubs.push(onSnapshot(doc(db, 'triviaConfig', 'types'), snap => {
+    S.types = snap.exists() ? (snap.data().list || []) : null;
+    renderSide(); renderHead();
+  }, () => {}));
   S.unsubs.push(onSnapshot(doc(db, 'triviaConfig', 'columns'), snap => {
     S.custom = snap.exists() ? (snap.data().custom || []) : [];
     if (S.curId) renderAll();
@@ -644,11 +678,20 @@ const visibleCols = () => allCols().filter(c => c.key === 'question' || !S.hidde
 /* ═══════════════════════════════════════════════════════════
    6. SIDEBAR + HEADER
    ═══════════════════════════════════════════════════════════ */
+// Category types: the saved list (triviaConfig/types) in its saved order, then
+// any type still in use by a category but missing from the list. Until a list
+// has been saved, the defaults stand in.
 function typeList(){
-  const set = new Set(DEFAULT_TYPES);
-  for (const c of S.cats.values()) if (c.type) set.add(c.type);
-  const rest = [...set].filter(t => !DEFAULT_TYPES.includes(t)).sort((a, b) => a.localeCompare(b));
-  return [...DEFAULT_TYPES, ...rest];
+  const base = S.types && S.types.length ? S.types : DEFAULT_TYPES;
+  const seen = new Set(base.map(normName)), out = [...base], extra = [];
+  for (const c of S.cats.values()) if (c.type && !seen.has(normName(c.type))){ seen.add(normName(c.type)); extra.push(c.type); }
+  return [...out, ...extra.sort((a, b) => a.localeCompare(b))];
+}
+async function saveTypes(list){ await setDoc(doc(db, 'triviaConfig', 'types'), { list, updatedAt: serverTimestamp() }); }
+async function addType(name){
+  name = String(name || '').trim(); if (!name) return null;
+  const hit = typeList().find(t => normName(t) === normName(name)); if (hit) return hit;
+  await saveTypes([...typeList(), name]); return name;
 }
 function catByNorm(name){ const k = normName(name); for (const c of S.cats.values()) if (normName(c.name) === k) return c; return null; }
 
@@ -663,7 +706,7 @@ function renderSide(){
   }
   let html = '';
   for (const [t, list] of groups){
-    if (!list.length && !(t in {}) && (q || !DEFAULT_TYPES.includes(t))) continue;
+    if (!list.length && q) continue;
     list.sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: 'base' }));
     const closed = !q && S.collapsed.has(t);
     html += `<div class="grp ${closed ? 'closed' : ''}"><button class="grpHead" data-type="${esc(t)}"><span class="chev">▾</span>${esc(t)}<em>${list.length}</em></button><div class="grpBody">` +
@@ -707,6 +750,7 @@ $('#catType').addEventListener('change', async e => {
   const c = S.cats.get(S.curId); if (!c) return;
   let v = e.target.value;
   if (v === '__new'){ const t = await askText({ title: 'New category type', label: 'Type name (for example: Holiday)', ok: 'Add' }); if (!t){ renderHead(); return; } v = t; }
+  await run(async () => { v = await addType(v) || v; });
   await run(() => updateDoc(catRef(c.id), { type: v, updatedAt: serverTimestamp() }));
 });
 
@@ -1030,6 +1074,50 @@ window.addEventListener('online',  () => pend(0));
 /* ═══════════════════════════════════════════════════════════
    8. NEW CATEGORY / CATEGORY MENU / COLUMNS
    ═══════════════════════════════════════════════════════════ */
+/* ── Manage category types: add, rename (updates every category using it), delete empty ones ── */
+function openTypes(){
+  const body = document.createElement('div');
+  const draw = () => {
+    const counts = new Map(); for (const c of S.cats.values()) if (c.type) counts.set(c.type, (counts.get(c.type) || 0) + 1);
+    body.innerHTML = `<p class="hint" style="margin:0 0 10px">Types group your categories in the sidebar. Renaming a type renames it on every category that uses it.</p>
+      <div id="typeRows">${typeList().map((t, i) => `<div class="fld" style="display:flex;gap:8px;align-items:center;margin:6px 0">
+        <input type="text" value="${esc(t)}" data-i="${i}" data-old="${esc(t)}" style="flex:1" autocomplete="off">
+        <span class="hint" style="min-width:70px;text-align:right">${counts.get(t) || 0} categor${(counts.get(t) || 0) === 1 ? 'y' : 'ies'}</span>
+        <button class="btn ghost sm" data-del="${i}" ${(counts.get(t) || 0) ? 'disabled title="Move or delete its categories first"' : ''}>Delete</button></div>`).join('')}</div>
+      <div class="fld" style="display:flex;gap:8px;margin-top:14px"><input type="text" id="newTypeIn" placeholder="New type name (for example: Holiday)" style="flex:1" autocomplete="off"><button class="btn primary sm" id="newTypeAdd">Add type</button></div>
+      <div class="msg" id="typeMsg"></div>`;
+  };
+  draw();
+  body.addEventListener('change', async e => {
+    const el = e.target.closest('input[data-old]'); if (!el) return;
+    const old = el.dataset.old, nu = el.value.trim();
+    if (!nu || nu === old){ el.value = old; return; }
+    if (typeList().some(t => t !== old && normName(t) === normName(nu))){ $('#typeMsg').textContent = 'That type already exists.'; el.value = old; return; }
+    await run(async () => {
+      const list = typeList().map(t => t === old ? nu : t); await saveTypes(list);
+      const ids = [...S.cats.values()].filter(c => c.type === old).map(c => c.id);
+      for (let i = 0; i < ids.length; i += 400){ const b = writeBatch(db); ids.slice(i, i + 400).forEach(id => b.update(catRef(id), { type: nu, updatedAt: serverTimestamp() })); await b.commit(); }
+      toast(`Renamed to “${nu}”`);
+    });
+    setTimeout(draw, 300);
+  });
+  const add = async () => {
+    const v = $('#newTypeIn').value.trim(); if (!v) return;
+    if (typeList().some(t => normName(t) === normName(v))){ $('#typeMsg').textContent = 'That type already exists.'; return; }
+    await run(() => addType(v)); setTimeout(draw, 300);
+  };
+  body.addEventListener('click', async e => {
+    if (e.target.id === 'newTypeAdd'){ add(); return; }
+    const d = e.target.closest('[data-del]'); if (!d || d.disabled) return;
+    const t = typeList()[+d.dataset.del];
+    if (!await confirmBox({ title: 'Delete type', message: `Delete the type “${t}”? No categories use it.`, ok: 'Delete', danger: true })) return;
+    await run(() => saveTypes(typeList().filter(x => x !== t))); setTimeout(draw, 300); 
+  });
+  body.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'newTypeIn') add(); });
+  openModal({ title: 'Category types', body, actions: [{ label: 'Done', primary: true, onClick: closeModal }] });
+}
+$('#manageTypesBtn').addEventListener('click', openTypes);
+
 $('#newCatBtn').addEventListener('click', () => {
   const body = document.createElement('div');
   body.innerHTML = `<label class="fld">Category name<input type="text" id="ncName" autocomplete="off"></label>
@@ -1039,6 +1127,7 @@ $('#newCatBtn').addEventListener('click', () => {
   const submit = async () => {
     const name = $('#ncName').value.trim(); let type = $('#ncType').value;
     if (type === '__new') type = $('#ncNew').value.trim();
+    if (type && type !== '__new') await run(async () => { type = await addType(type) || type; });
     if (!name) return $('#ncMsg').textContent = 'Give it a name.';
     if (!type) return $('#ncMsg').textContent = 'Pick or name a type.';
     if (catByNorm(name)) return $('#ncMsg').textContent = 'A category with that name already exists.';
@@ -1201,6 +1290,7 @@ function openImport(){
       const g = seen.get(key);
       for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)) en.dupCount++; else { g.set.add(k); en.toAdd.push(rec); } }
       en.status = isGenericName(en.name) ? 'Needs a real category name' : cat ? `Adds to existing` : g.used ? 'Merges with file above' : 'New category';
+      if (en.parsed.layout) en.status += ' · ' + en.parsed.layout;
       g.used = true;
     }
     if (my !== st.ver) return;
