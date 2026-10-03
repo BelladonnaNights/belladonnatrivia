@@ -167,6 +167,9 @@ a{color:inherit}
 .theme-opt.active-pick{background:var(--gold-dim);color:var(--gold2);font-weight:600}
 .theme-opt.active-pick::before{content:'✓ ';}
 .theme-opt small{display:block;color:var(--text3);font-size:10px;margin-top:2px}
+.theme-opt .alt2{display:block;color:var(--text3);font-size:10px;font-style:italic;margin-top:1px;line-height:1.2}
+.lib-alt{font-weight:600}
+.lib-main-indent{padding-left:16px;font-size:12px;color:var(--text2)}
 
 /* VENUE DETAIL */
 .vd-toolbar{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
@@ -676,6 +679,8 @@ a{color:inherit}
     <h3 id="theme-modal-title">Add Theme</h3>
     <label class="form-label">Theme Name</label>
     <input type="text" class="form-input" id="t-name">
+    <label class="form-label">Secondary Name <span style="opacity:.6;font-weight:normal">(optional — the true theme, e.g. the real show/franchise. Internal only)</span></label>
+    <input type="text" class="form-input" id="t-alt" placeholder="e.g. Buffy the Vampire Slayer Trivia">
     <label class="form-label">Category Type</label>
     <select class="form-select" id="t-tier" onchange="renderPairsWithSection();updateThemeKaraokeVisibility();">
       <option value="">— Unassigned / legacy —</option>
@@ -1080,6 +1085,7 @@ function libRecord(source, id, c){
   return {
     key: source+':'+id, source, id,
     name: c.name || c.title || '',
+    altName: c.altName || '',
     tier,
     typeLabel: source==='vm' ? (c.type||'') : '',
     tags: normalizeVmTags(c.tags),
@@ -1124,6 +1130,11 @@ function refToKey(r){
   return 'trivia:'+n;
 }
 function resolveRefAny(r){ return getLibRecord(refToKey(r)); }
+// Secondary name = the category's true theme (e.g. "Buffy the Vampire Slayer Trivia") when the
+// category itself carries a different public name. Internal only. Searchable alongside the name.
+function altOf(t){ return (t && t.altName) ? String(t.altName).trim() : ''; }
+function altLine(t){ const a = altOf(t); return a ? `<span class="alt2">${escapeHtml(a)}</span>` : ''; }
+function nameOrAltHas(t, q){ return (t.name||'').toLowerCase().includes(q) || altOf(t).toLowerCase().includes(q); }
 function jsq(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 // Resolves a Pairs With id that may point into any of three libraries.
 // Cross-library refs are prefixed 'bingo:<id>' (a real Bingo category) or
@@ -1141,7 +1152,7 @@ function resolveCrossPairTheme(id){
 function onDataChange(){ clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner(); renderActiveTab(); }
 function updateThemeDatalist(){
   document.getElementById('theme-name-list').innerHTML = Object.values(state.themes||{})
-    .map(t=>`<option value="${escapeHtml(t.name)}">`).join('');
+    .map(t=>`<option value="${escapeHtml(t.name)}"${altOf(t)?` label="${escapeHtml(altOf(t))}"`:''}>`).join('');
 }
 
 // ═══════════════════════════════════════════════
@@ -2178,7 +2189,7 @@ function showInlineSuggest(inputEl, dk, which){
   const pairIds = otherTheme ? new Set((otherTheme.pairsWith||[]).filter(pid=>state.themes[pid])) : new Set();
   const scope = otherTheme ? pairScopeFor(otherTheme.tier) : (which==='trivia' ? (t=>t.tier!=='coordinating-music') : (t=>t.tier==='coordinating-music'));
   let list = Object.entries(state.themes||{});
-  if(q) list = list.filter(([id,t])=>(t.name||'').toLowerCase().includes(q));
+  if(q) list = list.filter(([id,t])=>nameOrAltHas(t,q));
   list.sort((a,b)=>{
     const aP = pairIds.has(a[0])?0:1, bP = pairIds.has(b[0])?0:1;
     if(aP!==bP) return aP-bP;
@@ -2190,7 +2201,7 @@ function showInlineSuggest(inputEl, dk, which){
   const box = document.getElementById('inline-suggest-box');
   box.innerHTML = list.length ? list.map(([id,t])=>{
     const suggested = pairIds.has(id);
-    return `<div class="theme-opt" onmousedown="event.preventDefault();pickInlineSuggest('${id}')">${suggested?'★ ':''}${escapeHtml(t.name)} <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span></div>`;
+    return `<div class="theme-opt" onmousedown="event.preventDefault();pickInlineSuggest('${id}')">${suggested?'★ ':''}${escapeHtml(t.name)} <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span>${altLine(t)}</div>`;
   }).join('') : '<div class="theme-opt" style="color:var(--text3)">No match — will save as typed.</div>';
   const rect = inputEl.getBoundingClientRect();
   box.style.left = rect.left+'px';
@@ -2677,7 +2688,7 @@ function renderThemes(){
 
   const q = (document.getElementById('theme-search')?.value||'').toLowerCase();
   let list = list0;
-  if(q) list = list.filter(([id,t])=>(t.name||'').toLowerCase().includes(q));
+  if(q) list = list.filter(([id,t])=>nameOrAltHas(t,q));
   if(activeTagFilters.size) list = list.filter(([id,t])=>safeTags(t).some(tag=>activeTagFilters.has((tag||'').toLowerCase())));
   if(activeTierFilters.size) list = list.filter(([id,t])=>activeTierFilters.has(normTier(t.tier) || (t.typeLabel ? '__other' : '')));
   list = sortEntries(list, themeSort, ([id,t])=>themeSort.key==='timesUsed' ? (t.timesUsed||0) : t[themeSort.key]);
@@ -2689,7 +2700,7 @@ function renderThemes(){
       : (t.typeLabel ? `<span class="badge badge-empty">${escapeHtml(t.typeLabel)}</span>` : '');
     return `<tr>
       <td><input type="checkbox" class="theme-row-check" data-id="${escapeHtml(id)}" ${selectedThemeIds.has(id)?'checked':''} onchange="toggleThemeSelection('${jsq(id)}', this.checked)"></td>
-      <td>${escapeHtml(t.name||'')} ${tierBadge}</td>
+      <td>${altOf(t) ? `<div class="lib-alt">${escapeHtml(altOf(t))}</div><div class="lib-main-indent">${escapeHtml(t.name||'')} ${tierBadge}</div>` : `${escapeHtml(t.name||'')} ${tierBadge}`}</td>
       <td>${safeTags(t).map(tag=>`<span class="tag-chip">${escapeHtml(tag)}</span>`).join('')||'<span style="color:var(--text3)">—</span>'}</td>
       <td>${t.timesUsed||0}</td>
       <td>${fmtMDY(t.lastUsedDate)}</td>
@@ -2852,6 +2863,8 @@ function openThemeModal(key){
   document.getElementById('theme-modal-title').textContent = (key ? 'Edit Theme' : 'Add Theme') + ownerLabel;
   document.getElementById('t-name').value = rec.name||'';
   document.getElementById('t-name').disabled = (editingThemeSource!=='trivia');
+  document.getElementById('t-alt').value = rec.altName||'';
+  document.getElementById('t-alt').disabled = (editingThemeSource!=='trivia');
   document.getElementById('t-tier').value = normTier(rec.tier)||'';
   // A Venue Menu record's type (Karaoke / Sing-Along / Mini Games…) is set by
   // its own Type field in the Venue Menu, so the tier selector is read-only there.
@@ -2926,14 +2939,14 @@ function renderPairsSuggest(){
   // Searches the whole unified library (Trivia, Bingo, Venue Menu) by name or tag.
   const matches = getAllLibrary()
     .filter(r=> r.key!==editingThemeKey && !editingThemePairs.includes(refOf(r.source, r.id))
-      && ((r.name||'').toLowerCase().includes(q) || (r.tags||[]).some(tag=>(tag||'').toLowerCase().includes(q))))
+      && ((r.name||'').toLowerCase().includes(q) || (r.altName||'').toLowerCase().includes(q) || (r.tags||[]).some(tag=>(tag||'').toLowerCase().includes(q))))
     .sort((x,y)=>(x.name||'').localeCompare(y.name||''))
     .slice(0,30);
   box.innerHTML = matches.map(r=>{
     const nameHit = (r.name||'').toLowerCase().includes(q);
     const hitTag = !nameHit ? (r.tags||[]).find(tag=>(tag||'').toLowerCase().includes(q)) : null;
     const typeTxt = r.source==='bingo' ? 'Bingo' : r.source==='vm' ? (r.typeLabel||'Venue Menu') : (TIER_LABELS[normTier(r.tier)]||'');
-    return `<div class="theme-opt" onclick="addPairChip('${jsq(refOf(r.source, r.id))}')">${escapeHtml(r.name)}<small>${escapeHtml(typeTxt)}${hitTag?' · tag: '+escapeHtml(hitTag):''}</small></div>`;
+    return `<div class="theme-opt" onclick="addPairChip('${jsq(refOf(r.source, r.id))}')">${escapeHtml(r.name)}${altLine(r)}<small>${escapeHtml(typeTxt)}${hitTag?' · tag: '+escapeHtml(hitTag):''}</small></div>`;
   }).join('') || '<div class="theme-opt" style="color:var(--text3)">No match — tag the other category\'s type first.</div>';
 }
 function addPairChip(ref){
@@ -2967,6 +2980,7 @@ function saveTheme(){
   };
   const commonFields = {
     name,
+    altName: (source==='trivia') ? (document.getElementById('t-alt').value.trim() || null) : undefined,
     tags: editingThemeTags,
     plannerTier: tier || null,
     pairsWith: canPair(tier) ? newPairs.map(r=>storeRef(r, source)) : null,
@@ -2983,7 +2997,7 @@ function saveTheme(){
       rtdbUpdates[libPath+'/'+themeId] = { ...commonFields, type: 'trivia', createdAt: Date.now(), unified: true,
         notes: 'Created from the Planner — add sheets/images/music in Trivia Admin.' };
     } else {
-      ['name','tags','plannerTier','pairsWith','karaokeSongs','plannerUsage'].forEach(f=>{ rtdbUpdates[libPath+'/'+themeId+'/'+f] = commonFields[f]; });
+      ['name','altName','tags','plannerTier','pairsWith','karaokeSongs','plannerUsage'].forEach(f=>{ rtdbUpdates[libPath+'/'+themeId+'/'+f] = commonFields[f]; });
     }
   } else if(source==='bingo'){
     rtdbUpdates[bPath+'/'+themeId+'/tags'] = commonFields.tags;
@@ -3302,11 +3316,11 @@ function renderBingoCatSuggest(slot){
   const q = input.value.trim().toLowerCase();
   if(!q){ box.innerHTML=''; return; }
   const matches = Object.entries(state.themes||{})
-    .filter(([id,t])=>(t.name||'').toLowerCase().includes(q))
+    .filter(([id,t])=>nameOrAltHas(t,q))
     .sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''))
     .slice(0,25);
   box.innerHTML = matches.length ? matches.map(([id,t])=>
-    `<div class="theme-opt" onclick="pickBingoCat(${slot},'${id}')">${escapeHtml(t.name)}</div>`
+    `<div class="theme-opt" onclick="pickBingoCat(${slot},'${id}')">${escapeHtml(t.name)}${altLine(t)}</div>`
   ).join('') : '<div class="theme-opt" style="color:var(--text3)">No match — new categories are added in the Bingo app itself.</div>';
 }
 function pickBingoCat(slot, id){
@@ -3398,11 +3412,11 @@ function renderRoundInputSuggest(i){
   if(!q){ box.innerHTML=''; return; }
   const usedIds = new Set(gigCtx.rounds.map(r=>r.themeId).filter(Boolean));
   const list = Object.entries(state.themes||{})
-    .filter(([id,t])=>!usedIds.has(id) && (t.name||'').toLowerCase().includes(q))
+    .filter(([id,t])=>!usedIds.has(id) && nameOrAltHas(t,q))
     .sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''))
     .slice(0,25);
   box.innerHTML = list.length ? list.map(([id,t])=>
-    `<div class="theme-opt" onclick="pickRoundOption(${i},'${id}')">${escapeHtml(t.name)} <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span></div>`
+    `<div class="theme-opt" onclick="pickRoundOption(${i},'${id}')">${escapeHtml(t.name)} <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span>${altLine(t)}</div>`
   ).join('') : (gigCtx.regularTrivia ? '<div class="theme-opt" style="color:var(--text3)">No match — this will be saved as a new category.</div>' : '<div class="theme-opt" style="color:var(--text3)">No match — this will be saved as a new category.</div>');
 }
 function pickRoundOption(i,id){
@@ -3449,7 +3463,7 @@ function renderRoundSuggestPanel(){
   const pairs = (t.pairsWith||[]).map(id=>[id,state.themes[id]]).filter(([id,p])=>p && id!==r0.themeId);
   const usedIds = new Set(gigCtx.rounds.map(r=>r.themeId).filter(Boolean));
   document.getElementById('gig-round-suggest-list').innerHTML = pairs.length ? pairs.map(([id,p])=>
-    `<div class="theme-opt${usedIds.has(id)?' active-pick':''}" onclick="pickRoundSuggestion('${id}')">${escapeHtml(p.name)} <span style="color:var(--text3)">· ${TIER_LABELS[p.tier]||''}</span></div>`
+    `<div class="theme-opt${usedIds.has(id)?' active-pick':''}" onclick="pickRoundSuggestion('${id}')">${escapeHtml(p.name)} <span style="color:var(--text3)">· ${TIER_LABELS[p.tier]||''}</span>${altLine(p)}</div>`
   ).join('') : '<div class="theme-opt" style="color:var(--text3)">No saved pairings yet.</div>';
 }
 function pickRoundSuggestion(id){
