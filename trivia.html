@@ -6,6 +6,8 @@
 <title>Trivia</title>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -659,12 +661,14 @@ const API_KEY = 'AIzaSyACMjXQCXjVo75hbMXtag_JctR4SoX70So';
 var appSettings = {};
 var catTypes = [];
 var db; // global Firebase database reference
+var fsdb, fbAuth; // Firestore (Question Vault) + Auth
 (function() {
   try {
     const cfg = {apiKey:"AIzaSyCIfAE1JGHsUGzzVH2pz1Vyj5b5OhA0tDQ",authDomain:"belladonna-hq.firebaseapp.com",databaseURL:"https://belladonna-hq-default-rtdb.firebaseio.com",projectId:"belladonna-hq"};
     if(!firebase.apps.length) firebase.initializeApp(cfg);
     db = firebase.database();
   } catch(e) {}
+  try { fsdb = firebase.firestore(); fbAuth = firebase.auth(); } catch(e) { console.warn('Vault unavailable', e); }
 })();
 
 // ═══════════════════════════════════════════════════════
@@ -926,6 +930,7 @@ function rerandomizeNextQuestion() {
   // easy/medium/hard sequencing intact); fall back to any unused row.
   let candidates = shuffle(pool.filter(r => r.difficulty === oldRow.difficulty && !usedIds.has(rowId(r))));
   if(!candidates.length) candidates = shuffle(pool.filter(r => !usedIds.has(rowId(r))));
+  candidates = preferFresh(candidates, venuePlaysCache);
 
   if(!candidates.length) {
     toast('No unused questions left in the spreadsheet to swap in.');
@@ -1023,6 +1028,128 @@ async function loadSheetQuestions(sheetUrl, tabName, count) {
   const rows = (data.values || []).map((r,i)=>parseRow(r,i+2)).filter(Boolean);
   if(!rows.length) throw new Error('No valid rows found.');
   return { questions: pickByDifficultySequence(rows, count), pool: rows };
+}
+
+// ═══════════════════════════════════════════════════════
+//  QUESTION VAULT (Firestore) — questions are read by FIELD NAME, never by
+//  column position, so rearranging/adding columns in the Vault can't break
+//  this. Order of preference for every round:
+//    1. the Vault category linked to this round (vaultCatId, else matched by name)
+//    2. the last copy of that category cached on this device (offline / bad venue wifi)
+//    3. the old Google Sheet, if the category still has one
+// ═══════════════════════════════════════════════════════
+const VAULT_CACHE_PREFIX = 'vaultCache_';
+function vaultNorm(s){ return String(s||'').toLowerCase().replace(/[‘’]/g,"'").replace(/\s+/g,' ').trim(); }
+
+function waitForAuth(ms) {
+  return new Promise(res => {
+    if(!fbAuth) return res(null);
+    if(fbAuth.currentUser) return res(fbAuth.currentUser);
+    let done = false, un = null;
+    const finish = u => { if(done) return; done = true; clearTimeout(timer); if(un) un(); res(u); };
+    const timer = setTimeout(() => finish(null), ms);
+    un = fbAuth.onAuthStateChanged(u => finish(u), () => finish(null));
+  });
+}
+
+async function vaultCatIdByName(title) {
+  const want = vaultNorm(title);
+  if(!want || !fsdb) return null;
+  const snap = await fsdb.collection('triviaCategories').get();
+  let hit = null;
+  snap.forEach(d => { const c = d.data(); if(!c.archived && vaultNorm(c.name) === want) hit = d.id; });
+  return hit;
+}
+
+function vaultRow(id, d, catId) {
+  const q = safe(d.question).trim(), a = safe(d.answer).trim();
+  if(!q || !a) return null;
+  const diff = Math.min(3, Math.max(1, parseInt(d.difficulty) || DIFF_EASY));
+  const mcOptions = [d.optionA, d.optionB, d.optionC, d.optionD].map(v => safe(v).trim()).filter(v => v.length > 0);
+  const au = a.toUpperCase();
+  const type = (au==='TRUE'||au==='FALSE') ? 'tf' : mcOptions.length > 0 ? 'mc' : 'standard';
+  return { question:q, answer:a, difficulty:diff, imageUrl:safe(d.imgUrl).trim(), audioUrl:safe(d.soundUrl).trim(),
+           type, mcOptions, notes:safe(d.notes).trim(), rowIndex:null,
+           vaultQuestionId:id, vaultCatId:catId, feedbackKey:`vault__${catId}__${id}` };
+}
+
+// Music: question = song title, answer = artist, SOUND URL = audio, IMG URL = album art.
+// Optional custom columns "Start Time" / "End Time" (add them in the Vault's Columns menu).
+function vaultMusicRow(id, d, catId) {
+  const song = safe(d.question).trim(), artist = safe(d.answer).trim();
+  if(!song || !artist) return null;
+  return { question:song, answer:artist, difficulty:1, imageUrl:'', audioUrl:safe(d.soundUrl).trim(),
+           startTime:parseMusicTime(safe(d.startTime)), endTime:parseMusicTime(safe(d.endTime)),
+           albumArt:safe(d.imgUrl).trim(), type:'standard', mcOptions:[], notes:safe(d.notes).trim(), rowIndex:null,
+           vaultQuestionId:id, vaultCatId:catId, feedbackKey:`vault__${catId}__${id}` };
+}
+
+async function fetchVaultRows(catId, isMusic) {
+  const cacheKey = VAULT_CACHE_PREFIX + catId;
+  let docs = null;
+  try {
+    await waitForAuth(4000);
+    const snap = await fsdb.collection('triviaQuestions').where('categoryId', '==', catId).get();
+    docs = [];
+    snap.forEach(x => { const d = x.data(); if(!d.archived) docs.push({ id:x.id, d }); });
+    if(docs.length) { try { localStorage.setItem(cacheKey, JSON.stringify({ ts:Date.now(), docs })); } catch(e) {} }
+  } catch(e) {
+    console.warn('Vault read failed — trying cached copy', e);
+    try { const c = JSON.parse(localStorage.getItem(cacheKey) || 'null'); if(c && c.docs) { docs = c.docs; docs._cached = true; } } catch(_) {}
+  }
+  if(!docs) return { rows:[], cached:false };
+  const rows = docs.map(x => isMusic ? vaultMusicRow(x.id, x.d, catId) : vaultRow(x.id, x.d, catId)).filter(Boolean);
+  return { rows, cached: !!docs._cached };
+}
+
+function interleaveMusic(rows, count) {
+  const buckets = {};
+  for(const row of shuffle(rows)) {
+    const k = (row.answer || 'Unknown').toLowerCase().trim();
+    (buckets[k] = buckets[k] || []).push(row);
+  }
+  const queues = Object.values(buckets), out = [];
+  let remaining = true;
+  while(remaining) {
+    remaining = false;
+    for(const b of shuffle([...queues])) {
+      if(b.length) { out.push(b.shift()); if(b.length) remaining = true; }
+    }
+  }
+  return out.slice(0, count);
+}
+
+// Returns {questions, pool, source} or null when the Vault has nothing usable for this round.
+async function loadVaultQuestions(round, count) {
+  if(!fsdb) return null;
+  const isMusic = round.type === 'music';
+  const tried = new Set();
+  const ids = [];
+  if(round.vaultCatId) ids.push(round.vaultCatId);
+  for(let pass = 0; pass < 2; pass++) {
+    let catId = ids[pass];
+    if(!catId && pass === ids.length) {
+      try { catId = await vaultCatIdByName(round.title); } catch(e) { catId = null; }
+    }
+    if(!catId || tried.has(catId)) continue;
+    tried.add(catId);
+    const { rows, cached } = await fetchVaultRows(catId, isMusic);
+    if(rows.length) {
+      round.vaultCatId = catId;
+      let picked;
+      if(isMusic) {
+        const fresh = rows.filter(r => isFreshFor(r, venuePlaysCache));
+        picked = interleaveMusic(fresh, count);
+        if(picked.length < count) {
+          const stale = rows.filter(r => !isFreshFor(r, venuePlaysCache)).sort((a, b) => lastPlayedAt(a, venuePlaysCache) - lastPlayedAt(b, venuePlaysCache));
+          picked = picked.concat(stale.slice(0, count - picked.length));
+        }
+      } else picked = pickByDifficultySequence(rows, count, venuePlaysCache);
+      return { questions: picked,
+               pool: rows, source: cached ? 'vault (saved copy)' : 'vault' };
+    }
+  }
+  return null;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1132,7 +1259,53 @@ async function loadMusicQuestions(sheetUrl, tabName, count) {
   return { questions: interleaved.slice(0, count), pool: rows };
 }
 
-function pickByDifficultySequence(rows, n) {
+// ═══════════════════════════════════════════════════════
+//  QUESTION SELECTION RULES
+//   1. Difficulty rotates easy → medium → hard.
+//   2. Within each difficulty, question TYPES rotate (regular / true-false /
+//      multiple choice / image / sound): the least-used type so far wins, and
+//      the same type never runs back-to-back inside a difficulty if another is available.
+//   3. A venue doesn't see the same question again for REPEAT_WEEKS weeks
+//      (history: trivia/questionPlays/<venue>/<question>). If a category has
+//      run out of fresh questions, the ones this venue saw LONGEST ago are used.
+// ═══════════════════════════════════════════════════════
+const REPEAT_WEEKS = 12;
+const REPEAT_MS = REPEAT_WEEKS * 7 * 24 * 3600 * 1000;
+let venuePlaysCache = {};
+
+function venueIdNow() {
+  const v = new URLSearchParams(window.location.search).get('venue');
+  return v || window._standaloneVenue || '';
+}
+async function loadVenuePlays() {
+  const v = venueIdNow();
+  if(!v || !db) return {};
+  try { const s = await db.ref('trivia/questionPlays/' + v).once('value'); return s.val() || {}; }
+  catch(e) { console.warn('Could not read venue play history — repeat rule skipped', e); return {}; }
+}
+function lastPlayedAt(r, plays) {
+  const p = plays && r.feedbackKey && plays[r.feedbackKey];
+  return (p && p.lastPlayed) || 0;
+}
+function isFreshFor(r, plays) {
+  const lp = lastPlayedAt(r, plays);
+  return !lp || (Date.now() - lp) >= REPEAT_MS;
+}
+// Fresh questions first, then the ones this venue saw longest ago.
+function preferFresh(arr, plays) {
+  const fresh = arr.filter(r => isFreshFor(r, plays));
+  const stale = arr.filter(r => !isFreshFor(r, plays)).sort((a, b) => lastPlayedAt(a, plays) - lastPlayedAt(b, plays));
+  return [...fresh, ...stale];
+}
+function kindOf(r) {
+  if(r.audioUrl) return 'sound';
+  if(r.imageUrl) return 'image';
+  if(r.type === 'mc') return 'mc';
+  if(r.type === 'tf') return 'tf';
+  return 'regular';
+}
+
+function pickByDifficultySequence(rows, n, plays) {
   const pools = {
     [DIFF_EASY]:   shuffle(rows.filter(r=>r.difficulty===DIFF_EASY)),
     [DIFF_MEDIUM]: shuffle(rows.filter(r=>r.difficulty===DIFF_MEDIUM)),
@@ -1140,22 +1313,56 @@ function pickByDifficultySequence(rows, n) {
   };
   const usedIds = new Set();
   const sequence = [DIFF_EASY, DIFF_MEDIUM, DIFF_HARD];
+  const kindCount = {[DIFF_EASY]:{}, [DIFF_MEDIUM]:{}, [DIFF_HARD]:{}};
+  const lastKind = {};
   const chosen = [];
+
+  function pull(diff, freshOnly) {
+    const cands = pools[diff].filter(r => !usedIds.has(rowId(r)) && (!freshOnly || isFreshFor(r, plays)));
+    if(!cands.length) return null;
+    if(!freshOnly) {
+      // Out of fresh questions: oldest-played first.
+      return cands.slice().sort((a, b) => lastPlayedAt(a, plays) - lastPlayedAt(b, plays))[0];
+    }
+    let best = null, bestScore = Infinity;
+    for(const r of cands) {
+      const k = kindOf(r);
+      const score = (kindCount[diff][k] || 0) * 10 + (k === lastKind[diff] ? 5 : 0);
+      if(score < bestScore) { best = r; bestScore = score; }
+    }
+    return best;
+  }
 
   for(let i=0; i<n; i++) {
     const diff = sequence[i % sequence.length];
-    let row = pullUnused(pools[diff], usedIds);
-    if(!row) {
-      for(const fd of [DIFF_EASY,DIFF_MEDIUM,DIFF_HARD].filter(d=>d!==diff)) {
-        row = pullUnused(pools[fd], usedIds);
-        if(row) break;
-      }
-    }
+    const order = [diff, ...sequence.filter(d => d !== diff)];
+    let row = null, d = diff;
+    for(const dd of order) { row = pull(dd, true); if(row) { d = dd; break; } }
+    if(!row) for(const dd of order) { row = pull(dd, false); if(row) { d = dd; break; } }
     if(!row) break;
+    const k = kindOf(row);
+    kindCount[d][k] = (kindCount[d][k] || 0) + 1;
+    lastKind[d] = k;
     usedIds.add(rowId(row));
     chosen.push(row);
   }
   return chosen;
+}
+
+// Written when a question is shown on screen (not at launch), so previews/test launches don't count.
+const _playRecorded = new Set();
+function recordPlay(round, q) {
+  try {
+    const venue = venueIdNow();
+    const key = q && q.feedbackKey;
+    if(!venue || !key || !db || _playRecorded.has(key)) return;
+    _playRecorded.add(key);
+    db.ref('trivia/questionPlays/' + venue + '/' + key).update({
+      lastPlayed: Date.now(), lastDate: todayKeyTrivia(),
+      plays: firebase.database.ServerValue.increment(1),
+      question: String(q.question || '').slice(0, 200), vaultCatId: q.vaultCatId || null,
+    }).catch(()=>{});
+  } catch(e) {}
 }
 
 function pullUnused(pool, usedIds) {
@@ -1256,6 +1463,7 @@ function currentQuestion() {
 //  in HQ under trivia/questionFeedback.
 // ═══════════════════════════════════════════════════════
 function feedbackKeyFor(round, q) {
+  if(q && q.feedbackKey) return q.feedbackKey; // Question Vault question
   if(!round || !q || q.rowIndex == null) return null;
   const sheetId = extractSheetId(round.sheetUrl || '');
   const tab = String(round.tabName || '').trim().replace(/[.#$\[\]\/\s]+/g, '_');
@@ -1272,7 +1480,8 @@ function sendQuestionThumb(dir) {
   const ref = db.ref('trivia/questionFeedback/' + key);
   ref.update({
     question: q.question, answer: q.answer,
-    sheetUrl: round.sheetUrl || '', tabName: round.tabName || '', rowIndex: q.rowIndex,
+    sheetUrl: round.sheetUrl || '', tabName: round.tabName || '', rowIndex: q.rowIndex == null ? null : q.rowIndex,
+    vaultCatId: q.vaultCatId || null, vaultQuestionId: q.vaultQuestionId || null,
     lastFeedbackAt: Date.now(),
   });
   ref.child(dir === 'up' ? 'thumbsUp' : 'thumbsDown').transaction(v => (v||0) + 1);
@@ -1303,7 +1512,8 @@ function submitFeedbackNoteBox() {
   const ref = db.ref('trivia/questionFeedback/' + key);
   ref.update({
     question: q.question, answer: q.answer,
-    sheetUrl: round.sheetUrl || '', tabName: round.tabName || '', rowIndex: q.rowIndex,
+    sheetUrl: round.sheetUrl || '', tabName: round.tabName || '', rowIndex: q.rowIndex == null ? null : q.rowIndex,
+    vaultCatId: q.vaultCatId || null, vaultQuestionId: q.vaultQuestionId || null,
     lastFeedbackAt: Date.now(),
   });
   ref.child('notes').push({ text, ts: Date.now() });
@@ -1528,6 +1738,7 @@ function renderCurrentSlide() {
       text   = q ? q.question : '';
       answer = (state.answerVisible || state.bonusVisible) && q ? q.answer : '';
       hasAudio = !!(q && q.audioUrl);
+      if(q) recordPlay(round, q);
       // Picture-round questions: show the actual question image in the
       // host preview, not just the round's plain background.
       if(q && q.imageUrl && q.imageUrl.startsWith('http')) {
@@ -2435,6 +2646,7 @@ function checkUrlParams() {
     const qCount = parseInt(p.get(`r${i}_qcount`))||20;
     if(url !== null || p.get(`r${i}_folder`) || p.get(`r${i}_canvaId`)) rounds.push({
       sheetUrl:url||'', tabName:tab||'',
+      vaultCatId: p.get(`r${i}_vault`)||'',
       type: p.get(`r${i}_type`)||'trivia',
       folderUrl: p.get(`r${i}_folder`)||'',
       canvaDesignId: p.get(`r${i}_canvaId`)||'',
@@ -2498,6 +2710,7 @@ async function launchFromSetup() {
   state.rounds = pendingRounds.map(r=>({...r, questions:[], slides:[]}));
   document.getElementById('setup-screen').style.display = 'none';
   showLoading('Loading questions…');
+  venuePlaysCache = await loadVenuePlays();
 
   for(let i=0;i<state.rounds.length;i++) {
     const round = state.rounds[i];
@@ -2515,18 +2728,26 @@ async function launchFromSetup() {
         round.slides = loadSlidesheetManifest(round.folderUrl);
         round.questions = [];
       } else if(round.type === 'music') {
-        const loaded = await loadMusicQuestions(
-          round.sheetUrl, round.tabName, round.questionCount
-        );
+        let loaded = await loadVaultQuestions(round, round.questionCount);
+        if(!loaded) {
+          if(!round.sheetUrl) throw new Error('No questions found in the Question Vault, and no sheet is linked.');
+          loaded = await loadMusicQuestions(round.sheetUrl, round.tabName, round.questionCount);
+          loaded.source = 'sheet';
+        }
         round.questions = loaded.questions;
         round.pool = loaded.pool;
+        round.source = loaded.source;
       } else {
         // trivia
-        const loaded = await loadSheetQuestions(
-          round.sheetUrl, round.tabName, round.questionCount
-        );
+        let loaded = await loadVaultQuestions(round, round.questionCount);
+        if(!loaded) {
+          if(!round.sheetUrl) throw new Error('No questions found in the Question Vault, and no sheet is linked.');
+          loaded = await loadSheetQuestions(round.sheetUrl, round.tabName, round.questionCount);
+          loaded.source = 'sheet';
+        }
         round.questions = loaded.questions;
         round.pool = loaded.pool;
+        round.source = loaded.source;
       }
     } catch(e) {
       console.error('Round load failed:', e);
@@ -2566,7 +2787,7 @@ async function launchFromSetup() {
         <div class="setup-round-card-body">
           <div class="setup-round-num">Round ${i+1}${hasError ? ' · ⚠' : ''}</div>
           <div class="setup-round-name">${r.title}</div>
-          <div class="setup-round-tab" style="${hasError?'color:var(--red)':''}">${hasError ? r.loadError : isSlideshow ? (r.slides.length + ' slides loaded') : (r.questions.length + ' questions loaded')}</div>
+          <div class="setup-round-tab" style="${hasError?'color:var(--red)':''}">${hasError ? r.loadError : isSlideshow ? (r.slides.length + ' slides loaded') : (r.questions.length + ' questions loaded' + (r.source ? ' · ' + r.source : ''))}</div>
         </div>
       </div>`;
     }).join('');
@@ -2693,6 +2914,7 @@ async function tryStandaloneAutoLoad(){
     venueName = localStorage.getItem('trivia-last-venueName') || "tonight's venue";
   }catch(e){ return; }
   if(!venueId || !db) return;
+  window._standaloneVenue = venueId;
   const gigDate = todayKeyTrivia();
   let gig;
   try{
@@ -2720,11 +2942,11 @@ async function tryStandaloneAutoLoad(){
     if(!key) return null;
     return Object.values(catMap).find(c=>(c.name||'').trim().toLowerCase()===key) || null;
   }
-  const usable = rounds.map(r=>({round:r,cat:resolveCat(r)})).filter(r=>r.cat && r.cat.sheetUrl);
+  const usable = rounds.map(r=>({round:r,cat:resolveCat(r)})).filter(r=>r.cat && (r.cat.sheetUrl || r.cat.vaultCatId));
   if(!usable.length) return;
 
   pendingRounds = usable.map(({round,cat})=>({
-    sheetUrl:cat.sheetUrl||'', tabName:cat.tabName||'',
+    sheetUrl:cat.sheetUrl||'', tabName:cat.tabName||'', vaultCatId:cat.vaultCatId||'',
     type:cat.type||'trivia', folderUrl:cat.folderUrl||'', canvaDesignId:cat.canvaDesignId||'',
     bgImage:cat.bgImage||'', bgIntro:cat.bgIntro||cat.bgImage||'',
     bgQuestion:(cat.type==='canva'?cat.canvaBgUrl:null)||cat.bgQuestion||cat.bgImage||'',
