@@ -3008,7 +3008,7 @@ function attachHbListeners() {
   if(reBtn) reBtn.style.display = 'block';
 });
 
-  const qmRef = secretRef('questionMeta'); _hbRefs.push(qmRef); qmRef.on('value', snap => { questionMetaCache = snap.val() || {}; try{ updateGradeButton(); }catch(e){} });
+  const qmRef = liveRef('questionMeta'); _hbRefs.push(qmRef); qmRef.on('value', snap => { questionMetaCache = snap.val() || {}; try{ updateGradeButton(); }catch(e){} });
   const answersRef = liveRef('answers'); _hbRefs.push(answersRef); answersRef.on('value', snap => {
   const allAnswers = snap.val() || {};
   allAnswersCache = allAnswers;
