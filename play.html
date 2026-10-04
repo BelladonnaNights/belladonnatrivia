@@ -83,6 +83,7 @@ html,body{
 }
 .reg-btn:active{opacity:.8}
 .reg-btn:disabled{opacity:.4;cursor:not-allowed}
+.reg-btn.joined:disabled{opacity:1;background:#2ecc71;color:#000}
 .reg-hint{
   font-size:12px;color:var(--text3);
   font-family:var(--serif);font-style:italic;
@@ -353,6 +354,12 @@ const cfg = {
 if(!firebase.apps.length) firebase.initializeApp(cfg);
 const db = firebase.database();
 
+// Each host runs their own game at games/<hostUid>. The QR code carries ?g=<hostUid>.
+const GID = (new URLSearchParams(location.search).get('g') || '').replace(/[^A-Za-z0-9_-]/g,'') || sessionStorage.getItem('bella_gid') || localStorage.getItem('bella_gid') || '';
+if(GID){ try{ localStorage.setItem('bella_gid', GID); sessionStorage.setItem('bella_gid', GID); }catch(e){} }
+const GP = 'games/' + (GID || '__none__');
+function gref(sub){ return db.ref(GP + (sub ? '/' + sub : '')); }
+
 // ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
@@ -381,43 +388,63 @@ function showScreen(id) {
 async function register() {
   const name = document.getElementById('reg-input').value.trim();
   if(!name) return;
-
   const btn = document.getElementById('reg-btn');
+  const statusEl = document.getElementById('reg-status');
+  if(!GID){
+    statusEl.textContent = 'Please scan the QR code on the TV screen to join.';
+    return;
+  }
   btn.disabled = true;
   btn.textContent = 'Joining…';
+  try {
+    // Session id (so stale sessions are detected)
+    const sessSnap = await gref('sessionId').once('value');
+    const sid = sessSnap.val();
+    if(sid && sid !== mySessionId){
+      // new game session -> new team identity
+      teamId = null;
+      localStorage.removeItem('bella_team_id');
+    }
+    if(sid){
+      mySessionId = sid;
+      localStorage.setItem('bella_session_id', sid);
+    }
+    if(!teamId) {
+      teamId = 'team_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+      localStorage.setItem('bella_team_id', teamId);
+    }
+    teamName = name;
+    localStorage.setItem('bella_team_name', name);
 
-  // Check if game is active
-  const gameSnap = await db.ref('trivia/liveGame/status').once('value');
-  const status = gameSnap.val();
-
-  // Generate or reuse team ID
-  if(!teamId) {
-    teamId = 'team_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-    localStorage.setItem('bella_team_id', teamId);
+    const teamRef = gref('teams/' + teamId);
+    const existing = await teamRef.once('value');
+    if(existing.exists()){
+      myScore = (existing.val() || {}).score || 0;
+      if((existing.val() || {}).name !== name){ try{ await teamRef.child('name').set(name); }catch(e){} }
+    } else {
+      await teamRef.set({ name, score: 0, joinedAt: Date.now() });
+      myScore = 0;
+    }
+  } catch(err) {
+    console.error('Join failed', err);
+    btn.disabled = false;
+    btn.textContent = 'Join Game';
+    statusEl.textContent = 'Couldn\u2019t join \u2014 check your connection and try again. (' + ((err && err.code) || 'error') + ')';
+    return;
   }
-  teamName = name;
-  localStorage.setItem('bella_team_name', name);
 
-  // Store the current session ID so stale sessions are detected
-  const sessSnap = await db.ref('trivia/liveGame/sessionId').once('value');
-  if(sessSnap.val()) {
-    mySessionId = sessSnap.val();
-    localStorage.setItem('bella_session_id', mySessionId);
-  }
-
-  // Register in Firebase
-  await db.ref(`trivia/liveGame/teams/${teamId}`).set({
-    name,
-    score: 0,
-    joinedAt: Date.now(),
-  });
-
-  // Get existing score if rejoining
-  const scoreSnap = await db.ref(`trivia/liveGame/teams/${teamId}/score`).once('value');
-  myScore = scoreSnap.val() || 0;
-
-  showWait();
+  btn.textContent = 'Joined \u2713';
+  btn.classList.add('joined');
+  statusEl.textContent = 'You\u2019re in! Just wait for the host to start the game.';
   startListening();
+  setTimeout(() => {
+    const rs = document.getElementById('reg-screen');
+    if(rs && !rs.classList.contains('hidden')) {
+      showWait();
+      const wm = document.getElementById('wait-msg');
+      if(wm) wm.textContent = 'You\u2019re in! Waiting for the host to start the game\u2026';
+    }
+  }, 1100);
 }
 
 // ═══════════════════════════════════════════════
@@ -432,10 +459,26 @@ function showWait() {
 // ═══════════════════════════════════════════════
 //  FIREBASE LISTENERS
 // ═══════════════════════════════════════════════
+let _listening = false;
 function startListening() {
-  db.ref('trivia/liveGame').on('value', snap => {
-    const game = snap.val();
+  if(_listening) return;
+  _listening = true;
+  const game = {};
+  const keys = ['status','currentQuestion','sessionId','leaderboardVisible','resultsVisible','results','teams'];
+  let loaded = 0, timer = null;
+  const fire = () => { clearTimeout(timer); timer = setTimeout(() => handleGame(Object.assign({}, game)), 30); };
+  keys.forEach(k => {
+    let first = true;
+    gref(k).on('value', snap => {
+      game[k] = snap.val();
+      if(first){ first = false; loaded++; }
+      if(loaded >= keys.length) fire();
+    }, err => { console.warn('listen denied', k, err && err.code); });
+  });
+}
 
+function handleGame(game) {
+  {
     // Game was closed/reset by host — but only send back to register if truly no game
     if(!game || (game.status === null && !game.teams)) {
       // Only kick back if we have no record of joining (safety check)
@@ -508,7 +551,7 @@ function startListening() {
         }
         break;
     }
-  });
+  }
 }
 
 // ═══════════════════════════════════════════════
@@ -704,24 +747,16 @@ async function submitAnswer(value, btn, type) {
 
   // Write to Firebase
   if(value !== null) {
-    // Fetch correct answer for grading panel
-    let correctAnswer = '';
-    let questionText = currentQ.text || '';
     try {
-      const metaSnap = await db.ref('trivia/liveGame/questionMeta/' + currentQ.id).once('value');
-      const meta = metaSnap.val();
-      if(meta) { correctAnswer = meta.correctAnswer || ''; questionText = meta.questionText || questionText; }
-    } catch(e) {}
-
-    await db.ref(`trivia/liveGame/answers/${currentQ.id}/${teamId}`).set({
-      answer: value,
-      timestamp: Date.now(),
-      elapsed: elapsed,
-      teamName: teamName,
-      questionText,
-      correctAnswer,
-      status: 'pending',
-    });
+      await gref(`answers/${currentQ.id}/${teamId}`).set({
+        answer: value,
+        timestamp: Date.now(),
+        elapsed: elapsed,
+        teamName: teamName,
+        questionText: currentQ.text || '',
+        status: 'pending',
+      });
+    } catch(e) { console.error('Answer not saved', e); }
   }
 }
 
@@ -835,8 +870,15 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Fetch current game state
-  const snap = await db.ref('trivia/liveGame').once('value');
-  const game = snap.val();
+  if(!GID){
+    document.getElementById('reg-status').textContent = 'Please scan the QR code on the TV screen to join.';
+    return;
+  }
+  let game = {};
+  try {
+    const [st, sid] = await Promise.all([gref('status').once('value'), gref('sessionId').once('value')]);
+    game = { status: st.val(), sessionId: sid.val() };
+  } catch(e) { console.warn('initial read failed', e && e.code); }
   const currentSessionId = game?.sessionId || null;
 
   if(teamId && teamName && currentSessionId && currentSessionId === mySessionId && game?.status) {
