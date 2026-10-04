@@ -8,7 +8,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@500;600;700&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -1942,9 +1942,19 @@ function loadNextWeek() {
   _nextWeekPromise = (async () => {
     const out = { dateKey:'', items:[] };
     try {
-      const vid = venueIdNow();
-      if(!vid || !db) return out;
       const p = new URLSearchParams(window.location.search);
+      let vid = venueIdNow();
+      if(!vid) { try { vid = localStorage.getItem('trivia-last-venue') || ''; } catch(e) {} }
+      if(!vid && db) {
+        // Last resort: match the venue by name against the Planner's venue list
+        const nm = String(p.get('venueName') || '').toLowerCase().trim();
+        if(nm) {
+          const all = (await db.ref('trivia/planner/venues').once('value')).val() || {};
+          const hit = Object.entries(all).find(([id, v]) => String(v && v.name || '').toLowerCase().trim() === nm);
+          if(hit) vid = hit[0];
+        }
+      }
+      if(!vid || !db) return out;
       const base = p.get('gigDate') || todayKeyTrivia();
       const d = new Date(base + 'T12:00:00'); d.setDate(d.getDate() + 7);
       const nk = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -2001,39 +2011,89 @@ function loadNextWeek() {
   })();
   return _nextWeekPromise;
 }
+// ── Shared pre-show look ─────────────────────────────────────────────────
+// All three pre-show slides are drawn on a fixed 1672x941 stage that is
+// scaled to fit the screen, so they look identical at any resolution, and the
+// "Press → to continue" line sits in exactly the same spot on every one.
+const PS_GOLD = 'linear-gradient(180deg,#f3d77a 0%,#d9ac3a 48%,#b8861f 100%)';
+const PS_GOLD_SOLID = '#e3b22f';
+function psEsc(t) { return String(t==null?'':t).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+function psGoldText(extra) { return `background:${PS_GOLD};-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;${extra||''}`; }
+function psSubtitle(text) {
+  return `<div style="display:flex;align-items:center;justify-content:center;gap:34px;width:880px;margin:0 auto">
+    <div style="flex:1;height:3px;background:${PS_GOLD_SOLID}"></div>
+    <div style="font-family:var(--cinzel);font-weight:600;font-size:46px;letter-spacing:.28em;text-transform:uppercase;color:${PS_GOLD_SOLID};padding-left:.28em;white-space:nowrap">${psEsc(text)}</div>
+    <div style="flex:1;height:3px;background:${PS_GOLD_SOLID}"></div>
+  </div>`;
+}
+function psHint() {
+  return `<div style="position:absolute;left:0;right:0;top:868px;text-align:center;font-family:var(--cinzel);font-weight:500;font-size:26px;letter-spacing:.3em;text-transform:uppercase;color:${PS_GOLD_SOLID}">Press &rarr; to continue</div>`;
+}
+function psStage(container, innerHtml) {
+  const bg = document.getElementById('pres-bg');
+  if(bg) { bg.style.backgroundImage = 'none'; bg.style.background = '#000'; bg.classList.remove('no-img'); }
+  const wrap = document.createElement('div');
+  wrap.className = 'slide slide-intro active';
+  wrap.style.cssText = 'position:absolute;inset:0;overflow:hidden;background:#000;';
+  const stage = document.createElement('div');
+  stage.style.cssText = 'position:absolute;left:50%;top:50%;width:1672px;height:941px;transform-origin:center center;';
+  stage.innerHTML = innerHtml + psHint();
+  wrap.appendChild(stage);
+  container.appendChild(wrap);
+  const fit = () => {
+    if(!wrap.isConnected) { window.removeEventListener('resize', fit); return; }
+    const k = Math.min(window.innerWidth / 1672, window.innerHeight / 941);
+    stage.style.transform = `translate(-50%,-50%) scale(${k})`;
+  };
+  fit();
+  window.addEventListener('resize', fit);
+  // Shrink any long text that would run wider than its box
+  stage.querySelectorAll('.ps-fit').forEach(el => {
+    let px = parseFloat(el.dataset.px) || 40, guard = 40;
+    const inner = document.createElement('span'); inner.innerHTML = el.innerHTML; el.innerHTML = ''; el.appendChild(inner);
+    el.style.display = 'block'; el.style.textAlign = 'center';
+    while(inner.getBoundingClientRect().width / (parseFloat(stage.style.transform.split('scale(')[1]) || 1) > 1100 && px > 18 && guard--) { px -= 2; el.style.fontSize = px + 'px'; }
+  });
+}
+
 function renderNextWeek(container) {
-  const esc = t => String(t).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
   const r = window._nextWeekResult || { items:[], dateKey:'' };
-  const items = r.items;
+  const items = r.items || [];
   const n = items.length;
-  const size = n <= 3 ? 'clamp(28px,4.2vw,56px)' : n <= 5 ? 'clamp(22px,3.2vw,42px)' : 'clamp(17px,2.4vw,32px)';
-  let tripN = 0;
   const tag = { trivia:'Trivia', bingo:'Music Bingo', karaoke:'Karaoke' };
-  const rows = items.map(it => {
-    const lead = it.kind === 'trivia' ? 'Round ' + (++tripN) : tag[it.kind];
-    return `<div style="display:flex;align-items:baseline;justify-content:center;gap:1rem;flex-wrap:wrap">
-      <span style="font-family:var(--cinzel);font-size:clamp(11px,1.3vw,16px);letter-spacing:.14em;text-transform:uppercase;color:var(--gold);min-width:7.5em;text-align:right">${esc(lead)}</span>
-      <span style="font-family:var(--serif);font-size:${size};color:var(--text);line-height:1.25;text-align:left">${esc(it.label)}</span>
-    </div>`;
-  }).join('');
-  let dateLine = '';
-  if(r.dateKey) { const dd = new Date(r.dateKey + 'T12:00:00'); dateLine = dd.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' }); }
-  const el = document.createElement('div');
-  el.className = 'slide slide-intro active';
-  el.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.4rem;padding:3rem;text-align:center;';
-  el.innerHTML = `
-    <div style="font-family:var(--display);font-size:clamp(40px,7vw,90px);letter-spacing:.06em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1">NEXT WEEK</div>
-    ${dateLine?`<div style="font-family:var(--cinzel);font-size:clamp(13px,1.8vw,22px);letter-spacing:.14em;text-transform:uppercase;color:var(--text2)">${esc(dateLine)}</div>`:''}
-    <div style="display:flex;flex-direction:column;gap:${n>5?'.6rem':'1rem'};align-items:center;max-width:1100px">${rows}</div>
-    <div style="font-family:var(--cinzel);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem">Press → to continue</div>
-  `;
-  container.appendChild(el);
+  const kinds = [...new Set(items.map(i => tag[i.kind]))];
+  const sub = kinds.length ? kinds.join(' · ') : 'Trivia';
+  let rows = '';
+  if(!n) {
+    rows = `<div style="margin-top:150px;text-align:center;font-family:var(--cinzel);font-weight:600;font-size:54px;letter-spacing:.14em;text-transform:uppercase;color:#fff;line-height:1.5">Next week&rsquo;s schedule<br>is coming soon</div>`;
+  } else {
+    const avail = 585;                                   // vertical room for the list
+    const rowH = Math.min(120, Math.floor(avail / n));
+    const k = rowH / 120;                                // shrink type with row height
+    const labelPx = Math.max(15, Math.round(30 * k)), namePx = Math.max(24, Math.round(58 * k));
+    rows = items.map((it, i) => {
+      const last = i === n - 1 && n > 1;
+      let lead = n === 1 ? tag[it.kind] : (last ? 'Final Round' : 'Round ' + (i + 1));
+      if(n > 1 && it.kind !== 'trivia') lead += ' · ' + tag[it.kind];
+      return `<div style="width:732px;margin:0 auto;height:${rowH}px;box-sizing:border-box;text-align:center;display:flex;flex-direction:column;justify-content:center;${i<n-1?`border-bottom:3px solid ${PS_GOLD_SOLID};`:''}">
+        <div style="font-family:var(--cinzel);font-weight:600;font-size:${labelPx}px;letter-spacing:.3em;text-transform:uppercase;color:${PS_GOLD_SOLID};line-height:1.1;padding-left:.3em">${psEsc(lead)}</div>
+        <div class="ps-fit" data-px="${namePx}" style="width:1300px;margin-left:-284px;font-family:var(--cinzel);font-weight:600;font-size:${namePx}px;letter-spacing:.14em;text-transform:uppercase;color:#fff;line-height:1.1;white-space:nowrap;padding-left:.14em">${psEsc(it.label)}</div>
+      </div>`;
+    }).join('');
+  }
+  psStage(container, `
+    <div style="position:absolute;left:0;right:0;top:8px;text-align:center">
+      <div style="font-family:'Oswald',var(--display),sans-serif;font-weight:700;font-size:102px;line-height:1.02;letter-spacing:.005em;text-transform:uppercase;${psGoldText()}">Next Week&rsquo;s Rounds</div>
+      <div style="margin-top:10px">${psSubtitle(sub)}</div>
+    </div>
+    <div style="position:absolute;left:0;right:0;top:196px">${rows}</div>
+  `);
 }
 
 function retreatPreShow() {
   if(state.preShow === PS_RULES) {
     const r = window._nextWeekResult;
-    state.preShow = (r && r.items && r.items.length) ? PS_NEXTWEEK : PS_FOLLOWUS;
+    state.preShow = PS_NEXTWEEK;
     renderPreShow();
   } else if(state.preShow === PS_NEXTWEEK) {
     state.preShow = PS_FOLLOWUS;
@@ -2056,7 +2116,8 @@ async function advancePreShow() {
     let r = window._nextWeekResult;
     if(!r) { try { r = await Promise.race([loadNextWeek(), new Promise(res => setTimeout(() => res(null), 2500))]); } catch(e) { r = null; } window._nextWeekResult = r || window._nextWeekResult; }
     if(state.preShow !== PS_FOLLOWUS) return;
-    state.preShow = (r && r.items && r.items.length) ? PS_NEXTWEEK : PS_RULES;
+    window._nextWeekResult = r || window._nextWeekResult || { items:[], dateKey:'' };
+    state.preShow = PS_NEXTWEEK;
     renderPreShow();
   } else if(state.preShow === PS_NEXTWEEK) {
     state.preShow = PS_RULES;
@@ -2124,39 +2185,101 @@ function renderIntro(container, round) {
 }
 
 function renderFollowUs(container, round) {
-  const s = appSettings||{};
-  const esc = t => String(t).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
-  const el = document.createElement('div');
-  el.className = 'slide slide-intro active';
-  el.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.2vh;padding:3vh 4vw;text-align:center;';
-  el.innerHTML = `
-    <div style="font-family:var(--display);font-size:clamp(70px,13vw,210px);letter-spacing:.06em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:.95">FOLLOW US</div>
-    <div style="display:flex;flex-direction:column;gap:1.2vh;align-items:center">
-      ${s.instagram?`<div style="font-family:var(--cinzel);font-size:clamp(40px,6.4vw,112px);color:var(--text);letter-spacing:.06em;line-height:1.1">${esc(s.instagram)}</div>`:''}
-      ${s.tiktok?`<div style="font-family:var(--cinzel);font-size:clamp(40px,6.4vw,112px);color:var(--text);letter-spacing:.06em;line-height:1.1">${esc(s.tiktok)}</div>`:''}
-      ${s.website?`<div style="font-family:var(--cinzel);font-size:clamp(34px,5vw,90px);color:var(--gold);letter-spacing:.05em;line-height:1.1">${esc(s.website)}</div>`:''}
+  const s = appSettings || {};
+  const logo = s.logo ? `<img src="${psEsc(s.logo)}" style="height:182px;width:auto;max-width:420px;object-fit:contain;display:block;margin:0 auto">` : '';
+  const handles = [s.instagram, s.tiktok].filter(Boolean);
+  const two = handles.length > 1;
+  const hPx = two ? 40 : 46;
+  const handleHtml = handles.map(h => `<div style="font-family:var(--cinzel);font-weight:500;font-size:${hPx}px;letter-spacing:.2em;color:#fff;line-height:1.18;white-space:nowrap">${psEsc(String(h).toUpperCase())}</div>`).join('');
+  const siteHtml = s.website ? `<div style="font-family:var(--cinzel);font-weight:500;font-size:${two?36:40}px;letter-spacing:.14em;color:${PS_GOLD_SOLID};line-height:1.2;white-space:nowrap">${psEsc(String(s.website).toUpperCase())}</div>` : '';
+  const blockTop = 298;
+  const qrTop = Math.round(blockTop + handles.length*hPx*1.18 + (s.website?(two?36:40)*1.2:0) + 10);
+  const qrSize = Math.min(338, 746 - qrTop);
+  const scan1 = s.scan1 || s.tagline || 'Scan for shows, tickets & more';
+  const scan2 = (s.scan2 || 'Upcoming Events | Theme Nights | Tickets').split('|').map(t => t.trim()).filter(Boolean);
+  const scan2Html = scan2.map((t, i) => (i ? `<span style="color:${PS_GOLD_SOLID};margin:0 26px;font-weight:600">|</span>` : '') + `<span>${psEsc(t.toUpperCase())}</span>`).join('');
+  const qrBox = `<div id="ps-qr-box" style="width:${qrSize}px;height:${qrSize}px;margin:0 auto;box-sizing:border-box;border:7px solid #d9ac3a;padding:10px;background:#fff;box-shadow:0 0 0 3px #000 inset;display:flex;align-items:center;justify-content:center;overflow:hidden">${s.qr ? `<img src="${psEsc(s.qr)}" style="width:100%;height:100%;object-fit:contain">` : ''}</div>`;
+  psStage(container, `
+    <div style="position:absolute;left:0;right:0;top:20px;height:190px">${logo}</div>
+    <div style="position:absolute;left:0;right:0;top:207px;text-align:center">
+      <div style="font-family:'Oswald',var(--display),sans-serif;font-weight:700;font-size:88px;line-height:1;text-transform:uppercase;${psGoldText()}">Follow Us</div>
     </div>
-    ${s.qr?`<img src="${esc(s.qr)}" style="height:min(34vh,30vw);width:auto;border-radius:16px;border:4px solid var(--gold-glow)">`:''}
-    ${s.tagline?`<div style="font-family:var(--serif);font-style:italic;font-size:clamp(28px,3.6vw,64px);color:var(--text2)">${esc(s.tagline)}</div>`:''}
-    <div style="font-family:var(--cinzel);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:.5vh">Press → to continue</div>
-  `;
-  container.appendChild(el);
+    <div style="position:absolute;left:0;right:0;top:${blockTop}px;text-align:center">${handleHtml}${siteHtml}</div>
+    <div style="position:absolute;left:0;right:0;top:${qrTop}px">${qrBox}</div>
+    <div style="position:absolute;left:0;right:0;top:762px;text-align:center">
+      <div style="font-family:var(--cinzel);font-weight:500;font-size:25px;letter-spacing:.24em;text-transform:uppercase;color:#fff;line-height:1.3">${psEsc(scan1)}</div>
+      <div style="font-family:var(--cinzel);font-weight:500;font-size:25px;letter-spacing:.22em;color:#fff;margin-top:12px;white-space:nowrap">${scan2Html}</div>
+    </div>
+  `);
+  // No QR image set? Draw one from the website address so the slide is never empty.
+  if(!s.qr && s.website && window.QRCode) {
+    try {
+      const box = container.querySelector('#ps-qr-box');
+      box.innerHTML = '';
+      const url = /^https?:/i.test(s.website) ? s.website : 'https://' + s.website;
+      new QRCode(box, { text: url, width: qrSize - 34, height: qrSize - 34, correctLevel: QRCode.CorrectLevel.M });
+    } catch(e) {}
+  }
 }
 
+const HTP_DEFAULTS = {
+  steps: [
+    { t:'Name Your Team',   d:'Write your team name at the top of every answer sheet.' },
+    { t:'Phones Away',      d:'No Googling, Shazaming, AI, smart watches, carrier pigeons, etc.' },
+    { t:'Let the Host Host',d:'Don’t shout answers or talk over questions.' },
+    { t:'Trade & Grade',    d:'At the end of the round, we’ll trade papers for grading. One point per correct answer.' },
+  ],
+  ties:      { t:'Ties', d:'A tiebreaker round will decide the winner.' },
+  important: { t:'Most Important Rule', d:'Keep it fun, keep it honest, and may the best team win.' },
+};
 function renderRules(container, round) {
-  const typeObj = (catTypes||[]).find(t=>t.id===round.catType);
-  const rulesText = typeObj?.rules||'';
-  const typeName = typeObj?.name||'';
-  const el = document.createElement('div');
-  el.className = 'slide slide-intro active';
-  el.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;padding:3rem;text-align:center;';
-  el.innerHTML = `
-    <div style="font-family:var(--display);font-size:clamp(36px,6vw,80px);letter-spacing:.06em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1">HOW TO PLAY</div>
-    ${typeName?`<div style="font-family:var(--cinzel);font-size:clamp(13px,1.8vw,20px);letter-spacing:.12em;text-transform:uppercase;color:var(--gold)">${typeName}</div>`:''}
-    <div style="font-family:var(--serif);font-size:clamp(22px,3vw,40px);color:var(--text);line-height:1.6;max-width:800px;white-space:pre-line">${rulesText||'Listen carefully and write down your answers!'}</div>
-    <div style="font-family:var(--cinzel);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem">Press → to begin</div>
-  `;
-  container.appendChild(el);
+  const cfg = (appSettings && appSettings.howToPlay) || {};
+  const pick = (mine, def) => ({ t: (mine && mine.t) || def.t, d: (mine && mine.d) || def.d });
+  const steps = HTP_DEFAULTS.steps.map((def, i) => pick((cfg.steps || [])[i], def));
+  const ties = pick(cfg.ties, HTP_DEFAULTS.ties), imp = pick(cfg.important, HTP_DEFAULTS.important);
+  // Torn-paper note shapes (each a little different, like the mock)
+  const clips = [
+    'polygon(3% 14%,9% 11%,16% 13%,24% 9%,33% 12%,42% 9%,51% 12%,60% 8%,69% 11%,78% 8%,87% 11%,95% 9%,98% 22%,96% 38%,99% 52%,96% 68%,98% 84%,94% 96%,84% 93%,74% 97%,62% 94%,52% 98%,41% 95%,30% 98%,19% 94%,9% 97%,3% 90%,5% 74%,2% 58%,5% 42%,2% 28%)',
+    'polygon(2% 10%,10% 13%,19% 9%,29% 12%,38% 8%,48% 11%,58% 8%,68% 12%,78% 9%,88% 12%,97% 8%,95% 24%,98% 40%,95% 56%,98% 72%,96% 88%,88% 94%,78% 91%,67% 96%,56% 92%,45% 97%,34% 93%,23% 97%,12% 92%,4% 96%,3% 78%,6% 62%,2% 46%,5% 30%)',
+    'polygon(4% 9%,12% 12%,22% 8%,31% 11%,41% 8%,50% 12%,61% 9%,71% 12%,81% 8%,91% 11%,97% 10%,99% 28%,96% 44%,99% 60%,96% 76%,98% 92%,89% 95%,79% 92%,68% 96%,57% 93%,46% 97%,35% 93%,25% 96%,14% 93%,5% 96%,2% 80%,5% 64%,3% 48%,6% 32%,3% 20%)',
+    'polygon(3% 12%,11% 9%,20% 12%,30% 8%,40% 12%,49% 9%,59% 12%,69% 8%,79% 12%,89% 9%,97% 12%,96% 30%,99% 46%,96% 62%,99% 78%,95% 94%,86% 91%,75% 96%,64% 92%,53% 97%,42% 93%,31% 96%,20% 92%,10% 96%,3% 92%,5% 76%,2% 60%,5% 44%,2% 28%)',
+  ];
+  const rot = [-1.4, 1.1, -0.8, 1.3], nudge = [4, -6, 10, -2];
+  const noteBg = 'radial-gradient(circle at 30% 20%,#262218 0%,#14110c 55%,#0b0a07 100%)';
+  const cards = steps.map((st, i) => `
+    <div style="position:absolute;left:${28 + i*405}px;top:${230 + nudge[i]}px;width:395px;height:395px;transform:rotate(${rot[i]}deg)">
+      <div style="position:absolute;inset:0;clip-path:${clips[i]};background:${noteBg};filter:drop-shadow(0 0 1px #c9a84c)"></div>
+      <div style="position:absolute;left:150px;top:6px;width:100px;height:44px;background:linear-gradient(135deg,#a8883a,#d9bb64 50%,#a07f2f);opacity:.9;transform:rotate(-3deg)"></div>
+      <div style="position:absolute;left:50%;top:44px;width:136px;height:84px;margin-left:-68px;border:4px solid #e3b22f;border-radius:50%;transform:rotate(-6deg);display:flex;align-items:center;justify-content:center;font-family:'Oswald',sans-serif;font-style:italic;font-weight:600;font-size:62px;color:#e3b22f;line-height:1">0${i+1}</div>
+      <div style="position:absolute;left:24px;right:24px;top:154px;text-align:center">
+        <div style="font-family:'Oswald',var(--display),sans-serif;font-weight:700;font-size:${st.t.length > 15 ? 38 : 44}px;letter-spacing:.03em;text-transform:uppercase;color:#e3b22f;line-height:1.05">${psEsc(st.t)}</div>
+        <div style="width:112px;height:4px;border-radius:2px;background:#e3b22f;margin:12px auto 14px"></div>
+        <div style="font-family:var(--serif);font-weight:500;font-size:${st.d.length > 80 ? 27 : 30}px;color:#fff;line-height:1.28">${psEsc(st.d)}</div>
+      </div>
+    </div>`).join('');
+  const doodle = (d, x, y) => `<svg style="position:absolute;left:${x}px;top:${y}px" width="90" height="70" viewBox="0 0 90 70" fill="none" stroke="#e3b22f" stroke-width="4" stroke-linecap="round">${d}</svg>`;
+  const arrow = (x, y, flip) => `<svg style="position:absolute;left:${x}px;top:${y}px;${flip?'transform:scaleY(-1)':''}" width="120" height="70" viewBox="0 0 120 70" fill="none" stroke="#e3b22f" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 44 C 30 10, 76 6, 108 34"/><path d="M92 20 L110 36 L88 44"/></svg>`;
+  psStage(container, `
+    <div style="position:absolute;left:0;right:0;top:42px;text-align:center">
+      <div style="font-family:'Oswald',var(--display),sans-serif;font-weight:700;font-size:120px;line-height:1.02;text-transform:uppercase;${psGoldText()}">How to Play</div>
+      <div style="margin-top:10px">${psSubtitle('Trivia')}</div>
+    </div>
+    ${doodle('<path d="M10 62 L22 34"/><path d="M34 46 L38 20"/><path d="M52 30 L60 12"/>', 30, 218)}
+    ${doodle('<path d="M78 62 L66 34"/><path d="M54 46 L50 20"/><path d="M36 30 L28 12"/>', 1150, 222)}
+    ${cards}
+    ${arrow(372, 288, false)}${arrow(1196, 308, true)}
+    <div style="position:absolute;left:487px;right:584px;top:681px;height:3px;background:#c9a84c"></div>
+    <div style="position:absolute;left:443px;top:700px;width:340px;text-align:center">
+      <div style="font-family:'Oswald',var(--display),sans-serif;font-weight:700;font-size:38px;letter-spacing:.03em;text-transform:uppercase;color:#e3b22f;line-height:1.1">${psEsc(ties.t)}</div>
+      <div style="font-family:var(--serif);font-weight:500;font-size:27px;color:#fff;line-height:1.22;margin-top:6px">${psEsc(ties.d)}</div>
+    </div>
+    <div style="position:absolute;left:809px;top:712px;width:3px;height:98px;background:#e3b22f"></div>
+    <div style="position:absolute;left:842px;top:700px;width:345px;text-align:center">
+      <div style="font-family:'Oswald',var(--display),sans-serif;font-weight:700;font-size:38px;letter-spacing:.03em;text-transform:uppercase;color:#e3b22f;line-height:1.1">${psEsc(imp.t)}</div>
+      <div style="font-family:var(--serif);font-weight:500;font-size:27px;color:#fff;line-height:1.22;margin-top:6px">${psEsc(imp.d)}</div>
+    </div>
+    <div style="position:absolute;left:487px;right:589px;top:838px;height:3px;background:#c9a84c"></div>
+  `);
 }
 
 function renderInterstitial(container, round) {
