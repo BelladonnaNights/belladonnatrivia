@@ -641,11 +641,19 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-peek-label{font-size:11px}
 .hb-peek-text{font-size:14px;line-height:1.4}
 .hb-peek-answer{font-size:13px}
-.hb-adj-input{width:84px;font-size:16px;padding:8px 8px}
+.hb-adj-input{width:84px;font-size:16px;padding:8px 8px;-moz-appearance:textfield;appearance:textfield}
+.hb-adj-input::-webkit-outer-spin-button,.hb-adj-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.hb-position{font-family:var(--cinzel);font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);line-height:1.5;padding:8px 12px 2px}
+.hb-fb-row{display:flex;gap:8px;padding:6px 12px;flex-wrap:wrap}
+.hb-fb-btn{padding:8px 14px;border-radius:8px;border:1px solid var(--border2);background:rgba(255,255,255,.05);color:var(--text2);cursor:pointer;font-size:16px;font-family:var(--cinzel);letter-spacing:.06em}
+.hb-fb-btn:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.hb-fb-btn.flash{background:var(--gold-dim);border-color:var(--gold-glow);color:var(--gold)}
+#hb-fb-note{padding:0 12px 8px}
+#hb-fb-note textarea{width:100%;min-height:70px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:14px;padding:8px;box-sizing:border-box;resize:vertical;font-family:inherit}
 .hb-adj-btn{padding:9px 16px;font-size:12px;border-radius:7px}
 .hb-grade-btns{gap:8px}
 .hb-grade-btn{padding:10px 20px;font-size:20px;line-height:1;min-width:58px;border-radius:8px}
-.hb-lock-btn{padding:8px 12px;border-radius:7px;border:1px solid var(--border2);background:rgba(255,255,255,.05);color:var(--text2);cursor:pointer;font-family:var(--cinzel);font-size:11px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.hb-lock-btn{padding:4px 10px;border-radius:7px;border:1px solid var(--border2);background:rgba(255,255,255,.05);cursor:pointer;font-size:20px;line-height:1.2}
 .hb-lock-btn.on{background:var(--gold-dim);border-color:var(--gold-glow);color:var(--gold)}
 </style>
 </head>
@@ -718,6 +726,19 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         </div>
         <div class="hb-preview-resize-handle" id="hb-preview-resize-handle" title="Drag to resize"></div>
       </div>
+      <div class="hb-position" id="hb-position"></div>
+      <div class="hb-fb-row" id="hb-fb-row" style="display:none">
+        <button class="hb-fb-btn" id="hb-fb-up" onclick="hostThumb('up')" title="Good question">👍</button>
+        <button class="hb-fb-btn" id="hb-fb-down" onclick="hostThumb('down')" title="Flag this question">👎</button>
+        <button class="hb-fb-btn" onclick="hostToggleNote()" title="Leave a note about this question">✎ Note</button>
+      </div>
+      <div id="hb-fb-note" style="display:none">
+        <textarea id="hb-fb-note-text" placeholder="Misspelling, bad answer, anything you want to flag…"></textarea>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+          <button class="hb-fb-btn" style="font-size:13px" onclick="hostToggleNote()">Cancel</button>
+          <button class="hb-fb-btn flash" style="font-size:13px" onclick="hostSubmitNote()">Submit</button>
+        </div>
+      </div>
       <div style="padding:6px 12px;flex-shrink:0">
         <div class="hb-section-label">Answers</div>
         <div class="hb-submit-count" id="hb-submit-count">— / —</div>
@@ -737,7 +758,6 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="hb-nav-controls">
           <button class="hb-nav-btn" onclick="sendHostCommand('back')">← Back</button>
           <button class="hb-nav-btn hb-nav-btn-primary" onclick="sendHostCommand('next')">Next →</button>
-          <button class="hb-nav-btn" onclick="sendHostCommand('reveal')" id="hb-reveal-btn">Space Reveal</button>
           <button class="hb-nav-btn" id="hb-audio-btn" onclick="sendHostCommand('audio')" style="display:none">▶ Play Audio</button>
         </div>
       </div>
@@ -764,11 +784,14 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="hb-peek-answer" id="hb-peek-answer" style="display:none"></div>
         <button class="hb-peek-rerandom-btn" id="hb-peek-rerandom-btn" onclick="sendHostCommand('rerandomize-next')" style="display:none">Re-randomize ↻</button>
       </div>
-      <div class="hb-timed-row">
-        <span class="hb-timed-label">⏱ Timed (10s)<br><span style="font-size:11px;letter-spacing:.06em;color:var(--text3);text-transform:none">next question only</span></span>
-        <div style="display:flex;align-items:center;gap:10px">
-          <button class="hb-lock-btn" id="hb-timed-lock" onclick="toggleHostTimedLock()" title="Keep timed mode on for every question until unlocked">🔓 Lock</button>
+      <div class="hb-timed-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span class="hb-timed-label" style="font-size:12px;white-space:nowrap">⏱ Timed (10s)</span>
           <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()"></div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">next question only</span>
+          <button class="hb-lock-btn" id="hb-timed-lock" onclick="toggleHostTimedLock()" title="Lock timed mode on for every question (click again to unlock)">🔓</button>
         </div>
       </div>
       <button class="hb-btn hb-btn-ghost" id="hb-intro-btn" onclick="toggleHostIntro()">Play Intro Slides</button>
@@ -2595,6 +2618,23 @@ function toggleHostTimed() {
   document.getElementById('hb-timed-toggle').classList.toggle('on', hostTimedOn);
   liveRef('timedOverride').set(hostTimedOn ? true : null);
 }
+function hostThumb(dir) {
+  sendHostCommand(dir === 'up' ? 'thumb-up' : 'thumb-down');
+  const b = document.getElementById(dir === 'up' ? 'hb-fb-up' : 'hb-fb-down');
+  if(b) { b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 900); }
+  toast(dir === 'up' ? '👍 Noted' : '👎 Flagged for review');
+}
+function hostToggleNote() {
+  const box = document.getElementById('hb-fb-note');
+  const show = box.style.display === 'none';
+  box.style.display = show ? 'block' : 'none';
+  if(show) { const ta = document.getElementById('hb-fb-note-text'); ta.value = ''; ta.focus(); }
+}
+function hostSubmitNote() {
+  const text = document.getElementById('hb-fb-note-text').value.trim();
+  if(text) { sendHostCommand('feedback-note', { text }); toast('Note saved'); }
+  hostToggleNote();
+}
 function toggleHostTimedLock() {
   hostTimedLocked = !hostTimedLocked;
   liveRef('timedLock').set(hostTimedLocked ? true : null);
@@ -2684,6 +2724,14 @@ async function runConfirmedAction() {
 // (closeConfirm was nulling pendingConfirmAction before it was read)
 
 // ── Grading panel ─────────────────────────────────────────────────────
+// An answer needs host grading unless it came from a multiple-choice / true-false question
+function isOpenAnswer(a) {
+  if(!a || !a.answer) return false;
+  const t = String(a.type || '').toLowerCase();
+  if(t === 'mc' || t === 'tf') return false;
+  if(!t) return !['true','false'].includes(String(a.answer).toLowerCase()) && String(a.answer).length > 1;
+  return true;
+}
 function normalizeForGrade(s) {
   return (s||'').toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim();
 }
@@ -2699,7 +2747,7 @@ function buildGradingQuestions() {
     const ansEntries = Object.entries(answers);
     if(!ansEntries.length) continue;
     // Only open-answer questions — skip MC and TF (they're auto-graded)
-    const hasOpen = ansEntries.some(([,a]) => a.type === 'open' || (!a.type && a.answer && typeof a.answer === 'string' && !['true','false','True','False'].includes(a.answer) && a.answer.length > 1));
+    const hasOpen = ansEntries.some(([,a]) => isOpenAnswer(a));
     if(!hasOpen) continue;
     const first = ansEntries[0][1];
     gradingQuestions.push({
@@ -2812,7 +2860,7 @@ function effectiveStatus(qId, ans) {
   const key = normalizeForGrade(keyFor(qId) || ans.correctAnswer || '');
   const given = normalizeForGrade(ans.answer);
   const t = String(ans.type || '').toLowerCase();
-  const isChoice = t === 'mc' || t === 'tf' || ['true','false'].includes(given);
+  const isChoice = t === 'mc' || t === 'tf' || (!t && ['true','false'].includes(given));
   if(!key) return null;
   if(given && given === key) return 'correct';
   if(isChoice) return 'wrong';
@@ -2835,7 +2883,7 @@ function updateGradeButton() {
   let hasPending = false;
   for(const [qId, answers] of Object.entries(allAnswersCache)) {
     for(const ans of Object.values(answers)) {
-      if(ans.type === 'open' || (!ans.type && ans.answer && !['true','false','True','False'].includes(ans.answer) && ans.answer.length > 1)) {
+      if(isOpenAnswer(ans)) {
         if(ans.status !== 'correct' && ans.status !== 'wrong') {
           const norm = normalizeForGrade(ans.answer);
           const normCorrect = normalizeForGrade(keyFor(qId)||ans.correctAnswer||'');
@@ -3036,7 +3084,7 @@ function attachHbListeners() {
   timedLockRef.on('value', snap => {
     hostTimedLocked = snap.val() === true;
     const b = document.getElementById('hb-timed-lock');
-    if(b) { b.classList.toggle('on', hostTimedLocked); b.textContent = hostTimedLocked ? '🔒 Locked on' : '🔓 Lock'; }
+    if(b) { b.classList.toggle('on', hostTimedLocked); b.textContent = hostTimedLocked ? '🔒' : '🔓'; b.title = hostTimedLocked ? 'Locked on for every question — click to unlock' : 'Lock timed mode on for every question'; }
   });
 
   const introQrRef = liveRef('introQrVisible'); _hbRefs.push(introQrRef);
@@ -3055,6 +3103,10 @@ function attachHbListeners() {
   const audioBtn = document.getElementById('hb-audio-btn');
   const watermark= document.getElementById('hb-idle-watermark');
   const slideLabel = document.getElementById('hb-slide-label');
+  const posEl = document.getElementById('hb-position'), fbRow = document.getElementById('hb-fb-row');
+  if(posEl) posEl.innerHTML = s && s.roundNum ? 'Round ' + s.roundNum + (s.roundTotal ? ' of ' + s.roundTotal : '') + (s.qNow ? '<br>Question ' + s.qNow + (s.qTotal ? ' of ' + s.qTotal : '') : '') : '';
+  if(fbRow) fbRow.style.display = (s && s.canFeedback) ? 'flex' : 'none';
+  if(!(s && s.canFeedback)) { const nb = document.getElementById('hb-fb-note'); if(nb) nb.style.display = 'none'; }
   if(!s) {
     if(typeEl) typeEl.textContent = '';
     if(numEl)  numEl.textContent  = '';
