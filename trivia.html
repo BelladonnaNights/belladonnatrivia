@@ -672,6 +672,33 @@ var fsdb, fbAuth; // Firestore (Question Vault) + Auth
 })();
 
 // ═══════════════════════════════════════════════════════
+//  HOST-SCOPED LIVE GAME PATH
+//  Everything for tonight's game lives under games/<host's uid>/, so two hosts
+//  at once never touch each other's game. Players join with ?g=<uid> in their
+//  link (the QR code carries it). Answer keys live apart, in gameSecrets/<uid>/,
+//  readable only by the host.
+// ═══════════════════════════════════════════════════════
+var LIVE_UID = null;
+function liveRef(sub) { return db.ref('games/' + (LIVE_UID || '__unset__') + (sub ? '/' + sub : '')); }
+function secretRef(sub) { return db.ref('gameSecrets/' + (LIVE_UID || '__unset__') + (sub ? '/' + sub : '')); }
+var _liveReadyCbs = [];
+function whenLiveReady(fn) { if(LIVE_UID) fn(); else _liveReadyCbs.push(fn); }
+if(typeof fbAuth !== 'undefined' && fbAuth) {
+  fbAuth.onAuthStateChanged(function(u) {
+    if(!u || LIVE_UID === u.uid) return;
+    LIVE_UID = u.uid;
+    if(typeof refreshJoinLinks === 'function') refreshJoinLinks();
+    const cbs = _liveReadyCbs; _liveReadyCbs = [];
+    cbs.forEach(f => { try { f(); } catch(e) { console.error(e); } });
+  });
+}
+// The link players scan/open — carries the host's id so they find this host's game.
+function joinLink() {
+  const base = window.location.href.replace(/\/[^/?#]*([?#].*)?$/, '/play.html');
+  return LIVE_UID ? base + '?g=' + encodeURIComponent(LIVE_UID) : base;
+}
+
+// ═══════════════════════════════════════════════════════
 //  LIVE GAME — Digital Answering System
 // ═══════════════════════════════════════════════════════
 let leaderboardVisible = false;
@@ -687,17 +714,31 @@ function toggleJoinPanel() {
 
 
 function initLiveGame() {
+  if(!LIVE_UID) { whenLiveReady(initLiveGame); return; }   // wait for sign-in to finish
   const sessionId = 'session_' + Date.now();
   const startedAt = Date.now();
-  db.ref('trivia/liveGame').set({
-    status: 'waiting',
-    currentQuestion: null,
-    leaderboardVisible: false,
-    sessionId,
-    startedAt,
-  });
+  // Players who scanned the QR while the setup screen was up have already joined —
+  // keep anyone who joined in the last 45 minutes (scores back to 0) instead of
+  // wiping them, and drop older leftovers from earlier games.
+  liveRef('teams').once('value').then(tsnap => {
+    const old = tsnap.val() || {};
+    const keep = {};
+    Object.entries(old).forEach(([id, t]) => {
+      if(t && t.joinedAt && Date.now() - t.joinedAt < 45*60*1000) keep[id] = { name: t.name, score: 0, joinedAt: t.joinedAt };
+    });
+    // update() (not set) so the slide-state write below isn't clobbered by a race
+    return liveRef().update({
+      status: 'waiting',
+      currentQuestion: null,
+      leaderboardVisible: false,
+      teams: Object.keys(keep).length ? keep : null,
+      answers: null, results: null, resultsVisible: null, hostPeek: null,
+      sessionId,
+      startedAt,
+    });
+  }).catch(e => console.error('Could not start the live game', e));
   // Push initial slide state so host board shows something immediately
-  db.ref('trivia/liveGame/slideState').set({
+  liveRef('slideState').set({
     label: 'Game Ready',
     text: 'Waiting for host to start…',
     qNum: '',
@@ -730,11 +771,11 @@ function toggleLeaderboard() {
   leaderboardVisible = !leaderboardVisible;
   const overlay = document.getElementById('lb-overlay');
   overlay.style.display = leaderboardVisible ? 'flex' : 'none';
-  db.ref('trivia/liveGame/leaderboardVisible').set(leaderboardVisible);
+  liveRef('leaderboardVisible').set(leaderboardVisible);
   const btn = document.getElementById('lb-toggle-btn');
   if(btn) btn.textContent = leaderboardVisible ? 'Hide Leaderboard' : 'Show Leaderboard';
   if(leaderboardVisible) {
-    db.ref('trivia/liveGame/teams').once('value', snap => renderLeaderboardOverlay(snap.val()||{}));
+    liveRef('teams').once('value', snap => renderLeaderboardOverlay(snap.val()||{}));
   }
 }
 
@@ -757,10 +798,10 @@ let nextQuestionTimedOverride = null;
 
 // Listen for host board timed toggle
 if(db) {
-  db.ref('trivia/liveGame/timedOverride').on('value', snap => {
+  whenLiveReady(() => liveRef('timedOverride').on('value', snap => {
     const val = snap.val();
     if(val !== null && val !== undefined) nextQuestionTimedOverride = !!val;
-  });
+  }));
 }
 
 function getEffectiveTimed(round) {
@@ -779,27 +820,27 @@ function pushLiveQuestion(q, qIndex, round) {
   const qId = `q_${state.roundIndex}_${qIndex}`;
   const timed = getEffectiveTimed(round);
 
-  db.ref('trivia/liveGame').update({
+  liveRef().update({
     status: 'question',
     currentQuestion: {
       id: qId, text: q.question, type: q.type||'open',
-      choices, correct: q.answer, index: qIndex,
+      choices, index: qIndex,
       timed, timeLimit: 10,
       roundIndex: state.roundIndex, openedAt: Date.now(),
     }
   });
   // Store correct answer on the question node so grading panel can read it
-  db.ref(`trivia/liveGame/questionMeta/${qId}`).set({
+  secretRef(`questionMeta/${qId}`).set({
     questionText: q.question,
     correctAnswer: q.answer,
   });
-  db.ref(`trivia/liveGame/answers/${qId}`).remove();
+  liveRef(`answers/${qId}`).remove();
 }
 
 // Listen for host commands from admin board
 if(db) {
-  let lastHostCommandTs = 0;
-  db.ref('trivia/liveGame/hostCommand').on('value', snap => {
+  let lastHostCommandTs = Date.now() - 2000; // ignore stale commands left from an earlier session
+  whenLiveReady(() => liveRef('hostCommand').on('value', snap => {
     const cmd = snap.val();
     if(!cmd || !cmd.ts || cmd.ts <= lastHostCommandTs) return;
     lastHostCommandTs = cmd.ts;
@@ -822,7 +863,7 @@ if(db) {
         if(anyAudioBtn && !anyAudioBtn.disabled) { anyAudioBtn.click(); }
         break;
     }
-  });
+  }));
 }
 
 // Clean up Firebase when host closes the tab
@@ -830,9 +871,9 @@ window.addEventListener('beforeunload', () => {
   if(db) {
     try {
       // Save final teams to history before closing
-      db.ref('trivia/liveGame/teams').once('value', snap => {
+      liveRef('teams').once('value', snap => {
         const teams = snap.val();
-        db.ref('trivia/liveGame').once('value', snap2 => {
+        liveRef().once('value', snap2 => {
           const g = snap2.val();
           if(g && g.sessionId && teams) {
             db.ref('trivia/gameHistory/' + g.sessionId + '/teams').set(teams);
@@ -840,16 +881,16 @@ window.addEventListener('beforeunload', () => {
           }
         });
       });
-      db.ref('trivia/liveGame/slideState').remove();
-      db.ref('trivia/liveGame/status').set(null);
-      db.ref('trivia/liveGame/currentQuestion').set(null);
+      liveRef('slideState').remove();
+      liveRef('status').set(null);
+      liveRef('currentQuestion').set(null);
     } catch(e) {}
   }
 });
 
 function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
   if(!db) return;
-  db.ref('trivia/liveGame/slideState').set({
+  liveRef('slideState').set({
     label:  label  || '',
     text:   text   || '',
     qNum:   qNum   || '',
@@ -867,7 +908,7 @@ function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
 function pushNextQuestionPeek() {
   if(!db) return;
   const round = currentRound();
-  if(!round) { db.ref('trivia/liveGame/hostPeek').set(null); return; }
+  if(!round) { liveRef('hostPeek').set(null); return; }
   const type = slideType();
   let nextText = '', nextLabel = '', nextAnswer = '';
 
@@ -892,7 +933,7 @@ function pushNextQuestionPeek() {
     }
   }
 
-  db.ref('trivia/liveGame/hostPeek').set({ text: nextText, answer: nextAnswer, label: nextLabel, ts: Date.now() });
+  liveRef('hostPeek').set({ text: nextText, answer: nextAnswer, label: nextLabel, ts: Date.now() });
 }
 
 // Host-triggered: swap the upcoming (not-yet-shown) question for a fresh
@@ -1534,12 +1575,13 @@ function closeNotePopup() {
 }
 
 function advanceSlide() {
+  if(state.preShow) { advancePreShow(); return; }
   const type = slideType();
   if(type === S_JUMP) return;
 
   // Close digital answers when leaving a question
   if(type === S_QUESTION) {
-    db.ref('trivia/liveGame/status').set('closed');
+    liveRef('status').set('closed');
     // Stop any music audio
     if(window._musicAudio) { window._musicAudio.pause(); window._musicAudio = null; }
     if(window._musicCtx) { try { window._musicCtx.close(); } catch(e) {} window._musicCtx = null; }
@@ -1587,10 +1629,31 @@ function advanceSlide() {
 }
 
 function retreatSlide() {
+  if(state.preShow) { retreatPreShow(); return; }
   if(slideType() === S_JUMP) return;
+  // An answer on screen? Back first hides it (returns to the question) instead of skipping a slide.
+  if(slideType() === S_QUESTION && state.answerVisible) {
+    state.answerVisible = false; renderCurrentSlide(); return;
+  }
   state.answerVisible = false;
   state.currentType = null;
-  if(state.slideIndex > 0) { state.slideIndex--; renderCurrentSlide(); }
+  if(state.slideIndex > 0) { state.slideIndex--; renderCurrentSlide(); return; }
+  // First slide of a round: step back into the previous round's last slide,
+  // or — from round 1 — back through the pre-show slides.
+  if(state.jumpingFromMain) return;
+  if(state.roundIndex > 0) {
+    state.roundIndex--;
+    state.slideIndex = slideCount() - 1;
+    state.answerVisible = false;
+    renderCurrentSlide();
+  } else {
+    state.preShow = PS_RULES;
+    retreatPreShowFromRules();
+  }
+}
+function retreatPreShowFromRules() {
+  // Re-enter the pre-show on its last slide (Rules), ready to step back further
+  renderPreShow();
 }
 
 // Keep legacy names for compatibility
@@ -1782,7 +1845,7 @@ let ssQrVisible = false;
 
 function startPreview() {
   // Collect all bgIntro images from pending rounds, fall back to bgQuestion
-  ssImages = pendingRounds
+  ssImages = ((pendingRounds && pendingRounds.length) ? pendingRounds : (state.rounds || []))
     .map(r => r.bgIntro || r.bgQuestion || r.bgImage || '')
     .filter(Boolean);
 
@@ -1800,7 +1863,7 @@ function startPreview() {
   document.documentElement.requestFullscreen?.().catch(()=>{});
   ssShowNext();
   if(ssQrVisible) renderScreensaverQR();
-  if(db) db.ref('trivia/liveGame/introPlaying').set(true);
+  if(db) liveRef('introPlaying').set(true);
 }
 
 function renderScreensaverQR() {
@@ -1809,7 +1872,8 @@ function renderScreensaverQR() {
   if(!box || !codeEl) return;
   box.classList.add('show');
   codeEl.innerHTML = '';
-  const url = joinUrlCached || window.location.href.replace(/\/[^/?#]*([?#].*)?$/, '/play.html');
+  joinUrlCached = joinLink();
+  const url = joinUrlCached;
   if(typeof QRCode === 'undefined') { setTimeout(renderScreensaverQR, 300); return; }
   const size = Math.max(100, Math.min(box.clientWidth - 32, 260));
   new QRCode(codeEl, {text:url, width:size, height:size, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
@@ -1821,7 +1885,7 @@ function setScreensaverQRVisible(show) {
   if(!box) return;
   if(ssQrVisible) renderScreensaverQR();
   else box.classList.remove('show');
-  if(db) db.ref('trivia/liveGame/introQrVisible').set(ssQrVisible);
+  if(db) liveRef('introQrVisible').set(ssQrVisible);
 }
 
 function ssShowNext() {
@@ -1858,7 +1922,7 @@ function stopPreview() {
   document.getElementById('ss-slide-b').style.opacity = '0';
   document.getElementById('ss-join-qr')?.classList.remove('show');
   document.exitFullscreen?.().catch(()=>{});
-  if(db) db.ref('trivia/liveGame/introPlaying').set(false);
+  if(db) liveRef('introPlaying').set(false);
 }
 
 // Also stop on any keypress
@@ -1966,6 +2030,18 @@ function renderNextWeek(container) {
   container.appendChild(el);
 }
 
+function retreatPreShow() {
+  if(state.preShow === PS_RULES) {
+    const r = window._nextWeekResult;
+    state.preShow = (r && r.items && r.items.length) ? PS_NEXTWEEK : PS_FOLLOWUS;
+    renderPreShow();
+  } else if(state.preShow === PS_NEXTWEEK) {
+    state.preShow = PS_FOLLOWUS;
+    renderPreShow();
+  }
+  // Follow Us is the first pre-show slide — nothing before it
+}
+
 function showPreShow() {
   state.preShow = PS_FOLLOWUS;
   window._nextWeekResult = null;
@@ -2049,19 +2125,20 @@ function renderIntro(container, round) {
 
 function renderFollowUs(container, round) {
   const s = appSettings||{};
+  const esc = t => String(t).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
   const el = document.createElement('div');
   el.className = 'slide slide-intro active';
-  el.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;padding:3rem;text-align:center;';
+  el.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.2vh;padding:3vh 4vw;text-align:center;';
   el.innerHTML = `
-    <div style="font-family:var(--display);font-size:clamp(40px,7vw,90px);letter-spacing:.06em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1">FOLLOW US</div>
-    <div style="display:flex;flex-direction:column;gap:.75rem;align-items:center">
-      ${s.instagram?`<div style="font-family:var(--cinzel);font-size:clamp(28px,4vw,52px);color:var(--text);letter-spacing:.08em">📸 ${s.instagram}</div>`:''}
-      ${s.tiktok?`<div style="font-family:var(--cinzel);font-size:clamp(28px,4vw,52px);color:var(--text);letter-spacing:.08em">🎵 ${s.tiktok}</div>`:''}
-      ${s.website?`<div style="font-family:var(--cinzel);font-size:clamp(22px,3vw,38px);color:var(--gold);letter-spacing:.06em">🌐 ${s.website}</div>`:''}
+    <div style="font-family:var(--display);font-size:clamp(70px,13vw,210px);letter-spacing:.06em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:.95">FOLLOW US</div>
+    <div style="display:flex;flex-direction:column;gap:1.2vh;align-items:center">
+      ${s.instagram?`<div style="font-family:var(--cinzel);font-size:clamp(40px,6.4vw,112px);color:var(--text);letter-spacing:.06em;line-height:1.1">${esc(s.instagram)}</div>`:''}
+      ${s.tiktok?`<div style="font-family:var(--cinzel);font-size:clamp(40px,6.4vw,112px);color:var(--text);letter-spacing:.06em;line-height:1.1">${esc(s.tiktok)}</div>`:''}
+      ${s.website?`<div style="font-family:var(--cinzel);font-size:clamp(34px,5vw,90px);color:var(--gold);letter-spacing:.05em;line-height:1.1">${esc(s.website)}</div>`:''}
     </div>
-    ${s.qr?`<img src="${s.qr}" style="width:clamp(140px,20vw,240px);height:auto;border-radius:12px;border:3px solid var(--gold-glow)">`:''}
-    ${s.tagline?`<div style="font-family:var(--serif);font-style:italic;font-size:clamp(20px,2.5vw,32px);color:var(--text2)">${s.tagline}</div>`:''}
-    <div style="font-family:var(--cinzel);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem">Press → to continue</div>
+    ${s.qr?`<img src="${esc(s.qr)}" style="height:min(34vh,30vw);width:auto;border-radius:16px;border:4px solid var(--gold-glow)">`:''}
+    ${s.tagline?`<div style="font-family:var(--serif);font-style:italic;font-size:clamp(28px,3.6vw,64px);color:var(--text2)">${esc(s.tagline)}</div>`:''}
+    <div style="font-family:var(--cinzel);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:.5vh">Press → to continue</div>
   `;
   container.appendChild(el);
 }
@@ -2571,17 +2648,16 @@ document.addEventListener('keydown', e => {
 
   if(e.key === 'Escape') { exitPresentation(); return; }
 
-  // Forward: Space, →, Enter, PageDown (clicker)
-  if(e.key === ' ' || e.code === 'Space' || e.key === 'ArrowRight' || e.key === 'Enter' || e.key === 'PageDown') {
+  // Forward — covers keyboards and presentation clickers (most send PageDown or →;
+  // some send ↓, Enter, Space, or a media "next" key)
+  if(e.key === ' ' || e.code === 'Space' || e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'Enter' || e.key === 'PageDown' || e.key === 'MediaTrackNext' || e.key === 'n' || e.key === 'N') {
     e.preventDefault();
-    if(state.preShow) { advancePreShow(); return; }
     advanceSlide(); return;
   }
 
-  // Back: ←, PageUp (clicker)
-  if(e.key === 'ArrowLeft' || e.key === 'PageUp') {
+  // Back — ←, ↑, PageUp (clicker), Backspace, media "previous"
+  if(e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'Backspace' || e.key === 'MediaTrackPrevious' || e.key === 'p' || e.key === 'P') {
     e.preventDefault();
-    if(state.preShow) return; // can't go back in pre-show
     retreatSlide(); return;
   }
 
@@ -2604,7 +2680,6 @@ document.addEventListener('keydown', e => {
 document.getElementById('pres-screen').addEventListener('click', e => {
   if(e.target.closest('button')) return;
   if(!document.getElementById('pres-screen').classList.contains('show')) return;
-  if(state.preShow) { advancePreShow(); return; }
   advanceSlide();
 });
 
@@ -2804,10 +2879,10 @@ function checkUrlParams() {
   document.getElementById('setup-launch-btn').style.display = 'block';
   document.getElementById('setup-preview-btn').style.display = 'block';
   document.getElementById('setup-join-btn').style.display = 'block';
-  joinUrlCached = window.location.href.replace(/\/[^/?#]*([?#].*)?$/, '/play.html');
+  joinUrlCached = joinLink();
   document.getElementById('setup-join-btn').style.display = 'block';
   // Set join URL
-  const joinUrl = window.location.href.replace(/\/[^/]*$/, '/play.html');
+  const joinUrl = joinLink();
   document.getElementById('join-url').textContent = joinUrl;
   generateQR(joinUrl);
   return true;
@@ -3086,8 +3161,8 @@ async function tryStandaloneAutoLoad(){
   document.getElementById('setup-launch-btn').style.display = 'block';
   document.getElementById('setup-preview-btn').style.display = 'block';
   document.getElementById('setup-join-btn').style.display = 'block';
-  joinUrlCached = window.location.href.replace(/\/[^/?#]*([?#].*)?$/, '/play.html');
-  const joinUrl = window.location.href.replace(/\/[^/]*$/, '/play.html');
+  joinUrlCached = joinLink();
+  const joinUrl = joinLink();
   document.getElementById('join-url').textContent = joinUrl;
   generateQR(joinUrl);
 }
@@ -3106,6 +3181,15 @@ function toggleJoinPopup() {
   }
 }
 
+// Once the host's id is known, rebuild the join link/QR so players get ?g=<uid>
+function refreshJoinLinks() {
+  try {
+    joinUrlCached = joinLink();
+    const el = document.getElementById('join-url');
+    if(el && el.textContent) { el.textContent = joinUrlCached; generateQR(joinUrlCached); }
+    if(typeof ssQrVisible !== 'undefined' && ssQrVisible && document.getElementById('screensaver').style.display !== 'none') renderScreensaverQR();
+  } catch(e) {}
+}
 function generateQR(url) {
   const container = document.getElementById('join-qr');
   if(!container) return;
