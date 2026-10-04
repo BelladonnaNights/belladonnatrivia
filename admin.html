@@ -630,6 +630,23 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .sched-tab.active{color:var(--gold);border-bottom-color:var(--gold)}
 .btn-sched-accent{background:var(--gold-dim);border:1px solid var(--gold-glow);color:var(--gold);font-size:10px;padding:5px 12px;border-radius:var(--radius);font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:all .15s}
 .btn-sched-accent:hover{background:rgba(201,168,76,.2)}
+
+/* ── Host board: bigger, easier-to-hit controls ── */
+.hb-middle-top .hb-section-label{font-size:15px;letter-spacing:.14em;margin-bottom:8px}
+#hb-slide-label{font-size:19px !important;line-height:1.35;white-space:normal !important;overflow:visible !important;text-overflow:clip !important;color:var(--text) !important}
+.hb-nav-controls{gap:10px;margin-top:10px}
+.hb-nav-btn{padding:13px 22px;font-size:14px;letter-spacing:.08em;border-radius:8px}
+.hb-grade-btn-trigger{padding:11px 18px;font-size:13px;letter-spacing:.08em;border-radius:8px}
+.hb-preview-q-text{font-size:12px;-webkit-line-clamp:3}
+.hb-peek-label{font-size:11px}
+.hb-peek-text{font-size:14px;line-height:1.4}
+.hb-peek-answer{font-size:13px}
+.hb-adj-input{width:84px;font-size:16px;padding:8px 8px}
+.hb-adj-btn{padding:9px 16px;font-size:12px;border-radius:7px}
+.hb-grade-btns{gap:8px}
+.hb-grade-btn{padding:10px 20px;font-size:20px;line-height:1;min-width:58px;border-radius:8px}
+.hb-lock-btn{padding:8px 12px;border-radius:7px;border:1px solid var(--border2);background:rgba(255,255,255,.05);color:var(--text2);cursor:pointer;font-family:var(--cinzel);font-size:11px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.hb-lock-btn.on{background:var(--gold-dim);border-color:var(--gold-glow);color:var(--gold)}
 </style>
 </head>
 <body>
@@ -715,7 +732,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
       <div class="hb-middle-top">
         <div class="hb-section-label">Current Slide</div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-          <span id="hb-slide-label" style="font-size:11px;color:var(--text2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span>
+          <span id="hb-slide-label" style="flex:1"></span>
         </div>
         <div class="hb-nav-controls">
           <button class="hb-nav-btn" onclick="sendHostCommand('back')">← Back</button>
@@ -748,8 +765,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <button class="hb-peek-rerandom-btn" id="hb-peek-rerandom-btn" onclick="sendHostCommand('rerandomize-next')" style="display:none">Re-randomize ↻</button>
       </div>
       <div class="hb-timed-row">
-        <span class="hb-timed-label">⏱ Timed (10s)</span>
-        <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()"></div>
+        <span class="hb-timed-label">⏱ Timed (10s)<br><span style="font-size:11px;letter-spacing:.06em;color:var(--text3);text-transform:none">next question only</span></span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="hb-lock-btn" id="hb-timed-lock" onclick="toggleHostTimedLock()" title="Keep timed mode on for every question until unlocked">🔓 Lock</button>
+          <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()"></div>
+        </div>
       </div>
       <button class="hb-btn hb-btn-ghost" id="hb-intro-btn" onclick="toggleHostIntro()">Play Intro Slides</button>
       <div class="hb-timed-row">
@@ -757,7 +777,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="hb-toggle" id="hb-intro-qr-toggle" onclick="toggleHostIntroQR()"></div>
       </div>
       <button class="hb-btn hb-btn-ghost" id="hb-lb-btn" onclick="toggleLbAdmin()">Show Leaderboard</button>
-      <button class="hb-btn hb-btn-gold" id="hb-give-scores-btn" onclick="giveScores()" style="display:none">Give Scores →</button>
+      <button class="hb-btn hb-btn-gold" id="hb-give-scores-btn" onclick="pressGiveScores()" style="display:none">Give Scores →</button>
       <button class="hb-btn hb-btn-ghost" onclick="openHistory()">Game History</button>
       <button class="hb-btn hb-btn-ghost" onclick="confirmAction('clear')">Clear Scores</button>
       <button class="hb-btn hb-btn-ghost" onclick="confirmAction('reset')">Reset Game</button>
@@ -2508,6 +2528,7 @@ function launchTrivia() {
 // ═══════════════════════════════════════════════
 let lbAdminVisible = false;
 let hostTimedOn = false;
+let hostTimedLocked = false;
 let pendingConfirmAction = null;
 let currentSubmitCount = 0;
 let currentTeamCount = 0;
@@ -2563,15 +2584,20 @@ function updateSubmitCount() {
 }
 
 // Send command to trivia.html via Firebase
-function sendHostCommand(cmd) {
+function sendHostCommand(cmd, extra) {
   if(!db) return;
-  liveRef('hostCommand').set({ cmd, ts: Date.now() });
+  liveRef('hostCommand').set(Object.assign({ cmd, ts: Date.now() }, extra || {}));
 }
 
 function toggleHostTimed() {
+  // One-shot: times the NEXT question only, then switches itself off (see the Lock button to keep it on)
   hostTimedOn = !hostTimedOn;
   document.getElementById('hb-timed-toggle').classList.toggle('on', hostTimedOn);
-  liveRef('timedOverride').set(hostTimedOn);
+  liveRef('timedOverride').set(hostTimedOn ? true : null);
+}
+function toggleHostTimedLock() {
+  hostTimedLocked = !hostTimedLocked;
+  liveRef('timedLock').set(hostTimedLocked ? true : null);
 }
 
 // Play/stop the intro-slide screensaver on trivia.html, and toggle its
@@ -2584,7 +2610,12 @@ function toggleHostIntro() {
   sendHostCommand(hostIntroOn ? 'stop-intro' : 'play-intro');
 }
 function toggleHostIntroQR() {
-  sendHostCommand('toggle-intro-qr');
+  // Send the state we WANT (not a blind flip) so it can never get out of step with the TV
+  const want = !hostIntroQrOn;
+  hostIntroQrOn = want;
+  document.getElementById('hb-intro-qr-toggle')?.classList.toggle('on', want);
+  liveRef('introQrVisible').set(want);
+  sendHostCommand('set-intro-qr', { value: want });
 }
 
 function toggleLbAdmin() {
@@ -2624,6 +2655,8 @@ async function runConfirmedAction() {
     currentTeamCount = 0; currentSubmitCount = 0; updateSubmitCount();
     allAnswersCache = {};
     toast('Scores cleared');
+  } else if(action === 'give-scores') {
+    await giveScores();
   } else if(action === 'reset') {
     await liveRef().remove();
     lbAdminVisible = false; hostTimedOn = false;
@@ -2764,13 +2797,34 @@ function renderGradingQuestion() {
   if(statusEl) statusEl.textContent = pending + ' need review';
 }
 
+const POINTS_PER_CORRECT = 1;
+async function resolveFromBtn(btn) {
+  const qId = btn.dataset.qid, teamId = btn.dataset.tid;
+  const ok = btn.dataset.correct === '1';
+  btn.disabled = true;
+  try {
+    await liveRef('answers/' + qId + '/' + teamId).update({ status: ok ? 'correct' : 'wrong', points: ok ? POINTS_PER_CORRECT : 0 });
+  } catch(e) { btn.disabled = false; toast('Could not save grade: ' + e.message, true); }
+}
+// Status for an answer: what the host chose, else auto (multiple choice / true-false / exact match)
+function effectiveStatus(qId, ans) {
+  if(ans.status === 'correct' || ans.status === 'wrong') return ans.status;
+  const key = normalizeForGrade(keyFor(qId) || ans.correctAnswer || '');
+  const given = normalizeForGrade(ans.answer);
+  const t = String(ans.type || '').toLowerCase();
+  const isChoice = t === 'mc' || t === 'tf' || ['true','false'].includes(given);
+  if(!key) return null;
+  if(given && given === key) return 'correct';
+  if(isChoice) return 'wrong';
+  return null;
+}
 const _autoGradeScheduled = new Set();
 function scheduleAutoGrade(qId, teamId, ans, isCorrect) {
   const key = qId + '/' + teamId;
   if(_autoGradeScheduled.has(key)) return;
   _autoGradeScheduled.add(key);
   // Auto-grade immediately — these are exact matches, no score held
-  setTimeout(() => liveRef('answers/' + qId + '/' + teamId + '/status').set(isCorrect ? 'correct' : 'wrong'), 100);
+  setTimeout(() => liveRef('answers/' + qId + '/' + teamId).update({ status: isCorrect ? 'correct' : 'wrong', points: isCorrect ? POINTS_PER_CORRECT : 0 }), 100);
 }
 
 function updateGradeButton() {
@@ -2801,28 +2855,43 @@ function updateGradeButton() {
 }
 
 // Give Scores — push all graded scores to players at once
+let hostResultsShown = false;
+function pressGiveScores() {
+  if(hostResultsShown) {                 // second press: put players back where they were
+    liveRef('resultsVisible').set(false);
+    return;
+  }
+  let ungraded = 0;
+  for(const [qId, answers] of Object.entries(allAnswersCache)) {
+    for(const ans of Object.values(answers)) if(!effectiveStatus(qId, ans)) ungraded++;
+  }
+  pendingConfirmAction = 'give-scores';
+  document.getElementById('hb-confirm-title').textContent = 'Give Scores?';
+  document.getElementById('hb-confirm-msg').textContent =
+    'This sends every team their graded answers and updates the scores on their phones.'
+    + (ungraded ? ' ' + ungraded + ' answer' + (ungraded === 1 ? ' is' : 's are') + ' still ungraded and will count as 0.' : '')
+    + ' Press the button again afterward to hide the results.';
+  document.getElementById('hb-confirm').classList.add('show');
+}
 async function giveScores() {
-  // Collect all graded answers and push results to liveGame/results/{teamId}
-  const results = {}; // teamId -> [{qText, answer, status, pts}]
-  const scoreUpdates = {};
+  const teamsSnap = await liveRef('teams').once('value');
+  const teams = teamsSnap.val() || {};
+  const results = {};  // teamId -> [{qText, answer, status, pts}]
+  const totals = {};
   for(const [qId, answers] of Object.entries(allAnswersCache)) {
     for(const [teamId, ans] of Object.entries(answers)) {
       if(!results[teamId]) results[teamId] = [];
-      const pts = ans.points || 0;
-      results[teamId].push({
-        qText: ans.questionText || '',
-        answer: ans.answer || '',
-        status: ans.status || 'pending',
-        pts,
-      });
-      if(ans.status === 'correct' && pts > 0) {
-        scoreUpdates[LIVE_GAME_PATH + '/teams/' + teamId + '/score'] = (scoreUpdates[LIVE_GAME_PATH + '/teams/' + teamId + '/score'] || 0) + pts;
-      }
+      const st = effectiveStatus(qId, ans) || 'pending';
+      const pts = st === 'correct' ? (typeof ans.points === 'number' && ans.points > 0 ? ans.points : POINTS_PER_CORRECT) : 0;
+      results[teamId].push({ qText: ans.questionText || '', answer: ans.answer || '', status: st, pts });
+      totals[teamId] = (totals[teamId] || 0) + pts;
     }
   }
-  const updates = { [LIVE_GAME_PATH + '/resultsVisible']: true, ...scoreUpdates };
+  const updates = { [LIVE_GAME_PATH + '/resultsVisible']: true };
   for(const [teamId, res] of Object.entries(results)) {
     updates[LIVE_GAME_PATH + '/results/' + teamId] = res;
+    // score = graded points + any manual adjustments (so pressing this again never double-counts)
+    updates[LIVE_GAME_PATH + '/teams/' + teamId + '/score'] = Math.max(0, (totals[teamId] || 0) + ((teams[teamId] && teams[teamId].adj) || 0));
   }
   await db.ref().update(updates);
   toast('Scores given to players!');
@@ -2914,7 +2983,8 @@ async function adjustPoints(teamId, delta) {
   const snap = await liveRef('teams/' + teamId + '/score').once('value');
   const current = snap.val() || 0;
   const newScore = Math.max(0, current + delta);
-  await liveRef('teams/' + teamId + '/score').set(newScore);
+  const adjSnap = await liveRef('teams/' + teamId + '/adj').once('value');
+  await liveRef('teams/' + teamId).update({ score: newScore, adj: (adjSnap.val() || 0) + delta });
   toast((delta > 0 ? '+' : '') + delta + ' pts to team');
 }
 
@@ -2948,6 +3018,25 @@ function attachHbListeners() {
     hostIntroOn = !!snap.val();
     const btn = document.getElementById('hb-intro-btn');
     if(btn) btn.textContent = hostIntroOn ? 'Stop Intro Slides' : 'Play Intro Slides';
+  });
+
+  const resVisRef = liveRef('resultsVisible'); _hbRefs.push(resVisRef);
+  resVisRef.on('value', snap => {
+    hostResultsShown = snap.val() === true;
+    const b = document.getElementById('hb-give-scores-btn');
+    if(b) { b.textContent = hostResultsShown ? 'Hide Scores from Players' : 'Give Scores →'; b.classList.toggle('hb-btn-ghost', hostResultsShown); b.classList.toggle('hb-btn-gold', !hostResultsShown); }
+  });
+
+  const timedRef = liveRef('timedOverride'); _hbRefs.push(timedRef);
+  timedRef.on('value', snap => {
+    hostTimedOn = snap.val() === true;
+    document.getElementById('hb-timed-toggle')?.classList.toggle('on', hostTimedOn);
+  });
+  const timedLockRef = liveRef('timedLock'); _hbRefs.push(timedLockRef);
+  timedLockRef.on('value', snap => {
+    hostTimedLocked = snap.val() === true;
+    const b = document.getElementById('hb-timed-lock');
+    if(b) { b.classList.toggle('on', hostTimedLocked); b.textContent = hostTimedLocked ? '🔒 Locked on' : '🔓 Lock'; }
   });
 
   const introQrRef = liveRef('introQrVisible'); _hbRefs.push(introQrRef);
@@ -3002,7 +3091,7 @@ function attachHbListeners() {
     return;
   }
   box.style.display = 'block';
-  if(label) label.textContent = p.label || 'Next';
+  if(label) label.textContent = (p.label || 'Next') + (p.kind ? '  ·  ' + p.kind : '');
   if(text)  text.textContent  = p.text;
   if(ans)   { ans.textContent = p.answer ? 'Answer: ' + p.answer : ''; ans.style.display = p.answer ? 'block' : 'none'; }
   if(reBtn) reBtn.style.display = 'block';
