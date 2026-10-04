@@ -997,7 +997,7 @@ let state = {
 // Slide types
 const S_INTRO='intro', S_QUESTION='question', S_INTERSTITIAL='interstitial', S_ANSWERKEY='answerkey', S_THANKYOU='thankyou', S_END='end', S_SLIDE='slide', S_JUMP='jump';
 // Pre-show states (separate from slide system - never affect slide indexing)
-const PS_FOLLOWUS='followus', PS_RULES='rules';
+const PS_FOLLOWUS='followus', PS_NEXTWEEK='nextweek', PS_RULES='rules';
 
 // ═══════════════════════════════════════════════════════
 //  LAUNCH (manual fallback — normally launched from admin)
@@ -1868,13 +1868,121 @@ document.addEventListener('keydown', e => {
   }
 });
 // ═══════════════════════════════════════════════════════
+// ── Next Week's Rounds (pre-show slide) ─────────────────────────────────
+// Pulls whatever the Planner has scheduled for this venue exactly one week
+// after tonight — every trivia round, bingo category and karaoke list — and
+// shows them all, in order. If nothing is scheduled the slide is skipped.
+let _nextWeekPromise = null;
+function loadNextWeek() {
+  if(_nextWeekPromise) return _nextWeekPromise;
+  _nextWeekPromise = (async () => {
+    const out = { dateKey:'', items:[] };
+    try {
+      const vid = venueIdNow();
+      if(!vid || !db) return out;
+      const p = new URLSearchParams(window.location.search);
+      const base = p.get('gigDate') || todayKeyTrivia();
+      const d = new Date(base + 'T12:00:00'); d.setDate(d.getDate() + 7);
+      const nk = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      out.dateKey = nk;
+      const norm = x => String(x||'').toLowerCase().replace(/\s+/g,' ').trim();
+      const val = async path => { try { return (await db.ref(path).once('value')).val(); } catch(e) { return null; } };
+      let vName = await val('trivia/planner/venues/'+vid+'/name') || p.get('venueName') || localStorage.getItem('trivia-last-venueName') || '';
+      const cats = await val('trivia/categories') || {};
+      const kindOfCat = c => {
+        const t = String(c && c.type || '').toLowerCase();
+        if(c && (c.plannerTier === 'karaoke' || t === 'karaoke')) return 'karaoke';
+        if(c && (c.plannerTier === 'music-bingo' || t === 'bingo' || t === 'music-bingo')) return 'bingo';
+        return 'trivia';
+      };
+      const resolve = (id, name) => {
+        if(id && cats[id]) return cats[id];
+        const k = norm(name);
+        return k ? Object.values(cats).find(c => norm(c.name) === k) : null;
+      };
+      const seen = new Set();
+      const add = (kind, label) => { const key = kind+'|'+norm(label); if(!label || seen.has(key)) return; seen.add(key); out.items.push({ kind, label }); };
+
+      // Trivia night (its rounds can include bingo / karaoke categories too)
+      const g = await val('trivia/planner/gigs/'+vid+'/'+nk);
+      if(g && g.status !== 'cancelled') {
+        const rounds = [];
+        if(g.themeName) rounds.push({ id:g.themeId, name:g.themeName });
+        if(g.round3Name) rounds.push({ id:g.round3ThemeId, name:g.round3Name });
+        (Array.isArray(g.extraCategories) ? g.extraCategories : []).forEach(e => { if(e && e.name) rounds.push({ id:e.id, name:e.name }); });
+        rounds.forEach(r => { const c = resolve(r.id, r.name); add(c ? kindOfCat(c) : 'trivia', (c && c.name) || r.name); });
+      }
+      // Karaoke planned in the Planner's Karaoke mode
+      const kv = await val('trivia/planner/karaokeVenues') || {};
+      const km = Object.entries(kv).find(([id, v]) => id === vid || norm(v.name) === norm(vName));
+      if(km) {
+        const kg = await val('trivia/planner/karaokeGigs/'+km[0]+'/'+nk);
+        if(kg && kg.status !== 'cancelled') add('karaoke', kg.themeName || 'Karaoke Night');
+      }
+      // Bingo scheduled in the Bingo app
+      const bv = await val('bingo/landing/venues') || {};
+      const bm = Object.entries(bv).find(([id, v]) => norm(v.name) === norm(vName));
+      if(bm) {
+        const sched = await val('bingo/landing/schedule') || {};
+        const entry = Object.values(sched).find(e => e && e.venueId === bm[0] && e.date === nk);
+        if(entry) {
+          const bcats = await val('bingo/landing/categories') || {};
+          const ids = entry.rounds || entry.categoryIds || [];
+          const names = ids.map(i => bcats[i] && (bcats[i].title || bcats[i].name)).filter(Boolean);
+          if(names.length) names.forEach(n => add('bingo', n)); else add('bingo', entry.notes || 'Music Bingo');
+        }
+      }
+    } catch(e) { console.warn('Next-week rounds unavailable:', e); }
+    return out;
+  })();
+  return _nextWeekPromise;
+}
+function renderNextWeek(container) {
+  const esc = t => String(t).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+  const r = window._nextWeekResult || { items:[], dateKey:'' };
+  const items = r.items;
+  const n = items.length;
+  const size = n <= 3 ? 'clamp(28px,4.2vw,56px)' : n <= 5 ? 'clamp(22px,3.2vw,42px)' : 'clamp(17px,2.4vw,32px)';
+  let tripN = 0;
+  const tag = { trivia:'Trivia', bingo:'Music Bingo', karaoke:'Karaoke' };
+  const rows = items.map(it => {
+    const lead = it.kind === 'trivia' ? 'Round ' + (++tripN) : tag[it.kind];
+    return `<div style="display:flex;align-items:baseline;justify-content:center;gap:1rem;flex-wrap:wrap">
+      <span style="font-family:var(--cinzel);font-size:clamp(11px,1.3vw,16px);letter-spacing:.14em;text-transform:uppercase;color:var(--gold);min-width:7.5em;text-align:right">${esc(lead)}</span>
+      <span style="font-family:var(--serif);font-size:${size};color:var(--text);line-height:1.25;text-align:left">${esc(it.label)}</span>
+    </div>`;
+  }).join('');
+  let dateLine = '';
+  if(r.dateKey) { const dd = new Date(r.dateKey + 'T12:00:00'); dateLine = dd.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' }); }
+  const el = document.createElement('div');
+  el.className = 'slide slide-intro active';
+  el.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.4rem;padding:3rem;text-align:center;';
+  el.innerHTML = `
+    <div style="font-family:var(--display);font-size:clamp(40px,7vw,90px);letter-spacing:.06em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1">NEXT WEEK</div>
+    ${dateLine?`<div style="font-family:var(--cinzel);font-size:clamp(13px,1.8vw,22px);letter-spacing:.14em;text-transform:uppercase;color:var(--text2)">${esc(dateLine)}</div>`:''}
+    <div style="display:flex;flex-direction:column;gap:${n>5?'.6rem':'1rem'};align-items:center;max-width:1100px">${rows}</div>
+    <div style="font-family:var(--cinzel);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-top:1rem">Press → to continue</div>
+  `;
+  container.appendChild(el);
+}
+
 function showPreShow() {
   state.preShow = PS_FOLLOWUS;
+  window._nextWeekResult = null;
+  _nextWeekPromise = null;
+  loadNextWeek().then(r => { window._nextWeekResult = r; });   // starts loading while Follow Us is on screen
   renderPreShow();
 }
 
-function advancePreShow() {
+async function advancePreShow() {
   if(state.preShow === PS_FOLLOWUS) {
+    // Wait (briefly) for next week's schedule; skip the slide if nothing is scheduled
+    let r = window._nextWeekResult;
+    if(!r) { try { r = await Promise.race([loadNextWeek(), new Promise(res => setTimeout(() => res(null), 2500))]); } catch(e) { r = null; } window._nextWeekResult = r || window._nextWeekResult; }
+    if(state.preShow !== PS_FOLLOWUS) return;
+    state.preShow = (r && r.items && r.items.length) ? PS_NEXTWEEK : PS_RULES;
+    renderPreShow();
+  } else if(state.preShow === PS_NEXTWEEK) {
     state.preShow = PS_RULES;
     renderPreShow();
   } else {
@@ -1903,6 +2011,8 @@ function renderPreShow() {
   const round = round0;
   if(state.preShow === PS_FOLLOWUS) {
     renderFollowUs(container, round);
+  } else if(state.preShow === PS_NEXTWEEK) {
+    renderNextWeek(container);
   } else {
     renderRules(container, round);
   }
