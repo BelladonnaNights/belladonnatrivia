@@ -747,13 +747,21 @@ async function submitAnswer(value, btn, type) {
 
   // Write to Firebase
   if(value !== null) {
+    let correctAnswer = currentQ.correct || '';
+    let questionText = currentQ.text || '';
+    try {
+      const metaSnap = await gref('questionMeta/' + currentQ.id).once('value');
+      const meta = metaSnap.val();
+      if(meta) { correctAnswer = meta.correctAnswer || correctAnswer; questionText = meta.questionText || questionText; }
+    } catch(e) {}
     try {
       await gref(`answers/${currentQ.id}/${teamId}`).set({
         answer: value,
         timestamp: Date.now(),
         elapsed: elapsed,
         teamName: teamName,
-        questionText: currentQ.text || '',
+        questionText,
+        correctAnswer,
         status: 'pending',
       });
     } catch(e) { console.error('Answer not saved', e); }
