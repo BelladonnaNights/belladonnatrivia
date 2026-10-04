@@ -1145,43 +1145,40 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
             <input class="field-input" id="s-tagline" placeholder="Your unforgettable trivia night experience"/>
           </div>
           <div class="field" style="grid-column:1/-1">
-            <div class="field-label">Follow Us &amp; Rules Background URL</div>
+            <div class="field-label">Logo Image URL (top of Follow Us slide)</div>
+            <input class="field-input" id="s-logo" placeholder="https://… transparent PNG of your logo"/>
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <div class="field-label">Under the QR — line 1</div>
+            <input class="field-input" id="s-scan1" placeholder="Scan for shows, tickets &amp; more"/>
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <div class="field-label">Under the QR — line 2 (separate with  |  )</div>
+            <input class="field-input" id="s-scan2" placeholder="Upcoming Events | Theme Nights | Tickets"/>
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <div class="field-label">Background URL (not used by the new pre-show slides)</div>
             <input class="field-input" id="s-plain-bg" placeholder="https://… image shown behind Follow Us and Rules slides"/>
           </div>
         </div>
       </div>
       <div style="height:1px;background:var(--border)"></div>
       <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div class="field-label" style="font-size:11px;color:var(--gold)">Category Types & Rules</div>
-          <button class="btn btn-primary" onclick="addCategoryType()" style="font-size:9px;padding:5px 12px">+ Add Type</button>
-        </div>
-        <div id="cat-types-list" style="display:flex;flex-direction:column;gap:8px"></div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeSettings()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
-    </div>
-  </div>
-</div>
-
-<!-- SETTINGS MODAL -->
-<div class="overlay" id="settings-overlay" onclick="if(event.target===this)closeSettings()">
-  <div class="modal" style="max-width:640px">
-    <div class="modal-header">
-      <div class="modal-title">SETTINGS</div>
-      <button class="modal-close" onclick="closeSettings()">×</button>
-    </div>
-    <div class="modal-body" style="gap:1.5rem">
-      <div>
-        <div class="field-label" style="font-size:11px;margin-bottom:10px;color:var(--gold)">Follow Us Slide</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="field"><div class="field-label">Instagram Handle</div><input class="field-input" id="s-instagram" placeholder="@belladonnaaudio"/></div>
-          <div class="field"><div class="field-label">TikTok Handle</div><input class="field-input" id="s-tiktok" placeholder="@belladonnaaudio"/></div>
-          <div class="field"><div class="field-label">Website</div><input class="field-input" id="s-website" placeholder="belladonnaaudio.com"/></div>
-          <div class="field"><div class="field-label">QR Code Image URL</div><input class="field-input" id="s-qr" placeholder="https://…"/></div>
-          <div class="field" style="grid-column:1/-1"><div class="field-label">Tagline / Subtext</div><input class="field-input" id="s-tagline" placeholder="Your unforgettable trivia night experience"/></div>
+        <div class="field-label" style="font-size:11px;margin-bottom:4px;color:var(--gold)">How to Play Slide</div>
+        <div style="font-family:var(--serif);font-style:italic;font-size:12px;color:var(--text3);margin-bottom:10px">Exactly what you type here appears on the slide. Leave a box empty to use the default wording.</div>
+        <div style="display:grid;grid-template-columns:1fr;gap:10px">
+          <div class="field"><div class="field-label">Card 1 — Heading</div><input class="field-input" id="s-htp-t1" placeholder="Name Your Team"/>
+            <div class="field-label" style="margin-top:6px">Card 1 — Text</div><textarea class="field-input" id="s-htp-d1" rows="2" style="resize:vertical" placeholder="Write your team name at the top of every answer sheet."></textarea></div>
+          <div class="field"><div class="field-label">Card 2 — Heading</div><input class="field-input" id="s-htp-t2" placeholder="Name Your Team"/>
+            <div class="field-label" style="margin-top:6px">Card 2 — Text</div><textarea class="field-input" id="s-htp-d2" rows="2" style="resize:vertical" placeholder="Write your team name at the top of every answer sheet."></textarea></div>
+          <div class="field"><div class="field-label">Card 3 — Heading</div><input class="field-input" id="s-htp-t3" placeholder="Name Your Team"/>
+            <div class="field-label" style="margin-top:6px">Card 3 — Text</div><textarea class="field-input" id="s-htp-d3" rows="2" style="resize:vertical" placeholder="Write your team name at the top of every answer sheet."></textarea></div>
+          <div class="field"><div class="field-label">Card 4 — Heading</div><input class="field-input" id="s-htp-t4" placeholder="Name Your Team"/>
+            <div class="field-label" style="margin-top:6px">Card 4 — Text</div><textarea class="field-input" id="s-htp-d4" rows="2" style="resize:vertical" placeholder="Write your team name at the top of every answer sheet."></textarea></div>
+          <div class="field"><div class="field-label">Bottom left — Heading</div><input class="field-input" id="s-ties-t" placeholder="Ties"/>
+            <div class="field-label" style="margin-top:6px">Bottom left — Text</div><textarea class="field-input" id="s-ties-d" rows="2" style="resize:vertical" placeholder="A tiebreaker round will decide the winner."></textarea></div>
+          <div class="field"><div class="field-label">Bottom right — Heading</div><input class="field-input" id="s-imp-t" placeholder="Most Important Rule"/>
+            <div class="field-label" style="margin-top:6px">Bottom right — Text</div><textarea class="field-input" id="s-imp-d" rows="2" style="resize:vertical" placeholder="Keep it fun, keep it honest, and may the best team win."></textarea></div>
         </div>
       </div>
       <div style="height:1px;background:var(--border)"></div>
@@ -1642,6 +1639,13 @@ function openSettings() {
   document.getElementById('s-qr').value = appSettings.qr||'';
   document.getElementById('s-tagline').value = appSettings.tagline||'';
   document.getElementById('s-plain-bg').value = appSettings.plainBg||'';
+  document.getElementById('s-logo').value = appSettings.logo||'';
+  document.getElementById('s-scan1').value = appSettings.scan1||'';
+  document.getElementById('s-scan2').value = appSettings.scan2||'';
+  const htp = appSettings.howToPlay || {};
+  for(let i=1;i<=4;i++){ const st=(htp.steps||[])[i-1]||{}; document.getElementById('s-htp-t'+i).value = st.t||''; document.getElementById('s-htp-d'+i).value = st.d||''; }
+  document.getElementById('s-ties-t').value = (htp.ties||{}).t||''; document.getElementById('s-ties-d').value = (htp.ties||{}).d||'';
+  document.getElementById('s-imp-t').value = (htp.important||{}).t||''; document.getElementById('s-imp-d').value = (htp.important||{}).d||'';
   renderCatTypesList();
   document.getElementById('settings-overlay').classList.add('show');
 }
@@ -1656,6 +1660,14 @@ async function saveSettings() {
     qr: document.getElementById('s-qr').value.trim(),
     tagline: document.getElementById('s-tagline').value.trim(),
     plainBg: document.getElementById('s-plain-bg').value.trim(),
+    logo: document.getElementById('s-logo').value.trim(),
+    scan1: document.getElementById('s-scan1').value.trim(),
+    scan2: document.getElementById('s-scan2').value.trim(),
+    howToPlay: {
+      steps: [1,2,3,4].map(i => ({ t: document.getElementById('s-htp-t'+i).value.trim(), d: document.getElementById('s-htp-d'+i).value.trim() })),
+      ties: { t: document.getElementById('s-ties-t').value.trim(), d: document.getElementById('s-ties-d').value.trim() },
+      important: { t: document.getElementById('s-imp-t').value.trim(), d: document.getElementById('s-imp-d').value.trim() },
+    },
   };
   try {
     await db.ref('trivia/appSettings').set(settings);
