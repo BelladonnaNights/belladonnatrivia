@@ -360,13 +360,13 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 
 /* JOIN QR — bottom-right corner box shown over the intro-slide screensaver */
 #ss-join-qr{
-  position:absolute;right:2.2rem;bottom:2.2rem;width:30%;max-width:280px;min-width:160px;
+  position:absolute;right:2.2rem;bottom:2.2rem;width:min(46vh,34vw);max-width:none;min-width:260px;
   display:none;flex-direction:column;align-items:center;gap:.6rem;
   background:rgba(255,255,255,.96);border-radius:16px;padding:1rem;
   box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:2010;
 }
 #ss-join-qr.show{display:flex}
-#ss-join-qr-label{font-family:var(--cinzel);font-size:clamp(11px,1.4vw,15px);letter-spacing:.1em;text-transform:uppercase;color:#111;text-align:center}
+#ss-join-qr-label{font-family:var(--cinzel);font-weight:700;font-size:clamp(16px,2vw,30px);letter-spacing:.1em;text-transform:uppercase;color:#111;text-align:center}
 #ss-join-qr-code{width:100%;aspect-ratio:1/1;line-height:0;display:flex;align-items:center;justify-content:center}
 #ss-join-qr-code img,#ss-join-qr-code canvas{width:100% !important;height:100% !important}
 
@@ -732,7 +732,7 @@ function initLiveGame() {
       currentQuestion: null,
       leaderboardVisible: false,
       teams: Object.keys(keep).length ? keep : null,
-      answers: null, results: null, resultsVisible: null, hostPeek: null,
+      answers: null, results: null, resultsVisible: null, hostPeek: null, introPlaying: null,
       sessionId,
       startedAt,
     });
@@ -804,7 +804,14 @@ if(db) {
   }));
 }
 
+// "Timed (10s)" applies to ONE question, then switches itself off. The Lock
+// button on the host board keeps it on for every question until unlocked.
+let timedLocked = false;
+if(db) {
+  whenLiveReady(() => liveRef('timedLock').on('value', snap => { timedLocked = snap.val() === true; }));
+}
 function getEffectiveTimed(round) {
+  if(timedLocked) return true;
   if(nextQuestionTimedOverride !== null) return nextQuestionTimedOverride;
   return round.timed || false;
 }
@@ -819,9 +826,14 @@ function pushLiveQuestion(q, qIndex, round) {
                   q.type==='tf' ? ['True','False'] : null;
   const qId = `q_${state.roundIndex}_${qIndex}`;
   const timed = getEffectiveTimed(round);
+  if(!timedLocked && nextQuestionTimedOverride === true) {   // one-shot: used up by this question
+    nextQuestionTimedOverride = null;
+    liveRef('timedOverride').set(null);
+  }
 
   liveRef().update({
     status: 'question',
+    resultsVisible: false,
     currentQuestion: {
       id: qId, text: q.question, type: q.type||'open',
       choices, correct: q.answer, index: qIndex,
@@ -836,6 +848,9 @@ function pushLiveQuestion(q, qIndex, round) {
   });
   liveRef(`answers/${qId}`).remove();
 }
+
+// Pick up the Join-QR toggle the host may have set before this page loaded
+if(db) { whenLiveReady(() => liveRef('introQrVisible').once('value').then(s => { if(s.val() === true) ssQrVisible = true; else if(s.val() === false) ssQrVisible = false; })); }
 
 // Listen for host commands from admin board
 if(db) {
@@ -852,6 +867,7 @@ if(db) {
       case 'play-intro': startPreview(); break;
       case 'stop-intro':  stopPreview(); break;
       case 'toggle-intro-qr': setScreensaverQRVisible(!ssQrVisible); break;
+      case 'set-intro-qr': setScreensaverQRVisible(!!cmd.value); break;
       case 'audio':
         // Try music play button first, then regular audio button
         const musicBtn = document.getElementById('music-play-btn');
@@ -905,12 +921,21 @@ function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
 // Lets the host read what's coming up (on admin.html only — never shown
 // on the audience screen or the player phones) so they can decide whether
 // to flip the "timed" toggle before advancing.
+function questionKindLabel(q) {
+  if(!q) return '';
+  const t = String(q.type || '').toLowerCase();
+  let k = t === 'mc' ? 'Multiple Choice' : t === 'tf' ? 'True / False' : 'Regular (open answer)';
+  const extras = [];
+  if(q.imageUrl) extras.push('picture');
+  if(q.audioUrl) extras.push('audio');
+  return extras.length ? k + ' + ' + extras.join(' + ') : k;
+}
 function pushNextQuestionPeek() {
   if(!db) return;
   const round = currentRound();
   if(!round) { liveRef('hostPeek').set(null); return; }
   const type = slideType();
-  let nextText = '', nextLabel = '', nextAnswer = '';
+  let nextText = '', nextLabel = '', nextAnswer = '', nextKind = '';
 
   if(type === S_QUESTION && round.questions && round.questions.length) {
     const { qIndex, isPass2 } = questionInfo();
@@ -919,6 +944,7 @@ function pushNextQuestionPeek() {
       const nq = round.questions[qIndex + 1];
       nextText   = nq ? nq.question : '';
       nextAnswer = nq ? nq.answer   : '';
+      nextKind   = questionKindLabel(nq);
       nextLabel  = 'Next: Q' + (qIndex + 2);
     } else if(!isPass2 && qIndex + 1 >= round.questions.length) {
       // Last question of this round — peek the next round's first question
@@ -926,6 +952,7 @@ function pushNextQuestionPeek() {
       if(nextRound && nextRound.questions && nextRound.questions.length) {
         nextText   = nextRound.questions[0].question;
         nextAnswer = nextRound.questions[0].answer;
+        nextKind   = questionKindLabel(nextRound.questions[0]);
         nextLabel  = 'Next round, Q1';
       } else {
         nextLabel = 'End of round';
@@ -933,7 +960,7 @@ function pushNextQuestionPeek() {
     }
   }
 
-  liveRef('hostPeek').set({ text: nextText, answer: nextAnswer, label: nextLabel, ts: Date.now() });
+  liveRef('hostPeek').set({ text: nextText, answer: nextAnswer, label: nextLabel, kind: nextKind, ts: Date.now() });
 }
 
 // Host-triggered: swap the upcoming (not-yet-shown) question for a fresh
@@ -1009,7 +1036,7 @@ function fuzzyConfidence(submitted,correct) {
 }
 
 
-    db.ref('trivia/appSettings').once('value', s => { appSettings = s.val()||{}; });
+    db.ref('trivia/appSettings').once('value', s => { appSettings = s.val()||{}; try { if(state && state.preShow === PS_FOLLOWUS) renderPreShow(); } catch(e) {} });
     db.ref('trivia/categoryTypes').once('value', s => { const d=s.val()||{}; catTypes=Object.entries(d).map(([id,v])=>({id,...v})); });
 
 
@@ -1875,7 +1902,7 @@ function renderScreensaverQR() {
   joinUrlCached = joinLink();
   const url = joinUrlCached;
   if(typeof QRCode === 'undefined') { setTimeout(renderScreensaverQR, 300); return; }
-  const size = Math.max(100, Math.min(box.clientWidth - 32, 260));
+  const size = Math.max(200, Math.min(box.clientWidth - 40, 700));
   new QRCode(codeEl, {text:url, width:size, height:size, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
 }
 
@@ -2188,7 +2215,7 @@ function renderIntro(container, round) {
 
 function renderFollowUs(container, round) {
   const s = appSettings || {};
-  const logo = s.logo ? `<img src="${psEsc(String(s.logo).trim())}" referrerpolicy="no-referrer" alt="" onerror="console.warn('Logo failed to load:', this.src); this.style.display='none'" style="height:182px;width:auto;max-width:420px;object-fit:contain;display:block;margin:0 auto">` : '';
+  const logo = s.logo ? `<img src="${psEsc(String(s.logo).trim())}" referrerpolicy="no-referrer" alt="" onerror="console.warn('Logo failed to load:', this.src); this.style.display='none'; try{ toast('Logo could not load — check the Logo URL in Settings'); }catch(e){}" style="height:182px;width:auto;max-width:420px;object-fit:contain;display:block;margin:0 auto">` : '';
   const handles = [s.instagram, s.tiktok].filter(Boolean);
   const two = handles.length > 1;
   const hPx = two ? 40 : 46;
