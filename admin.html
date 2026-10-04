@@ -1541,6 +1541,25 @@ auth.onAuthStateChanged(function(user){
 let plannerVenues = {};
 let selectedVenueId = '';
 let selectedVenueGig = null;
+// Opened from the Tonight page: ?tonight=1&venue=<id>&cats=<id,id,...> drops
+// tonight's rounds straight into the lineup, in order, with the venue picked.
+const _tonightParams = new URLSearchParams(location.search);
+let _tonightApplied = false;
+function applyTonightParams(){
+  if(_tonightApplied || _tonightParams.get('tonight')!=='1') return;
+  if(!categories.length || !Object.keys(plannerVenues).length) return;
+  _tonightApplied = true;
+  const vid = _tonightParams.get('venue') || '';
+  const ids = (_tonightParams.get('cats') || '').split(',').filter(Boolean);
+  const sel = document.getElementById('venue-select');
+  if(vid && plannerVenues[vid] && sel){ sel.value = vid; onVenueSelectChange(); }
+  lineup = [null, null, null, null, null];
+  let placed = 0;
+  ids.forEach(id => { if(placed < 5 && categories.find(c => c.id === id)) lineup[placed++] = id; });
+  renderLineup();
+  toast(placed ? `Tonight's ${placed} round${placed===1?'':'s'} loaded into the lineup.` : 'Opened from Tonight — no rounds could be matched, add them below.', !placed);
+  if(ids.length > 5) toast('Only the first 5 rounds fit in the lineup.', true);
+}
 db.ref('trivia/planner/venues').on('value', snap=>{
   plannerVenues = snap.val() || {};
   const sel = document.getElementById('venue-select');
@@ -1552,6 +1571,7 @@ db.ref('trivia/planner/venues').on('value', snap=>{
   sel.innerHTML = '<option value="">— No venue selected —</option>' +
     opts.map(([id,v])=>`<option value="${id}">${v.name}${v.day?' ('+v.day+' '+(v.time||'')+')':''}</option>`).join('');
   if(prev && plannerVenues[prev]) sel.value = prev;
+  applyTonightParams();
 });
 function todayKeyLocal(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function onVenueSelectChange(){
@@ -1696,6 +1716,7 @@ db.ref('trivia/categories').on('value', snap => {
   renderLibrary();
   renderFilterBar();
   setSyncStatus('synced');
+  applyTonightParams();
 }, err => {
   console.error(err);
   setSyncStatus('error');
