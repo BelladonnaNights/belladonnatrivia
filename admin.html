@@ -146,7 +146,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .cat-action-del{background:rgba(10,10,10,.8);color:var(--text3)}
 .cat-action-del:hover{background:var(--red);color:#fff}
 .cat-action-add{
-  position:absolute;bottom:8px;left:8px;
+  position:absolute;bottom:8px;right:8px;
   width:26px;height:26px;border-radius:50%;border:1.5px solid rgba(46,204,113,.5);
   background:rgba(10,10,10,.8);color:#2ecc71;
   display:flex;align-items:center;justify-content:center;
@@ -2517,6 +2517,9 @@ auth.onAuthStateChanged(function(user) {
   initSchedListeners(); // also attach schedule listeners on login
 });
 
+let questionMetaCache = {};
+function secretRef(sub){ return db.ref('gameSecrets/' + LIVE_GAME_PATH.replace('games/','') + (sub?'/'+sub:'')); }
+function keyFor(qId){ const m = questionMetaCache[qId]; return (m && (m.correctAnswer||m.correct)) || ''; }
 function liveRef(subpath) {
   return db.ref(LIVE_GAME_PATH + (subpath ? '/' + subpath : ''));
 }
@@ -2657,7 +2660,7 @@ function buildGradingQuestions() {
     gradingQuestions.push({
       qId,
       qText: first.questionText || qId,
-      correctAnswer: first.correctAnswer || '',
+      correctAnswer: keyFor(qId) || first.correctAnswer || '',
       answers: ansEntries.map(([teamId, a]) => ({teamId, ...a})),
     });
   }
@@ -2755,7 +2758,7 @@ function scheduleAutoGrade(qId, teamId, ans, isCorrect) {
   if(_autoGradeScheduled.has(key)) return;
   _autoGradeScheduled.add(key);
   // Auto-grade immediately — these are exact matches, no score held
-  setTimeout(() => db.ref('trivia/liveGame/answers/' + qId + '/' + teamId + '/status').set(isCorrect ? 'correct' : 'wrong'), 100);
+  setTimeout(() => liveRef('answers/' + qId + '/' + teamId + '/status').set(isCorrect ? 'correct' : 'wrong'), 100);
 }
 
 function updateGradeButton() {
@@ -2764,12 +2767,12 @@ function updateGradeButton() {
   const giveBtn = document.getElementById('hb-give-scores-btn');
   let pending = 0;
   let hasPending = false;
-  for(const answers of Object.values(allAnswersCache)) {
+  for(const [qId, answers] of Object.entries(allAnswersCache)) {
     for(const ans of Object.values(answers)) {
       if(ans.type === 'open' || (!ans.type && ans.answer && !['true','false','True','False'].includes(ans.answer) && ans.answer.length > 1)) {
         if(ans.status !== 'correct' && ans.status !== 'wrong') {
           const norm = normalizeForGrade(ans.answer);
-          const normCorrect = normalizeForGrade(ans.correctAnswer||'');
+          const normCorrect = normalizeForGrade(keyFor(qId)||ans.correctAnswer||'');
           if(!normCorrect || norm !== normCorrect) pending++;
         }
         hasPending = true;
@@ -2801,13 +2804,13 @@ async function giveScores() {
         pts,
       });
       if(ans.status === 'correct' && pts > 0) {
-        scoreUpdates['trivia/liveGame/teams/' + teamId + '/score'] = (scoreUpdates['trivia/liveGame/teams/' + teamId + '/score'] || 0) + pts;
+        scoreUpdates[LIVE_GAME_PATH + '/teams/' + teamId + '/score'] = (scoreUpdates[LIVE_GAME_PATH + '/teams/' + teamId + '/score'] || 0) + pts;
       }
     }
   }
-  const updates = { 'trivia/liveGame/resultsVisible': true, ...scoreUpdates };
+  const updates = { [LIVE_GAME_PATH + '/resultsVisible']: true, ...scoreUpdates };
   for(const [teamId, res] of Object.entries(results)) {
-    updates['trivia/liveGame/results/' + teamId] = res;
+    updates[LIVE_GAME_PATH + '/results/' + teamId] = res;
   }
   await db.ref().update(updates);
   toast('Scores given to players!');
@@ -2816,7 +2819,7 @@ async function giveScores() {
 async function ungradeAnswer(btn) {
   const qId = btn.dataset.qid;
   const teamId = btn.dataset.tid;
-  await db.ref('trivia/liveGame/answers/' + qId + '/' + teamId + '/status').set('pending');
+  await liveRef('answers/' + qId + '/' + teamId + '/status').set('pending');
   toast('Marked as pending');
 }
 
@@ -2854,7 +2857,7 @@ async function saveEditAnswer(btn) {
   const input = document.getElementById(rowId + '_input');
   if(!input) return;
   const newVal = input.value.trim();
-  await db.ref('trivia/liveGame/answers/' + qId + '/' + teamId + '/answer').set(newVal);
+  await liveRef('answers/' + qId + '/' + teamId + '/answer').set(newVal);
   toast('Answer updated');
   renderGradingQuestion();
 }
@@ -2896,10 +2899,10 @@ function renderHistory() {
 // ── Manual point adjustment ───────────────────────────────────────────
 async function adjustPoints(teamId, delta) {
   if(!teamId || !delta) return;
-  const snap = await db.ref('trivia/liveGame/teams/' + teamId + '/score').once('value');
+  const snap = await liveRef('teams/' + teamId + '/score').once('value');
   const current = snap.val() || 0;
   const newScore = Math.max(0, current + delta);
-  await db.ref('trivia/liveGame/teams/' + teamId + '/score').set(newScore);
+  await liveRef('teams/' + teamId + '/score').set(newScore);
   toast((delta > 0 ? '+' : '') + delta + ' pts to team');
 }
 
@@ -2993,6 +2996,7 @@ function attachHbListeners() {
   if(reBtn) reBtn.style.display = 'block';
 });
 
+  const qmRef = secretRef('questionMeta'); _hbRefs.push(qmRef); qmRef.on('value', snap => { questionMetaCache = snap.val() || {}; try{ updateGradeButton(); }catch(e){} });
   const answersRef = liveRef('answers'); _hbRefs.push(answersRef); answersRef.on('value', snap => {
   const allAnswers = snap.val() || {};
   allAnswersCache = allAnswers;
