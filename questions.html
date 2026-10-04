@@ -138,7 +138,7 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 #loading{padding:22px 24px;color:var(--text3);font-family:var(--serif);font-style:italic;font-size:1.05rem}
 
 /* ── the grid ── */
-.gridWrap{flex:1;overflow:auto;position:relative}
+.gridWrap{flex:1;overflow:auto;position:relative;scroll-padding-top:48px;scroll-padding-left:330px;overflow-anchor:none}
 table#grid{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}
 #grid th{position:sticky;top:0;z-index:4;background:var(--surface2);text-align:left;font-family:var(--cinzel);font-weight:600;letter-spacing:.12em;text-transform:uppercase;font-size:9px;color:var(--text3);padding:12px 10px;border-bottom:1px solid var(--border2);border-right:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
 #grid th.num,#grid th.act{cursor:default}
@@ -199,7 +199,7 @@ td.act .ico{background:none;border:0;color:var(--text3);padding:6px 5px;font-siz
 tr:hover td.act .ico,td.act .ico:focus{opacity:1}
 td.act .ico:hover{color:var(--gold2)}
 td.act .ico.del:hover{color:var(--red)}
-.addBar{padding:12px 24px 60px}
+.addBar{padding:12px 24px 60px;min-height:calc(100vh - 200px)}
 .sortInd{color:var(--gold2)}
 
 /* ── modal + toast (same as the other apps) ── */
@@ -1062,8 +1062,11 @@ function updateRowDom(r){
     else { const nv = v ?? ''; if (el.value !== String(nv)){ el.value = nv; if (el.tagName === 'TEXTAREA') autosize(el); } }
   }
 }
-function autosizeAll(els){ els.forEach(e => { e.style.height = 'auto'; }); const hs = els.map(e => Math.max(e.scrollHeight, 34)); els.forEach((e, i) => { e.style.height = hs[i] + 'px'; }); }
-function autosize(el){ el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight, 34) + 'px'; }
+// Collapsing a textarea to height:auto briefly shrinks the whole sheet, which
+// made the browser jump the scroll position. Remember it and put it back.
+function keepScroll(fn){ const w = document.querySelector('.gridWrap'); const t = w ? w.scrollTop : 0, l = w ? w.scrollLeft : 0; fn(); if (w){ if (w.scrollTop !== t) w.scrollTop = t; if (w.scrollLeft !== l) w.scrollLeft = l; } }
+function autosizeAll(els){ keepScroll(() => { els.forEach(e => { e.style.height = 'auto'; }); const hs = els.map(e => Math.max(e.scrollHeight, 34)); els.forEach((e, i) => { e.style.height = hs[i] + 'px'; }); }); }
+function autosize(el){ keepScroll(() => { el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight, 34) + 'px'; }); }
 function autosizeRow(tr){ requestAnimationFrame(() => $$('textarea', tr).forEach(autosize)); }
 
 /* editing ---------------------------------------------------- */
@@ -1140,14 +1143,25 @@ function moveDown(el){
 }
 function addDraft(focusKey = 'question'){
   const blank = [...S.rows.values()].find(r => !r.persisted && !String(r.data.question || '').trim());
-  if (blank){ blank.tr.querySelector(`[data-key="${focusKey}"]`)?.focus(); return; }
+  if (blank && blank.tr && blank.tr.isConnected){ focusRowTop(blank.tr, blank.tr.querySelector(`[data-key="${focusKey}"]`)); return; }
+  if (blank) { S.rows.delete(blank.id); }
   const ref = doc(qColl());
   const data = {}; for (const c of allCols()) data[c.key] = defaultFor(c);
   if (S.filter.diff) data.difficulty = S.filter.diff;
   const r = { id: ref.id, ref, data, persisted: false, tr: null };
   S.rows.set(r.id, r); r.tr = buildRow(r); tbody.appendChild(r.tr); autosizeRow(r.tr);
   const t = r.tr.querySelector(`[data-key="${focusKey}"]`) || r.tr.querySelector('[data-key="question"]');
-  t?.focus(); r.tr.scrollIntoView({ block: 'nearest' });
+  focusRowTop(r.tr, t);
+  // Re-assert once layout has settled so the very first press always lands.
+  requestAnimationFrame(() => { if (r.tr.isConnected) focusRowTop(r.tr, t); });
+}
+// Bring a row to the top of the sheet (just under the header) and focus it, so
+// the newest question sits where typing is comfortable.
+function focusRowTop(tr, el){
+  const w = document.querySelector('.gridWrap'); if (!w || !tr) return;
+  const head = w.querySelector('thead')?.offsetHeight || 40;
+  w.scrollTop = Math.max(0, tr.offsetTop - head - 4);
+  if (el){ try { el.focus({ preventScroll: true }); } catch (_) { el.focus(); } }
 }
 $('#addBtn').addEventListener('click', () => addDraft());
 $('#addBtn2').addEventListener('click', () => addDraft());
@@ -1226,8 +1240,10 @@ function openTypes(){
   const body = document.createElement('div');
   const draw = () => {
     const counts = new Map(); for (const c of S.cats.values()) if (c.type) counts.set(c.type, (counts.get(c.type) || 0) + 1);
-    body.innerHTML = `<p class="hint" style="margin:0 0 10px">Types group your categories in the sidebar. Renaming a type renames it on every category that uses it.</p>
+    body.innerHTML = `<p class="hint" style="margin:0 0 10px">Types group your categories in the sidebar, in this order — drag ⠿ or use ▲▼ to rearrange. Renaming a type renames it on every category that uses it.</p>
       <div id="typeRows">${typeList().map((t, i) => `<div class="fld" style="display:flex;gap:8px;align-items:center;margin:6px 0">
+        <span class="tgrab" draggable="true" data-drag="${i}" title="Drag to reorder" style="cursor:grab;color:var(--text3);user-select:none;padding:0 2px">⠿</span>
+        <button class="btn ghost sm" data-up="${i}" ${i === 0 ? 'disabled' : ''} title="Move up">▲</button><button class="btn ghost sm" data-dn="${i}" ${i === typeList().length - 1 ? 'disabled' : ''} title="Move down">▼</button>
         <input type="text" value="${esc(t)}" data-i="${i}" data-old="${esc(t)}" style="flex:1" autocomplete="off">
         <span class="hint" style="min-width:70px;text-align:right">${counts.get(t) || 0} categor${(counts.get(t) || 0) === 1 ? 'y' : 'ies'}</span>
         <button class="btn ghost sm" data-del="${i}" ${(counts.get(t) || 0) ? 'disabled title="Move or delete its categories first"' : ''}>Delete</button></div>`).join('')}</div>
@@ -1253,7 +1269,18 @@ function openTypes(){
     if (typeList().some(t => normName(t) === normName(v))){ $('#typeMsg').textContent = 'That type already exists.'; return; }
     await run(() => addType(v)); setTimeout(draw, 300);
   };
+  const moveType = async (from, to) => {
+    const list = typeList(); if (to < 0 || to >= list.length || from === to) return;
+    const [m] = list.splice(from, 1); list.splice(to, 0, m);
+    await run(() => saveTypes(list)); setTimeout(draw, 250);
+  };
+  let dragI = null;
+  body.addEventListener('dragstart', e => { const g = e.target.closest('[data-drag]'); if (!g) return; dragI = +g.dataset.drag; try { e.dataTransfer.setData('text/plain', String(dragI)); } catch (_) {} });
+  body.addEventListener('dragover', e => { if (dragI !== null) e.preventDefault(); });
+  body.addEventListener('drop', e => { if (dragI === null) return; e.preventDefault(); const row = e.target.closest('#typeRows .fld'); if (!row) { dragI = null; return; } const to = [...row.parentNode.children].indexOf(row); const from = dragI; dragI = null; moveType(from, to); });
   body.addEventListener('click', async e => {
+    const up = e.target.closest('[data-up]'); if (up && !up.disabled){ moveType(+up.dataset.up, +up.dataset.up - 1); return; }
+    const dn = e.target.closest('[data-dn]'); if (dn && !dn.disabled){ moveType(+dn.dataset.dn, +dn.dataset.dn + 1); return; }
     if (e.target.id === 'newTypeAdd'){ add(); return; }
     const d = e.target.closest('[data-del]'); if (!d || d.disabled) return;
     const t = typeList()[+d.dataset.del];
