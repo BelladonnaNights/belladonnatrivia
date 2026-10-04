@@ -300,6 +300,7 @@ a{color:inherit}
   <div>
     <button class="mode-pill active" onclick="setPlannerMode('trivia',this)">TRIVIA</button>
     <button class="mode-pill" onclick="setPlannerMode('bingo',this)">BINGO</button>
+    <button class="mode-pill" onclick="setPlannerMode('karaoke',this)">KARAOKE</button>
   </div>
   <select id="plannerLocationSelect" onchange="setPlannerLocation(this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:999px;color:var(--gold);padding:8px 18px;font-size:12px;font-weight:600;margin:0 0 10px 0;min-width:190px;max-width:260px"><option>Loading locations…</option></select>
 </div>
@@ -936,6 +937,23 @@ const state = { venues:{}, themes:{}, gigs:{}, sequences:{} };
 // only fields (plannerTier, pairsWith, plannerUsage) live right on that same
 // record, written by whichever app touches them.
 let libraryRaw = {};
+// Karaoke song lists get a public, read-only copy at publicKaraoke/<categoryId>
+// so the printed/shown QR code can open a plain song-list page for guests who
+// aren't signed in. Only name + secondary name + songs are copied — nothing
+// else from the category. Quietly does nothing if this account can't write there.
+const _pkSent = {};
+function mirrorPublicKaraoke(themes){
+  Object.entries(themes||{}).forEach(([id,t])=>{
+    if(t.tier!=='karaoke') return;
+    const songs = Array.isArray(t.karaokeSongs) ? t.karaokeSongs : (typeof t.karaokeSongs==='string' ? t.karaokeSongs.split('\n') : []);
+    const clean = songs.map(x=>String(x).trim()).filter(Boolean);
+    const payload = {name:t.name||'', altName:t.altName||'', songs:clean};
+    const sig = JSON.stringify(payload);
+    if(_pkSent[id]===sig) return;
+    _pkSent[id] = sig;
+    db.ref('publicKaraoke/'+id).set(Object.assign({updatedAt:Date.now()}, payload)).catch(()=>{ delete _pkSent[id]; });
+  });
+}
 function rebuildThemesState(){
   const out = {};
   Object.entries(libraryRaw||{}).forEach(([id,c])=>{
@@ -954,6 +972,10 @@ function rebuildThemesState(){
       lastUsedVenueId: usage.lastUsedVenueId || c.lastUsedVenueId || null
     };
   });
+  if(plannerMode!=='bingo') mirrorPublicKaraoke(out);
+  if(plannerMode==='karaoke'){
+    Object.keys(out).forEach(id=>{ if(out[id].tier!=='karaoke') delete out[id]; });
+  }
   state.themes = out;
   onDataChange();
   updateThemeDatalist();
@@ -1196,6 +1218,11 @@ function attachHostRosterListener(){
 }
 const MODE_PATHS = {
   trivia: { venues:'trivia/planner/venues', gigs:'trivia/planner/gigs', library:'trivia/categories', sequences:'trivia/planner/sequences' },
+  // Karaoke: its own venues + gigs (so a venue's karaoke night is planned here,
+  // like Trivia and Bingo), but the SAME category library as Trivia — karaoke
+  // lists are trivia/categories records tagged plannerTier 'karaoke', keyed by
+  // their real category ID, songs in karaokeSongs.
+  karaoke:{ venues:'trivia/planner/karaokeVenues', gigs:'trivia/planner/karaokeGigs', library:'trivia/categories', sequences:null },
   bingo:  { venues:'bingo/landing/venues',  gigs:'bingo/landing/schedule', library:'bingo/landing/categories', sequences:null }
 };
 // ── LOCATIONS ── same shared list HQ manages. Venues and gigs get filtered
@@ -1919,16 +1946,16 @@ async function gridPaste(){
     if(r<0||c<0||r>=gridRows||c>=gridCols){ skipped++; continue; }
     const addr = cellAddr(r,c);
     if(!addr || !addr.dateKey){ skipped++; continue; }
-    if(!cell.themeName){ updates['trivia/planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null; continue; }
+    if(!cell.themeName){ updates[(MODE_PATHS[plannerMode].gigs+'/')+addr.venueId+'/'+addr.dateKey] = null; continue; }
     const themeId = await resolveThemeIdByName(cell.themeName);
     const existingDest = (state.gigs[addr.venueId]||{})[addr.dateKey]||{};
-    updates['trivia/planner/gigs/'+addr.venueId+'/'+addr.dateKey] = { themeId, themeName:cell.themeName, status:cell.status||'planned', note:'', host:existingDest.host||null };
+    updates[(MODE_PATHS[plannerMode].gigs+'/')+addr.venueId+'/'+addr.dateKey] = { themeId, themeName:cell.themeName, status:cell.status||'planned', note:'', host:existingDest.host||null };
     bumpThemeUsageForVenue(themeId, addr.dateKey, addr.venueId);
   }
   if(clipboard.mode==='cut'){
     for(const cell of clipboard.cells){
       const addr = cellAddr(cell.origR, cell.origC);
-      if(addr && addr.dateKey) updates['trivia/planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null;
+      if(addr && addr.dateKey) updates[(MODE_PATHS[plannerMode].gigs+'/')+addr.venueId+'/'+addr.dateKey] = null;
     }
   }
   await db.ref().update(updates);
@@ -1943,7 +1970,7 @@ async function gridClearSelected(){
   const updates = {};
   for(let r=rect.rMin;r<=rect.rMax;r++) for(let c=rect.cMin;c<=rect.cMax;c++){
     const addr = cellAddr(r,c);
-    if(addr && addr.dateKey) updates['trivia/planner/gigs/'+addr.venueId+'/'+addr.dateKey] = null;
+    if(addr && addr.dateKey) updates[(MODE_PATHS[plannerMode].gigs+'/')+addr.venueId+'/'+addr.dateKey] = null;
   }
   await db.ref().update(updates);
   toast('Cleared.');
@@ -2032,7 +2059,7 @@ async function submitApplySequenceAt(){
     const dk = toKey(d);
     const themeId = await resolveThemeIdByName(themeName);
     const existingDk = (state.gigs[venueId]||{})[dk]||{};
-    updates['trivia/planner/gigs/'+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:'', host:existingDk.host||null};
+    updates[(MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:'', host:existingDk.host||null};
     bumpThemeUsageForVenue(themeId, dk, venueId);
     d = addDays(d,7);
   }
@@ -2287,12 +2314,12 @@ function vdInlineSave(row, dk){
   const existing = (state.gigs[id]||{})[dk] || {};
 
   if(status==='unplanned' || (!triviaName && !musicName && status!=='cancelled')){
-    db.ref('trivia/planner/gigs/'+id+'/'+dk).remove();
+    db.ref((MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk).remove();
     flashSaved(row);
     return;
   }
   if(status==='cancelled'){
-    db.ref('trivia/planner/gigs/'+id+'/'+dk).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, status:'cancelled', note:existing.note||'', host:existing.host||null});
+    db.ref((MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, status:'cancelled', note:existing.note||'', host:existing.host||null});
     flashSaved(row);
     return;
   }
@@ -2310,7 +2337,7 @@ function vdInlineSave(row, dk){
         round3Id = newId;
       }
     }
-    await db.ref('trivia/planner/gigs/'+id+'/'+dk).set({themeId, themeName:triviaName||null, round3ThemeId:round3Id, round3Name:musicName||null, status:'planned', note:existing.note||'', host:existing.host||null});
+    await db.ref((MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk).set({themeId, themeName:triviaName||null, round3ThemeId:round3Id, round3Name:musicName||null, status:'planned', note:existing.note||'', host:existing.host||null});
     if(themeId) bumpThemeUsage(themeId, dk);
     if(round3Id) bumpThemeUsage(round3Id, dk);
     flashSaved(row);
@@ -2403,7 +2430,7 @@ function submitQuickBulk(){
       const dk = toKey(d);
       const themeId = noCreateMode ? findThemeIdByNameOnly(name) : await resolveThemeIdByName(name);
       const existingDk = (state.gigs[id]||{})[dk]||{};
-      updates['trivia/planner/gigs/'+id+'/'+dk] = {themeId, themeName:name, status:'planned', note:'', host:existingDk.host||null};
+      updates[(MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk] = {themeId, themeName:name, status:'planned', note:'', host:existingDk.host||null};
       if(themeId) bumpThemeUsage(themeId, dk);
       d = addDays(d,7);
     }
@@ -2457,7 +2484,7 @@ async function submitBulkFill(){
     const dk = toKey(d);
     const themeId = noCreateMode ? findThemeIdByNameOnly(themeNames[i]) : await resolveThemeIdByName(themeNames[i]);
     const existingDk = (state.gigs[id]||{})[dk]||{};
-    updates['trivia/planner/gigs/'+id+'/'+dk] = {themeId, themeName:themeNames[i], status:'planned', note:'', host:existingDk.host||null};
+    updates[(MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk] = {themeId, themeName:themeNames[i], status:'planned', note:'', host:existingDk.host||null};
     if(themeId) bumpThemeUsage(themeId, dk);
   }
   await db.ref().update(updates);
@@ -2743,7 +2770,7 @@ function renderThemes(){
 function assignThemeFromLibrary(key){
   const t = getLibRecord(key);
   if(!t || t.source==='vm') return;
-  const targetMode = t.source;
+  const targetMode = (t.source==='trivia' && normTier(t.tier)==='karaoke') ? 'karaoke' : t.source;
   const doOpen = ()=>{
     openGigModal(null);
     if(targetMode==='trivia'){
@@ -2757,6 +2784,11 @@ function assignThemeFromLibrary(key){
       }
       maybeAutoPlan();
       renderRoundsUI();
+    } else if(targetMode==='karaoke'){
+      gigCtx.rounds = [{name:t.name, themeId:t.id}];
+      renderRoundsUI();
+      const statusEl = document.getElementById('gig-status');
+      if(statusEl.value==='unplanned') statusEl.value = 'planned';
     } else {
       document.getElementById('gig-bingo-cat1').value = t.name;
       document.getElementById('bingo-cat1-suggest').innerHTML = '';
@@ -3206,7 +3238,7 @@ async function submitApplySequence(){
     const dk = toKey(d);
     const themeId = await resolveThemeIdByName(themeName);
     const existingDk = (state.gigs[venueId]||{})[dk]||{};
-    updates['trivia/planner/gigs/'+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:'', host:existingDk.host||null};
+    updates[(MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:'', host:existingDk.host||null};
     bumpThemeUsageForVenue(themeId, dk, venueId);
     d = addDays(d,7);
   }
@@ -3251,6 +3283,7 @@ function openGigModal(venueId, dateKey){
   // the venue's regular assignment.
   renderGigHostOptions((existing && existing.host) || (v && v.host) || '');
   document.getElementById('gig-trivia-fields').style.display = plannerMode==='bingo' ? 'none' : '';
+  { const rl = document.getElementById('gig-regular-toggle').closest('label'); if(rl) rl.style.display = plannerMode==='karaoke' ? 'none' : ''; }
   document.getElementById('gig-bingo-fields').style.display = plannerMode==='bingo' ? 'block' : 'none';
   if(plannerMode==='bingo'){
     const rounds = (existing && existing._bingoRounds) || [];
@@ -3277,7 +3310,8 @@ function openGigModal(venueId, dateKey){
     // Night category (those are never "regular").
     const r0Theme = gigCtx.rounds[0] && gigCtx.rounds[0].themeId ? state.themes[gigCtx.rounds[0].themeId] : null;
     const specialTier = r0Theme && ['featured','feature-trivia','theme-night'].includes(normTier(r0Theme.tier));
-    gigCtx.regularTrivia = !specialTier;
+    gigCtx.regularTrivia = plannerMode!=='karaoke' && !specialTier;
+    if(plannerMode==='karaoke') gigCtx.rounds = gigCtx.rounds.slice(0,1);
     if(gigCtx.regularTrivia){
       while(gigCtx.rounds.length<3) gigCtx.rounds.push({name:'',themeId:null});
       if(gigCtx.rounds.length>3) gigCtx.rounds = gigCtx.rounds.slice(0,3);
@@ -3417,9 +3451,9 @@ function roundRowHtml(r,i,opts){
   return `<div class="round-row" style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;"
       ${opts.draggable?`draggable="true" ondragstart="roundDragStart(${i})" ondragover="event.preventDefault()" ondrop="roundDrop(${i})" ondragend="roundDragEnd()"`:''}>
     ${opts.draggable?'<span style="cursor:grab;color:var(--text3);padding-top:9px;">⠿</span>':''}
-    <span style="font-size:11px;letter-spacing:.06em;color:var(--text3);text-transform:uppercase;min-width:58px;padding-top:11px;">Round ${i+1}</span>
+    <span style="font-size:11px;letter-spacing:.06em;color:var(--text3);text-transform:uppercase;min-width:58px;padding-top:11px;">${opts.karaoke?'Karaoke':'Round '+(i+1)}</span>
     <div style="flex:1;">
-      <input type="text" class="form-input" id="round-input-${i}" value="${escapeHtml(r.name||'')}" placeholder="${i===0?'General Knowledge':'Search any category…'}"
+      <input type="text" class="form-input" id="round-input-${i}" value="${escapeHtml(r.name||'')}" placeholder="${opts.karaoke?'Themed song list (optional)…':i===0?'General Knowledge':'Search any category…'}"
         oninput="onRoundInput(${i},this.value)" onfocus="renderRoundInputSuggest(${i})">
       <div class="theme-suggest" id="round-suggest-${i}"></div>
     </div>
@@ -3429,6 +3463,12 @@ function roundRowHtml(r,i,opts){
 function renderRoundsUI(){
   const container = document.getElementById('gig-rounds-container');
   if(!container) return;
+  if(plannerMode==='karaoke'){
+    gigCtx.rounds = gigCtx.rounds.slice(0,1); if(!gigCtx.rounds.length) gigCtx.rounds.push({name:'',themeId:null});
+    container.innerHTML = `<div id="gig-rounds-list">${roundRowHtml(gigCtx.rounds[0],0,{removable:false,draggable:false,karaoke:true})}</div>
+      <div class="section-sub" style="font-size:11px;margin-top:2px">Pick a themed song list, or leave blank and set Status to Planned for plain regular karaoke.</div>`;
+    return;
+  }
   if(gigCtx.regularTrivia){
     container.innerHTML = `<div id="gig-rounds-list">${gigCtx.rounds.map((r,i)=>roundRowHtml(r,i,{removable:false,draggable:false})+(i===1?`<div id="regular-pairs-holder">${regularPairsHtml(1)}</div>`:'')).join('')}</div>`;
   }else{
@@ -3612,13 +3652,19 @@ function saveGig(){
     saveBingoGig(venueId,dateKey,status,note,cat1,cat2,host);
     return;
   }
-  const rounds = (gigCtx.rounds||[]).filter(r=>r && r.name && r.name.trim());
+  let rounds = (gigCtx.rounds||[]).filter(r=>r && r.name && r.name.trim());
+  if(plannerMode==='karaoke') rounds = rounds.slice(0,1);
+  if(plannerMode==='karaoke' && !rounds.length && status==='planned'){
+    // plain regular karaoke — a planned night with no themed list
+    db.ref(MODE_PATHS.karaoke.gigs+'/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, status:'planned', note, host, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+    return;
+  }
   if(status==='unplanned' || (!rounds.length && status!=='cancelled')){
-    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).remove().then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+    db.ref((MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dateKey).remove().then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
   if(status==='cancelled'){
-    db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, extraCategories:null, status:'cancelled', note, host, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+    db.ref((MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, extraCategories:null, status:'cancelled', note, host, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
   // Rounds resolve independently, in order — round 0 saves as themeId/themeName,
@@ -3640,7 +3686,7 @@ function saveGig(){
     const round3Id = resolvedIds[1]||null;
     const round3Name = rounds[1] ? rounds[1].name.trim() : null;
     const extraCategories = rounds.slice(2).map((r,i)=>({id:resolvedIds[i+2]||null, name:r.name.trim()}));
-    await db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).set({
+    await db.ref((MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dateKey).set({
       themeId, themeName, round3ThemeId: round3Id, round3Name,
       extraCategories: extraCategories.length?extraCategories:null, status:'planned', note, host, locationId:selectedLocationId
     });
@@ -3699,7 +3745,7 @@ function clearGig(){
     db.ref('bingo/landing/schedule/'+existingEntryId).remove().then(()=>{ toast('Cleared — back to unplanned.'); closeModal('gig-modal-overlay'); });
     return;
   }
-  db.ref('trivia/planner/gigs/'+venueId+'/'+dateKey).remove().then(()=>{ toast('Cleared — back to unplanned.'); closeModal('gig-modal-overlay'); });
+  db.ref((MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dateKey).remove().then(()=>{ toast('Cleared — back to unplanned.'); closeModal('gig-modal-overlay'); });
 }
 
 // ═══════════════════════════════════════════════
