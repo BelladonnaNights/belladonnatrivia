@@ -944,7 +944,7 @@ let libraryRaw = {};
 const _pkSent = {};
 function mirrorPublicKaraoke(themes){
   Object.entries(themes||{}).forEach(([id,t])=>{
-    if(t.tier!=='karaoke') return;
+    if(t.tier!=='karaoke' && String(t.type||'').toLowerCase()!=='karaoke' && !(Array.isArray(t.karaokeSongs)&&t.karaokeSongs.length)) return;
     const songs = Array.isArray(t.karaokeSongs) ? t.karaokeSongs : (typeof t.karaokeSongs==='string' ? t.karaokeSongs.split('\n') : []);
     const clean = songs.map(x=>String(x).trim()).filter(Boolean);
     const payload = {name:t.name||'', altName:t.altName||'', songs:clean};
