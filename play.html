@@ -762,6 +762,7 @@ async function submitAnswer(value, btn, type) {
         teamName: teamName,
         questionText,
         correctAnswer,
+        type: currentQ.type || 'open',
         status: 'pending',
       });
     } catch(e) { console.error('Answer not saved', e); }
