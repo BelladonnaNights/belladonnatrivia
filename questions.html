@@ -145,7 +145,7 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 table#grid{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}
 #grid th{position:sticky;top:0;z-index:4;background:var(--surface2);text-align:left;font-family:var(--cinzel);font-weight:600;letter-spacing:.12em;text-transform:uppercase;font-size:9px;color:var(--text3);padding:12px 10px;border-bottom:1px solid var(--border2);border-right:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
 #grid th.num,#grid th.act{cursor:default}
-td.fb,th.fb{position:sticky;left:52px;z-index:2;width:104px;min-width:104px;max-width:104px;background:var(--surface)!important;white-space:nowrap;padding:6px 6px!important;font-size:12px;vertical-align:top}
+td.fb,th.fb{position:sticky;left:66px;z-index:2;width:104px;min-width:104px;max-width:104px;background:var(--surface)!important;white-space:nowrap;padding:6px 6px!important;font-size:12px;vertical-align:top}
 th.fb{z-index:6;background:var(--surface2)!important;cursor:default}
 td.fb .star{background:none;border:0;cursor:pointer;color:var(--gold2);font-size:15px;line-height:1;padding:2px 3px;margin-right:2px}
 td.fb .star:hover{color:#fff}
@@ -182,7 +182,7 @@ tr.flash td{background:rgba(201,168,76,.28)!important;transition:background 1s}
 #grid td.c-check{text-align:center;padding-top:9px}
 #grid td .thumb{display:block;width:100%;background:none;border:0;padding:7px 4px;font-size:16px;opacity:.9}
 #grid td .thumb[data-v='']{opacity:.3}
-td.num,th.num{position:sticky;left:0;z-index:2;width:52px;min-width:52px;text-align:right;color:var(--text3);padding:9px 8px 0 4px!important;font-size:12px;background:var(--surface)!important;white-space:nowrap}
+td.num,th.num{position:sticky;left:0;z-index:2;width:66px;min-width:66px;text-align:right;color:var(--text3);padding:9px 8px 0 4px!important;font-size:12px;background:var(--surface)!important;white-space:nowrap}
 th.num{z-index:6}
 td.stickyQ,th.stickyQ{position:sticky;left:156px;z-index:2;box-shadow:2px 0 0 var(--border2)}
 th.stickyQ{z-index:6}
@@ -246,6 +246,14 @@ table.pv tr.hit:hover td{background:var(--gold-dim)}
   .nav-subtitle{display:none}
   .catTitle{font-size:26px}
 }
+
+.rowx{background:none;border:0;padding:0 5px 0 0;margin:0;cursor:pointer;color:#6b6b6b;font-size:12px;line-height:1;opacity:.75;transition:color .15s,opacity .15s}
+.rowx:hover,.rowx:focus-visible{color:var(--red);opacity:1;outline:0}
+#grid th{position:sticky}
+#grid th .rz{position:absolute;top:0;right:-3px;bottom:0;width:8px;cursor:col-resize;z-index:7}
+#grid th .rz::after{content:'';position:absolute;top:22%;bottom:22%;left:3px;width:1px;background:var(--border2);transition:background .15s,width .15s}
+#grid th .rz:hover::after,body.resizing #grid th .rz::after{background:var(--gold);width:2px}
+body.resizing{cursor:col-resize;user-select:none}
 </style>
 </head>
 <body>
@@ -368,6 +376,7 @@ import {
 const BUILTIN = [
   { key:'question',      label:'Question',       exportLabel:'Question',         type:'long', w:380 },
   { key:'answer',        label:'Answer',         exportLabel:'Answer',           type:'long', w:220 },
+  { key:'altAnswers',    label:'Variable Answers', exportLabel:'Variable Answers', type:'long', w:240 },
   { key:'difficulty',    label:'Diff',           exportLabel:'Difficulty (1-3)', type:'diff', w:70  },
   { key:'tags',          label:'Tags',           exportLabel:'Tags',             type:'tags', w:200 },
   { key:'optionA',       label:'Option A',       exportLabel:'Option A',         type:'long', w:160 },
@@ -386,6 +395,7 @@ const CUSTOM_TYPES = { text:'Short text', long:'Long text / notes', thumbs:'Thum
 const CUSTOM_W = { text:170, long:280, thumbs:80, check:70, number:90 };
 const HEADER_MAP = {
   question:'question', answer:'answer',
+  variableanswers:'altAnswers', variableanswer:'altAnswers', altanswers:'altAnswers', alternateanswers:'altAnswers', acceptedanswers:'altAnswers', alsoaccept:'altAnswers',
   difficulty:'difficulty', difficulty13:'difficulty', diff:'difficulty',
   imgurl:'imgUrl', imageurl:'imgUrl', img:'imgUrl', image:'imgUrl',
   soundurl:'soundUrl', audiourl:'soundUrl', sound:'soundUrl', audio:'soundUrl',
@@ -574,7 +584,7 @@ catch (e) { db = initializeFirestore(app, { localCache: memoryLocalCache() }); }
 const S = {
   user: null, cats: new Map(), fb: new Map(), custom: [], order: null, tempOrder: null, types: null, curId: null, unsubQ: null,
   rows: new Map(), maxOrder: 0, sort: { key:'order', dir:1 }, filter: { q:'', diff:0, tags:new Set() },
-  hidden: new Set(LS.get('hiddenCols', [])), collapsed: new Set(LS.get('collapsed', [])), sortCount: new Set(LS.get('sortCount', [])),
+  hidden: new Set(LS.get('hiddenCols', [])), collapsed: new Set(LS.get('collapsed', [])), sortCount: new Set(LS.get('sortCount', [])), colW: LS.get('colW', {}) || {},
   pending: 0, listening: false, unsubs: [], firstQ: true
 };
 const catRef = id => doc(db, 'triviaCategories', id);
@@ -725,6 +735,7 @@ function orderCols(ord){
   return out;
 }
 const allCols = () => orderCols(S.tempOrder || S.order);
+const colWidth = c => Math.max(60, Math.round(Number(S.colW && S.colW[c.key]) || c.w || 170));
 const visibleCols = () => allCols().filter(c => c.key === 'question' || !S.hidden.has(c.key));
 
 /* ═══════════════════════════════════════════════════════════
@@ -914,7 +925,7 @@ function insertSorted(r){
 function renderAll(){
   const cols = visibleCols();
   thead.innerHTML = '<tr><th class="num">#</th><th class="fb" title="Host feedback from live games: ★ = notes to review, then 👍 / 👎 counts">Feedback</th>' + cols.map(c =>
-    `<th data-key="${c.key}" ${c.key === 'question' ? '' : 'draggable="true"'} title="${c.key === 'question' ? 'Click to sort' : 'Click to sort · drag to move this column for now'}" class="${c.key === 'question' ? 'stickyQ' : ''}" style="min-width:${c.w}px;width:${c.w}px">${esc(c.label)} <span class="sortInd">${S.sort.key === c.key ? (S.sort.dir === 1 ? '▲' : '▼') : ''}</span></th>`).join('') + '<th class="act"></th></tr>';
+    `<th data-key="${c.key}" ${c.key === 'question' ? '' : 'draggable="true"'} title="${c.key === 'question' ? 'Click to sort' : 'Click to sort · drag to move this column for now'}" class="${c.key === 'question' ? 'stickyQ' : ''}" style="min-width:${colWidth(c)}px;width:${colWidth(c)}px">${esc(c.label)} <span class="sortInd">${S.sort.key === c.key ? (S.sort.dir === 1 ? '▲' : '▼') : ''}</span><span class="rz" data-rz="${c.key}" title="Drag to resize · double-click to reset"></span></th>`).join('') + '<th class="act"></th></tr>';
   tbody.innerHTML = '';
   const persisted = [...S.rows.values()].filter(r => r.persisted).sort(cmpRows);
   const drafts = [...S.rows.values()].filter(r => !r.persisted);
@@ -928,6 +939,18 @@ function renderAll(){
 }
 /* ── Drag a column header to move it for this session only (Columns ▸ Move columns to make it permanent) ── */
 let dragKey = null;
+/* ── Resize a column by dragging the edge of its header (saved on this device) ── */
+thead.addEventListener('mousedown', e => {
+  const h = e.target.closest('.rz'); if (!h) return;
+  e.preventDefault(); e.stopPropagation();
+  const th = h.closest('th'), key = h.dataset.rz, startX = e.clientX, startW = th.getBoundingClientRect().width;
+  const move = ev => { const w = Math.max(60, Math.round(startW + ev.clientX - startX)); th.style.width = th.style.minWidth = w + 'px'; };
+  const up = ev => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); document.body.classList.remove('resizing');
+    S.colW[key] = Math.max(60, Math.round(startW + ev.clientX - startX)); LS.set('colW', S.colW); requestAnimationFrame(() => autosizeAll($$('textarea', tbody))); };
+  document.body.classList.add('resizing'); document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+});
+thead.addEventListener('dblclick', e => { const h = e.target.closest('.rz'); if (!h) return; delete S.colW[h.dataset.rz]; LS.set('colW', S.colW); renderAll(); });
+thead.addEventListener('dragstart', e => { if (e.target.closest && e.target.closest('.rz')) e.preventDefault(); }, true);
 const clearDrop = () => $$('#grid th.dropL,#grid th.dropR,#grid th.dragging').forEach(t => t.classList.remove('dropL', 'dropR', 'dragging'));
 thead.addEventListener('dragstart', e => {
   const th = e.target.closest('th[data-key]'); if (!th || th.dataset.key === 'question') { e.preventDefault(); return; }
@@ -948,6 +971,7 @@ thead.addEventListener('drop', e => {
 thead.addEventListener('dragend', () => { dragKey = null; clearDrop(); });
 $('#resetOrderBtn').addEventListener('click', () => { S.tempOrder = null; renderAll(); });
 thead.addEventListener('click', e => {
+  if (e.target.closest('.rz')) return;
   const th = e.target.closest('th[data-key]'); if (!th) return;
   const k = th.dataset.key;
   S.sort = S.sort.key === k ? { key: k, dir: -S.sort.dir } : { key: k, dir: 1 };
@@ -1066,7 +1090,7 @@ function buildRow(r){
   const tr = document.createElement('tr'); tr.dataset.id = r.id;
   if (!r.persisted) tr.classList.add('draft');
   if (r.data.archived) tr.classList.add('arch');
-  let h = '<td class="num"><span class="dot"></span><span class="n"></span></td><td class="fb">' + fbHTML(r) + '</td>';
+  let h = '<td class="num"><button class="rowx" data-act="rowdelete" tabindex="-1" title="Delete this question">\u2715</button><span class="dot"></span><span class="n"></span></td><td class="fb">' + fbHTML(r) + '</td>';
   for (const c of visibleCols()) h += `<td class="c-${c.type}${c.key === 'question' ? ' stickyQ' : ''}">${cellHTML(c, r.data[c.key])}</td>`;
   h += r.data.archived
     ? '<td class="act"><button class="ico" data-act="restore" tabindex="-1" title="Restore">↺</button><button class="ico del" data-act="delete" tabindex="-1" title="Delete forever">🗑</button></td>'
@@ -1157,6 +1181,12 @@ tbody.addEventListener('click', async e => {
   const r = S.rows.get(b.closest('tr').dataset.id); if (!r) return;
   if (b.dataset.act === 'archive') archiveRow(r, true);
   if (b.dataset.act === 'restore') archiveRow(r, false);
+  if (b.dataset.act === 'rowdelete'){
+    if (!r.persisted){ r.tr.remove(); S.rows.delete(r.id); scheduleDupes(); updateCount(); return; }
+    const preview = String(r.data.question || '').trim().slice(0, 140);
+    if (await confirmBox({ title: 'Delete this question?', message: (preview ? '\u201c' + preview + (String(r.data.question).length > 140 ? '\u2026' : '') + '\u201d\n\n' : '') + 'It will be permanently deleted. This can\u2019t be undone.', ok: 'Delete', danger: true })) run(async () => { await deleteDoc(r.ref); });
+    return;
+  }
   if (b.dataset.act === 'delete'){
     if (await confirmBox({ title: 'Delete forever?', message: 'This question will be permanently deleted. This can\u2019t be undone.', ok: 'Delete forever', danger: true })) run(async () => { await deleteDoc(r.ref); });
   }
