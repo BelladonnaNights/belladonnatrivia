@@ -588,7 +588,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 }
 .hb-history-body{overflow-y:auto;flex:1}
 .hb-history-row{
-  display:grid;grid-template-columns:140px 1fr 180px;gap:12px;
+  display:grid;grid-template-columns:140px 1fr 180px auto;gap:12px;
   padding:10px 18px;border-bottom:1px solid rgba(255,255,255,.04);align-items:center;
 }
 .hb-history-row:hover{background:rgba(255,255,255,.02)}
@@ -645,7 +645,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-adj-input::-webkit-outer-spin-button,.hb-adj-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .hb-position{font-family:var(--cinzel);font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);line-height:1.5;padding:8px 12px 2px}
 .hb-fb-row{display:flex;gap:8px;padding:6px 12px;flex-wrap:wrap}
-.hb-fb-btn{padding:8px 14px;border-radius:8px;border:1px solid var(--border2);background:rgba(255,255,255,.05);color:var(--text2);cursor:pointer;font-size:16px;font-family:var(--cinzel);letter-spacing:.06em}
+.hb-fb-btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:8px;border:1px solid var(--border2);background:rgba(255,255,255,.05);color:var(--text2);cursor:pointer;font-size:16px;font-family:var(--cinzel);letter-spacing:.06em}
 .hb-fb-btn:hover{background:rgba(255,255,255,.1);color:var(--text)}
 .hb-fb-btn.flash{background:var(--gold-dim);border-color:var(--gold-glow);color:var(--gold)}
 #hb-fb-note{padding:0 12px 8px}
@@ -653,6 +653,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-adj-btn{padding:9px 16px;font-size:12px;border-radius:7px}
 .hb-grade-btns{gap:8px}
 .hb-grade-btn{padding:10px 20px;font-size:20px;line-height:1;min-width:58px;border-radius:8px}
+.hb-adj-take{background:rgba(155,89,182,.2) !important;color:#c9a0dc !important;border-color:#9b59b6 !important}
+.hb-adj-take:hover{background:rgba(155,89,182,.38) !important}
 .hb-lock-btn{padding:4px 10px;border-radius:7px;border:1px solid var(--border2);background:rgba(255,255,255,.05);cursor:pointer;font-size:20px;line-height:1.2}
 .hb-lock-btn.on{background:var(--gold-dim);border-color:var(--gold-glow);color:var(--gold)}
 </style>
@@ -728,8 +730,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
       </div>
       <div class="hb-position" id="hb-position"></div>
       <div class="hb-fb-row" id="hb-fb-row">
-        <button class="hb-fb-btn" id="hb-fb-up" onclick="hostThumb('up')" title="Good question">👍</button>
-        <button class="hb-fb-btn" id="hb-fb-down" onclick="hostThumb('down')" title="Flag this question">👎</button>
+        <button class="hb-fb-btn" id="hb-fb-up" onclick="hostThumb('up')" title="Good question"><svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg></button>
+        <button class="hb-fb-btn" id="hb-fb-down" onclick="hostThumb('down')" title="Flag this question"><svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true" style="transform:rotate(180deg)"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg></button>
         <button class="hb-fb-btn" onclick="hostToggleNote()" title="Leave a note about this question">✎ Note</button>
       </div>
       <div id="hb-fb-note" style="display:none">
@@ -786,7 +788,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
       </div>
       <div class="hb-timed-row" style="flex-direction:column;align-items:flex-start;gap:8px">
         <span class="hb-timed-label" style="font-size:11px;letter-spacing:.08em">⏱ Timed (10s)</span>
-        <span style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">next question only</span>
+        <span id="hb-timed-sub" style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">next question only</span>
         <div style="display:flex;align-items:center;gap:16px">
           <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()" title="Time the next question"></div>
           <button class="hb-lock-btn" id="hb-timed-lock" onclick="toggleHostTimedLock()" title="Lock timed mode on for every question (click again to unlock)">🔓</button>
@@ -872,7 +874,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   <!-- RIGHT: LINEUP -->
   <div class="lineup">
     <div class="lineup-launch-sticky">
-      <button class="launch-btn" id="launch-btn" onclick="launchTrivia()">Launch Trivia Night →</button>
+      <button class="launch-btn" id="launch-btn" onclick="pressLaunchBtn()">Open Trivia</button>
     </div>
     <div class="lineup-header">
       <div class="lineup-title">TONIGHT'S LINEUP</div>
@@ -920,6 +922,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 <div class="hb-history-popup" id="hb-history-popup">
   <div class="hb-history-header">
     <div class="hb-grading-title">GAME HISTORY</div>
+    <div id="hb-hist-tabs" style="display:none;gap:8px;margin-left:16px"><button class="hb-adj-btn" id="hist-tab-mine" onclick="setHistScope('mine')">My games</button><button class="hb-adj-btn" id="hist-tab-all" onclick="setHistScope('all')">All hosts</button></div>
     <button class="hb-grading-close" onclick="closeHistory()">×</button>
   </div>
   <div class="hb-history-body" id="hb-history-body">
@@ -2505,6 +2508,19 @@ async function deleteCategory() {
 // ═══════════════════════════════════════════════
 //  LAUNCH TRIVIA
 // ═══════════════════════════════════════════════
+// Open Trivia -> (trivia.html is open on the setup screen) -> Launch Trivia Night -> (live)
+let triviaPhase = null;
+function pressLaunchBtn() {
+  if(triviaPhase === 'setup') { sendHostCommand('launch'); toast('Launching trivia night…'); }
+  else if(triviaPhase === 'live') toast('Trivia night is already running');
+  else launchTrivia();
+}
+function renderLaunchBtn() {
+  const b = document.getElementById('launch-btn');
+  if(!b) return;
+  b.textContent = triviaPhase === 'setup' ? 'Launch Trivia Night →' : triviaPhase === 'live' ? 'Trivia Night Is Live ✓' : 'Open Trivia';
+  b.style.opacity = triviaPhase === 'live' ? '.6' : '';
+}
 function launchTrivia() {
   const activeRounds = lineup.map((id,i) => id ? {cat: categories.find(c=>c.id===id), slotIndex: i} : null)
     .filter(r => r && r.cat);
@@ -3004,12 +3020,21 @@ function closeHistory() {
   document.getElementById('hb-history-popup').classList.remove('show');
 }
 
+let histScope = 'mine';
+function setHistScope(sc) { histScope = sc; renderHistory(); }
 function renderHistory() {
   const body = document.getElementById('hb-history-body');
   if(!body) return;
-  db.ref('trivia/gameHistory').orderByKey().limitToLast(20).once('value', snap => {
-    const all = snap.val() || {};
-    const entries = Object.values(all).sort((a,b) => (b.startedAt||0)-(a.startedAt||0));
+  const uid = LIVE_GAME_PATH.replace('games/','');
+  const tabs = document.getElementById('hb-hist-tabs');
+  if(tabs) {
+    tabs.style.display = adminMode ? 'flex' : 'none';
+    ['mine','all'].forEach(k => { const b = document.getElementById('hist-tab-' + k); if(b) b.style.opacity = (histScope === k || (!adminMode && k === 'mine')) ? '1' : '.5'; });
+  }
+  const all = adminMode && histScope === 'all';
+  const fail = e => { body.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--text3)">Could not load history: ' + escHtml(e.message || e) + '</div>'; };
+  const draw = entries => {
+    entries.sort((a,b) => (b.startedAt||0)-(a.startedAt||0));
     if(!entries.length) {
       body.innerHTML = '<div style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);text-align:center;padding:2rem">No game history yet.</div>';
       return;
@@ -3017,16 +3042,39 @@ function renderHistory() {
     body.innerHTML = entries.map(g => {
       const teams = g.teams ? Object.values(g.teams).sort((a,b)=>(b.score||0)-(a.score||0)) : [];
       const teamsHtml = teams.length
-        ? teams.map(t => '<div class="hb-history-team"><span>' + t.name + '</span><span class="hb-history-pts">' + (t.score||0) + ' pts</span></div>').join('')
+        ? teams.map(t => '<div class="hb-history-team"><span>' + escHtml(t.name||'?') + '</span><span class="hb-history-pts">' + (t.score||0) + ' pts</span></div>').join('')
         : '<div style="font-size:11px;color:var(--text3);font-style:italic">No teams recorded</div>';
       const ended = g.endedAt ? ' · ended ' + new Date(g.endedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
+      const hostLine = all ? '<div style="font-size:12px;color:var(--gold,#c9a45c);margin-top:2px">Host: ' + escHtml(g.hostName || g.hostUid || 'unknown') + '</div>' : '';
+      const del = adminMode ? '<button class="hb-grade-btn hb-grade-btn-wrong" style="font-size:14px;padding:6px 12px;min-width:0" title="Delete this game record (admin only)" onclick="deleteHistoryGame(\'' + g.hostUid + '\',\'' + g.key + '\')">Delete</button>' : '';
       return '<div class="hb-history-row">'
-        + '<div><div class="hb-history-date">' + (g.date||'Unknown') + ended + '</div></div>'
-        + '<div class="hb-history-cats">' + (g.categories||'Unknown categories') + '</div>'
+        + '<div><div class="hb-history-date">' + escHtml(g.date||'Unknown') + ended + '</div>' + hostLine + '</div>'
+        + '<div class="hb-history-cats">' + escHtml(g.categories||'Unknown categories') + '</div>'
         + '<div class="hb-history-teams">' + teamsHtml + '</div>'
+        + '<div>' + del + '</div>'
         + '</div>';
     }).join('');
-  });
+  };
+  if(all) {
+    db.ref('hostHistory').once('value').then(snap => {
+      const out = [];
+      Object.entries(snap.val() || {}).forEach(([hUid, games]) => Object.entries(games || {}).forEach(([key, g]) => out.push({ key, ...g, hostUid: hUid })));
+      draw(out);
+    }).catch(fail);
+  } else {
+    db.ref('hostHistory/' + uid).orderByKey().limitToLast(30).once('value').then(snap => {
+      draw(Object.entries(snap.val() || {}).map(([key, g]) => ({ key, ...g, hostUid: uid })));
+    }).catch(fail);
+  }
+}
+async function deleteHistoryGame(hUid, key) {
+  if(!adminMode) { toast('Only an admin can delete game records', true); return; }
+  if(!confirm('Delete this game record permanently? This cannot be undone.')) return;
+  try {
+    await db.ref('hostHistory/' + hUid + '/' + key).remove();
+    toast('Game record deleted');
+    renderHistory();
+  } catch(e) { toast('Could not delete: ' + e.message, true); }
 }
 
 // ── Manual point adjustment ───────────────────────────────────────────
@@ -3086,6 +3134,9 @@ function attachHbListeners() {
     if(b) { b.textContent = hostResultsShown ? 'Hide Scores from Players' : 'Give Scores →'; b.classList.toggle('hb-btn-ghost', hostResultsShown); b.classList.toggle('hb-btn-gold', !hostResultsShown); }
   });
 
+  const phaseRef = liveRef('triviaPhase'); _hbRefs.push(phaseRef);
+  phaseRef.on('value', snap => { triviaPhase = snap.val() || null; renderLaunchBtn(); });
+
   const timedRef = liveRef('timedOverride'); _hbRefs.push(timedRef);
   timedRef.on('value', snap => {
     hostTimedOn = snap.val() === true;
@@ -3096,6 +3147,7 @@ function attachHbListeners() {
     hostTimedLocked = snap.val() === true;
     const b = document.getElementById('hb-timed-lock');
     if(b) { b.classList.toggle('on', hostTimedLocked); b.textContent = hostTimedLocked ? '🔒' : '🔓'; b.title = hostTimedLocked ? 'Locked on for every question — click to unlock' : 'Lock timed mode on for every question'; }
+    const sub = document.getElementById('hb-timed-sub'); if(sub) sub.textContent = hostTimedLocked ? 'all questions' : 'next question only';
   });
 
   const introQrRef = liveRef('introQrVisible'); _hbRefs.push(introQrRef);
@@ -3192,7 +3244,7 @@ function attachHbListeners() {
         + '<div class="hb-adj-row">'
         + '<input class="hb-adj-input" id="adj-input-' + t.id + '" type="number" placeholder="pts" title="Points to add or subtract"/>'
         + '<button class="hb-adj-btn" onclick="adjustPoints(\'' + t.id + '\', getAdjDelta(\'' + t.id + '\'))">Give</button>'
-        + '<button class="hb-adj-btn" style="background:var(--red-dim);color:var(--red);border-color:rgba(231,76,60,.3)" onclick="adjustPoints(\'' + t.id + '\', -getAdjDelta(\'' + t.id + '\'))">Take</button>'
+        + '<button class="hb-adj-btn hb-adj-take" onclick="adjustPoints(\'' + t.id + '\', -getAdjDelta(\'' + t.id + '\'))">Take</button>'
         + '</div>'
         + '</div>'
       ).join('')
