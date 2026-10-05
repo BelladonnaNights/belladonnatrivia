@@ -857,6 +857,7 @@ function pushLiveQuestion(q, qIndex, round) {
   liveRef(`questionMeta/${qId}`).set({
     questionText: q.question,
     correctAnswer: q.answer,
+    altAnswers: Array.isArray(q.altAnswers) ? q.altAnswers : [],
   });
   liveRef(`answers/${qId}`).remove();
 }
@@ -1181,6 +1182,12 @@ async function vaultCatIdByName(title) {
   return hit;
 }
 
+// "Variable Answers" from the Question Vault: one accepted variation per line (or separated by |).
+function parseAlts(v){
+  const out=[], seen=new Set();
+  String(v==null?'':v).split(/\r?\n|\|/).forEach(x=>{ x=x.trim(); const k=x.toLowerCase(); if(x&&!seen.has(k)){ seen.add(k); out.push(x); } });
+  return out.slice(0,25);
+}
 function vaultRow(id, d, catId) {
   const q = safe(d.question).trim(), a = safe(d.answer).trim();
   if(!q || !a) return null;
@@ -1189,7 +1196,7 @@ function vaultRow(id, d, catId) {
   const au = a.toUpperCase();
   const type = (au==='TRUE'||au==='FALSE') ? 'tf' : mcOptions.length > 0 ? 'mc' : 'standard';
   return { question:q, answer:a, difficulty:diff, imageUrl:safe(d.imgUrl).trim(), audioUrl:safe(d.soundUrl).trim(),
-           type, mcOptions, notes:safe(d.notes).trim(), whisperQ:safe(d.whisperQ).trim(), whisperA:safe(d.whisperA).trim(), rowIndex:null,
+           altAnswers:parseAlts(d.altAnswers), type, mcOptions, notes:safe(d.notes).trim(), whisperQ:safe(d.whisperQ).trim(), whisperA:safe(d.whisperA).trim(), rowIndex:null,
            vaultQuestionId:id, vaultCatId:catId, feedbackKey:`vault__${catId}__${id}` };
 }
 
@@ -1200,7 +1207,7 @@ function vaultMusicRow(id, d, catId) {
   if(!song || !artist) return null;
   return { question:song, answer:artist, difficulty:1, imageUrl:'', audioUrl:safe(d.soundUrl).trim(),
            startTime:parseMusicTime(safe(d.startTime)), endTime:parseMusicTime(safe(d.endTime)),
-           albumArt:safe(d.imgUrl).trim(), type:'standard', mcOptions:[], notes:safe(d.notes).trim(), whisperQ:safe(d.whisperQ).trim(), whisperA:safe(d.whisperA).trim(), rowIndex:null,
+           albumArt:safe(d.imgUrl).trim(), altAnswers:parseAlts(d.altAnswers), type:'standard', mcOptions:[], notes:safe(d.notes).trim(), whisperQ:safe(d.whisperQ).trim(), whisperA:safe(d.whisperA).trim(), rowIndex:null,
            vaultQuestionId:id, vaultCatId:catId, feedbackKey:`vault__${catId}__${id}` };
 }
 
