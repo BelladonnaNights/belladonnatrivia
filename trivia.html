@@ -697,6 +697,24 @@ function toggleJoinPanel() {
 
 
 
+let currentSessionId = null;
+function histRef(id){ return db.ref('hostHistory/' + LIVE_UID + '/' + id); }
+function histHostName(){ return (function(){try{const u=fbAuth&&fbAuth.currentUser;return u?(u.displayName||u.email||''):'';}catch(e){return '';}})(); }
+let _histTimer = null;
+// Keep the game-history record up to date as teams join and scores change
+if(db) {
+  whenLiveReady(() => liveRef('teams').on('value', snap => {
+    if(!currentSessionId) return;
+    clearTimeout(_histTimer);
+    _histTimer = setTimeout(() => {
+      const teams = snap.val() || {};
+      const slim = {};
+      Object.entries(teams).forEach(([id, t]) => { slim[id] = { name: t.name || '?', score: t.score || 0 }; });
+      histRef(currentSessionId).update({ teams: Object.keys(slim).length ? slim : null, updatedAt: Date.now(), hostUid: LIVE_UID || null, hostName: histHostName() })
+        .catch(e => console.warn('Game history not saved:', e && e.message));
+    }, 800);
+  }));
+}
 function initLiveGame() {
   if(!LIVE_UID) { whenLiveReady(initLiveGame); return; }   // wait for sign-in to finish
   const sessionId = 'session_' + Date.now();
@@ -731,23 +749,17 @@ function initLiveGame() {
     hasAudio: false,
     ts: startedAt,
   });
+  currentSessionId = sessionId;
   // Save to game history (last 20 games kept via Firebase)
   const categories = (state.rounds||[]).map(r => r.title || r.tabName || 'Unknown').join(', ');
-  db.ref('trivia/gameHistory/' + sessionId).set({
+  histRef(sessionId).set({
     sessionId,
+    hostUid: LIVE_UID || null,
+    hostName: histHostName(),
     startedAt,
     date: new Date(startedAt).toLocaleString(),
     categories,
     teams: null,
-  });
-  // Prune to 20 most recent
-  db.ref('trivia/gameHistory').once('value', snap => {
-    const all = snap.val() || {};
-    const keys = Object.keys(all).sort();
-    if(keys.length > 20) {
-      const toDelete = keys.slice(0, keys.length - 20);
-      toDelete.forEach(k => db.ref('trivia/gameHistory/' + k).remove());
-    }
   });
 }
 
@@ -847,6 +859,10 @@ function pushLiveQuestion(q, qIndex, round) {
   liveRef(`answers/${qId}`).remove();
 }
 
+// Tell the host board (admin.html) where this page is: 'setup' (waiting to launch) or 'live'
+function setTriviaPhase(p) { try { whenLiveReady(() => liveRef('triviaPhase').set(p)); } catch(e) {} }
+if(db) { whenLiveReady(() => { const r = liveRef('triviaPhase'); r.set('setup'); r.onDisconnect().remove(); }); }
+
 // Pick up the Join-QR toggle the host may have set before this page loaded
 if(db) { whenLiveReady(() => liveRef('introQrVisible').once('value').then(s => { if(s.val() === false) ssQrVisible = false; else ssQrVisible = true; })); }
 
@@ -865,6 +881,7 @@ if(db) {
       case 'play-intro': startPreview(); break;
       case 'stop-intro':  stopPreview(); break;
       case 'toggle-intro-qr': setScreensaverQRVisible(!ssQrVisible); break;
+      case 'launch': if(!state.rounds.length && pendingRounds.length) launchFromSetup(); break;
       case 'set-intro-qr': setScreensaverQRVisible(!!cmd.value); break;
       case 'thumb-up':   sendQuestionThumb('up', true); break;
       case 'thumb-down': sendQuestionThumb('down', true); break;
@@ -893,8 +910,8 @@ window.addEventListener('beforeunload', () => {
         liveRef().once('value', snap2 => {
           const g = snap2.val();
           if(g && g.sessionId && teams) {
-            db.ref('trivia/gameHistory/' + g.sessionId + '/teams').set(teams);
-            db.ref('trivia/gameHistory/' + g.sessionId + '/endedAt').set(Date.now());
+            histRef(g.sessionId).child('teams').set(teams);
+            histRef(g.sessionId).child('endedAt').set(Date.now());
           }
         });
       });
@@ -1543,6 +1560,10 @@ function feedbackKeyFor(round, q) {
   return `${sheetId}__${tab}__r${q.rowIndex}`;
 }
 
+function fbWho() {
+  let u = null; try { u = fbAuth && fbAuth.currentUser; } catch(e) {}
+  return { byUid: u ? u.uid : null, byName: u ? (u.displayName || u.email || '') : '' };
+}
 function fbAck(ok, msg) { try { liveRef('feedbackResult').set({ ok, msg, ts: Date.now() }); } catch(e) {} }
 function sendQuestionThumb(dir, silent) {
   if(!db) { toast('Not connected — feedback not saved'); return; }
@@ -1557,6 +1578,7 @@ function sendQuestionThumb(dir, silent) {
     vaultCatId: q.vaultCatId || null, vaultQuestionId: q.vaultQuestionId || null,
     lastFeedbackAt: Date.now(),
   });
+  ref.child('votes').push(Object.assign({ dir, ts: Date.now() }, fbWho()));
   ref.child(dir === 'up' ? 'thumbsUp' : 'thumbsDown').transaction(v => (v||0) + 1, (err) => { if(silent) fbAck(!err, err ? 'Feedback not saved: ' + err.message : (dir === 'up' ? '👍 Saved to this question' : '👎 Flagged on this question')); });
   const btn = document.getElementById(dir === 'up' ? 'hud-thumb-up' : 'hud-thumb-down');
   if(btn) { btn.classList.add('active'); setTimeout(()=>btn.classList.remove('active'), 900); }
@@ -1577,7 +1599,7 @@ function saveHostFeedbackNote(text) {
     vaultCatId: q.vaultCatId || null, vaultQuestionId: q.vaultQuestionId || null,
     lastFeedbackAt: Date.now(),
   });
-  ref.child('notes').push({ text, ts: Date.now() }, (err) => fbAck(!err, err ? 'Note not saved: ' + err.message : 'Note saved to this question'));
+  ref.child('notes').push(Object.assign({ text, ts: Date.now() }, fbWho()), (err) => fbAck(!err, err ? 'Note not saved: ' + err.message : 'Note saved to this question'));
 }
 
 function toggleFeedbackNoteBox() {
@@ -1606,7 +1628,7 @@ function submitFeedbackNoteBox() {
     vaultCatId: q.vaultCatId || null, vaultQuestionId: q.vaultQuestionId || null,
     lastFeedbackAt: Date.now(),
   });
-  ref.child('notes').push({ text, ts: Date.now() });
+  ref.child('notes').push(Object.assign({ text, ts: Date.now() }, fbWho()));
   toast('Note saved');
   toggleFeedbackNoteBox();
 }
@@ -3071,6 +3093,7 @@ function checkUrlParams() {
 
 async function launchFromSetup() {
   if(!pendingRounds.length) return;
+  setTriviaPhase('live');
   unlockAudioPlayback(); // must happen synchronously, inside this real click
 
   state.rounds = pendingRounds.map(r=>({...r, questions:[], slides:[]}));
