@@ -699,8 +699,12 @@ a{color:inherit}
       <option value="battle">Battle</option>
     </select>
     <div id="t-karaoke-wrap" style="display:none">
-      <label class="form-label">Themed Song List <span style="font-weight:normal;color:var(--text3);">— optional, leave blank for plain regular karaoke. One song per line.</span></label>
-      <textarea class="form-textarea" id="t-karaoke-songs" rows="6" placeholder="Buffy Theme Song&#10;I'll Never Tell (Once More, With Feeling)&#10;Goodbye to You"></textarea>
+      <label class="form-label">Themed Song List <span style="font-weight:normal;color:var(--text3);">— optional, leave blank for plain regular karaoke. One song per line: <b>Title - Artist</b></span></label>
+      <textarea class="form-textarea" id="t-karaoke-songs" rows="8" placeholder="# Bands &amp; Artists of Buffy&#10;Under Your Spell - Amber Benson&#10;I'll Never Tell - Anya &amp; Xander&#10;&#10;# Heard on Buffy&#10;Believe - K's Choice"></textarea>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="insertKaraokeHeading()" style="padding:4px 12px;">＋ Section heading</button>
+        <span style="font-size:11px;color:var(--text3);line-height:1.5;">Start a line with <b style="color:var(--gold2);">#</b> to make it a section title (e.g. <span style="color:var(--gold2);"># Buffy Songs</span>). Titles show as headings, not songs, and don't count toward the song total. ALL-CAPS lines with no “ - ” work as headings too.</span>
+      </div>
     </div>
     <div id="t-pairs-section" style="display:none">
       <label class="form-label" id="t-pairs-label">Pairs With</label>
@@ -954,6 +958,18 @@ function mirrorPublicKaraoke(themes){
     _pkSent[id] = sig;
     db.ref('publicKaraoke/'+id).set(Object.assign({updatedAt:Date.now()}, payload)).catch(()=>{ delete _pkSent[id]; });
   });
+}
+// Adds a "# " section-heading line to the karaoke song list at the cursor (or the end).
+function insertKaraokeHeading(){
+  const ta=document.getElementById('t-karaoke-songs'); if(!ta) return;
+  const v=ta.value, pos=(ta.selectionStart==null?v.length:ta.selectionStart);
+  const lineStart=v.lastIndexOf('\n',pos-1)+1;
+  const atEmptyLine=(v.slice(lineStart).split('\n')[0].trim()==='');
+  let ins, at;
+  if(atEmptyLine){ at=lineStart; ins='# '; }
+  else { at=v.length; ins=(v.endsWith('\n')||!v?'':'\n')+(v?'\n':'')+'# '; }
+  ta.value=v.slice(0,at)+ins+v.slice(at);
+  const c=at+ins.length; ta.focus(); ta.setSelectionRange(c,c);
 }
 function rebuildThemesState(){
   const out = {};
