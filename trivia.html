@@ -751,6 +751,20 @@ function initLiveGame() {
   });
 }
 
+function applyLeaderboard(show) {
+  leaderboardVisible = !!show;
+  const overlay = document.getElementById('lb-overlay');
+  if(overlay) overlay.style.display = leaderboardVisible ? 'flex' : 'none';
+  const btn = document.getElementById('lb-toggle-btn');
+  if(btn) btn.textContent = leaderboardVisible ? 'Hide Leaderboard' : 'Show Leaderboard';
+  if(leaderboardVisible) liveRef('teams').once('value', snap => renderLeaderboardOverlay(snap.val()||{}));
+}
+if(db) {
+  whenLiveReady(() => {
+    liveRef('leaderboardVisible').on('value', snap => { if((snap.val() === true) !== leaderboardVisible) applyLeaderboard(snap.val() === true); });
+    liveRef('teams').on('value', snap => { if(leaderboardVisible) renderLeaderboardOverlay(snap.val()||{}); });
+  });
+}
 function toggleLeaderboard() {
   leaderboardVisible = !leaderboardVisible;
   const overlay = document.getElementById('lb-overlay');
@@ -834,7 +848,7 @@ function pushLiveQuestion(q, qIndex, round) {
 }
 
 // Pick up the Join-QR toggle the host may have set before this page loaded
-if(db) { whenLiveReady(() => liveRef('introQrVisible').once('value').then(s => { if(s.val() === true) ssQrVisible = true; else if(s.val() === false) ssQrVisible = false; })); }
+if(db) { whenLiveReady(() => liveRef('introQrVisible').once('value').then(s => { if(s.val() === false) ssQrVisible = false; else ssQrVisible = true; })); }
 
 // Listen for host commands from admin board
 if(db) {
@@ -1529,12 +1543,13 @@ function feedbackKeyFor(round, q) {
   return `${sheetId}__${tab}__r${q.rowIndex}`;
 }
 
+function fbAck(ok, msg) { try { liveRef('feedbackResult').set({ ok, msg, ts: Date.now() }); } catch(e) {} }
 function sendQuestionThumb(dir, silent) {
   if(!db) { toast('Not connected — feedback not saved'); return; }
   const round = currentRound();
-  const q = currentQuestion();
-  const key = feedbackKeyFor(round, q);
-  if(!key) { if(!silent) toast('Could not identify this question'); return; }
+  let q = null; try { q = currentQuestion(); } catch(e) {}
+  const key = q ? feedbackKeyFor(round, q) : null;
+  if(!key) { if(silent) fbAck(false, 'No question on screen to rate — go to a question first'); else toast('Could not identify this question'); return; }
   const ref = db.ref('trivia/questionFeedback/' + key);
   ref.update({
     question: q.question, answer: q.answer,
@@ -1542,7 +1557,7 @@ function sendQuestionThumb(dir, silent) {
     vaultCatId: q.vaultCatId || null, vaultQuestionId: q.vaultQuestionId || null,
     lastFeedbackAt: Date.now(),
   });
-  ref.child(dir === 'up' ? 'thumbsUp' : 'thumbsDown').transaction(v => (v||0) + 1);
+  ref.child(dir === 'up' ? 'thumbsUp' : 'thumbsDown').transaction(v => (v||0) + 1, (err) => { if(silent) fbAck(!err, err ? 'Feedback not saved: ' + err.message : (dir === 'up' ? '👍 Saved to this question' : '👎 Flagged on this question')); });
   const btn = document.getElementById(dir === 'up' ? 'hud-thumb-up' : 'hud-thumb-down');
   if(btn) { btn.classList.add('active'); setTimeout(()=>btn.classList.remove('active'), 900); }
   if(!silent) toast(dir === 'up' ? '👍 Thanks — noted' : '👎 Flagged for review');
@@ -1552,9 +1567,9 @@ function sendQuestionThumb(dir, silent) {
 function saveHostFeedbackNote(text) {
   text = String(text || '').trim();
   if(!text || !db) return;
-  const round = currentRound(), q = currentQuestion();
-  const key = feedbackKeyFor(round, q);
-  if(!key || !q) return;
+  const round = currentRound(); let q = null; try { q = currentQuestion(); } catch(e) {}
+  const key = q ? feedbackKeyFor(round, q) : null;
+  if(!key || !q) { fbAck(false, 'No question on screen to add a note to'); return; }
   const ref = db.ref('trivia/questionFeedback/' + key);
   ref.update({
     question: q.question, answer: q.answer,
@@ -1562,7 +1577,7 @@ function saveHostFeedbackNote(text) {
     vaultCatId: q.vaultCatId || null, vaultQuestionId: q.vaultQuestionId || null,
     lastFeedbackAt: Date.now(),
   });
-  ref.child('notes').push({ text, ts: Date.now() });
+  ref.child('notes').push({ text, ts: Date.now() }, (err) => fbAck(!err, err ? 'Note not saved: ' + err.message : 'Note saved to this question'));
 }
 
 function toggleFeedbackNoteBox() {
@@ -1882,7 +1897,7 @@ let ssIndex = 0;
 let ssImages = [];
 let ssActive = false; // which div is currently showing (false=A, true=B)
 
-let ssQrVisible = false;
+let ssQrVisible = true;   // Join QR shows on intro slides by default
 
 function startPreview() {
   // Collect all bgIntro images from pending rounds, fall back to bgQuestion
