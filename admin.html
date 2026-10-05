@@ -1289,6 +1289,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="field-label">Question Vault Category</div>
         <select class="field-input" id="f-vault"><option value="">— not linked (use the Google Sheet below) —</option></select>
         <div class="field-hint">Linked categories load their questions from the Question Vault by name-of-field, so you can rearrange Vault columns freely. The sheet below is only used as a backup.</div>
+        <div id="vault-link-hint" class="field-hint" style="margin-top:6px"></div>
       </div>
 
       <!-- TRIVIA FIELDS -->
@@ -1804,12 +1805,38 @@ function fillVaultSelect(selected) {
     + (selected && !known ? `<option value="${selected}">(missing Vault category)</option>` : '');
   sel.value = selected || '';
 }
+// Shows what the Vault link currently resolves to, and offers a one-click way to create
+// the Vault sheet (same name) when there isn't one yet.
+function updateVaultLinkHint() {
+  const el = document.getElementById('vault-link-hint'), sel = document.getElementById('f-vault');
+  if(!el || !sel) return;
+  const name = (document.getElementById('f-name')?.value || '').trim();
+  const v = vaultCats.find(x => x.id === sel.value);
+  if(v) { el.innerHTML = '<span style="color:#2ecc71">✓ Linked to Vault sheet “' + escHtml(v.name) + '”' + (v.questionCount != null ? ' — ' + v.questionCount + ' questions' : '') + '</span>'; return; }
+  const byName = vaultCats.filter(x => vaultNormName(x.name) === vaultNormName(name));
+  if(byName.length === 1 && name) { el.innerHTML = 'A Vault sheet with this exact name exists — <a href="#" onclick="pickVault(\'' + byName[0].id + '\');return false" style="color:var(--gold)">link it</a>.'; return; }
+  el.innerHTML = '<span style="color:#e08a4a">⚠ Not linked to a Vault sheet.</span>' + (name ? ' <a href="#" onclick="createVaultSheet();return false" style="color:var(--gold)">Create an empty Vault sheet named “' + escHtml(name) + '” and link it</a>' : '');
+}
+function pickVault(id) { const sel = document.getElementById('f-vault'); if(sel) { sel.value = id; sel.dataset.touched = '1'; updateVaultLinkHint(); } }
+async function createVaultSheet() {
+  const name = (document.getElementById('f-name')?.value || '').trim();
+  if(!name) return toast('Give the category a name first.', true);
+  const isMusic = currentCatType === 'music';
+  try {
+    const ref = await dbFs.collection('triviaCategories').add({ name, type: isMusic ? 'Music' : 'Evergreen', questionCount: 0, archived: false, createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    vaultCats.push({ id: ref.id, name, questionCount: 0 });
+    fillVaultSelect(ref.id);
+    const sel = document.getElementById('f-vault'); if(sel) sel.dataset.touched = '1';
+    updateVaultLinkHint();
+    toast('Vault sheet created — save the category, then add questions in Questions.');
+  } catch(e) { toast('Could not create the Vault sheet: ' + e.message, true); }
+}
 function autoLinkVault() {
   if(!vaultCats.length || !categories.length) return;
   const byName = {};
   vaultCats.forEach(v => { const k = vaultNormName(v.name); (byName[k] = byName[k] || []).push(v); });
   categories.forEach(c => {
-    if(c.vaultCatId !== undefined || _vaultAutoLinked.has(c.id)) return;
+    if(c.vaultCatId || c.vaultOptOut || _vaultAutoLinked.has(c.id)) return;   // already linked, or deliberately left unlinked
     if(c.type && c.type !== 'trivia' && c.type !== 'music') return;
     const hits = byName[vaultNormName(c.name)] || [];
     if(hits.length !== 1) return;
@@ -1822,6 +1849,7 @@ dbFs.collection('triviaCategories').onSnapshot(snap => {
   snap.forEach(d => { const v = d.data(); if(!v.archived) vaultCats.push({ id:d.id, name:v.name||'', questionCount:v.questionCount }); });
   vaultCats.sort((x,y)=>x.name.localeCompare(y.name));
   autoLinkVault();
+  try { renderLibrary(); } catch(e) {}
 }, err => console.warn('Question Vault categories unavailable', err));
 
 // Lineup is local only — resets on refresh, each host manages their own
@@ -1881,6 +1909,10 @@ function renderLibrary() {
       ? `<img class="cat-banner" src="${cat.bgImage}" onerror="this.outerHTML='<div class=cat-banner-placeholder><span>${cat.name}</span></div>'">`
       : `<div class="cat-banner-placeholder"><span>${cat.name||'UNTITLED'}</span></div>`;
     const tagPills = tags.map(t => '<span class="cat-genre">' + t + '</span>').join('');
+    const _vOk = (cat.type === 'trivia' || cat.type === 'music' || !cat.type) && !(cat.type && cat.type !== 'trivia' && cat.type !== 'music');
+    const vaultBadge = _vOk ? (cat.vaultCatId && vaultCats.some(v => v.id === cat.vaultCatId)
+      ? '<span class="cat-genre" style="background:rgba(46,204,113,.10);color:#2ecc71;border-color:rgba(46,204,113,.25)" title="Linked to a Question Vault sheet">Vault ✓</span>'
+      : '<span class="cat-genre" style="background:rgba(224,138,74,.12);color:#e08a4a;border-color:rgba(224,138,74,.3)" title="No Question Vault sheet linked — edit the category to link or create one">⚠ No Vault sheet</span>') : '';
     const musicBadge     = cat.type === 'music'     ? '<span class="cat-genre" style="background:rgba(46,204,113,.12);color:#2ecc71;border-color:rgba(46,204,113,.25)">&#127925; Music</span>' : '';
     const slideshowBadge = cat.type === 'slideshow' ? '<span class="cat-genre" style="background:rgba(201,168,76,.08);color:var(--gold)">&#128444; Slideshow</span>' : '';
     const canvaBadge     = cat.type === 'canva'     ? '<span class="cat-genre" style="background:rgba(201,168,76,.08);color:var(--gold)">&#127912; Canva</span>' : '';
@@ -1914,7 +1946,7 @@ function renderLibrary() {
       + bannerHtml
       + '<div class="cat-body">'
       + (cat.altName ? '<div class="cat-alt">' + cat.altName + '</div><div class="cat-title cat-title-indent">' + (cat.name||'Untitled') + '</div>' : '<div class="cat-title">' + (cat.name||'Untitled') + '</div>')
-      + '<div class="cat-meta">' + themeSetBadge + musicBadge + slideshowBadge + canvaBadge + tagPills + seePairsBtn + '</div>'
+      + '<div class="cat-meta">' + themeSetBadge + musicBadge + vaultBadge + slideshowBadge + canvaBadge + tagPills + seePairsBtn + '</div>'
       + pairsDropdown
       + '</div>'
       + '<div class="cat-actions">' + editBtn + delBtn + '</div>'
@@ -2296,6 +2328,8 @@ function openModal(id) {
   document.getElementById('f-canva-bg').value     = cat?.canvaBgUrl     || '';
   document.getElementById('f-notes').value       = cat?.notes      || '';
   fillVaultSelect(cat?.vaultCatId || '');
+  { const vs = document.getElementById('f-vault'); if(vs){ vs.dataset.touched=''; vs.onchange = () => { vs.dataset.touched='1'; updateVaultLinkHint(); }; } }
+  updateVaultLinkHint();
   document.getElementById('f-attributions').value = cat?.attributions || '';
   renderCatTypeDropdown();
   document.getElementById('f-cattype').value     = cat?.catType    || '';
@@ -2433,7 +2467,10 @@ async function saveCategory() {
 
   setSyncStatus('syncing');
   const vaultCatId = (type === 'trivia' || type === 'music') ? (document.getElementById('f-vault')?.value || '') : '';
+  const _vs = document.getElementById('f-vault');
+  const vaultOptOutUpdate = vaultCatId ? null : (_vs && _vs.dataset.touched === '1' ? true : undefined);
   const data = {name, altName, genre, type, sheetUrl, tabName, vaultCatId, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, attributions, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, updatedAt: Date.now()};
+  if(vaultOptOutUpdate !== undefined) data.vaultOptOut = vaultOptOutUpdate;
 
   try {
     let catId = editingId;
