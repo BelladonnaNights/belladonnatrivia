@@ -2731,6 +2731,13 @@ auth.onAuthStateChanged(function(user) {
 
 let questionMetaCache = {};
 function secretRef(sub){ return db.ref('gameSecrets/' + LIVE_GAME_PATH.replace('games/','') + (sub?'/'+sub:'')); }
+// Variable answers: other wordings the Question Vault says are also correct for this question.
+function altsFor(qId){ const m = questionMetaCache[qId]; let v = m && m.altAnswers; if(!v) return []; if(!Array.isArray(v)) v = Object.values(v); return v.map(x => String(x||'')).filter(Boolean); }
+function isKeyMatch(normGiven, primary, alts){
+  if(!normGiven) return false;
+  if(normalizeForGrade(primary) === normGiven) return true;
+  return (alts||[]).some(x => normalizeForGrade(x) === normGiven);
+}
 function keyFor(qId){ const m = questionMetaCache[qId]; return (m && (m.correctAnswer||m.correct)) || ''; }
 function liveRef(subpath) {
   return db.ref(LIVE_GAME_PATH + (subpath ? '/' + subpath : ''));
@@ -2916,6 +2923,7 @@ function buildGradingQuestions() {
       qId,
       qText: first.questionText || qId,
       correctAnswer: keyFor(qId) || first.correctAnswer || '',
+      altAnswers: altsFor(qId),
       answers: ansEntries.map(([teamId, a]) => ({teamId, ...a})),
     });
   }
@@ -2959,7 +2967,7 @@ function renderGradingQuestion() {
 
   // Answer reference banner
   if(answerRef) answerRef.style.display = 'block';
-  if(correctText) correctText.textContent = q.correctAnswer || '(no answer key set)';
+  if(correctText) correctText.textContent = (q.correctAnswer || '(no answer key set)') + ((q.altAnswers && q.altAnswers.length) ? '   \u00b7   also accepts: ' + q.altAnswers.join(' / ') : '');
   if(qTextEl) qTextEl.textContent = q.qText;
 
   // Nav
@@ -2978,7 +2986,7 @@ function renderGradingQuestion() {
     if(ans.status === 'correct') { statusIcon = '&#10003;'; graded = true; }
     else if(ans.status === 'wrong')   { statusIcon = '&#10007;'; graded = true; }
     else {
-      if(normCorrect && norm === normCorrect) {
+      if(normCorrect && isKeyMatch(norm, q.correctAnswer, q.altAnswers)) {
         statusIcon = '&#10003; auto';
         scheduleAutoGrade(q.qId, ans.teamId, ans, true);
       } else {
@@ -3024,7 +3032,7 @@ function effectiveStatus(qId, ans) {
   const t = String(ans.type || '').toLowerCase();
   const isChoice = t === 'mc' || t === 'tf' || (!t && ['true','false'].includes(given));
   if(!key) return null;
-  if(given && given === key) return 'correct';
+  if(given && isKeyMatch(given, keyFor(qId) || ans.correctAnswer || '', altsFor(qId))) return 'correct';
   if(isChoice) return 'wrong';
   return null;
 }
@@ -3049,7 +3057,7 @@ function updateGradeButton() {
         if(ans.status !== 'correct' && ans.status !== 'wrong') {
           const norm = normalizeForGrade(ans.answer);
           const normCorrect = normalizeForGrade(keyFor(qId)||ans.correctAnswer||'');
-          if(!normCorrect || norm !== normCorrect) pending++;
+          if(!normCorrect || !isKeyMatch(norm, keyFor(qId)||ans.correctAnswer||'', altsFor(qId))) pending++;
         }
         hasPending = true;
       }
