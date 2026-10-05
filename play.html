@@ -520,7 +520,7 @@ function handleGame(game) {
     }
 
     // Leaderboard visibility
-    if(game.leaderboardVisible && game.status !== 'question') {
+    if(game.leaderboardVisible) {
       renderLeaderboard(game.teams || {});
       showScreen('lb-screen');
       return;
