@@ -301,6 +301,7 @@ a{color:inherit}
     <button class="mode-pill active" onclick="setPlannerMode('trivia',this)">TRIVIA</button>
     <button class="mode-pill" onclick="setPlannerMode('bingo',this)">BINGO</button>
     <button class="mode-pill" onclick="setPlannerMode('karaoke',this)">KARAOKE</button>
+    <button class="mode-pill" onclick="setPlannerMode('events',this)">EVENTS</button>
   </div>
   <select id="plannerLocationSelect" onchange="setPlannerLocation(this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:999px;color:var(--gold);padding:8px 18px;font-size:12px;font-weight:600;margin:0 0 10px 0;min-width:190px;max-width:260px"><option>Loading locations…</option></select>
 </div>
@@ -972,7 +973,8 @@ function rebuildThemesState(){
       lastUsedVenueId: usage.lastUsedVenueId || c.lastUsedVenueId || null
     };
   });
-  if(plannerMode!=='bingo') mirrorPublicKaraoke(out);
+  if(plannerMode==='trivia'||plannerMode==='karaoke') mirrorPublicKaraoke(out);
+  if(plannerMode==='events') Object.keys(out).forEach(id=>delete out[id]);
   if(plannerMode==='karaoke'){
     Object.keys(out).forEach(id=>{ if(out[id].tier!=='karaoke') delete out[id]; });
   }
@@ -1223,6 +1225,9 @@ const MODE_PATHS = {
   // lists are trivia/categories records tagged plannerTier 'karaoke', keyed by
   // their real category ID, songs in karaokeSongs.
   karaoke:{ venues:'trivia/planner/karaokeVenues', gigs:'trivia/planner/karaokeGigs', library:'trivia/categories', sequences:null },
+  // Events + Private Events: one-off nights at a venue — no theme library, just date, host,
+  // status and notes. HQ's Events / Private Events gigs mirror in here (and back).
+  events: { venues:'trivia/planner/eventVenues', gigs:'trivia/planner/eventGigs', library:'trivia/categories', sequences:null },
   bingo:  { venues:'bingo/landing/venues',  gigs:'bingo/landing/schedule', library:'bingo/landing/categories', sequences:null }
 };
 // ── LOCATIONS ── same shared list HQ manages. Venues and gigs get filtered
@@ -1303,7 +1308,77 @@ function onListenerError(label){
     syncWatchdogTimer = setTimeout(attachModeListeners, 2000);
   };
 }
+// ═══════════════════════════════════════════════
+//  HQ ⇄ PLANNER MIRROR — a gig scheduled in HQ (Schedule > Calendar) lives in
+//  Firestore `gig_schedule`. This watches it live and makes sure every upcoming
+//  Trivia / Karaoke / Bingo gig has a matching night here, creating the Planner
+//  venue if it doesn't exist yet (Bingo only fills in venues that already exist).
+//  It only ADDS what's missing — it never overwrites a theme, note or host you've
+//  already set in the Planner. The other direction (Planner → HQ) is read by HQ.
+// ═══════════════════════════════════════════════
+let _hqMirrorStarted=false,_hqMirrorTimer=null,_hqGigsRaw=[];
+function startHqGigMirror(){
+  if(_hqMirrorStarted||typeof dbFs==='undefined')return;
+  _hqMirrorStarted=true;
+  try{
+    dbFs.collection('gig_schedule').onSnapshot(snap=>{
+      _hqGigsRaw=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
+      clearTimeout(_hqMirrorTimer);
+      _hqMirrorTimer=setTimeout(()=>mirrorHqGigsToPlanner().catch(e=>console.warn('HQ mirror failed:',e)),1200);
+    },err=>console.warn('Could not read HQ gig schedule for the mirror:',err&&err.message));
+  }catch(e){console.warn('HQ mirror unavailable',e);}
+}
+async function mirrorHqGigsToPlanner(){
+  const today=toKey(new Date());
+  const modeOf=k=>{k=(k||'').toLowerCase();return k==='private events'?'events':k;};
+  const list=_hqGigsRaw.filter(g=>g.date>=today&&g.status!=='cancelled'&&['trivia','karaoke','bingo','events'].includes(modeOf(g.kind)));
+  if(!list.length)return;
+  const P={trivia:{v:'trivia/planner/venues',g:'trivia/planner/gigs'},karaoke:{v:'trivia/planner/karaokeVenues',g:'trivia/planner/karaokeGigs'},events:{v:'trivia/planner/eventVenues',g:'trivia/planner/eventGigs'},bingo:{v:'bingo/landing/venues',g:'bingo/landing/schedule'}};
+  const cache={};
+  const load=async p=>{if(!cache[p])cache[p]=(await db.ref(p).once('value')).val()||{};return cache[p];};
+  const norm=x=>(x||'').toString().trim().toLowerCase();
+  const dayAbbr=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let wrote=0;
+  for(const g of list){
+    const k=modeOf(g.kind), pp=P[k];
+    const evExtra=k==='events'?{eventKind:g.kind}:{};
+    const venues=await load(pp.v), gigs=await load(pp.g);
+    const dow=new Date(g.date+'T12:00:00').getDay();
+    const host=(g.host&&g.host!=='Unassigned')?g.host:null;
+    const hits=Object.entries(venues).filter(([id,v])=>norm(v.name)===norm(g.venue));
+    if(k==='bingo'){
+      if(!hits.length)continue;
+      const vid=hits[0][0];
+      if(Object.values(gigs).some(e=>e&&e.venueId===vid&&e.date===g.date))continue;
+      const id=db.ref(pp.g).push().key;
+      const rec={id,date:g.date,venueId:vid,notes:g.notes||'',host,locationId:g.locationId||null};
+      await db.ref(pp.g+'/'+id).set(rec); gigs[id]=rec; wrote++;
+      continue;
+    }
+    let hit=(k==='events'?hits[0]:hits.find(([id,v])=>DAY_MAP[v.day]===dow))||hits[0];
+    let vid;
+    if(hit){vid=hit[0];}
+    else{
+      vid=db.ref(pp.v).push().key;
+      const vrec={name:g.venue,groupName:g.venue,day:dayAbbr[dow],time:'',pay:{amount:null,method:''},status:(g.seriesId&&k!=='events')?'active':'finished',source:'hq',cadence:'weekly',notes:'Created from HQ',host:(g.seriesId&&k!=='events')?(host||''):'',locationId:g.locationId||null,createdAt:Date.now()};
+      Object.assign(vrec,evExtra);
+      await db.ref(pp.v+'/'+vid).set(vrec); venues[vid]=vrec;
+    }
+    const have=gigs[vid]&&gigs[vid][g.date];
+    // Planner-side cancel → HQ gig is cancelled too (only for cancels made here, not ones HQ sent).
+    if(have&&have.status==='cancelled'&&!have.cancelledByHQ){
+      try{await dbFs.collection('gig_schedule').doc(g.id).update({status:'cancelled'});wrote++;}catch(e){console.warn('Could not cancel HQ gig',e);}
+      continue;
+    }
+    if(have)continue;
+    const rec=Object.assign({themeId:null,themeName:null,status:'planned',note:g.notes||'',host,locationId:g.locationId||null,fromHQ:true},evExtra);
+    await db.ref(pp.g+'/'+vid+'/'+g.date).set(rec);
+    (gigs[vid]=gigs[vid]||{})[g.date]=rec; wrote++;
+  }
+  if(wrote)toast('Pulled '+wrote+' gig'+(wrote>1?'s':'')+' in from HQ.');
+}
 function attachModeListeners(){
+  startHqGigMirror();
   detachModeListeners();
   const p = MODE_PATHS[plannerMode];
   armSyncWatchdog();
@@ -1362,6 +1437,8 @@ function attachModeListeners(){
     }
     applyCheckoutCancellations();
     onDataChange();
+    clearTimeout(_hqMirrorTimer);
+    _hqMirrorTimer=setTimeout(()=>mirrorHqGigsToPlanner().catch(()=>{}),1500);
   }, onListenerError('gigs/schedule'));
   modeListenerRefs.push(gigsRef);
 
@@ -1592,7 +1669,7 @@ function renderPlanning(){
     const d = v.day ? nextDateForDay(v.day, weekStart) : null;
     const dk = d ? toKey(d) : null;
     const gig = dk ? (state.gigs[id]||{})[dk] : null;
-    const isUnassigned = !gig || (!gig.themeName && gig.status!=='cancelled');
+    const isUnassigned = plannerMode==='events' ? false : (!gig || (!gig.themeName && gig.status!=='cancelled'));
     if(isUnassigned && dk) unassigned.push({id, name:v.name, dk});
     const themeCell = gig && gig.themeName
       ? `<span class="theme-link" onclick="openGigModal('${id}','${dk}')">${escapeHtml(gig.themeName)}</span>${gig.round3Name?`<br><span style="color:var(--text3);font-size:11px">♪ ${escapeHtml(gig.round3Name)}</span>`:''}`
@@ -2098,7 +2175,7 @@ function renderMonthCalendar(){
     const inMonth = d.getMonth()===monthCalDate.getMonth();
     const items = gigsForDate(dk);
     const dots = items.slice(0,8).map(it=>{
-      const cls = !it.gig ? 'dot-empty' : it.gig.status==='cancelled' ? 'dot-cancelled' : it.gig.themeName ? 'dot-planned' : 'dot-empty';
+      const cls = !it.gig ? 'dot-empty' : it.gig.status==='cancelled' ? 'dot-cancelled' : (it.gig.themeName||plannerMode==='events') ? 'dot-planned' : 'dot-empty';
       return `<span class="monthcal-dot ${cls}"></span>`;
     }).join('');
     const more = items.length>8 ? `<span class="monthcal-more">+${items.length-8}</span>` : '';
@@ -2146,7 +2223,12 @@ function renderDayBoxes(){
         const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? 'cancelled' : 'unplanned';
         const round3 = gig && gig.round3Name ? ` · ♪ ${escapeHtml(gig.round3Name)}` : '';
         const hostName = (gig && gig.host) || v.host || '';
-        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${it.venueId}','${dk}')">${escapeHtml(v.name||it.venueName)}<small>${v.time||''} — ${label}${round3}${hostName?' · '+escapeHtml(hostName):''}</small></div>`;
+        // A one-off fill-in: the regular host struck through, the fill-in in purple beneath.
+        const fillIn = !!(gig && gig.host && v.host && gig.host !== v.host);
+        const hostHtml = !hostName ? '<span style="color:var(--text3)">no host</span>'
+          : fillIn ? `<span style="text-decoration:line-through;color:var(--text3)">${escapeHtml(v.host)}</span><br><span style="color:#c9a0dc;margin-left:12px">${escapeHtml(gig.host)}</span>`
+          : escapeHtml(hostName);
+        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${it.venueId}','${dk}')">${escapeHtml(v.name||it.venueName)}<small>${v.time||''} — ${label}${round3}</small><small style="color:var(--text2)">${hostHtml}</small></div>`;
       }).join('') : '<div class="daybox-item" style="color:var(--text3)">Nothing scheduled</div>'}
     </div>`;
   }).join('');
@@ -3087,8 +3169,25 @@ function saveTheme(){
       if(tier==='theme-night') return syncOrCreateLinkedNight(themeId, existing, commonFields);
       if(tier==='karaoke') return syncKaraokeThemeToVenueMenu(name, karaokeSongs||[], isNew);
     })
+    .then(()=>{ if(source==='trivia' && isNew && tier!=='karaoke') return mirrorNewThemeEverywhere(themeId, name, tier); })
     .then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); })
     .catch(err=>{ console.error('Save theme failed:', err); toast('Save failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
+}
+// A theme created here also gets its Question Vault sheet and Venue Menu entry (linked by ID),
+// so one creation shows up in every app. Never blocks the save if either write is refused.
+async function mirrorNewThemeEverywhere(themeId, name, tier){
+  try{
+    const nm = s=>String(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+    const vs = await dbFs.collection('triviaCategories').get();
+    let vaultId = null; vs.forEach(d=>{ const c=d.data(); if(!c.archived && nm(c.name)===nm(name)) vaultId=d.id; });
+    if(!vaultId){
+      const ref = await dbFs.collection('triviaCategories').add({ name, type: /feature/.test(tier||'') ? 'Feature' : 'Evergreen', questionCount:0, archived:false, createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      vaultId = ref.id;
+    }
+    await db.ref(MODE_PATHS.trivia.library+'/'+themeId+'/vaultCatId').set(vaultId);
+    const vm = await dbFs.collection('venueMenuCategories').add({ name, type:'Trivia', tags:'', image:'', plannerTier:null, linked:true, triviaCatId:themeId, createdAt:Date.now(), updatedAt:Date.now() });
+    await db.ref(MODE_PATHS.trivia.library+'/'+themeId+'/vmCatId').set(vm.id);
+  }catch(e){ console.warn('Could not mirror the new theme into Questions / Venue Menu:', e && e.message); }
 }
 function toNightId(name){
   return name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80)
@@ -3283,7 +3382,7 @@ function openGigModal(venueId, dateKey){
   // the whole point of being able to swap one occurrence without touching
   // the venue's regular assignment.
   renderGigHostOptions((existing && existing.host) || (v && v.host) || '');
-  document.getElementById('gig-trivia-fields').style.display = plannerMode==='bingo' ? 'none' : '';
+  document.getElementById('gig-trivia-fields').style.display = (plannerMode==='bingo'||plannerMode==='events') ? 'none' : '';
   { const rl = document.getElementById('gig-regular-toggle').closest('label'); if(rl) rl.style.display = plannerMode==='karaoke' ? 'none' : ''; }
   document.getElementById('gig-bingo-fields').style.display = plannerMode==='bingo' ? 'block' : 'none';
   if(plannerMode==='bingo'){
@@ -3651,6 +3750,13 @@ function saveGig(){
     const cat1 = document.getElementById('gig-bingo-cat1').value.trim();
     const cat2 = document.getElementById('gig-bingo-cat2').value.trim();
     saveBingoGig(venueId,dateKey,status,note,cat1,cat2,host);
+    return;
+  }
+  if(plannerMode==='events'){
+    const path = MODE_PATHS.events.gigs+'/'+venueId+'/'+dateKey;
+    if(status==='unplanned'){ db.ref(path).remove().then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); }); return; }
+    const prev = (state.gigs[venueId]||{})[dateKey]||{};
+    db.ref(path).set(Object.assign({}, prev.eventKind?{eventKind:prev.eventKind}:{}, {themeId:null, themeName:null, status:status==='cancelled'?'cancelled':'planned', note, host, locationId:selectedLocationId})).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
   let rounds = (gigCtx.rounds||[]).filter(r=>r && r.name && r.name.trim());
