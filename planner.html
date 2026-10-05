@@ -2076,9 +2076,12 @@ function gigsForDate(dk){
   const dow = fromKey(dk).getDay();
   const out = [];
   Object.entries(state.venues||{}).forEach(([id,v])=>{
-    if(v.status!=='active' && v.status!=='seasonal') return;
-    if(DAY_MAP[v.day]!==dow) return;
-    out.push({ venueId:id, venueName:v.name, gig: (state.gigs[id]||{})[dk] || null });
+    const rec = (state.gigs[id]||{})[dk] || null;
+    const recurs = (v.status==='active' || v.status==='seasonal') && DAY_MAP[v.day]===dow;
+    // A real per-date record (e.g. a gig added from HQ on a one-off date, or a
+    // fill-in host) always shows, even on a day that isn't the venue's usual night.
+    if(!recurs && !rec) return;
+    out.push({ venueId:id, venueName:v.name, gig: rec });
   });
   return out;
 }
@@ -2132,20 +2135,18 @@ function renderDayBoxes(){
   const label = document.getElementById('daybox-week-label');
   if(label) label.textContent = fmtRange(dayBoxWeekStart, addDays(dayBoxWeekStart,6));
   const order = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const byDay = {}; order.forEach(d=>byDay[d]=[]);
-  Object.entries(state.venues||{}).forEach(([id,v])=>{
-    if(v.status!=='active' && v.status!=='seasonal') return;
-    if(v.day && byDay[v.day]) byDay[v.day].push([id,v]);
-  });
   document.getElementById('daybox-grid').innerHTML = order.map((d,i)=>{
     const date = addDays(dayBoxWeekStart, i);
     const dk = toKey(date);
+    const items = gigsForDate(dk).sort((a,b)=>((state.venues[a.venueId]||{}).time||'').localeCompare((state.venues[b.venueId]||{}).time||''));
     return `<div class="daybox"><h4>${d}<br><span style="font-family:var(--font);font-weight:400;font-size:11px;color:var(--text3)">${date.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></h4>
-      ${byDay[d].length ? byDay[d].sort((a,b)=>(a[1].time||'').localeCompare(b[1].time||'')).map(([id,v])=>{
-        const gig = (state.gigs[id]||{})[dk];
+      ${items.length ? items.map(it=>{
+        const v = state.venues[it.venueId]||{};
+        const gig = it.gig;
         const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? 'cancelled' : 'unplanned';
         const round3 = gig && gig.round3Name ? ` · ♪ ${escapeHtml(gig.round3Name)}` : '';
-        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${id}','${dk}')">${escapeHtml(v.name)}<small>${v.time||''} — ${label}${round3}</small></div>`;
+        const hostName = (gig && gig.host) || v.host || '';
+        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${it.venueId}','${dk}')">${escapeHtml(v.name||it.venueName)}<small>${v.time||''} — ${label}${round3}${hostName?' · '+escapeHtml(hostName):''}</small></div>`;
       }).join('') : '<div class="daybox-item" style="color:var(--text3)">Nothing scheduled</div>'}
     </div>`;
   }).join('');
