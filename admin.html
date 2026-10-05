@@ -342,6 +342,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   flex-shrink:0;
 }
 .hb-chevron-btn:hover{color:var(--gold)}
+.round-opts-toggle{display:block;margin:4px auto 0;font-size:12px}
+.round-opts-toggle.open{transform:rotate(180deg)}
 #host-board.expanded .hb-chevron-btn{transform:rotate(180deg)}
 #host-board-body{
   display:none;
@@ -1458,6 +1460,7 @@ function checkPassword() {
 }
 function enterAdminMode() {
   adminMode = true;
+  setTimeout(()=>{ try{ renderCategorySyncBanner(); }catch(e){} }, 300);
   document.getElementById('add-cat-btn').style.display = 'block';
   document.getElementById('admin-gear-btn').style.display = 'none';
   document.getElementById('admin-pw-btn').style.display = 'block';
@@ -1846,11 +1849,100 @@ function autoLinkVault() {
 }
 dbFs.collection('triviaCategories').onSnapshot(snap => {
   vaultCats = [];
-  snap.forEach(d => { const v = d.data(); if(!v.archived) vaultCats.push({ id:d.id, name:v.name||'', questionCount:v.questionCount }); });
+  snap.forEach(d => { const v = d.data(); if(!v.archived) vaultCats.push({ id:d.id, name:v.name||'', type:v.type||'', questionCount:v.questionCount }); });
   vaultCats.sort((x,y)=>x.name.localeCompare(y.name));
   autoLinkVault();
   try { renderLibrary(); } catch(e) {}
+  scheduleCategorySync();
 }, err => console.warn('Question Vault categories unavailable', err));
+
+// ═══════════════════════════════════════════════
+//  ONE CATEGORY, EVERYWHERE — a category made in the Trivia app / Planner, the Question Vault
+//  (Questions) or the Venue Menu gets its counterparts in the other places:
+//    Trivia app + Planner  = trivia/categories (one record, shared)
+//    Question Vault sheet  = Firestore triviaCategories   (linked by vaultCatId)
+//    Venue Menu category   = Firestore venueMenuCategories (linked by vmCatId / triviaCatId)
+//  Trivia categories missing a Vault sheet or Venue Menu entry get them automatically. Ones that
+//  exist only in the Vault / Venue Menu are offered in a banner (one click adds them).
+// ═══════════════════════════════════════════════
+let vmCats = [], _catSyncTimer = null; const _catSyncBusy = new Set();
+dbFs.collection('venueMenuCategories').onSnapshot(snap => {
+  vmCats = [];
+  snap.forEach(d => { const v = d.data(); vmCats.push({ id:d.id, name:v.name||'', type:v.type||'', triviaCatId:v.triviaCatId||null, mirror:!!v._plannerMirror, archived:!!v.archived, tags:v.tags||'', image:v.image||'' }); });
+  scheduleCategorySync();
+}, err => console.warn('Venue Menu categories unavailable', err));
+function scheduleCategorySync() { clearTimeout(_catSyncTimer); _catSyncTimer = setTimeout(runCategorySync, 2500); }
+const isTriviaish = c => !c.type || c.type === 'trivia' || c.type === 'music';
+function planCategorySync() {
+  const cats = categories.filter(isTriviaish);
+  const hasVaultName = n => vaultCats.some(v => vaultNormName(v.name) === vaultNormName(n));
+  const needVault = cats.filter(c => !c.vaultCatId && !c.vaultOptOut && !hasVaultName(c.name) && !_catSyncBusy.has('v'+c.id));
+  const needVm = cats.filter(c => !c.vmCatId && !vmCats.some(v => v.triviaCatId === c.id) && !_catSyncBusy.has('m'+c.id));
+  const linkedVault = new Set(categories.map(c => c.vaultCatId).filter(Boolean));
+  const nameInTrivia = n => cats.some(c => vaultNormName(c.name) === vaultNormName(n));
+  const fromVault = vaultCats.filter(v => !linkedVault.has(v.id) && !nameInTrivia(v.name) && !_catSyncBusy.has('fv'+v.id));
+  const fromVm = vmCats.filter(v => v.type === 'Trivia' && !v.triviaCatId && !v.mirror && !v.archived && !categories.some(c => c.vmCatId === v.id) && !nameInTrivia(v.name) && !_catSyncBusy.has('fm'+v.id));
+  return { needVault, needVm, fromVault, fromVm };
+}
+async function runCategorySync() {
+  if(!categories.length || !vaultCats.length && !vmCats.length) return;
+  const plan = planCategorySync();
+  // Automatic: trivia categories that are missing their Vault sheet / Venue Menu entry
+  for(const c of plan.needVault) {
+    _catSyncBusy.add('v'+c.id);
+    try {
+      const ref = await dbFs.collection('triviaCategories').add({ name:c.name, type: c.type === 'music' ? 'Music' : 'Evergreen', questionCount:0, archived:false, createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      await db.ref(`trivia/categories/${c.id}/vaultCatId`).set(ref.id);
+    } catch(e) { console.warn('Vault sheet auto-create failed for', c.name, e && e.message); }
+  }
+  for(const c of plan.needVm) {
+    _catSyncBusy.add('m'+c.id);
+    await syncCategoryToVm(c.id, { name:c.name, genre:c.genre||'', bgImage:c.bgImage||'' });
+  }
+  renderCategorySyncBanner();
+}
+function renderCategorySyncBanner() {
+  let el = document.getElementById('cat-sync-banner');
+  const plan = planCategorySync();
+  const n = plan.fromVault.length + plan.fromVm.length;
+  if(!el) {
+    el = document.createElement('div'); el.id = 'cat-sync-banner';
+    el.style.cssText = 'display:none;margin:10px 0;padding:10px 14px;border:1px solid var(--gold-glow);border-radius:10px;background:var(--gold-dim);color:var(--text);font-size:13px;align-items:center;gap:12px;flex-wrap:wrap';
+    const lib = document.getElementById('category-grid') || document.querySelector('.cat-grid') || document.getElementById('add-cat-btn')?.parentElement;
+    if(lib && lib.parentElement) lib.parentElement.insertBefore(el, lib); else document.body.prepend(el);
+  }
+  if(!n || !adminMode) { el.style.display = 'none'; return; }
+  const names = [...plan.fromVault.map(v => v.name), ...plan.fromVm.map(v => v.name)].slice(0, 6).map(escHtml).join(', ');
+  el.innerHTML = '<span><b>' + n + '</b> categor' + (n === 1 ? 'y exists' : 'ies exist') + ' in Questions / Venue Menu but not here: ' + names + (n > 6 ? '…' : '') + '</span>'
+    + '<button class="btn btn-primary" style="padding:6px 14px" onclick="addMissingCategories()">Add ' + (n === 1 ? 'it' : 'them') + ' to Trivia &amp; Planner</button>';
+  el.style.display = 'flex';
+}
+async function addMissingCategories() {
+  const plan = planCategorySync();
+  let made = 0;
+  for(const v of plan.fromVault) {
+    _catSyncBusy.add('fv'+v.id);
+    try {
+      const vrec = vaultCats.find(x => x.id === v.id) || v;
+      const ref = db.ref('trivia/categories').push();
+      const data = { name:v.name, genre:'', type: /music/i.test(vrec.type || '') ? 'music' : 'trivia', vaultCatId:v.id, unified:true, notes:'Created from the Question Vault', createdAt:Date.now(), updatedAt:Date.now() };
+      await ref.set(data); made++;
+      await syncCategoryToVm(ref.key, data);
+    } catch(e) { console.warn('Could not add Vault category', v.name, e && e.message); }
+  }
+  for(const v of plan.fromVm) {
+    _catSyncBusy.add('fm'+v.id);
+    try {
+      const vref = await dbFs.collection('triviaCategories').add({ name:v.name, type:'Evergreen', questionCount:0, archived:false, createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      const ref = db.ref('trivia/categories').push();
+      await ref.set({ name:v.name, genre:v.tags||'', type:'trivia', vaultCatId:vref.id, vmCatId:v.id, bgImage:v.image||'', unified:true, notes:'Created from the Venue Menu', createdAt:Date.now(), updatedAt:Date.now() });
+      await dbFs.collection('venueMenuCategories').doc(v.id).update({ triviaCatId: ref.key, linked:true });
+      made++;
+    } catch(e) { console.warn('Could not add Venue Menu category', v.name, e && e.message); }
+  }
+  toast(made ? 'Added ' + made + ' categor' + (made === 1 ? 'y' : 'ies') + ' everywhere.' : 'Nothing was added — check you are signed in as admin.', !made);
+  renderCategorySyncBanner();
+}
 
 // Lineup is local only — resets on refresh, each host manages their own
 renderLineup();
@@ -2044,6 +2136,8 @@ function clearGenreFilter() {
 // ═══════════════════════════════════════════════
 //  RENDER LINEUP
 // ═══════════════════════════════════════════════
+let lineupOptsOpen = [false,false,false,false,false];
+function toggleRoundOpts(i) { lineupOptsOpen[i] = !lineupOptsOpen[i]; renderLineup(); }
 function renderLineup() {
   for(let i=0;i<5;i++) {
     const slot = document.getElementById(`slot-${i}`);
@@ -2132,9 +2226,12 @@ function renderLineup() {
         +   '</div>'
         +   '<button class="round-slot-remove" onclick="removeFromSlot(' + i + ')">×</button>'
         + '</div>'
+        + '<button class="hb-chevron-btn round-opts-toggle' + (lineupOptsOpen[i] ? ' open' : '') + '" onclick="toggleRoundOpts(' + i + ')" title="' + (lineupOptsOpen[i] ? 'Hide' : 'Show') + ' round options">▲</button>'
+        + '<div class="round-opts" style="display:' + (lineupOptsOpen[i] ? 'block' : 'none') + '">'
         + triviaControls
         + musicControls
-        + sharedControls;
+        + sharedControls
+        + '</div>';
     } else {
       slot.innerHTML = `
         <div class="round-slot-label">Round ${i+1}</div>
@@ -2484,6 +2581,7 @@ async function saveCategory() {
       toast('Category added!');
     }
     syncCategoryToVm(catId, data); // fire-and-forget — mirror into Venue Menu/Planner
+    scheduleCategorySync();       // and make sure it has a Question Vault sheet too
     setSyncStatus('synced');
     closeModal();
     restore();
