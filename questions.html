@@ -375,6 +375,8 @@ const BUILTIN = [
   { key:'soundUrl',      label:'SOUND URL',      exportLabel:'SOUND URL',        type:'text', w:170 },
   { key:'bonusQuestion', label:'Bonus Question', exportLabel:'Bonus Question',   type:'long', w:280 },
   { key:'notes',         label:'Notes',          exportLabel:'Notes',            type:'long', w:260 },
+  { key:'whisperQ',      label:'Whisper: Question', exportLabel:'Whisper (During Question)', type:'long', w:260 },
+  { key:'whisperA',      label:'Whisper: Reveal',   exportLabel:'Whisper (At Reveal)',       type:'long', w:260 },
 ];
 const RESERVED = new Set(['categoryId','order','archived','createdAt','updatedAt','id']);
 const CUSTOM_TYPES = { text:'Short text', long:'Long text / notes', thumbs:'Thumbs up / down', check:'Checkbox', number:'Number' };
@@ -386,7 +388,9 @@ const HEADER_MAP = {
   soundurl:'soundUrl', audiourl:'soundUrl', sound:'soundUrl', audio:'soundUrl',
   optiona:'optionA', optionb:'optionB', optionc:'optionC', optiond:'optionD',
   bonusquestion:'bonusQuestion', bonus:'bonusQuestion',
-  tags:'tags', tag:'tags', notes:'notes', note:'notes'
+  tags:'tags', tag:'tags', notes:'notes', note:'notes',
+  whisperduringquestion:'whisperQ', whisperquestion:'whisperQ', whisperq:'whisperQ', whisper1:'whisperQ', whisperduring:'whisperQ',
+  whisperatreveal:'whisperA', whisperreveal:'whisperA', whispera:'whisperA', whisper2:'whisperA', whisperanswer:'whisperA'
 };
 
 const norm = s => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1021,7 +1025,7 @@ function openNotesReview(onlyKey){
         <div class="nrMeta"><span>👍 ${x.rec.thumbsUp || 0}</span><span>👎 ${x.rec.thumbsDown || 0}</span>
           ${x.catId ? `<button class="linkbtn" data-go="${esc(x.catId)}:${esc(x.qid)}">Go to question</button>` : ''}
           <button class="linkbtn" data-clearnotes="${esc(x.key)}">Done — clear all notes</button></div>
-        ${x.notes.map(n => `<div class="nrNote"><div>${esc(n.text)}<small>${when(n.ts)}</small></div><button class="btn ghost sm" data-delnote="${esc(x.key)}:${esc(n.id)}">Delete</button></div>`).join('')}
+        ${x.notes.map(n => `<div class="nrNote"><div>${esc(n.text)}<small>${n.byName ? esc(n.byName) + ' · ' : ''}${when(n.ts)}</small></div><button class="btn ghost sm" data-delnote="${esc(x.key)}:${esc(n.id)}">Delete</button></div>`).join('')}
       </div>`).join('')).join('');
   };
   draw(); fbRedraw = draw;
