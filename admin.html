@@ -727,7 +727,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="hb-preview-resize-handle" id="hb-preview-resize-handle" title="Drag to resize"></div>
       </div>
       <div class="hb-position" id="hb-position"></div>
-      <div class="hb-fb-row" id="hb-fb-row" style="display:none">
+      <div class="hb-fb-row" id="hb-fb-row">
         <button class="hb-fb-btn" id="hb-fb-up" onclick="hostThumb('up')" title="Good question">👍</button>
         <button class="hb-fb-btn" id="hb-fb-down" onclick="hostThumb('down')" title="Flag this question">👎</button>
         <button class="hb-fb-btn" onclick="hostToggleNote()" title="Leave a note about this question">✎ Note</button>
@@ -740,7 +740,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         </div>
       </div>
       <div style="padding:6px 12px;flex-shrink:0">
-        <div class="hb-section-label">Answers</div>
+        <div class="hb-section-label">Teams answered this question</div>
         <div class="hb-submit-count" id="hb-submit-count">— / —</div>
       </div>
     </div>
@@ -784,13 +784,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="hb-peek-answer" id="hb-peek-answer" style="display:none"></div>
         <button class="hb-peek-rerandom-btn" id="hb-peek-rerandom-btn" onclick="sendHostCommand('rerandomize-next')" style="display:none">Re-randomize ↻</button>
       </div>
-      <div class="hb-timed-row" style="flex-direction:column;align-items:stretch;gap:6px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <span class="hb-timed-label" style="font-size:12px;white-space:nowrap">⏱ Timed (10s)</span>
-          <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()"></div>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <span style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">next question only</span>
+      <div class="hb-timed-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+        <span class="hb-timed-label" style="font-size:11px;letter-spacing:.08em">⏱ Timed (10s)</span>
+        <span style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">next question only</span>
+        <div style="display:flex;align-items:center;gap:16px">
+          <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()" title="Time the next question"></div>
           <button class="hb-lock-btn" id="hb-timed-lock" onclick="toggleHostTimedLock()" title="Lock timed mode on for every question (click again to unlock)">🔓</button>
         </div>
       </div>
@@ -2591,8 +2589,15 @@ function toggleHostBoard() {
 }
 
 // Renders answer count into the submit-count readouts.
+let currentQId = null;
+// How many teams have answered the question that is on screen right now
+function recomputeSubmitCount() {
+  const byTeam = (currentQId && allAnswersCache && allAnswersCache[currentQId]) || {};
+  currentSubmitCount = Object.values(byTeam).filter(a => a && a.answer).length;
+  updateSubmitCount();
+}
 function updateSubmitCount() {
-  const text = currentTeamCount > 0 ? (currentSubmitCount + ' / ' + currentTeamCount) : '— / —';
+  const text = currentTeamCount > 0 ? (currentSubmitCount + ' of ' + currentTeamCount + ' teams') : 'No teams yet';
   const el = document.getElementById('hb-submit-count');
   if(el) el.textContent = text;
   // Update tab summary when collapsed
@@ -2622,7 +2627,6 @@ function hostThumb(dir) {
   sendHostCommand(dir === 'up' ? 'thumb-up' : 'thumb-down');
   const b = document.getElementById(dir === 'up' ? 'hb-fb-up' : 'hb-fb-down');
   if(b) { b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 900); }
-  toast(dir === 'up' ? '👍 Noted' : '👎 Flagged for review');
 }
 function hostToggleNote() {
   const box = document.getElementById('hb-fb-note');
@@ -2632,7 +2636,7 @@ function hostToggleNote() {
 }
 function hostSubmitNote() {
   const text = document.getElementById('hb-fb-note-text').value.trim();
-  if(text) { sendHostCommand('feedback-note', { text }); toast('Note saved'); }
+  if(text) sendHostCommand('feedback-note', { text });
   hostToggleNote();
 }
 function toggleHostTimedLock() {
@@ -2645,7 +2649,7 @@ function toggleHostTimedLock() {
 // trivia.html itself (see attachHbListeners) so the button/toggle stay
 // in sync even if a host dismisses the slides by hand on the TV.
 let hostIntroOn = false;
-let hostIntroQrOn = false;
+let hostIntroQrOn = true;
 function toggleHostIntro() {
   sendHostCommand(hostIntroOn ? 'stop-intro' : 'play-intro');
 }
@@ -3068,6 +3072,13 @@ function attachHbListeners() {
     if(btn) btn.textContent = hostIntroOn ? 'Stop Intro Slides' : 'Play Intro Slides';
   });
 
+  const fbResRef = liveRef('feedbackResult'); _hbRefs.push(fbResRef);
+  let _fbFirst = true;
+  fbResRef.on('value', snap => {
+    const r = snap.val();
+    if(_fbFirst) { _fbFirst = false; return; }   // ignore the one left over from earlier
+    if(r && r.msg) toast(r.msg, r.ok === false);
+  });
   const resVisRef = liveRef('resultsVisible'); _hbRefs.push(resVisRef);
   resVisRef.on('value', snap => {
     hostResultsShown = snap.val() === true;
@@ -3089,7 +3100,7 @@ function attachHbListeners() {
 
   const introQrRef = liveRef('introQrVisible'); _hbRefs.push(introQrRef);
   introQrRef.on('value', snap => {
-    hostIntroQrOn = !!snap.val();
+    hostIntroQrOn = snap.val() !== false;   // on by default
     document.getElementById('hb-intro-qr-toggle')?.classList.toggle('on', hostIntroQrOn);
   });
 
@@ -3105,8 +3116,6 @@ function attachHbListeners() {
   const slideLabel = document.getElementById('hb-slide-label');
   const posEl = document.getElementById('hb-position'), fbRow = document.getElementById('hb-fb-row');
   if(posEl) posEl.innerHTML = s && s.roundNum ? 'Round ' + s.roundNum + (s.roundTotal ? ' of ' + s.roundTotal : '') + (s.qNow ? '<br>Question ' + s.qNow + (s.qTotal ? ' of ' + s.qTotal : '') : '') : '';
-  if(fbRow) fbRow.style.display = (s && s.canFeedback) ? 'flex' : 'none';
-  if(!(s && s.canFeedback)) { const nb = document.getElementById('hb-fb-note'); if(nb) nb.style.display = 'none'; }
   if(!s) {
     if(typeEl) typeEl.textContent = '';
     if(numEl)  numEl.textContent  = '';
@@ -3149,18 +3158,13 @@ function attachHbListeners() {
   if(reBtn) reBtn.style.display = 'block';
 });
 
+  const curQRef = liveRef('currentQuestion/id'); _hbRefs.push(curQRef);
+  curQRef.on('value', snap => { currentQId = snap.val() || null; recomputeSubmitCount(); });
   const qmRef = liveRef('questionMeta'); _hbRefs.push(qmRef); qmRef.on('value', snap => { questionMetaCache = snap.val() || {}; try{ updateGradeButton(); }catch(e){} });
   const answersRef = liveRef('answers'); _hbRefs.push(answersRef); answersRef.on('value', snap => {
   const allAnswers = snap.val() || {};
   allAnswersCache = allAnswers;
-  let submitCount = 0;
-  for(const answers of Object.values(allAnswers)) {
-    for(const ans of Object.values(answers)) {
-      if(ans.answer) submitCount++;
-    }
-  }
-  currentSubmitCount = submitCount;
-  updateSubmitCount();
+  recomputeSubmitCount();
   updateGradeButton();
   if(document.getElementById('hb-grading-popup')?.classList.contains('show')) {
     renderGradingQuestion();
