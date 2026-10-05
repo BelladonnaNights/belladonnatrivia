@@ -643,6 +643,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-peek-answer{font-size:13px}
 .hb-adj-input{width:84px;font-size:16px;padding:8px 8px;-moz-appearance:textfield;appearance:textfield}
 .hb-adj-input::-webkit-outer-spin-button,.hb-adj-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.hb-whisper{margin:6px 12px 0;padding:8px 10px;border:1px dashed rgba(201,164,92,.35);border-radius:8px;background:rgba(201,164,92,.05);opacity:.55}
+.hb-whisper.active{opacity:1;border-style:solid;border-color:rgba(201,164,92,.7);background:rgba(201,164,92,.1)}
+.hb-whisper-label{font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:3px}
+.hb-whisper-text{font-family:var(--serif);font-size:15px;line-height:1.4;color:var(--text);white-space:pre-wrap}
+.hb-whisper-text.empty{font-style:italic;color:var(--text3);font-size:13px}
 .hb-position{font-family:var(--cinzel);font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);line-height:1.5;padding:8px 12px 2px}
 .hb-fb-row{display:flex;gap:8px;padding:6px 12px;flex-wrap:wrap}
 .hb-fb-btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:8px;border:1px solid var(--border2);background:rgba(255,255,255,.05);color:var(--text2);cursor:pointer;font-size:16px;font-family:var(--cinzel);letter-spacing:.06em}
@@ -729,6 +734,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <div class="hb-preview-resize-handle" id="hb-preview-resize-handle" title="Drag to resize"></div>
       </div>
       <div class="hb-position" id="hb-position"></div>
+      <div class="hb-whisper" id="hb-whisper-q"><div class="hb-whisper-label">🤫 Whisper — during the question</div><div class="hb-whisper-text empty" id="hb-whisper-q-text">—</div></div>
+      <div class="hb-whisper" id="hb-whisper-a"><div class="hb-whisper-label">🤫 Whisper — at the answer reveal</div><div class="hb-whisper-text empty" id="hb-whisper-a-text">—</div></div>
       <div class="hb-fb-row" id="hb-fb-row">
         <button class="hb-fb-btn" id="hb-fb-up" onclick="hostThumb('up')" title="Good question"><svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg></button>
         <button class="hb-fb-btn" id="hb-fb-down" onclick="hostThumb('down')" title="Flag this question"><svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true" style="transform:rotate(180deg)"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg></button>
@@ -2922,6 +2929,30 @@ function updateGradeButton() {
   if(giveBtn) giveBtn.style.display = hasAnswers ? 'block' : 'none';
 }
 
+// Live tally — every team's score is kept current as answers come in and get graded
+// (auto-graded multiple choice / true-false count immediately; open answers count the moment
+// you mark them correct), plus any manual Give/Take adjustments.
+let latestTeams = {}, _liveScoreTimer = null;
+function scheduleLiveScores() { clearTimeout(_liveScoreTimer); _liveScoreTimer = setTimeout(syncLiveScores, 400); }
+function syncLiveScores() {
+  try {
+    const teams = latestTeams || {};
+    if(!Object.keys(teams).length) return;
+    const totals = {};
+    for(const [qId, answers] of Object.entries(allAnswersCache || {})) {
+      for(const [teamId, ans] of Object.entries(answers || {})) {
+        if(effectiveStatus(qId, ans) === 'correct') totals[teamId] = (totals[teamId] || 0) + (typeof ans.points === 'number' && ans.points > 0 ? ans.points : POINTS_PER_CORRECT);
+      }
+    }
+    const updates = {};
+    for(const [teamId, t] of Object.entries(teams)) {
+      const want = Math.max(0, (totals[teamId] || 0) + (t.adj || 0));
+      if((t.score || 0) !== want) updates[LIVE_GAME_PATH + '/teams/' + teamId + '/score'] = want;
+    }
+    if(Object.keys(updates).length) db.ref().update(updates).catch(e => console.warn('Live score update failed:', e && e.message));
+  } catch(e) { console.warn('syncLiveScores', e); }
+}
+
 // Give Scores — push all graded scores to players at once
 let hostResultsShown = false;
 function pressGiveScores() {
@@ -3167,6 +3198,13 @@ function attachHbListeners() {
   const watermark= document.getElementById('hb-idle-watermark');
   const slideLabel = document.getElementById('hb-slide-label');
   const posEl = document.getElementById('hb-position'), fbRow = document.getElementById('hb-fb-row');
+  { const wq = document.getElementById('hb-whisper-q-text'), wa = document.getElementById('hb-whisper-a-text');
+    const boxQ = document.getElementById('hb-whisper-q'), boxA = document.getElementById('hb-whisper-a');
+    const setW = (el, txt) => { if(!el) return; el.textContent = txt || 'Nothing for this question'; el.classList.toggle('empty', !txt); };
+    setW(wq, s && s.whisperQ); setW(wa, s && s.whisperA);
+    const revealed = !!(s && s.answer);
+    if(boxQ) boxQ.classList.toggle('active', !!s && !revealed);
+    if(boxA) boxA.classList.toggle('active', !!s && revealed); }
   if(posEl) posEl.innerHTML = s && s.roundNum ? 'Round ' + s.roundNum + (s.roundTotal ? ' of ' + s.roundTotal : '') + (s.qNow ? '<br>Question ' + s.qNow + (s.qTotal ? ' of ' + s.qTotal : '') : '') : '';
   if(!s) {
     if(typeEl) typeEl.textContent = '';
@@ -3212,10 +3250,11 @@ function attachHbListeners() {
 
   const curQRef = liveRef('currentQuestion/id'); _hbRefs.push(curQRef);
   curQRef.on('value', snap => { currentQId = snap.val() || null; recomputeSubmitCount(); });
-  const qmRef = liveRef('questionMeta'); _hbRefs.push(qmRef); qmRef.on('value', snap => { questionMetaCache = snap.val() || {}; try{ updateGradeButton(); }catch(e){} });
+  const qmRef = liveRef('questionMeta'); _hbRefs.push(qmRef); qmRef.on('value', snap => { questionMetaCache = snap.val() || {}; scheduleLiveScores(); try{ updateGradeButton(); }catch(e){} });
   const answersRef = liveRef('answers'); _hbRefs.push(answersRef); answersRef.on('value', snap => {
   const allAnswers = snap.val() || {};
   allAnswersCache = allAnswers;
+  scheduleLiveScores();
   recomputeSubmitCount();
   updateGradeButton();
   if(document.getElementById('hb-grading-popup')?.classList.contains('show')) {
@@ -3226,6 +3265,7 @@ function attachHbListeners() {
 // ── Update scores renderer to include point adjustment ─────────────────
   const teamsRef = liveRef('teams'); _hbRefs.push(teamsRef); teamsRef.on('value', snap => {
   const teams = snap.val() || {};
+  latestTeams = teams; scheduleLiveScores();
   const sorted = Object.entries(teams)
     .map(([id,t]) => ({id, name:t.name||'?', score:t.score||0}))
     .sort((a,b) => b.score-a.score);
