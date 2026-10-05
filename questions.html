@@ -106,6 +106,9 @@ aside{background:var(--surface);border-right:1px solid var(--border);display:fle
 #catList{flex:1;overflow-y:auto;padding:2px 8px 12px}
 .grpHead{display:flex;width:100%;align-items:center;gap:8px;background:none;border:0;padding:10px 8px 6px;color:var(--gold);font-family:var(--cinzel);letter-spacing:.14em;text-transform:uppercase;font-size:10px;font-weight:600;text-align:left}
 .grpHead em{margin-left:auto;font-style:normal;color:var(--text3);font-family:var(--font);letter-spacing:0;font-weight:400}
+.sortBtn{display:inline-block;padding:1px 6px;border:1px solid var(--border2);border-radius:99px;color:var(--text3);font-size:10px;letter-spacing:0;cursor:pointer}
+.sortBtn:hover{color:var(--gold);border-color:var(--gold)}
+.sortBtn.on{color:#080808;background:var(--gold);border-color:var(--gold)}
 .chev{display:inline-block;transition:transform .15s;font-size:9px}
 .grp.closed .chev{transform:rotate(-90deg)}
 .grp.closed .grpBody{display:none}
@@ -571,7 +574,7 @@ catch (e) { db = initializeFirestore(app, { localCache: memoryLocalCache() }); }
 const S = {
   user: null, cats: new Map(), fb: new Map(), custom: [], order: null, tempOrder: null, types: null, curId: null, unsubQ: null,
   rows: new Map(), maxOrder: 0, sort: { key:'order', dir:1 }, filter: { q:'', diff:0, tags:new Set() },
-  hidden: new Set(LS.get('hiddenCols', [])), collapsed: new Set(LS.get('collapsed', [])),
+  hidden: new Set(LS.get('hiddenCols', [])), collapsed: new Set(LS.get('collapsed', [])), sortCount: new Set(LS.get('sortCount', [])),
   pending: 0, listening: false, unsubs: [], firstQ: true
 };
 const catRef = id => doc(db, 'triviaCategories', id);
@@ -756,15 +759,18 @@ function renderSide(){
   let html = '';
   for (const [t, list] of groups){
     if (!list.length && q) continue;
-    list.sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: 'base' }));
+    const byCount = S.sortCount.has(t);
+    list.sort((a, b) => (byCount ? (Number(b.questionCount) || 0) - (Number(a.questionCount) || 0) : 0) || String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: 'base' }));
     const closed = !q && S.collapsed.has(t);
-    html += `<div class="grp ${closed ? 'closed' : ''}"><button class="grpHead" data-type="${esc(t)}"><span class="chev">▾</span>${esc(t)}<em>${list.length}</em></button><div class="grpBody">` +
+    html += `<div class="grp ${closed ? 'closed' : ''}"><button class="grpHead" data-type="${esc(t)}"><span class="chev">▾</span><span class="sortBtn ${byCount ? 'on' : ''}" role="button" data-sort="${esc(t)}" title="${byCount ? 'Sorted by most questions — click for A–Z' : 'Sort by most questions'}">⇅ ${byCount ? '#' : ''}</span>${esc(t)}<em>${list.length}</em></button><div class="grpBody">` +
       list.map(c => `<button class="cat ${c.id === S.curId ? 'active' : ''} ${c.archived ? 'arch' : ''}" data-id="${c.id}"><span class="nm">${esc(c.name)}</span><span class="ct">${c.questionCount ?? ''}</span></button>`).join('') +
       `</div></div>`;
   }
   $('#catList').innerHTML = html || '<p class="hint" style="padding:12px">No categories yet — create one or import your CSVs.</p>';
 }
 $('#catList').addEventListener('click', e => {
+  const sb = e.target.closest('.sortBtn');
+  if (sb){ const t = sb.dataset.sort; S.sortCount.has(t) ? S.sortCount.delete(t) : S.sortCount.add(t); LS.set('sortCount', [...S.sortCount]); renderSide(); return; }
   const g = e.target.closest('.grpHead');
   if (g){ const t = g.dataset.type; S.collapsed.has(t) ? S.collapsed.delete(t) : S.collapsed.add(t); LS.set('collapsed', [...S.collapsed]); renderSide(); return; }
   const c = e.target.closest('.cat'); if (c) selectCategory(c.dataset.id);
