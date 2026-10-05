@@ -1240,11 +1240,13 @@ function interleaveMusic(rows, count) {
 }
 
 // Returns {questions, pool, source} or null when the Vault has nothing usable for this round.
+// (round._vaultWhy explains why, for the error message.)
 async function loadVaultQuestions(round, count) {
-  if(!fsdb) return null;
+  if(!fsdb) { round._vaultWhy = 'The Question Vault connection is not available on this page.'; return null; }
   const isMusic = round.type === 'music';
   const tried = new Set();
   const ids = [];
+  round._vaultWhy = '';
   if(round.vaultCatId) ids.push(round.vaultCatId);
   for(let pass = 0; pass < 2; pass++) {
     let catId = ids[pass];
@@ -1254,6 +1256,7 @@ async function loadVaultQuestions(round, count) {
     if(!catId || tried.has(catId)) continue;
     tried.add(catId);
     const { rows, cached } = await fetchVaultRows(catId, isMusic);
+    if(!rows.length) round._vaultWhy = 'The linked Vault sheet has no usable questions yet (each row needs BOTH a Question and an Answer, and must not be archived), or the Vault could not be read (check you are signed in).';
     if(rows.length) {
       round.vaultCatId = catId;
       let picked;
@@ -1269,6 +1272,7 @@ async function loadVaultQuestions(round, count) {
                pool: rows, source: cached ? 'vault (saved copy)' : 'vault' };
     }
   }
+  if(!round._vaultWhy) round._vaultWhy = 'No Vault sheet is linked to this category, and none is named exactly "' + (round.title || '') + '". Open the category in the trivia admin and pick its Question Vault sheet.';
   return null;
 }
 
@@ -3151,7 +3155,7 @@ async function launchFromSetup() {
       } else if(round.type === 'music') {
         let loaded = await loadVaultQuestions(round, round.questionCount);
         if(!loaded) {
-          if(!round.sheetUrl) throw new Error('No questions found in the Question Vault, and no sheet is linked.');
+          if(!round.sheetUrl) throw new Error('No questions found in the Question Vault, and no sheet is linked. ' + (round._vaultWhy || ''));
           loaded = await loadMusicQuestions(round.sheetUrl, round.tabName, round.questionCount);
           loaded.source = 'sheet';
         }
@@ -3162,7 +3166,7 @@ async function launchFromSetup() {
         // trivia
         let loaded = await loadVaultQuestions(round, round.questionCount);
         if(!loaded) {
-          if(!round.sheetUrl) throw new Error('No questions found in the Question Vault, and no sheet is linked.');
+          if(!round.sheetUrl) throw new Error('No questions found in the Question Vault, and no sheet is linked. ' + (round._vaultWhy || ''));
           loaded = await loadSheetQuestions(round.sheetUrl, round.tabName, round.questionCount);
           loaded.source = 'sheet';
         }
