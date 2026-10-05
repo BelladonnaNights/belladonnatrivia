@@ -145,7 +145,7 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 table#grid{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}
 #grid th{position:sticky;top:0;z-index:4;background:var(--surface2);text-align:left;font-family:var(--cinzel);font-weight:600;letter-spacing:.12em;text-transform:uppercase;font-size:9px;color:var(--text3);padding:12px 10px;border-bottom:1px solid var(--border2);border-right:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
 #grid th.num,#grid th.act{cursor:default}
-td.fb,th.fb{position:sticky;left:66px;z-index:2;width:104px;min-width:104px;max-width:104px;background:var(--surface)!important;white-space:nowrap;padding:6px 6px!important;font-size:12px;vertical-align:top}
+td.fb,th.fb{position:sticky;left:86px;z-index:2;width:120px;min-width:120px;max-width:120px;background:var(--surface)!important;white-space:nowrap;padding:6px 6px!important;font-size:12px;vertical-align:top}
 th.fb{z-index:6;background:var(--surface2)!important;cursor:default}
 td.fb .star{background:none;border:0;cursor:pointer;color:var(--gold2);font-size:15px;line-height:1;padding:2px 3px;margin-right:2px}
 td.fb .star:hover{color:#fff}
@@ -182,9 +182,9 @@ tr.flash td{background:rgba(201,168,76,.28)!important;transition:background 1s}
 #grid td.c-check{text-align:center;padding-top:9px}
 #grid td .thumb{display:block;width:100%;background:none;border:0;padding:7px 4px;font-size:16px;opacity:.9}
 #grid td .thumb[data-v='']{opacity:.3}
-td.num,th.num{position:sticky;left:0;z-index:2;width:66px;min-width:66px;text-align:right;color:var(--text3);padding:9px 8px 0 4px!important;font-size:12px;background:var(--surface)!important;white-space:nowrap}
+td.num,th.num{position:sticky;left:0;z-index:2;width:86px;min-width:86px;text-align:right;color:var(--text3);padding:9px 8px 0 4px!important;font-size:12px;background:var(--surface)!important;white-space:nowrap}
 th.num{z-index:6}
-td.stickyQ,th.stickyQ{position:sticky;left:156px;z-index:2;box-shadow:2px 0 0 var(--border2)}
+td.stickyQ,th.stickyQ{position:sticky;left:206px;z-index:2;box-shadow:2px 0 0 var(--border2)}
 th.stickyQ{z-index:6}
 tbody{counter-reset:r}
 td.num .n::before{counter-increment:r;content:counter(r)}
@@ -254,6 +254,24 @@ table.pv tr.hit:hover td{background:var(--gold-dim)}
 #grid th .rz::after{content:'';position:absolute;top:22%;bottom:22%;left:3px;width:1px;background:var(--border2);transition:background .15s,width .15s}
 #grid th .rz:hover::after,body.resizing #grid th .rz::after{background:var(--gold);width:2px}
 body.resizing{cursor:col-resize;user-select:none}
+
+.menuList .btn.danger{white-space:normal;line-height:1.5;padding:10px 16px}
+/* row icons: edit-all-fields + delete */
+.rowx.rowedit{padding:0 4px 0 0;display:inline-flex;vertical-align:-2px}
+.rowx.rowedit svg{width:13px;height:13px;display:block}
+.rowx.rowedit:hover,.rowx.rowedit:focus-visible{color:var(--gold2)}
+/* question editor (profile-style form) */
+.mBox.mid{width:min(660px,95vw)}
+.qeNav{display:flex;align-items:center;gap:8px;margin-right:auto;font-family:var(--cinzel);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)}
+.qeSec{font-family:var(--cinzel);font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);border-bottom:1px solid var(--border2);padding:6px 0 7px;margin:1.3rem 0 .9rem}
+.qeSec:first-child{margin-top:0}
+.qeForm .fld textarea{width:100%;padding:10px 13px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px/1.45 var(--font);letter-spacing:0;text-transform:none;outline:none;resize:vertical;min-height:44px}
+.qeForm .fld textarea:focus{border-color:var(--gold-glow2)}
+.qeForm .fld .qeHelp{font:11px var(--font);letter-spacing:0;text-transform:none;color:var(--text3)}
+.qeSeg{display:flex;gap:6px}
+.qeSeg button{flex:1;padding:9px 0;background:var(--surface2);border:1px solid var(--border2);color:var(--text2);font:13px var(--font);border-radius:var(--radius);cursor:pointer}
+.qeSeg button.on{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
+.qeChk{display:flex;align-items:center;gap:10px;font:14px var(--font);letter-spacing:0;text-transform:none;color:var(--text)}
 </style>
 </head>
 <body>
@@ -1090,7 +1108,7 @@ function buildRow(r){
   const tr = document.createElement('tr'); tr.dataset.id = r.id;
   if (!r.persisted) tr.classList.add('draft');
   if (r.data.archived) tr.classList.add('arch');
-  let h = '<td class="num"><button class="rowx" data-act="rowdelete" tabindex="-1" title="Delete this question">\u2715</button><span class="dot"></span><span class="n"></span></td><td class="fb">' + fbHTML(r) + '</td>';
+  let h = '<td class="num"><button class="rowx rowedit" data-act="rowedit" tabindex="-1" title="Open this question as a form (edit every column)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.4" r="2.6"/><path d="M2.8 14c.5-2.9 2.6-4.4 5.2-4.4s4.7 1.5 5.2 4.4"/></svg></button><button class="rowx" data-act="rowdelete" tabindex="-1" title="Delete this question">\u2715</button><span class="dot"></span><span class="n"></span></td><td class="fb">' + fbHTML(r) + '</td>';
   for (const c of visibleCols()) h += `<td class="c-${c.type}${c.key === 'question' ? ' stickyQ' : ''}">${cellHTML(c, r.data[c.key])}</td>`;
   h += r.data.archived
     ? '<td class="act"><button class="ico" data-act="restore" tabindex="-1" title="Restore">↺</button><button class="ico del" data-act="delete" tabindex="-1" title="Delete forever">🗑</button></td>'
@@ -1181,6 +1199,7 @@ tbody.addEventListener('click', async e => {
   const r = S.rows.get(b.closest('tr').dataset.id); if (!r) return;
   if (b.dataset.act === 'archive') archiveRow(r, true);
   if (b.dataset.act === 'restore') archiveRow(r, false);
+  if (b.dataset.act === 'rowedit'){ openQuestionEditor(r); return; }
   if (b.dataset.act === 'rowdelete'){
     if (!r.persisted){ r.tr.remove(); S.rows.delete(r.id); scheduleDupes(); updateCount(); return; }
     const preview = String(r.data.question || '').trim().slice(0, 140);
@@ -1191,6 +1210,82 @@ tbody.addEventListener('click', async e => {
     if (await confirmBox({ title: 'Delete forever?', message: 'This question will be permanently deleted. This can\u2019t be undone.', ok: 'Delete forever', danger: true })) run(async () => { await deleteDoc(r.ref); });
   }
 });
+
+/* ── Question editor: every column of one question as a fill-in form ── */
+const QE_ORDER = [
+  ['The question', ['question']],
+  ['Answer', ['answer', 'altAnswers']],
+  ['Difficulty', ['difficulty']],
+  ['Multiple choice options', ['optionA', 'optionB', 'optionC', 'optionD']],
+  ['Media', ['imgUrl', 'soundUrl']],
+  ['Extras', ['bonusQuestion', 'tags']],
+  ['Whispers', ['whisperQ', 'whisperA']],
+  ['Notes', ['notes']]
+];
+const QE_HELP = {
+  altAnswers: 'Other wordings that count as correct — one per line.',
+  difficulty: '1 = easy · 2 = medium · 3 = hard',
+  optionA: 'Leave all four blank for an open-answer question.',
+  tags: 'Separate tags with commas.'
+};
+function openQuestionEditor(r){
+  let cur = r;
+  const body = document.createElement('div'); body.className = 'qeForm';
+  const colsFor = () => {
+    const all = allCols(), used = new Set(), groups = [];
+    QE_ORDER.forEach(([title, keys]) => { const cs = keys.map(k => all.find(c => c.key === k) || baseCols().find(c => c.key === k)).filter(Boolean); cs.forEach(c => used.add(c.key)); if (cs.length) groups.push([title, cs]); });
+    const rest = baseCols().filter(c => !used.has(c.key)); if (rest.length) groups.push(['Custom columns', rest]);
+    return groups;
+  };
+  const fieldHTML = (c, v) => {
+    const k = `data-qe="${esc(c.key)}"`, lab = esc(c.label), help = QE_HELP[c.key] ? `<span class="qeHelp">${esc(QE_HELP[c.key])}</span>` : '';
+    switch (c.type){
+      case 'long':   return `<label class="fld">${lab}<textarea ${k} rows="${c.key === 'question' ? 3 : 2}" spellcheck="true">${esc(v)}</textarea>${help}</label>`;
+      case 'diff':   return `<div class="fld">${lab}<div class="qeSeg" ${k} data-v="${v || ''}">${[1,2,3].map(n => `<button type="button" data-n="${n}" class="${Number(v) === n ? 'on' : ''}">${n}</button>`).join('')}<button type="button" data-n="" class="${v ? '' : 'on'}" title="Not set">–</button></div>${help}</div>`;
+      case 'tags':   return `<label class="fld">${lab}<input type="text" ${k} value="${esc((v || []).join(', '))}" autocomplete="off" placeholder="tag, tag…">${help}</label>`;
+      case 'check':  return `<label class="fld"><span class="qeChk"><input type="checkbox" ${k} ${v ? 'checked' : ''}> ${lab}</span></label>`;
+      case 'thumbs': return `<div class="fld">${lab}<div class="qeSeg" ${k} data-v="${esc(v || '')}"><button type="button" data-n="up" class="${v === 'up' ? 'on' : ''}">👍</button><button type="button" data-n="down" class="${v === 'down' ? 'on' : ''}">👎</button><button type="button" data-n="" class="${v ? '' : 'on'}">–</button></div></div>`;
+      case 'number': return `<label class="fld">${lab}<input type="number" ${k} value="${esc(v ?? '')}" autocomplete="off"></label>`;
+      default:       return `<label class="fld">${lab}<input type="text" ${k} value="${esc(v)}" autocomplete="off">${help}</label>`;
+    }
+  };
+  const colByKey = k => baseCols().find(c => c.key === k);
+  const commit = async (el) => {
+    const c = colByKey(el.dataset.qe); if (!c || !cur) return;
+    let v;
+    if (el.classList.contains('qeSeg')) v = c.type === 'diff' ? (el.dataset.v ? Number(el.dataset.v) : null) : (el.dataset.v || '');
+    else if (c.type === 'check') v = el.checked;
+    else v = convert(c, el.value);
+    const old = cur.data[c.key];
+    if (JSON.stringify(old ?? (c.type === 'tags' ? [] : '')) === JSON.stringify(v ?? (c.type === 'tags' ? [] : ''))) return;
+    cur.data[c.key] = v; try { updateRowDom(cur); } catch (_) {}
+    await saveField(cur, c.key, v);
+  };
+  const commitAll = () => $$('[data-qe]', body).forEach(el => { if (el.classList.contains('qeSeg')) return; commit(el); });
+  const rowIds = () => [...tbody.children].filter(tr => !tr.hidden && tr.offsetParent !== null).map(tr => tr.dataset.id);
+  const numberOf = () => { const i = rowIds().indexOf(cur.id); return i >= 0 ? i + 1 : '–'; };
+  const draw = () => {
+    body.innerHTML = colsFor().map(([t, cs]) => `<div class="qeSec">${esc(t)}</div>` + cs.map(c => fieldHTML(c, cur.data[c.key])).join('')).join('');
+    $$('textarea', body).forEach(autosize);
+    const h = $('#modal h2'); if (h) h.textContent = 'Question ' + numberOf();
+  };
+  body.addEventListener('focusout', e => { const el = e.target; if (el.matches('input,textarea') && !el.classList.contains('qeSeg')) commit(el); });
+  body.addEventListener('change', e => { const el = e.target; if (el.matches('input[type=checkbox]')) commit(el); });
+  body.addEventListener('input', e => { if (e.target.matches('textarea')) autosize(e.target); });
+  body.addEventListener('click', e => {
+    const b = e.target.closest('.qeSeg button'); if (!b) return;
+    const seg = b.parentElement; seg.dataset.v = b.dataset.n; $$('button', seg).forEach(x => x.classList.toggle('on', x === b)); commit(seg);
+  });
+  const go = d => { commitAll(); const ids = rowIds(), i = ids.indexOf(cur.id), nx = S.rows.get(ids[i + d]); if (!nx) return; cur = nx; draw(); body.scrollTop = 0; const mb = $('#modal .mBody'); if (mb) mb.scrollTop = 0; };
+  const m = openModal({ title: 'Question', body, actions: [{ label: 'Done', primary: true, onClick: () => { commitAll(); closeModal(); } }], onClose: () => commitAll() });
+  $('.mBox', m).classList.add('mid');
+  const foot = $('.mFoot', m);
+  const nav = document.createElement('div'); nav.className = 'qeNav';
+  nav.innerHTML = '<button class="btn" data-d="-1">\u2039 Prev</button><button class="btn" data-d="1">Next \u203a</button>';
+  nav.addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (b) go(Number(b.dataset.d)); });
+  foot.insertBefore(nav, foot.firstChild);
+  draw();
+}
 
 function moveDown(el){
   const key = el.dataset.key; let tr = el.closest('tr').nextElementSibling;
@@ -1378,7 +1473,7 @@ $('#catMenuBtn').addEventListener('click', () => {
     <button class="btn" data-a="recount">Recount questions</button>
     <button class="btn" data-a="archive">${c.archived ? 'Restore this category' : 'Archive this category'}</button>
     <p class="hint" style="margin:0 0 6px">Archiving hides the category from the list. Its questions are kept.</p>
-    <button class="btn danger" data-a="delete">Delete this category and all its questions…</button>`;
+    <button class="btn danger" data-a="delete">Delete this category<br>and all its questions…</button>`;
   openModal({ title: c.name, body, actions: [{ label: 'Close', onClick: closeModal }] });
   body.addEventListener('click', async e => {
     const b = e.target.closest('[data-a]'); if (!b) return;
