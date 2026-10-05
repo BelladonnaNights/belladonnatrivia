@@ -351,7 +351,7 @@ const firebaseConfig = {
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { getDatabase, ref as rref, onChildAdded, onChildChanged, onChildRemoved, remove as rremove } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+import { getDatabase, ref as rref, onChildAdded, onChildChanged, onChildRemoved, remove as rremove, get as rget, set as rset, push as rpush, update as rupdate } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
   collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, onSnapshot,
@@ -994,6 +994,24 @@ function startFeedback(){
     S.unsubs.push(onChildRemoved(f, s => fbDel(s.key), err));
   } catch (e){ console.warn('Feedback unavailable', e); }
 }
+// A category made here also gets its Trivia-app / Planner category and Venue Menu entry,
+// linked by ID (vaultCatId / vmCatId / triviaCatId). Skipped quietly if one already exists by name
+// or if this account can't write there.
+async function mirrorNewVaultCategory(vaultId, name, type){
+  try {
+    rtdb = rtdb || getDatabase(app);
+    const snap = await rget(rref(rtdb, 'trivia/categories'));
+    const all = snap.val() || {};
+    const want = normName(name);
+    const hit = Object.entries(all).find(([id, c]) => normName(c && c.name) === want);
+    if (hit){ if (!hit[1].vaultCatId) await rupdate(rref(rtdb, 'trivia/categories/' + hit[0]), { vaultCatId: vaultId }); return; }
+    const r = rpush(rref(rtdb, 'trivia/categories'));
+    const isMusic = /music/i.test(type || '');
+    await rset(r, { name, genre: '', type: isMusic ? 'music' : 'trivia', vaultCatId: vaultId, unified: true, notes: 'Created from the Question Vault', createdAt: Date.now(), updatedAt: Date.now() });
+    const vm = await addDoc(collection(db, 'venueMenuCategories'), { name, type: 'Trivia', tags: '', image: '', plannerTier: null, linked: true, triviaCatId: r.key, createdAt: Date.now(), updatedAt: Date.now() });
+    await rupdate(rref(rtdb, 'trivia/categories/' + r.key), { vmCatId: vm.id });
+  } catch (e){ console.warn('Could not mirror the new category into Trivia / Venue Menu:', e && e.message); }
+}
 const fbPath = (key, sub) => rref(rtdb, 'trivia/questionFeedback/' + key + (sub ? '/' + sub : ''));
 
 function jumpToQuestion(catId, qid){
@@ -1310,7 +1328,7 @@ $('#newCatBtn').addEventListener('click', () => {
     if (!type) return $('#ncMsg').textContent = 'Pick or name a type.';
     if (catByNorm(name)) return $('#ncMsg').textContent = 'A category with that name already exists.';
     closeModal();
-    await run(async () => { const ref = await addDoc(collection(db, 'triviaCategories'), { name, type, questionCount: 0, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); selectCategory(ref.id); });
+    await run(async () => { const ref = await addDoc(collection(db, 'triviaCategories'), { name, type, questionCount: 0, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); selectCategory(ref.id); mirrorNewVaultCategory(ref.id, name, type); });
   };
   openModal({ title: 'New category', body, actions: [{ label: 'Cancel', onClick: closeModal }, { label: 'Create', primary: true, onClick: submit }] });
   $('#ncType').addEventListener('change', e => $('#ncNewWrap').classList.toggle('hidden', e.target.value !== '__new'));
@@ -1540,7 +1558,7 @@ function openImport(){
         msg.textContent = `Importing ${++done} of ${groups.size}: ${g.name}…`;
         let cat = catByNorm(g.name), id, order = 1;
         if (cat){ id = cat.id; const ex = await ensureExisting(id); order = ex.reduce((m, q) => Math.max(m, Number(q.order) || 0), 0) + 1; }
-        else { const ref = await addDoc(collection(db, 'triviaCategories'), { name: g.name, type: g.type, questionCount: 0, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); id = ref.id; }
+        else { const ref = await addDoc(collection(db, 'triviaCategories'), { name: g.name, type: g.type, questionCount: 0, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); id = ref.id; mirrorNewVaultCategory(id, g.name, g.type); }
         for (let i = 0; i < g.adds.length; i += 250){
           const batch = writeBatch(db);
           g.adds.slice(i, i + 250).forEach(rec => batch.set(doc(qColl()), { ...rec, categoryId: id, order: order++, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
