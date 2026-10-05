@@ -717,6 +717,7 @@ if(db) {
 }
 function initLiveGame() {
   if(!LIVE_UID) { whenLiveReady(initLiveGame); return; }   // wait for sign-in to finish
+  claimPresenter();
   const sessionId = 'session_' + Date.now();
   const startedAt = Date.now();
   // Players who scanned the QR while the setup screen was up have already joined —
@@ -832,6 +833,7 @@ function updateHudTimedCheckbox(round) {
 // ─── END timed override ───────────────────────────────────────────────
 
 function pushLiveQuestion(q, qIndex, round) {
+  if(_superseded) return;
   const choices = q.type==='mc' ? (q._choices||[]).map(c=>c.text) :
                   q.type==='tf' ? ['True','False'] : null;
   const qId = `q_${state.roundIndex}_${qIndex}`;
@@ -866,12 +868,40 @@ if(db) { whenLiveReady(() => { const r = liveRef('triviaPhase'); r.set('setup');
 // Pick up the Join-QR toggle the host may have set before this page loaded
 if(db) { whenLiveReady(() => liveRef('introQrVisible').once('value').then(s => { if(s.val() === false) ssQrVisible = false; else ssQrVisible = true; })); }
 
+// ── One live presenter at a time ─────────────────────────────────────
+// If a second trivia.html window is open (an old tab, a re-launch), both used to write to
+// the same host board and both obeyed Next — the board then bounced between their two
+// different question orders. Now the window that was launched LAST owns the live game; any
+// other window goes quiet and says so.
+const INSTANCE_ID = 't_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+let _superseded = false;
+function claimPresenter() {
+  if(!db) return;
+  whenLiveReady(() => {
+    const r = liveRef('presenter');
+    r.set({ id: INSTANCE_ID, ts: Date.now() });
+    if(!claimPresenter._watching) {
+      claimPresenter._watching = true;
+      r.on('value', snap => {
+        const v = snap.val();
+        if(v && v.id && v.id !== INSTANCE_ID && !_superseded) {
+          _superseded = true;
+          const b = document.createElement('div');
+          b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#8b1a1a;color:#fff;padding:14px;text-align:center;font:600 16px sans-serif';
+          b.textContent = 'Another trivia window took over this game — close this one. The host board is now following the other window.';
+          document.body.appendChild(b);
+        }
+      });
+    }
+  });
+}
+
 // Listen for host commands from admin board
 if(db) {
   let lastHostCommandTs = Date.now() - 2000; // ignore stale commands left from an earlier session
   whenLiveReady(() => liveRef('hostCommand').on('value', snap => {
     const cmd = snap.val();
-    if(!cmd || !cmd.ts || cmd.ts <= lastHostCommandTs) return;
+    if(_superseded || !cmd || !cmd.ts || cmd.ts <= lastHostCommandTs) return;
     lastHostCommandTs = cmd.ts;
     switch(cmd.cmd) {
       case 'next':    advanceSlide(); break;
@@ -923,7 +953,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
-  if(!db) return;
+  if(!db || _superseded) return;
   liveRef('slideState').set({
     label:  label  || '',
     text:   text   || '',
@@ -934,6 +964,7 @@ function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
     roundNum: (extra && extra.roundNum) || null, roundTotal: (extra && extra.roundTotal) || null,
     qNow: (extra && extra.qNow) || null, qTotal: (extra && extra.qTotal) || null,
     canFeedback: !!(extra && extra.canFeedback),
+    whisperQ: (extra && extra.whisperQ) || '', whisperA: (extra && extra.whisperA) || '',
     ts: Date.now(),
   });
 }
@@ -952,7 +983,7 @@ function questionKindLabel(q) {
   return extras.length ? k + ' + ' + extras.join(' + ') : k;
 }
 function pushNextQuestionPeek() {
-  if(!db) return;
+  if(!db || _superseded) return;
   const round = currentRound();
   if(!round) { liveRef('hostPeek').set(null); return; }
   const type = slideType();
@@ -1158,7 +1189,7 @@ function vaultRow(id, d, catId) {
   const au = a.toUpperCase();
   const type = (au==='TRUE'||au==='FALSE') ? 'tf' : mcOptions.length > 0 ? 'mc' : 'standard';
   return { question:q, answer:a, difficulty:diff, imageUrl:safe(d.imgUrl).trim(), audioUrl:safe(d.soundUrl).trim(),
-           type, mcOptions, notes:safe(d.notes).trim(), rowIndex:null,
+           type, mcOptions, notes:safe(d.notes).trim(), whisperQ:safe(d.whisperQ).trim(), whisperA:safe(d.whisperA).trim(), rowIndex:null,
            vaultQuestionId:id, vaultCatId:catId, feedbackKey:`vault__${catId}__${id}` };
 }
 
@@ -1169,7 +1200,7 @@ function vaultMusicRow(id, d, catId) {
   if(!song || !artist) return null;
   return { question:song, answer:artist, difficulty:1, imageUrl:'', audioUrl:safe(d.soundUrl).trim(),
            startTime:parseMusicTime(safe(d.startTime)), endTime:parseMusicTime(safe(d.endTime)),
-           albumArt:safe(d.imgUrl).trim(), type:'standard', mcOptions:[], notes:safe(d.notes).trim(), rowIndex:null,
+           albumArt:safe(d.imgUrl).trim(), type:'standard', mcOptions:[], notes:safe(d.notes).trim(), whisperQ:safe(d.whisperQ).trim(), whisperA:safe(d.whisperA).trim(), rowIndex:null,
            vaultQuestionId:id, vaultCatId:catId, feedbackKey:`vault__${catId}__${id}` };
 }
 
@@ -1859,7 +1890,7 @@ function renderCurrentSlide() {
 
   // Push slide state to Firebase for host board mini preview
   (function() {
-    let label = '', text = '', qNum = '', answer = '', hasAudio = false;
+    let label = '', text = '', qNum = '', answer = '', hasAudio = false, whisperQ = '', whisperA = '';
     let previewBg = bgUrl; // default: round background, same as the audience screen
     if(type === S_INTRO) {
       label = round.tabName || round.title || 'Intro';
@@ -1872,6 +1903,7 @@ function renderCurrentSlide() {
       text   = q ? q.question : '';
       answer = (state.answerVisible || state.bonusVisible) && q ? q.answer : '';
       hasAudio = !!(q && q.audioUrl);
+      whisperQ = (q && q.whisperQ) || ''; whisperA = (q && q.whisperA) || '';
       if(q) recordPlay(round, q);
       // Picture-round questions: show the actual question image in the
       // host preview, not just the round's plain background.
@@ -1891,7 +1923,7 @@ function renderCurrentSlide() {
     let _qNow = null;
     if(type === S_QUESTION) _qNow = questionInfo().qIndex + 1; else if(type === S_SLIDE) _qNow = state.slideIndex;
     pushSlideState(label, text, qNum, previewBg, answer, {
-      hasAudio, roundNum: state.roundIndex + 1, roundTotal: state.rounds.length,
+      hasAudio, whisperQ, whisperA, roundNum: state.roundIndex + 1, roundTotal: state.rounds.length,
       qNow: _qNow, qTotal: _qNow ? _n : null,
       canFeedback: type === S_QUESTION && round.type !== 'music' && round.type !== 'slideshow' && round.type !== 'canva',
     });
