@@ -827,8 +827,28 @@ $('#catName').addEventListener('change', async e => {
   const dupe = catByNorm(v);
   if (!v || (dupe && dupe.id !== c.id)){ toast(!v ? 'A category needs a name.' : 'Another category already has that name.'); e.target.value = c.name; return; }
   if (v === c.name) return;
+  const oldName = c.name;
   await run(() => updateDoc(catRef(c.id), { name: v, updatedAt: serverTimestamp() }));
+  renameLinkedCategory(c.id, oldName, v);
 });
+// The Trivia app finds a round's questions through this sheet's link (vaultCatId) or its NAME, and the Planner /
+// Venue Menu list the same category by name — so a rename here has to follow into those linked records.
+async function renameLinkedCategory(vaultId, oldName, newName){
+  try {
+    rtdb = rtdb || getDatabase(app);
+    const snap = await rget(rref(rtdb, 'trivia/categories'));
+    const all = snap.val() || {};
+    const old = normName(oldName);
+    let hit = Object.entries(all).find(([id, t]) => t && t.vaultCatId === vaultId);
+    if (!hit) hit = Object.entries(all).find(([id, t]) => t && normName(t.name) === old);   // one that relied on the name (or got linked to a blank copy)
+    if (!hit) return;
+    const [tid, t] = hit;
+    await rupdate(rref(rtdb, 'trivia/categories/' + tid), { name: newName, vaultCatId: vaultId, updatedAt: Date.now() });
+    const vmId = t.vmCatId;
+    if (vmId) { try { await updateDoc(doc(db, 'venueMenuCategories', vmId), { name: newName }); } catch (e) { console.warn('Venue Menu rename skipped', e && e.message); } }
+    toast('Renamed everywhere (Trivia, Planner, Venue Menu).');
+  } catch (e) { console.warn('Could not rename the linked Trivia / Planner category:', e && e.message); toast('Renamed here, but the linked Trivia category could not be renamed: ' + (e && e.message || e)); }
+}
 $('#catName').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape'){ const c = S.cats.get(S.curId); if (c) e.target.value = c.name; e.target.blur(); } });
 $('#catType').addEventListener('change', async e => {
   const c = S.cats.get(S.curId); if (!c) return;
@@ -1473,7 +1493,7 @@ $('#catMenuBtn').addEventListener('click', () => {
     <button class="btn" data-a="recount">Recount questions</button>
     <button class="btn" data-a="archive">${c.archived ? 'Restore this category' : 'Archive this category'}</button>
     <p class="hint" style="margin:0 0 6px">Archiving hides the category from the list. Its questions are kept.</p>
-    <button class="btn danger" data-a="delete">Delete this category<br>and all its questions…</button>`;
+    <button class="btn danger" data-a="delete">Delete this sheet<br>and all its questions…</button>`;
   openModal({ title: c.name, body, actions: [{ label: 'Close', onClick: closeModal }] });
   body.addEventListener('click', async e => {
     const b = e.target.closest('[data-a]'); if (!b) return;
@@ -1484,9 +1504,19 @@ $('#catMenuBtn').addEventListener('click', () => {
   });
 });
 
+// Deleting a Vault sheet only removes the sheet and its questions. The category stays in Trivia, the Planner and
+// the Venue Menu — it is just marked "no Vault sheet" so nothing re-creates a blank one.
+async function unlinkDeletedSheet(vaultId){
+  try {
+    rtdb = rtdb || getDatabase(app);
+    const all = (await rget(rref(rtdb, 'trivia/categories'))).val() || {};
+    for (const [id, t] of Object.entries(all)) if (t && t.vaultCatId === vaultId) await rupdate(rref(rtdb, 'trivia/categories/' + id), { vaultCatId: null, vaultOptOut: true });
+  } catch (e) { console.warn('Could not unlink the deleted sheet from Trivia:', e && e.message); }
+}
 function askDeleteCategory(c){
   const body = document.createElement('div');
-  body.innerHTML = `<p class="hint">This permanently deletes <strong style="color:var(--text)">${esc(c.name)}</strong> and <strong style="color:var(--text)">every question in it</strong>, including archived ones. It can’t be undone.</p>
+  body.innerHTML = `<p class="hint">This permanently deletes this <strong style="color:var(--text)">${esc(c.name)}</strong> Vault sheet and <strong style="color:var(--text)">every question in it</strong>, including archived ones. It can’t be undone.</p>
+    <p class="hint">The category itself stays in Trivia, the Planner and the Venue Menu — only the question sheet goes.</p>
     <label class="fld">Type the category name to confirm<input type="text" id="delConfirm" autocomplete="off"></label>
     <div class="msg" id="delMsg"></div>`;
   const actions = [{ label: 'Cancel', onClick: closeModal }, { label: 'Delete forever', danger: true, onClick: () => go() }];
@@ -1508,6 +1538,7 @@ function askDeleteCategory(c){
         n += snap.size; msg.textContent = `Deleted ${n.toLocaleString()} questions…`;
       }
       await deleteDoc(catRef(c.id));
+      await unlinkDeletedSheet(c.id);
       msg.textContent = `Done — removed the category and ${n.toLocaleString()} question${n === 1 ? '' : 's'}.`;
       btn.textContent = 'Close'; btn.classList.remove('danger'); btn.classList.add('primary'); btn.disabled = false; btn.onclick = closeModal;
     } catch (err){
