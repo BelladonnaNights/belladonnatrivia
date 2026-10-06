@@ -1874,10 +1874,12 @@ dbFs.collection('venueMenuCategories').onSnapshot(snap => {
 function scheduleCategorySync() { clearTimeout(_catSyncTimer); _catSyncTimer = setTimeout(runCategorySync, 2500); }
 const isTriviaish = c => !c.type || c.type === 'trivia' || c.type === 'music';
 // Theme Sets and Theme Nights are made of other categories — they have no questions of their own, so no Vault sheet.
-const noVaultTier = c => c && (c.plannerTier === 'featured' || c.plannerTier === 'theme-night');
+// Karaoke lists and Theme Night categories belong to the Planner / Venue Menu, not to trivia: they are hidden here and get no Vault sheet.
+const hiddenFromTrivia = c => !!c && (c.plannerTier === 'karaoke' || c.plannerTier === 'theme-night' || c.type === 'karaoke');
+const noVaultTier = c => !!c && (c.plannerTier === 'featured' || hiddenFromTrivia(c));
 const vaultTypeFor = c => c.plannerTier === 'feature-trivia' ? 'Feature' : (c.type === 'music' || c.plannerTier === 'coordinating-music') ? 'Music' : c.plannerTier === 'mini-games' ? 'Mini Games' : 'Evergreen';
 function planCategorySync() {
-  const cats = categories.filter(isTriviaish);
+  const cats = categories.filter(c => isTriviaish(c) && !hiddenFromTrivia(c));
   const hasVaultName = n => vaultCats.some(v => vaultNormName(v.name) === vaultNormName(n));
   const needVault = cats.filter(c => !noVaultTier(c) && !c.vaultCatId && !c.vaultOptOut && !hasVaultName(c.name) && !_catSyncBusy.has('v'+c.id));
   const needVm = cats.filter(c => !c.vmCatId && !vmCats.some(v => v.triviaCatId === c.id) && !_catSyncBusy.has('m'+c.id));
@@ -1976,7 +1978,7 @@ function renderLibrary() {
   const grid = document.getElementById('cat-grid');
   const searchVal = (document.getElementById('search-input')?.value||'').toLowerCase().trim();
 
-  let filtered = categories;
+  let filtered = categories.filter(c => !hiddenFromTrivia(c));
 
   // Filter by tags (show categories that match ANY selected tag)
   if(activeGenres.size > 0) {
@@ -2088,7 +2090,7 @@ function migrateMiniGamesTag() {
 }
 
 function renderFilterBar() {
-  const allTags = [...new Set(categories.flatMap(c => parseTags(c.genre)))].sort();
+  const allTags = [...new Set(categories.filter(c => !hiddenFromTrivia(c)).flatMap(c => parseTags(c.genre)))].sort();
   const pinned  = PINNED_GENRES.filter(t => allTags.includes(t));
   const more    = allTags.filter(t => !PINNED_GENRES.includes(t));
 
@@ -3579,8 +3581,8 @@ function populateSchedVenueDropdowns() {
 }
 
 function renderSchedCatDropdowns() {
-  const opts = '<option value="">— pick a category —</option>' + categories.map(c => `<option value="${c.id}">${c.name}${c.altName ? ' — ' + c.altName : ''}</option>`).join('');
-  const optsOpt = '<option value="">(none)</option>' + categories.map(c => `<option value="${c.id}">${c.name}${c.altName ? ' — ' + c.altName : ''}</option>`).join('');
+  const opts = '<option value="">— pick a category —</option>' + categories.filter(c => !hiddenFromTrivia(c)).map(c => `<option value="${c.id}">${c.name}${c.altName ? ' — ' + c.altName : ''}</option>`).join('');
+  const optsOpt = '<option value="">(none)</option>' + categories.filter(c => !hiddenFromTrivia(c)).map(c => `<option value="${c.id}">${c.name}${c.altName ? ' — ' + c.altName : ''}</option>`).join('');
   const editId = document.getElementById('sched-edit-id')?.value;
   const entry = editId ? triviaScheduleEntries.find(e => e.id === editId) : null;
   const rounds = entry ? (entry.rounds || []) : [];
