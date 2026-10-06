@@ -2480,7 +2480,18 @@ let currentVenueDetailId = null;
 let vdRangeStart = null, vdRangeEnd = null; // Date objects
 let vdFullRange = false;
 
+// Duplicate venue records (same name + same night) can exist side by side. The dashboard already shows them
+// as one; this makes Plan / venue detail open the one that actually holds the plans and liked categories.
+function primaryVenueId(id){
+  const v = state.venues[id]; if(!v) return id;
+  const k = vmxKey(v.name||''), d = vmxAbbr(v.day);
+  const sibs = Object.entries(state.venues).filter(([sid,sv])=>vmxKey(sv.name||'')===k && vmxAbbr(sv.day)===d);
+  if(sibs.length<2) return id;
+  const score = sid => Object.keys(state.gigs[sid]||{}).length*10 + (((state.venues[sid]||{}).likedCategoryIds||[]).length?5:0) + (sid===id?1:0);
+  return sibs.map(([sid])=>sid).sort((a,b)=>score(b)-score(a))[0];
+}
 function openVenueDetail(id){
+  id = primaryVenueId(id);
   currentVenueDetailId = id;
   noCreateMode = false;
   document.getElementById('vd-no-create-slot').innerHTML = noCreateToggleHtml();
@@ -2810,6 +2821,7 @@ function bumpThemeUsage(themeId, dk){
 // ═══════════════════════════════════════════════
 let qsStartOverride = null;
 function openQuickSchedule(venueId, startDateKey){
+  venueId = primaryVenueId(venueId);
   currentVenueDetailId = venueId; // reuse vdInlineSave / bulk-fill logic as-is
   qsStartOverride = startDateKey || null;
   noCreateMode = false;
