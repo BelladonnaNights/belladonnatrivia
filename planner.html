@@ -645,7 +645,7 @@ a{color:inherit}
           <option value="">—</option><option>Mon</option><option>Tue</option><option>Wed</option>
           <option>Thu</option><option>Fri</option><option>Sat</option><option>Sun</option>
         </select></div>
-      <div><label class="form-label">Time</label><input type="text" class="form-input" id="v-time" placeholder="7:00pm"></div>
+      <div><label class="form-label">Time</label><input type="time" class="form-input" id="v-time"></div>
     </div>
 
     <div class="form-row2" id="v-cadence-row">
@@ -1062,6 +1062,7 @@ function vmxFmt(kind,t24){
   let h=+t24.slice(0,2);const mm=t24.slice(3);const ap=h>=12?'pm':'am';h=h%12||12;return h+(mm==='00'?'':':'+mm)+ap;
 }
 function vmxLive(st){return !st||st==='active'||st==='seasonal'||st==='one-time';}
+function vmxNotify(msg,bad){try{if(typeof hqToast==='function')hqToast(msg,bad);else if(typeof toast==='function')toast(msg,bad);}catch(e){}}
 async function vmxReadAll(){
   const db_=VMX_RTDB();const out=[];
   for(const [kind,path] of Object.entries(VMX_KIND_PATH)){
@@ -1098,7 +1099,7 @@ async function vmxPushLegacy(kind,legacyId,v){
     upd[VMX_KIND_PATH[kind]+'/'+legacyId+'/venueId']=m.id;
     await db_.ref().update(upd);
     return m.id;
-  }catch(e){console.warn('vmxPushLegacy',e);}
+  }catch(e){console.warn('vmxPushLegacy',e);vmxNotify('Saved here, but the venue master record did NOT update: '+((e&&(e.code||e.message))||e),true);}
 }
 async function vmxRemoveLegacy(kind,legacyId,v){
   try{
@@ -1145,10 +1146,11 @@ async function vmxApplyToLegacy(masterId,master,legacyAll){
 let _vmxT=null;
 // Sync is OFF until HQ's Venue Master Records window turns it on (venues/_sync/on), so a master that
 // still needs a once-over can't overwrite anything.
-function vmxListen(onChange){
+function vmxListen(onChange,onLoad){
   const db_=VMX_RTDB();if(!db_)return;
   db_.ref('venues').on('value',sn=>{
     const all=sn.val()||{};window.__vmxMaster=all;window.__vmxSyncOn=!!(all._sync&&all._sync.on);
+    if(onLoad)try{onLoad(all);}catch(e){}
     clearTimeout(_vmxT);
     if(!window.__vmxSyncOn)return;
     _vmxT=setTimeout(async()=>{
@@ -1157,6 +1159,20 @@ function vmxListen(onChange){
       if(onChange)onChange(all);
     },1500);
   },()=>{});
+}
+
+// change a venue's ID: move its master record, restamp every app's venue record
+async function vmxRenameId(oldId,newId){
+  const db_=VMX_RTDB();newId=String(newId||'').trim().replace(/[.$#\[\]\/\s]+/g,'-');
+  if(!oldId||!newId||oldId===newId)return newId;
+  const ex=(await db_.ref('venues/'+newId).once('value')).val();
+  if(ex)throw new Error('The Venue ID "'+newId+'" is already used by '+(ex.name||'another venue'));
+  const m=(await db_.ref('venues/'+oldId).once('value')).val();
+  const upd={};
+  if(m){m.id=newId;upd['venues/'+newId]=m;upd['venues/'+oldId]=null;}
+  (await vmxReadAll()).filter(l=>l.v.venueId===oldId).forEach(l=>{upd[VMX_KIND_PATH[l.kind]+'/'+l.id+'/venueId']=newId;});
+  await db_.ref().update(upd);
+  return newId;
 }
 
 auth.onAuthStateChanged(function(user){
@@ -2905,7 +2921,7 @@ function addVenueSlotRow(day,time){
       ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<option ${day===d?'selected':''}>${d}</option>`).join('')}
     </select></div>
     <div style="display:flex;gap:0.4rem;">
-      <input type="text" class="form-input v-slot-time" placeholder="7:00pm" value="${(time||'').replace(/"/g,'&quot;')}" style="flex:1;">
+      <input type="time" class="form-input v-slot-time" value="${vmxT24(time||'')}" style="flex:1;">
       <button class="btn btn-ghost btn-sm" type="button" onclick="document.getElementById('${rowId}').remove()">✕</button>
     </div>
   `;
@@ -2914,7 +2930,7 @@ function addVenueSlotRow(day,time){
 function collectVenueSlots(){
   return [...document.querySelectorAll('#v-slots-list > div')].map(row=>({
     day:row.querySelector('.v-slot-day').value,
-    time:row.querySelector('.v-slot-time').value.trim()
+    time:vmxFmt(VMX_KIND_OF_MODE[plannerMode],vmxT24(row.querySelector('.v-slot-time').value))
   })).filter(s=>s.day||s.time);
 }
 function openVenueModal(id){
@@ -2939,7 +2955,7 @@ function openVenueModal(id){
     document.getElementById('v-slots-section').style.display='none';
     document.getElementById('v-slots-hint').style.display='none';
     document.getElementById('v-day').value = v.day||'';
-    document.getElementById('v-time').value = v.time||'';
+    document.getElementById('v-time').value = vmxT24(v.time||'');
   }else{
     // New venue — one or more nights added together, each becomes its own linked record.
     document.getElementById('v-single-daytime').style.display='none';
@@ -2981,7 +2997,7 @@ function saveVenue(){
     // Editing one existing night in place — untouched from how this always worked.
     const data = Object.assign({name}, shared, {
       day: cadence==='single' ? anchorDayAbbr : document.getElementById('v-day').value,
-      time: document.getElementById('v-time').value.trim()
+      time: vmxFmt(VMX_KIND_OF_MODE[plannerMode],vmxT24(document.getElementById('v-time').value))
     });
     const _eid=editingVenueId,_mode=plannerMode;
     db.ref(MODE_PATHS[plannerMode].venues+'/'+editingVenueId).update(data).then(()=>{ toast('Venue saved.'); closeModal('venue-modal-overlay'); vmxPushLegacy(VMX_KIND_OF_MODE[_mode],_eid,Object.assign({},state.venues[_eid]||{},data)); });
