@@ -1465,7 +1465,7 @@ function loadPlannerLocations(){
 function setPlannerLocation(code){
   if(!myAllLocations)return; // locked accounts can't switch — the select is disabled, but don't trust the DOM alone
   selectedLocationId=code;
-  state.venues={}; state.themes={}; state.gigs={}; state.sequences={}; libraryRaw={};
+  state.venues={}; state.themes={}; state.gigs={}; state.sequences={}; libraryRaw={}; gigsRaw={};
   attachModeListeners();
 }
 function locationMatches(recordLocId){
@@ -1571,6 +1571,38 @@ async function mirrorHqGigsToPlanner(){
   }
   if(wrote)toast('Pulled '+wrote+' gig'+(wrote>1?'s':'')+' in from HQ.');
 }
+let gigsRaw = {};
+// Re-derives state.gigs from the raw database copy. Runs whenever gigs, venues OR categories change,
+// so plans never vanish just because they loaded before the venue/category lists did.
+function rebuildGigsState(){
+  const raw = gigsRaw||{};
+  if(plannerMode==='bingo'){
+    const nested = {};
+    Object.values(raw).forEach(e=>{
+      if(!e || !e.venueId || !e.date) return;
+      if(!state.venues[e.venueId]) return;
+      if(!nested[e.venueId]) nested[e.venueId] = {};
+      const roundIds = e.rounds || e.categoryIds || [];
+      const catNames = roundIds.map(id=>(state.themes||{})[id]).filter(Boolean).map(c=>c.name);
+      nested[e.venueId][e.date] = {
+        themeId: roundIds[0]||null,
+        themeName: catNames.join(' + '),
+        status: 'planned',
+        note: e.notes||'',
+        host: e.host||null,
+        _bingoEntryId: e.id,
+        _bingoRounds: roundIds
+      };
+    });
+    state.gigs = nested;
+  } else {
+    const filtered={};
+    Object.entries(raw).forEach(([venueId,byDate])=>{ if(state.venues[venueId])filtered[venueId]=byDate; });
+    state.gigs = filtered;
+  }
+  applyCheckoutCancellations();
+  onDataChange();
+}
 function attachModeListeners(){
   startHqGigMirror();
   detachModeListeners();
@@ -1583,7 +1615,7 @@ function attachModeListeners(){
     const filtered={};
     Object.entries(raw).forEach(([id,v])=>{ if(locationMatches(v.locationId))filtered[id]=v; });
     state.venues = filtered;
-    onDataChange();
+    rebuildGigsState();
   }, onListenerError('venues'));
   modeListenerRefs.push(venuesRef);
 
@@ -1596,41 +1628,14 @@ function attachModeListeners(){
   libraryRef.on('value', snap=>{
     libraryRaw = snap.val()||{};
     rebuildThemesState();
+    if(plannerMode==='bingo') rebuildGigsState();
   }, onListenerError('theme/category library'));
   modeListenerRefs.push(libraryRef);
 
   const gigsRef = db.ref(p.gigs);
   gigsRef.on('value', snap=>{
-    const raw = snap.val()||{};
-    if(plannerMode==='bingo'){
-      // Flat {entryId:{id,date,venueId,rounds,notes}} -> nested {venueId:{dateKey:gigObj}},
-      // matching Trivia's shape so every existing calendar/warning/history
-      // function keeps working exactly as written, for both modes.
-      const nested = {};
-      Object.values(raw).forEach(e=>{
-        if(!e || !e.venueId || !e.date) return;
-        if(!state.venues[e.venueId]) return; // venue filtered out by location
-        if(!nested[e.venueId]) nested[e.venueId] = {};
-        const roundIds = e.rounds || e.categoryIds || [];
-        const catNames = roundIds.map(id=>(state.themes||{})[id]).filter(Boolean).map(c=>c.name);
-        nested[e.venueId][e.date] = {
-          themeId: roundIds[0]||null,
-          themeName: catNames.join(' + '),
-          status: 'planned',
-          note: e.notes||'',
-          host: e.host||null,
-          _bingoEntryId: e.id,
-          _bingoRounds: roundIds
-        };
-      });
-      state.gigs = nested;
-    } else {
-      const filtered={};
-      Object.entries(raw).forEach(([venueId,byDate])=>{ if(state.venues[venueId])filtered[venueId]=byDate; });
-      state.gigs = filtered;
-    }
-    applyCheckoutCancellations();
-    onDataChange();
+    gigsRaw = snap.val()||{};
+    rebuildGigsState();
     clearTimeout(_hqMirrorTimer);
     _hqMirrorTimer=setTimeout(()=>mirrorHqGigsToPlanner().catch(()=>{}),1500);
   }, onListenerError('gigs/schedule'));
@@ -4204,15 +4209,15 @@ let likedDraft = new Set();
 let randStartKey = '';
 function renderBingoTools(){
   const html = (()=>{
-    if(plannerMode!=='bingo') return '';
+    if(plannerMode!=='bingo' && plannerMode!=='trivia') return '';
     const v = state.venues[currentVenueDetailId]; if(!v) return '';
-    const n = (v.likedCategoryIds||[]).filter(c=>state.themes[c]).length;
+    const n = likedPoolFor(v).length;
     return `<div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin:0.6rem 0;padding:0.6rem;border:1px solid var(--border2);border-radius:10px;">
-      <span style="font-size:12px;color:var(--text3);margin-right:0.3rem;">🎲 Bingo categories</span>
+      <span style="font-size:12px;color:var(--text3);margin-right:0.3rem;">🎲 ${plannerMode==='bingo'?'Bingo':'Trivia'} categories</span>
       <button class="btn btn-ghost btn-sm" onclick="openLikedCats()">♥ Liked categories (${n})</button>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);">From
         <input type="date" class="form-input" value="${randStartKey||toKey(new Date())}" min="${toKey(new Date())}" onchange="randStartKey=this.value" style="width:auto;padding:4px 8px;font-size:12px;"></label>
-      <button class="btn btn-primary btn-sm" onclick="randomizeBingo(false)" title="Fills every empty bingo night in the 3 months starting on that date">Randomize 3 months</button>
+      <button class="btn btn-primary btn-sm" onclick="randomizeBingo(false)" title="Fills every empty night in the 3 months starting on that date">Randomize 3 months</button>
       <button class="btn btn-ghost btn-sm" onclick="randomizeBingo(true)" title="Overwrites every night in the 3 months starting on that date using the current liked list">Re-randomize</button>
     </div>`;
   })();
@@ -4220,7 +4225,7 @@ function renderBingoTools(){
 }
 function openLikedCats(){
   const v = state.venues[currentVenueDetailId]; if(!v) return;
-  likedDraft = new Set((v.likedCategoryIds||[]).filter(c=>state.themes[c]));
+  likedDraft = new Set(likedPoolFor(v));
   document.getElementById('bingo-liked-title').textContent = (v.name||'Venue')+' — liked categories';
   document.getElementById('bingo-liked-search').value = '';
   renderLikedCats();
@@ -4228,7 +4233,7 @@ function openLikedCats(){
 }
 function likedShownIds(){
   const q = document.getElementById('bingo-liked-search').value.trim().toLowerCase();
-  return Object.entries(state.themes||{}).filter(([id,t])=>!q||nameOrAltHas(t,q)).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'')).map(([id])=>id);
+  return Object.entries(state.themes||{}).filter(([id,t])=>(plannerMode!=='trivia'||t.tier!=='karaoke')&&(!q||nameOrAltHas(t,q))).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'')).map(([id])=>id);
 }
 function renderLikedCats(){
   const ids = likedShownIds();
@@ -4241,7 +4246,7 @@ function likedCatsBulk(on){ likedShownIds().forEach(id=>{ if(on) likedDraft.add(
 function saveLikedCats(){
   const id = currentVenueDetailId; if(!id) return;
   const arr = [...likedDraft];
-  db.ref(MODE_PATHS.bingo.venues+'/'+id+'/likedCategoryIds').set(arr.length?arr:null).then(()=>{
+  db.ref(MODE_PATHS[plannerMode].venues+'/'+id+'/likedCategoryIds').set(arr.length?arr:null).then(()=>{
     toast(arr.length+' liked categor'+(arr.length===1?'y':'ies')+' saved.');
     closeModal('bingo-liked-overlay');
     renderBingoTools();
@@ -4257,7 +4262,7 @@ function bingoPickPair(pool, assigned, dk){
   shuffled.sort((a,b)=>(last[a]||'').localeCompare(last[b]||''));
   return shuffled.slice(0,2);
 }
-function likedPoolFor(v){ return (v.likedCategoryIds||[]).filter(c=>state.themes[c]); }
+function likedPoolFor(v){ return (v.likedCategoryIds||[]).filter(c=>state.themes[c]&&!(plannerMode==='trivia'&&state.themes[c].tier==='karaoke')); }
 function randomizeBingoModal(){
   const venueId = document.getElementById('gig-venue').value;
   const dk = document.getElementById('gig-date').value;
@@ -4272,6 +4277,7 @@ function randomizeBingoModal(){
   const st = document.getElementById('gig-status'); if(st.value==='unplanned') st.value='planned';
 }
 async function randomizeBingo(overwrite){
+  if(plannerMode==='trivia') return randomizeTrivia(overwrite);
   if(plannerMode!=='bingo') return;
   const id = currentVenueDetailId, v = state.venues[id]; if(!v) return;
   const pool = likedPoolFor(v);
@@ -4304,6 +4310,39 @@ async function randomizeBingo(overwrite){
   });
   await db.ref().update(updates);
   toast(`Planned ${todo.length} night${todo.length===1?'':'s'}, ${fmtMDY(toKey(today))} – ${fmtMDY(toKey(end))}.`+(pool.length<2?' (Only 1 liked category — round 2 left empty.)':''));
+}
+async function randomizeTrivia(overwrite){
+  const id = currentVenueDetailId, v = state.venues[id]; if(!v) return;
+  const pool = likedPoolFor(v);
+  if(!pool.length){ toast('Pick the categories this venue likes first.', true); openLikedCats(); return; }
+  const todayD = new Date(); todayD.setHours(0,0,0,0);
+  let start = randStartKey ? fromKey(randStartKey) : todayD;
+  if(start < todayD) start = todayD;
+  const end = new Date(start); end.setMonth(end.getMonth()+3);
+  const dates = venueDatesBetween(v, start, end);
+  if(!dates.length) return toast('No trivia nights found for this venue — set its day (and frequency) in Edit Venue.', true);
+  const gigs = state.gigs[id]||{};
+  const assigned = {};
+  Object.entries(gigs).forEach(([dk,g])=>{ if(g.themeId && g.status!=='cancelled') assigned[dk]=[g.themeId]; });
+  let todo = dates.filter(dk=>!(gigs[dk]&&gigs[dk].status==='cancelled'));
+  if(overwrite){
+    if(!confirm(`Re-randomize all ${todo.length} trivia nights at ${v.name} from ${fmtMDY(toKey(start))} through ${fmtMDY(toKey(end))}? This replaces the categories planned there now.`)) return;
+    todo.forEach(dk=>{ delete assigned[dk]; });
+  } else {
+    todo = todo.filter(dk=>!(gigs[dk]&&(gigs[dk].themeId||gigs[dk].themeName)));
+    if(!todo.length) return toast('Every night from '+fmtMDY(toKey(start))+' on is already planned. Use Re-randomize to redo them.');
+  }
+  setSyncStatus('syncing');
+  const updates = {};
+  todo.sort().forEach(dk=>{
+    const pick = bingoPickPair(pool, assigned, dk).slice(0,1);
+    if(!pick.length) return;
+    assigned[dk] = pick;
+    const ex = gigs[dk]||{};
+    updates[MODE_PATHS.trivia.gigs+'/'+id+'/'+dk] = Object.assign({}, ex, {themeId:pick[0], themeName:state.themes[pick[0]].name, status:'planned', note:ex.note||'', host:ex.host||null, locationId:selectedLocationId});
+  });
+  await db.ref().update(updates);
+  toast(`Planned ${Object.keys(updates).length} night${Object.keys(updates).length===1?'':'s'}, ${fmtMDY(toKey(start))} – ${fmtMDY(toKey(end))}.`);
 }
 function saveBingoGig(venueId,dateKey,status,note,typedName1,typedName2,host){
   const cancelled = status==='cancelled';
