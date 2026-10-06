@@ -174,10 +174,14 @@ a{color:inherit}
 /* VENUE DETAIL */
 .vd-toolbar{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
 .vd-view-toggle{display:flex;gap:4px}
-.tl-row{display:grid;grid-template-columns:90px 1fr 1fr 110px;gap:8px;align-items:center;padding:7px 10px;
+.tl-row{display:grid;grid-template-columns:112px 1fr 1fr 110px;gap:8px;align-items:center;padding:7px 10px;
   background:var(--surface3);border-radius:var(--radius);margin-bottom:5px}
 .tl-row.tl-today{border:1px solid var(--gold-glow2)}
 .tl-row.tl-past{opacity:.6}
+.tl-grip{cursor:grab;color:var(--text3);font-size:14px;margin-right:6px;user-select:none;letter-spacing:0}
+.tl-grip:hover{color:var(--gold)}
+.tl-row.tl-dragging{opacity:.4}
+.tl-row.tl-drop{outline:2px dashed var(--gold);outline-offset:-2px}
 .tl-date{font-family:var(--cinzel);font-size:10px;letter-spacing:.04em;color:var(--text3)}
 .tl-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 9px;
   color:var(--text);font-size:12.5px;font-family:var(--font)}
@@ -2375,8 +2379,8 @@ function scheduleRowHtml(dk, gig){
     ph1 = 'Bingo category 1'; ph2 = 'Bingo category 2';
   }
   const statusVal = gig.status==='cancelled' ? 'cancelled' : (isBingo ? (val1||val2) : (gig.themeName||gig.round3Name)) ? 'planned' : 'unplanned';
-  return `<div class="tl-row ${isPast?'tl-past':''} ${isToday?'tl-today':''}" data-dk="${dk}">
-    <div class="tl-date">${fmtDisplay(fromKey(dk))}</div>
+  return `<div class="tl-row ${isPast?'tl-past':''} ${isToday?'tl-today':''}" data-dk="${dk}" data-vid="${currentVenueDetailId||''}">
+    <div class="tl-date"><span class="tl-grip" draggable="true" title="Drag these categories onto another day">⠿</span>${fmtDisplay(fromKey(dk))}</div>
     <input class="tl-input" value="${escapeHtml(val1)}" placeholder="${ph1}"
       onfocus="showInlineSuggest(this,'${dk}','trivia')" oninput="showInlineSuggest(this,'${dk}','trivia')"
       onchange="vdInlineSave(this.closest('.tl-row'), '${dk}')">
@@ -2478,7 +2482,7 @@ function scrollBoxToDate(box, dk){
 }
 
 function vdInlineSaveBingo(row, dk){
-  const id = currentVenueDetailId;
+  const id = row.dataset.vid || currentVenueDetailId;
   const inputs = row.querySelectorAll('.tl-input');
   const n1 = (inputs[0].value||'').trim(), n2 = (inputs[1].value||'').trim();
   const status = row.querySelector('.tl-select').value;
@@ -2502,7 +2506,7 @@ function vdInlineSaveBingo(row, dk){
 }
 function vdInlineSave(row, dk){
   if(plannerMode==='bingo') return vdInlineSaveBingo(row, dk);
-  const id = currentVenueDetailId;
+  const id = row.dataset.vid || currentVenueDetailId;
   const inputs = row.querySelectorAll('.tl-input');
   const triviaName = (inputs[0].value||'').trim();
   const musicName = (inputs[1].value||'').trim();
@@ -2538,6 +2542,75 @@ function vdInlineSave(row, dk){
     if(round3Id) bumpThemeUsage(round3Id, dk);
     flashSaved(row);
   })();
+}
+// ── Drag a day's categories onto another day (dates stay in order; only the categories move) ──
+let dragDay = null;
+document.addEventListener('dragstart', e=>{
+  const g = e.target.closest && e.target.closest('.tl-grip'); if(!g) return;
+  const row = g.closest('.tl-row'); if(!row) return;
+  dragDay = { vid: row.dataset.vid, dk: row.dataset.dk };
+  e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragDay.vid+'|'+dragDay.dk);
+  row.classList.add('tl-dragging');
+});
+document.addEventListener('dragover', e=>{
+  if(!dragDay) return;
+  const row = e.target.closest && e.target.closest('.tl-row');
+  if(!row || row.dataset.vid!==dragDay.vid) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.tl-row.tl-drop').forEach(r=>{ if(r!==row) r.classList.remove('tl-drop'); });
+  if(row.dataset.dk!==dragDay.dk) row.classList.add('tl-drop');
+});
+document.addEventListener('drop', e=>{
+  if(!dragDay) return;
+  const row = e.target.closest && e.target.closest('.tl-row');
+  const src = dragDay; endDrag();
+  if(!row || row.dataset.vid!==src.vid || row.dataset.dk===src.dk) return;
+  e.preventDefault();
+  moveDayCategories(src.vid, src.dk, row.dataset.dk);
+});
+document.addEventListener('dragend', endDrag);
+function endDrag(){ dragDay = null; document.querySelectorAll('.tl-dragging,.tl-drop').forEach(r=>r.classList.remove('tl-dragging','tl-drop')); }
+async function moveDayCategories(vid, srcDk, dstDk){
+  const gigs = state.gigs[vid]||{};
+  const s = gigs[srcDk]||{}, t = gigs[dstDk]||{};
+  const base = MODE_PATHS[plannerMode].gigs;
+  const updates = {};
+  if(plannerMode==='bingo'){
+    const sR = s._bingoRounds||[], tR = t._bingoRounds||[];
+    if(!sR.length) return toast('That day has no categories to move.', true);
+    const mk = (dk, ex, rounds)=>{
+      const eid = ex._bingoEntryId || ('sched_'+Date.now()+'_'+Math.random().toString(36).slice(2,5));
+      return [base+'/'+eid, {id:eid, date:dk, venueId:vid, rounds, categoryIds:rounds, notes:ex.note||'', host:ex.host||null, locationId:selectedLocationId}];
+    };
+    const [dPath, dRec] = mk(dstDk, t, sR); updates[dPath] = dRec;
+    if(tR.length){ const [sPath, sRec] = mk(srcDk, s, tR); updates[sPath] = sRec; }
+    else if(s.host || s.note){ const [sPath, sRec] = mk(srcDk, s, []); updates[sPath] = sRec; }
+    else if(s._bingoEntryId) updates[base+'/'+s._bingoEntryId] = null;
+  } else {
+    const KEYS = ['themeId','themeName','round3ThemeId','round3Name','extraCategories'];
+    const has = g=>!!(g.themeName||g.round3Name||(g.extraCategories&&g.extraCategories.length));
+    const cats = g=>{ const o={}; KEYS.forEach(k=>{ o[k] = g[k]===undefined ? null : g[k]; }); return o; };
+    if(!has(s)) return toast('That day has no categories to move.', true);
+    if(t.status==='cancelled') return toast('That day is cancelled — un-cancel it first.', true);
+    const strip = o=>{ Object.keys(o).forEach(k=>{ if(o[k]===undefined) delete o[k]; }); return o; };
+    updates[base+'/'+vid+'/'+dstDk] = strip(Object.assign({}, t, cats(s), {status:'planned', note:t.note||'', host:t.host||null, locationId:t.locationId||selectedLocationId}));
+    if(has(t)) updates[base+'/'+vid+'/'+srcDk] = strip(Object.assign({}, s, cats(t), {status:'planned'}));
+    else if(s.host || s.note) updates[base+'/'+vid+'/'+srcDk] = strip(Object.assign({}, s, cats({}), {status:'planned'}));
+    else updates[base+'/'+vid+'/'+srcDk] = null;
+  }
+  setSyncStatus('syncing');
+  try{
+    await db.ref().update(updates);
+    toast(has2(t)+' '+fmtMDY(srcDk)+' ⇄ '+fmtMDY(dstDk));
+  }catch(err){ toast('Could not move: '+(err.message||err), true); return; }
+  // refresh whichever schedule list is showing, keeping its scroll position
+  setTimeout(()=>{
+    const box = document.getElementById('gig-schedule-preview');
+    if(document.getElementById('gig-modal-overlay').classList.contains('open') && box){ const st = box.scrollTop; renderGigSchedulePreview(); setTimeout(()=>{ box.scrollTop = st; },150); }
+    if(document.getElementById('panel-venue-detail').classList.contains('active')) renderVdTimeline();
+    if(document.getElementById('quick-schedule-overlay').classList.contains('open')) renderQuickScheduleRows();
+  }, 300);
+  function has2(g){ return (g.themeName||g.round3Name||(g._bingoRounds&&g._bingoRounds.length)) ? 'Swapped' : 'Moved'; }
 }
 function flashSaved(row){
   setSyncStatus('syncing');
