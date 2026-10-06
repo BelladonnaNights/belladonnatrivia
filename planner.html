@@ -4012,6 +4012,7 @@ function saveGig(){
 // need an image, so those still get created in the Bingo app's own admin.
 // ── Bingo: liked categories + randomizer ──
 let likedDraft = new Set();
+let randStartKey = '';
 function renderBingoTools(){
   const html = (()=>{
     if(plannerMode!=='bingo') return '';
@@ -4020,8 +4021,10 @@ function renderBingoTools(){
     return `<div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin:0.6rem 0;padding:0.6rem;border:1px solid var(--border2);border-radius:10px;">
       <span style="font-size:12px;color:var(--text3);margin-right:0.3rem;">🎲 Bingo categories</span>
       <button class="btn btn-ghost btn-sm" onclick="openLikedCats()">♥ Liked categories (${n})</button>
-      <button class="btn btn-primary btn-sm" onclick="randomizeBingo(false)" title="Fills every empty bingo night in the next 3 months">Randomize next 3 months</button>
-      <button class="btn btn-ghost btn-sm" onclick="randomizeBingo(true)" title="Overwrites the next 3 months using the current liked list">Re-randomize</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);">From
+        <input type="date" class="form-input" value="${randStartKey||toKey(new Date())}" min="${toKey(new Date())}" onchange="randStartKey=this.value" style="width:auto;padding:4px 8px;font-size:12px;"></label>
+      <button class="btn btn-primary btn-sm" onclick="randomizeBingo(false)" title="Fills every empty bingo night in the 3 months starting on that date">Randomize 3 months</button>
+      <button class="btn btn-ghost btn-sm" onclick="randomizeBingo(true)" title="Overwrites every night in the 3 months starting on that date using the current liked list">Re-randomize</button>
     </div>`;
   })();
   ['vd-bingo-tools','qs-bingo-tools'].forEach(i=>{ const el=document.getElementById(i); if(el) el.innerHTML = html; });
@@ -4084,7 +4087,9 @@ async function randomizeBingo(overwrite){
   const id = currentVenueDetailId, v = state.venues[id]; if(!v) return;
   const pool = likedPoolFor(v);
   if(!pool.length){ toast('Pick the categories this venue likes first.', true); openLikedCats(); return; }
-  const today = new Date(); today.setHours(0,0,0,0);
+  const todayD = new Date(); todayD.setHours(0,0,0,0);
+  let today = randStartKey ? fromKey(randStartKey) : todayD;
+  if(today < todayD) today = todayD;
   const end = new Date(today); end.setMonth(end.getMonth()+3);
   const dates = venueDatesBetween(v, today, end);
   if(!dates.length) return toast('No bingo nights found for this venue — set its day (and frequency) in Edit Venue.', true);
@@ -4093,11 +4098,11 @@ async function randomizeBingo(overwrite){
   Object.entries(gigs).forEach(([dk,g])=>{ if(g._bingoRounds&&g._bingoRounds.length) assigned[dk]=g._bingoRounds.slice(); });
   let todo;
   if(overwrite){
-    if(!confirm(`Re-randomize all ${dates.length} bingo nights at ${v.name} through ${fmtMDY(toKey(end))}? This replaces what's planned there now.`)) return;
+    if(!confirm(`Re-randomize all ${dates.length} bingo nights at ${v.name} from ${fmtMDY(toKey(today))} through ${fmtMDY(toKey(end))}? This replaces what's planned there now.`)) return;
     todo = dates; dates.forEach(dk=>{ delete assigned[dk]; });
   } else {
     todo = dates.filter(dk=>!assigned[dk]);
-    if(!todo.length) return toast('Every night in the next 3 months is already planned. Use Re-randomize to redo them.');
+    if(!todo.length) return toast('Every night from '+fmtMDY(toKey(today))+' on is already planned. Use Re-randomize to redo them.');
   }
   setSyncStatus('syncing');
   const updates = {};
@@ -4109,7 +4114,7 @@ async function randomizeBingo(overwrite){
     updates[MODE_PATHS.bingo.gigs+'/'+eid] = {id:eid, date:dk, venueId:id, rounds:pick, categoryIds:pick, notes:ex.note||'', host:ex.host||null, locationId:selectedLocationId};
   });
   await db.ref().update(updates);
-  toast(`Planned ${todo.length} night${todo.length===1?'':'s'} through ${fmtMDY(toKey(end))}.`+(pool.length<2?' (Only 1 liked category — round 2 left empty.)':''));
+  toast(`Planned ${todo.length} night${todo.length===1?'':'s'}, ${fmtMDY(toKey(today))} – ${fmtMDY(toKey(end))}.`+(pool.length<2?' (Only 1 liked category — round 2 left empty.)':''));
 }
 function saveBingoGig(venueId,dateKey,status,note,typedName1,typedName2,host){
   const cancelled = status==='cancelled';
