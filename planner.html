@@ -1299,7 +1299,7 @@ function libRecord(source, id, c){
   const usage = c.plannerUsage || {};
   const tier = source==='trivia' ? (c.plannerTier||null)
              : source==='bingo'  ? (c.plannerTier||'music-bingo')
-             : vmTierFor(c);
+             : (vmTierFor(c) || c.plannerTier || null);
   return {
     key: source+':'+id, source, id,
     name: c.name || c.title || '',
@@ -3355,13 +3355,13 @@ function openThemeModal(key){
   const ownerLabel = editingThemeSource==='bingo' ? ' (Bingo library)' : editingThemeSource==='vm' ? ' (Venue Menu library)' : '';
   document.getElementById('theme-modal-title').textContent = (key ? 'Edit Theme' : 'Add Theme') + ownerLabel;
   document.getElementById('t-name').value = rec.name||'';
-  document.getElementById('t-name').disabled = (editingThemeSource!=='trivia');
+  document.getElementById('t-name').disabled = false;
   document.getElementById('t-alt').value = rec.altName||'';
   document.getElementById('t-alt').disabled = (editingThemeSource!=='trivia');
   document.getElementById('t-tier').value = normTier(rec.tier)||'';
   // A Venue Menu record's type (Karaoke / Sing-Along / Mini Games…) is set by
   // its own Type field in the Venue Menu, so the tier selector is read-only there.
-  document.getElementById('t-tier').disabled = (editingThemeSource==='vm');
+  document.getElementById('t-tier').disabled = (editingThemeSource==='bingo');
   document.getElementById('t-times-used').value = rec.timesUsed||0;
   document.getElementById('t-last-used').value = rec.lastUsedDate||'';
   document.getElementById('t-karaoke-songs').value = (rec.karaokeSongs||[]).join('\n');
@@ -3452,11 +3452,10 @@ function saveTheme(){
   // Bingo RTDB, or Venue Menu Firestore) — one record, one id, no copies.
   // Only Planner-owned fields are written; content fields are never touched.
   const source = editingThemeSource;
-  const name = (source==='trivia') ? document.getElementById('t-name').value.trim()
-    : ((getLibRecord(editingThemeKey)||{}).name || document.getElementById('t-name').value.trim());
+  const name = document.getElementById('t-name').value.trim();
   if(!name) return toast('Theme needs a name.', true);
   const isNew = !editingThemeId;
-  const tier = source==='vm' ? (vmTierFor(vmPairLibraryRaw[editingThemeId]||{})||'') : document.getElementById('t-tier').value;
+  const tier = document.getElementById('t-tier').value;
   const libPath = MODE_PATHS.trivia.library;
   const themeId = editingThemeId || db.ref(libPath).push().key;
   const existing = isNew ? {} : (getLibRecord(editingThemeKey) || {});
@@ -3493,12 +3492,16 @@ function saveTheme(){
       ['name','altName','tags','plannerTier','pairsWith','karaokeSongs','plannerUsage'].forEach(f=>{ rtdbUpdates[libPath+'/'+themeId+'/'+f] = commonFields[f]; });
     }
   } else if(source==='bingo'){
+    rtdbUpdates[bPath+'/'+themeId+'/title'] = name;
     rtdbUpdates[bPath+'/'+themeId+'/tags'] = commonFields.tags;
     rtdbUpdates[bPath+'/'+themeId+'/plannerTier'] = commonFields.plannerTier;
     rtdbUpdates[bPath+'/'+themeId+'/pairsWith'] = commonFields.pairsWith;
     rtdbUpdates[bPath+'/'+themeId+'/plannerUsage'] = commonFields.plannerUsage;
   } else {
-    fsUpdates.push({ id: themeId, data: { tags: editingThemeTags.join(', '), pairsWith: commonFields.pairsWith || [] } });
+    const vmType = {karaoke:'Karaoke','sing-along':'Sing-Along','mini-games':'Mini Games'}[tier];
+    const vmData = { name, tags: editingThemeTags.join(', '), pairsWith: commonFields.pairsWith || [], plannerTier: tier || null, updatedAt: Date.now() };
+    if(vmType) vmData.type = vmType;
+    fsUpdates.push({ id: themeId, data: vmData });
   }
 
   // Reciprocal pairing — both sides of a Pairs With link stay in sync, writing
@@ -3523,6 +3526,13 @@ function saveTheme(){
   // Theme Night <-> Venue Menu Night link and karaoke mirror are Trivia-record features.
   Promise.all(fsUpdates.map(u => dbFs.collection('venueMenuCategories').doc(u.id).set(u.data, { merge: true })))
     .then(() => db.ref().update(rtdbUpdates))
+    .then(()=>{ // changing a Trivia theme's type also files its Vault sheet under that type (Feature, Music, Mini Games)
+      if(source!=='trivia' || isNew) return;
+      const want = tier==='feature-trivia' ? 'Feature' : tier==='coordinating-music' ? 'Music' : tier==='mini-games' ? 'Mini Games' : tier==='evergreen-topic' ? 'Evergreen' : null;
+      if(!want) return;
+      return db.ref(libPath+'/'+themeId+'/vaultCatId').once('value').then(sn=>{ const vid=sn.val(); if(vid) return dbFs.collection('triviaCategories').doc(vid).update({ type: want, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }); }).catch(()=>{});
+    })
+    .then(()=>{ if(!isNew && existing.name && existing.name!==name) return propagateThemeRename(source, themeId, name); })
     .then(()=>{
       if(source!=='trivia') return;
       if(tier==='theme-night') return syncOrCreateLinkedNight(themeId, existing, commonFields);
@@ -3532,18 +3542,42 @@ function saveTheme(){
     .then(()=>{ toast('Theme saved.'); closeModal('theme-modal-overlay'); })
     .catch(err=>{ console.error('Save theme failed:', err); toast('Save failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
 }
+// ONE name everywhere: a category's Trivia/Planner record, its Question Vault sheet and its Venue Menu
+// entry are linked by ID (vaultCatId / vmCatId / triviaCatId). Renaming any of them renames all of them,
+// otherwise the Trivia app can no longer find the questions (it looks them up through the link / the name).
+async function propagateThemeRename(source, id, name){
+  try{
+    const libPath = MODE_PATHS.trivia.library;
+    let triviaId = null, vaultId = null, vmId = null;
+    if(source==='trivia'){ triviaId = id; }
+    else if(source==='vm'){ vmId = id; const d = await dbFs.collection('venueMenuCategories').doc(id).get(); triviaId = (d.exists && d.data().triviaCatId) || null; }
+    else return;
+    if(triviaId){
+      const t = (await db.ref(libPath+'/'+triviaId).once('value')).val() || {};
+      vaultId = t.vaultCatId || null; vmId = vmId || t.vmCatId || null;
+      if(!vmId){ const hit = Object.entries(vmAllRaw||{}).find(([k,v])=>v && v.triviaCatId===triviaId); if(hit) vmId = hit[0]; }
+      if(source!=='trivia') await db.ref(libPath+'/'+triviaId+'/name').set(name);
+    }
+    const jobs = [];
+    if(vaultId) jobs.push(dbFs.collection('triviaCategories').doc(vaultId).update({ name, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }));
+    if(vmId && source!=='vm') jobs.push(dbFs.collection('venueMenuCategories').doc(vmId).update({ name }));
+    await Promise.all(jobs);
+  }catch(e){ console.warn('Rename could not reach every linked record:', e && e.message); toast('Renamed here, but a linked record (Questions / Venue Menu) could not be updated: '+(e.code||e.message), true); }
+}
 // A theme created here also gets its Question Vault sheet and Venue Menu entry (linked by ID),
 // so one creation shows up in every app. Never blocks the save if either write is refused.
 async function mirrorNewThemeEverywhere(themeId, name, tier){
   try{
     const nm = s=>String(s||'').toLowerCase().replace(/\s+/g,' ').trim();
     const vs = await dbFs.collection('triviaCategories').get();
-    let vaultId = null; vs.forEach(d=>{ const c=d.data(); if(!c.archived && nm(c.name)===nm(name)) vaultId=d.id; });
-    if(!vaultId){
-      const ref = await dbFs.collection('triviaCategories').add({ name, type: /feature/.test(tier||'') ? 'Feature' : 'Evergreen', questionCount:0, archived:false, createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    let vaultId = null;
+    const needsVault = !(tier==='featured' || tier==='theme-night');   // Theme Sets / Theme Nights have no questions of their own
+    if(needsVault) vs.forEach(d=>{ const c=d.data(); if(!c.archived && nm(c.name)===nm(name)) vaultId=d.id; });
+    if(needsVault && !vaultId){
+      const ref = await dbFs.collection('triviaCategories').add({ name, type: /feature/.test(tier||'') ? 'Feature' : tier==='coordinating-music' ? 'Music' : tier==='mini-games' ? 'Mini Games' : 'Evergreen', questionCount:0, archived:false, createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
       vaultId = ref.id;
     }
-    await db.ref(MODE_PATHS.trivia.library+'/'+themeId+'/vaultCatId').set(vaultId);
+    if(vaultId) await db.ref(MODE_PATHS.trivia.library+'/'+themeId+'/vaultCatId').set(vaultId);
     const vm = await dbFs.collection('venueMenuCategories').add({ name, type:'Trivia', tags:'', image:'', plannerTier:null, linked:true, triviaCatId:themeId, createdAt:Date.now(), updatedAt:Date.now() });
     await db.ref(MODE_PATHS.trivia.library+'/'+themeId+'/vmCatId').set(vm.id);
   }catch(e){ console.warn('Could not mirror the new theme into Questions / Venue Menu:', e && e.message); }
