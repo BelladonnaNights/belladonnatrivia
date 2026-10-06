@@ -438,6 +438,7 @@ a{color:inherit}
       <button class="btn btn-ghost btn-sm" onclick="vdLoadEarlier()">↑ Load earlier</button>
       <button class="btn btn-ghost btn-sm" onclick="vdLoadLater()">Load later ↓</button>
     </div>
+    <div id="vd-bingo-tools"></div>
     <div id="vd-no-create-slot"></div>
 
     <div class="bulk-panel" id="bulk-panel">
@@ -592,6 +593,7 @@ a{color:inherit}
           <div class="theme-suggest" id="bingo-cat2-suggest"></div>
         </div>
       </div>
+      <button class="btn btn-ghost btn-sm" type="button" style="margin-top:0.5rem" onclick="randomizeBingoModal()">🎲 Pick from this venue's liked categories</button>
     </div>
 
     <div id="gig-no-create-slot"></div>
@@ -642,6 +644,16 @@ a{color:inherit}
       <div><label class="form-label">Time</label><input type="text" class="form-input" id="v-time" placeholder="7:00pm"></div>
     </div>
 
+    <div class="form-row2" id="v-cadence-row">
+      <div><label class="form-label">Frequency</label>
+        <select class="form-select" id="v-cadence" onchange="syncCadenceUI()">
+          <option value="weekly">Weekly</option><option value="biweekly">Bi-weekly (every other week)</option>
+          <option value="monthly">Monthly (same weekday each month)</option><option value="single">Single (one date only)</option>
+        </select></div>
+      <div id="v-anchor-wrap" style="display:none;"><label class="form-label" id="v-anchor-label">Date</label>
+        <input type="date" class="form-input" id="v-anchor"></div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin:-0.2rem 0 0.5rem;display:none;" id="v-anchor-hint"></div>
     <div class="form-row2">
       <div><label class="form-label">Pay Amount</label><input type="text" class="form-input" id="v-pay-amount" placeholder="175"></div>
       <div><label class="form-label">Pay Method</label>
@@ -777,9 +789,28 @@ a{color:inherit}
   </div>
 </div>
 
+<div class="modal-overlay" id="bingo-liked-overlay">
+  <div class="modal wide">
+    <h3 id="bingo-liked-title">Liked categories</h3>
+    <div class="section-sub" style="margin-bottom:0.6rem">Check the Bingo categories this venue likes. Randomizing only picks from these.</div>
+    <input type="text" class="form-input" id="bingo-liked-search" placeholder="Search categories…" oninput="renderLikedCats()">
+    <div style="display:flex;gap:0.5rem;margin:0.5rem 0;align-items:center;">
+      <button class="btn btn-ghost btn-sm" type="button" onclick="likedCatsBulk(true)">Select all shown</button>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="likedCatsBulk(false)">Clear shown</button>
+      <span style="flex:1"></span><span id="bingo-liked-count" style="font-size:12px;color:var(--text3)"></span>
+    </div>
+    <div id="bingo-liked-list" style="max-height:340px;overflow:auto;border:1px solid var(--border2);border-radius:8px;padding:0.4rem;"></div>
+    <div class="modal-actions">
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('bingo-liked-overlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLikedCats()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="quick-schedule-overlay">
   <div class="modal wide">
-    <h3 id="qs-venue-name">Schedule</h3>
+    <h3 id="qs-venue-name">Plan</h3>
     <div class="section-sub" id="qs-venue-meta" style="margin-bottom:1rem"></div>
     <div class="form-row2" style="align-items:end">
       <div><label class="form-label">Weeks to show</label>
@@ -788,6 +819,7 @@ a{color:inherit}
     </div>
     <div class="section-sub" style="margin-bottom:8px">Type a category (autocompletes against your library) or leave blank for unplanned. Saves as you go.</div>
     <div id="qs-no-create-slot"></div>
+    <div id="qs-bingo-tools"></div>
     <div class="tl-container" style="max-height:340px" id="qs-rows"></div>
 
     <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border2)">
@@ -1376,7 +1408,7 @@ async function mirrorHqGigsToPlanner(){
     if(hit){vid=hit[0];}
     else{
       vid=db.ref(pp.v).push().key;
-      const vrec={name:g.venue,groupName:g.venue,day:dayAbbr[dow],time:'',pay:{amount:null,method:''},status:(g.seriesId&&k!=='events')?'active':'finished',source:'hq',cadence:'weekly',notes:'Created from HQ',host:(g.seriesId&&k!=='events')?(host||''):'',locationId:g.locationId||null,createdAt:Date.now()};
+      const vrec={name:g.venue,groupName:g.venue,day:dayAbbr[dow],time:'',pay:{amount:null,method:''},status:(g.seriesId&&k!=='events')?'active':'finished',source:'hq',cadence:g.cadence||'weekly',cadenceAnchor:(g.cadence&&g.cadence!=='weekly')?g.date:'',notes:'Created from HQ',host:(g.seriesId&&k!=='events')?(host||''):'',locationId:g.locationId||null,createdAt:Date.now()};
       Object.assign(vrec,evExtra);
       await db.ref(pp.v+'/'+vid).set(vrec); venues[vid]=vrec;
     }
@@ -1489,6 +1521,37 @@ function toKey(d){ const yy=d.getFullYear(),mm=String(d.getMonth()+1).padStart(2
 function toKeyUTC(d){ const yy=d.getUTCFullYear(),mm=String(d.getUTCMonth()+1).padStart(2,'0'),dd=String(d.getUTCDate()).padStart(2,'0'); return `${yy}-${mm}-${dd}`; }
 function fromKey(k){ const [y,m,d]=k.split('-').map(Number); return new Date(y,m-1,d); }
 function addDays(d,n){ const nd=new Date(d); nd.setDate(nd.getDate()+n); return nd; }
+// ── Venue frequency: weekly / biweekly / monthly / single ──
+// cadence + cadenceAnchor (a YYYY-MM-DD) live on the venue record. Missing cadence = weekly.
+const CADENCE_LABELS = {weekly:'Weekly', biweekly:'Bi-weekly', monthly:'Monthly', single:'Single'};
+function cadenceTag(v){ const c=(v&&v.cadence)||'weekly'; return c==='weekly'?'':(CADENCE_LABELS[c]||''); }
+function venueRunsOn(v, dk, ignoreStatus){
+  if(!v) return false;
+  const cad = v.cadence||'weekly';
+  const st = v.status||'active';
+  const d = fromKey(dk);
+  if(cad==='single') return !!v.cadenceAnchor && v.cadenceAnchor===dk && (ignoreStatus || st==='active'||st==='seasonal'||st==='one-time');
+  if(!ignoreStatus && !(st==='active'||st==='seasonal')) return false;
+  if(DAY_MAP[v.day]!==d.getDay()) return false;
+  const a = v.cadenceAnchor ? fromKey(v.cadenceAnchor) : null;
+  if(cad==='biweekly' && a){
+    const diff = Math.round((d-a)/86400000);
+    return Math.abs(Math.floor(diff/7))%2===0;
+  }
+  if(cad==='monthly' && a) return Math.ceil(d.getDate()/7)===Math.ceil(a.getDate()/7);
+  return true;
+}
+function venueNextDates(v, fromDate, n){
+  const out=[]; let d=new Date(fromDate); d.setHours(0,0,0,0);
+  if((v.cadence||'weekly')==='single'){ if(v.cadenceAnchor) out.push(v.cadenceAnchor); return out; }
+  for(let i=0;i<1100 && out.length<n;i++){ const dk=toKey(d); if(venueRunsOn(v,dk,true)) out.push(dk); d=addDays(d,1); }
+  return out;
+}
+function venueDatesBetween(v, a, b){
+  const out=[]; let d=new Date(a); d.setHours(0,0,0,0);
+  while(d<=b){ const dk=toKey(d); if(venueRunsOn(v,dk,true)) out.push(dk); d=addDays(d,1); }
+  return out;
+}
 function startOfWeek(d){ const nd=new Date(d); const day=(nd.getDay()+6)%7; nd.setDate(nd.getDate()-day); nd.setHours(0,0,0,0); return nd; }
 function fmtDisplay(d){ return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); }
 function fmtRange(a,b){ return `${a.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${b.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`; }
@@ -1769,11 +1832,11 @@ function renderVenues(){
     const pay = v.pay && v.pay.amount ? `$${v.pay.amount} ${v.pay.method||''}` : '—';
     return `<tr style="cursor:pointer" onclick="openVenueDetail('${id}')">
       <td class="venue-name">${escapeHtml(v.name||'')}</td>
-      <td>${v.day||''} ${v.time||''}</td>
+      <td>${v.day||''} ${v.time||''}${cadenceTag(v)?` <span style="font-size:10px;opacity:.7;border:1px solid currentColor;border-radius:8px;padding:0 5px;">${cadenceTag(v)}</span>`:''}</td>
       <td>${pay}</td>
       <td><span class="badge badge-${v.status||'active'}">${(v.status||'active').replace('-',' ')}</span></td>
       <td>${escapeHtml(v.host||'—')}</td>
-      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openQuickSchedule('${id}')">Schedule</button> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openVenueModal('${id}')">Edit</button></td>
+      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openQuickSchedule('${id}')">Plan</button> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openVenueModal('${id}')">Edit</button></td>
     </tr>`;
   }).join('');
   document.getElementById('venues-empty').style.display = list.length ? 'none' : 'block';
@@ -2170,7 +2233,7 @@ function gigsForDate(dk){
   const out = [];
   Object.entries(state.venues||{}).forEach(([id,v])=>{
     const rec = (state.gigs[id]||{})[dk] || null;
-    const recurs = (v.status==='active' || v.status==='seasonal') && DAY_MAP[v.day]===dow;
+    const recurs = venueRunsOn(v, dk);
     // A real per-date record (e.g. a gig added from HQ on a one-off date, or a
     // fill-in host) always shows, even on a day that isn't the venue's usual night.
     if(!recurs && !rec) return;
@@ -2303,13 +2366,21 @@ function scheduleRowHtml(dk, gig){
   const today = toKey(new Date());
   gig = gig || {};
   const isPast = dk < today, isToday = dk === today;
-  const statusVal = gig.status==='cancelled' ? 'cancelled' : (gig.themeName||gig.round3Name) ? 'planned' : 'unplanned';
+  const isBingo = plannerMode==='bingo';
+  let val1 = gig.themeName||'', val2 = gig.round3Name||'', ph1 = 'Trivia category', ph2 = 'Music category';
+  if(isBingo){
+    const rr = gig._bingoRounds||[];
+    val1 = rr[0] ? ((state.themes[rr[0]]||{}).name||'') : '';
+    val2 = rr[1] ? ((state.themes[rr[1]]||{}).name||'') : '';
+    ph1 = 'Bingo category 1'; ph2 = 'Bingo category 2';
+  }
+  const statusVal = gig.status==='cancelled' ? 'cancelled' : (isBingo ? (val1||val2) : (gig.themeName||gig.round3Name)) ? 'planned' : 'unplanned';
   return `<div class="tl-row ${isPast?'tl-past':''} ${isToday?'tl-today':''}" data-dk="${dk}">
     <div class="tl-date">${fmtDisplay(fromKey(dk))}</div>
-    <input class="tl-input" value="${escapeHtml(gig.themeName||'')}" placeholder="Trivia category"
+    <input class="tl-input" value="${escapeHtml(val1)}" placeholder="${ph1}"
       onfocus="showInlineSuggest(this,'${dk}','trivia')" oninput="showInlineSuggest(this,'${dk}','trivia')"
       onchange="vdInlineSave(this.closest('.tl-row'), '${dk}')">
-    <input class="tl-input" value="${escapeHtml(gig.round3Name||'')}" placeholder="Music category"
+    <input class="tl-input" value="${escapeHtml(val2)}" placeholder="${ph2}"
       onfocus="showInlineSuggest(this,'${dk}','music')" oninput="showInlineSuggest(this,'${dk}','music')"
       onchange="vdInlineSave(this.closest('.tl-row'), '${dk}')">
     <select class="tl-select" onchange="vdInlineSave(this.closest('.tl-row'), '${dk}')">
@@ -2331,8 +2402,10 @@ function showInlineSuggest(inputEl, dk, which){
   const q = inputEl.value.trim().toLowerCase();
   const otherName = otherInput.value.trim();
   const otherTheme = otherName ? Object.values(state.themes||{}).find(t=>(t.name||'').trim().toLowerCase()===otherName.toLowerCase()) : null;
-  const pairIds = otherTheme ? new Set((otherTheme.pairsWith||[]).filter(pid=>state.themes[pid])) : new Set();
-  const scope = otherTheme ? pairScopeFor(otherTheme.tier) : (which==='trivia' ? (t=>t.tier!=='coordinating-music') : (t=>t.tier==='coordinating-music'));
+  const bingoSuggest = plannerMode==='bingo';
+  const likedSet = bingoSuggest ? new Set(((state.venues[currentVenueDetailId]||{}).likedCategoryIds)||[]) : new Set();
+  const pairIds = bingoSuggest ? likedSet : (otherTheme ? new Set((otherTheme.pairsWith||[]).filter(pid=>state.themes[pid])) : new Set());
+  const scope = bingoSuggest ? null : otherTheme ? pairScopeFor(otherTheme.tier) : (which==='trivia' ? (t=>t.tier!=='coordinating-music') : (t=>t.tier==='coordinating-music'));
   let list = Object.entries(state.themes||{});
   if(q) list = list.filter(([id,t])=>nameOrAltHas(t,q));
   list.sort((a,b)=>{
@@ -2346,7 +2419,7 @@ function showInlineSuggest(inputEl, dk, which){
   const box = document.getElementById('inline-suggest-box');
   box.innerHTML = list.length ? list.map(([id,t])=>{
     const suggested = pairIds.has(id);
-    return `<div class="theme-opt" onmousedown="event.preventDefault();pickInlineSuggest('${id}')">${suggested?'★ ':''}${escapeHtml(t.name)} <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span>${altLine(t)}</div>`;
+    return `<div class="theme-opt" onmousedown="event.preventDefault();pickInlineSuggest('${id}')">${suggested?(bingoSuggest?'♥ ':'★ '):''}${escapeHtml(t.name)}${bingoSuggest?'':` <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span>`}${altLine(t)}</div>`;
   }).join('') : '<div class="theme-opt" style="color:var(--text3)">No match — will save as typed.</div>';
   const rect = inputEl.getBoundingClientRect();
   box.style.left = rect.left+'px';
@@ -2380,14 +2453,7 @@ function renderVdTimeline(){
   // Build the list of dates to show: every occurrence of venue.day within range, plus any gig dates
   // that exist outside that pattern (irregular cadences, imported data).
   const dateSet = new Set();
-  if(v.day){
-    let d = new Date(vdRangeStart);
-    const target = DAY_MAP[v.day];
-    if(target!==undefined){
-      d = addDays(d, (target - d.getDay() + 7) % 7);
-      while(d <= vdRangeEnd){ dateSet.add(toKey(d)); d = addDays(d,7); }
-    }
-  }
+  venueDatesBetween(v, vdRangeStart, vdRangeEnd).forEach(k=>dateSet.add(k));
   Object.keys(gigs).forEach(dk=>{ if(dk>=toKey(vdRangeStart) && dk<=toKey(vdRangeEnd)) dateSet.add(dk); });
   const dates = Array.from(dateSet).sort();
 
@@ -2399,12 +2465,43 @@ function renderVdTimeline(){
     html += scheduleRowHtml(dk, gigs[dk]);
   });
   document.getElementById('vd-timeline').innerHTML = html || '<div class="empty-state">No dates in this range.</div>';
-  const todayRow = document.querySelector(`#vd-timeline .tl-row.tl-today`);
+  const todayKey = toKey(new Date());
+  const todayRow = document.querySelector(`#vd-timeline .tl-row.tl-today`) || [...document.querySelectorAll('#vd-timeline .tl-row')].find(r=>r.dataset.dk>=todayKey);
   if(todayRow) todayRow.scrollIntoView({block:'center'});
+  renderBingoTools();
+}
+function scrollBoxToDate(box, dk){
+  if(!box) return;
+  const rows = [...box.querySelectorAll('.tl-row')];
+  const row = rows.find(r=>r.dataset.dk===dk) || rows.find(r=>r.dataset.dk>=dk) || rows[rows.length-1];
+  if(row) box.scrollTop = Math.max(0, row.offsetTop - box.offsetTop - 40);
 }
 
+function vdInlineSaveBingo(row, dk){
+  const id = currentVenueDetailId;
+  const inputs = row.querySelectorAll('.tl-input');
+  const n1 = (inputs[0].value||'').trim(), n2 = (inputs[1].value||'').trim();
+  const status = row.querySelector('.tl-select').value;
+  const ex = (state.gigs[id]||{})[dk] || {};
+  const entryId = ex._bingoEntryId || null;
+  const path = MODE_PATHS.bingo.gigs+'/';
+  if(status==='unplanned' || (!n1 && !n2 && status!=='cancelled')){
+    if(entryId) db.ref(path+entryId).remove();
+    flashSaved(row); return;
+  }
+  const find = n=>{ if(!n) return null; const f = Object.entries(state.themes||{}).find(([cid,c])=>(c.name||'').trim().toLowerCase()===n.toLowerCase()); return f?f[0]:'NOTFOUND'; };
+  let rounds = [];
+  if(status!=='cancelled'){
+    const c1 = find(n1), c2 = find(n2);
+    if(c1==='NOTFOUND' || c2==='NOTFOUND'){ toast('Pick an existing Bingo category from the list — new ones are added in the Bingo app.', true); renderVdTimeline(); return; }
+    rounds = [c1,c2].filter(Boolean);
+  }
+  const eid = entryId || ('sched_'+Date.now()+'_'+Math.random().toString(36).slice(2,5));
+  db.ref(path+eid).set({id:eid, date:dk, venueId:id, rounds, categoryIds:rounds, notes:ex.note||'', host:ex.host||null, locationId:selectedLocationId});
+  flashSaved(row);
+}
 function vdInlineSave(row, dk){
-  if(blockIfBingoMode('Quick inline edit')) return;
+  if(plannerMode==='bingo') return vdInlineSaveBingo(row, dk);
   const id = currentVenueDetailId;
   const inputs = row.querySelectorAll('.tl-input');
   const triviaName = (inputs[0].value||'').trim();
@@ -2490,15 +2587,15 @@ function openQuickSchedule(venueId, startDateKey){
   document.getElementById('qs-no-create-slot').innerHTML = noCreateToggleHtml();
   const v = state.venues[venueId]; if(!v) return;
   document.getElementById('qs-venue-name').textContent = v.name;
-  document.getElementById('qs-venue-meta').textContent = `${v.day||''} ${v.time||''}`;
+  document.getElementById('qs-venue-meta').textContent = `${v.day||''} ${v.time||''}${cadenceTag(v)?' · '+cadenceTag(v):''}${v.cadenceAnchor&&v.cadence==='single'?' · '+fmtMDY(v.cadenceAnchor):''}`;
   document.getElementById('qs-bulk-text').value = '';
   renderQuickScheduleRows();
   openModal('quick-schedule-overlay');
 }
 function qsAnchorDate(v){
   const base = qsStartOverride ? fromKey(qsStartOverride) : (()=>{ const d=new Date(); d.setHours(0,0,0,0); return d; })();
-  if(v.day && DAY_MAP[v.day]!==undefined) return addDays(base, (DAY_MAP[v.day]-base.getDay()+7)%7);
-  return base;
+  const first = venueNextDates(v, base, 1)[0];
+  return first ? fromKey(first) : base;
 }
 function renderQuickScheduleRows(){
   const id = currentVenueDetailId;
@@ -2506,13 +2603,14 @@ function renderQuickScheduleRows(){
   const weeksCount = parseInt(document.getElementById('qs-weeks-count').value)||6;
   const gigs = state.gigs[id]||{};
   let dates = [];
-  if(v.day && DAY_MAP[v.day]!==undefined){
-    const d = qsAnchorDate(v);
-    for(let i=0;i<weeksCount;i++) dates.push(addDays(d,i*7));
+  if(((v.day && DAY_MAP[v.day]!==undefined) || (v.cadence==='single' && v.cadenceAnchor))){
+    dates = venueNextDates(v, qsAnchorDate(v), weeksCount).map(fromKey);
   }
   document.getElementById('qs-rows').innerHTML = dates.length
     ? dates.map(d=>scheduleRowHtml(toKey(d), gigs[toKey(d)])).join('')
     : '<div class="empty-state">This venue has no day set — add one in Edit Venue first.</div>';
+  renderBingoTools();
+  setTimeout(()=>scrollBoxToDate(document.getElementById('qs-rows'), toKey(new Date())), 0);
 }
 function submitQuickBulk(){
   if(blockIfBingoMode('Bulk theme paste')) return;
@@ -2520,21 +2618,22 @@ function submitQuickBulk(){
   const v = state.venues[id];
   const themeNames = document.getElementById('qs-bulk-text').value.split('\n').map(s=>s.trim()).filter(Boolean);
   if(!themeNames.length) return toast('Paste at least one theme, one per line.', true);
-  if(!v.day || DAY_MAP[v.day]===undefined) return toast('This venue has no day set.', true);
-  let d = qsAnchorDate(v);
+  if((!v.day || DAY_MAP[v.day]===undefined) && !(v.cadence==='single' && v.cadenceAnchor)) return toast('This venue has no day set.', true);
+  const qsDates = venueNextDates(v, qsAnchorDate(v), themeNames.length);
+  if(!qsDates.length) return toast('No dates to fill for this venue.', true);
   setSyncStatus('syncing');
   (async ()=>{
     const updates = {};
-    for(const name of themeNames){
-      const dk = toKey(d);
+    for(let qi=0; qi<themeNames.length && qi<qsDates.length; qi++){
+      const name = themeNames[qi];
+      const dk = qsDates[qi];
       const themeId = noCreateMode ? findThemeIdByNameOnly(name) : await resolveThemeIdByName(name);
       const existingDk = (state.gigs[id]||{})[dk]||{};
       updates[(MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk] = {themeId, themeName:name, status:'planned', note:'', host:existingDk.host||null};
       if(themeId) bumpThemeUsage(themeId, dk);
-      d = addDays(d,7);
     }
     await db.ref().update(updates);
-    toast(`Filled in ${themeNames.length} week${themeNames.length===1?'':'s'}.`);
+    toast(`Filled in ${Math.min(themeNames.length,qsDates.length)} date${Math.min(themeNames.length,qsDates.length)===1?'':'s'}.`);
     document.getElementById('qs-bulk-text').value = '';
     renderQuickScheduleRows();
   })();
@@ -2560,10 +2659,6 @@ async function submitBulkFill(){
   const startVal = document.getElementById('bulk-start-date').value;
   if(!startVal) return toast('Pick a start date.', true);
   let start = fromKey(startVal);
-  // snap to venue's weekday if set
-  if(v.day && DAY_MAP[v.day]!==undefined){
-    start = addDays(start, (DAY_MAP[v.day] - start.getDay() + 7) % 7);
-  }
   const mode = document.getElementById('bulk-mode').value;
   let themeNames = [];
   if(mode==='repeat'){
@@ -2576,18 +2671,20 @@ async function submitBulkFill(){
   }
   if(!themeNames.length) return toast('Nothing to fill in.', true);
 
+  // dates follow the venue's own frequency (weekly / bi-weekly / monthly / single)
+  let bfDates = venueNextDates(v, start, themeNames.length);
+  if(!bfDates.length){ bfDates = themeNames.map((_,i)=>toKey(addDays(start,i*7))); }
   setSyncStatus('syncing');
   const updates = {};
-  for(let i=0;i<themeNames.length;i++){
-    const d = addDays(start, i*7);
-    const dk = toKey(d);
+  for(let i=0;i<themeNames.length && i<bfDates.length;i++){
+    const dk = bfDates[i];
     const themeId = noCreateMode ? findThemeIdByNameOnly(themeNames[i]) : await resolveThemeIdByName(themeNames[i]);
     const existingDk = (state.gigs[id]||{})[dk]||{};
     updates[(MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk] = {themeId, themeName:themeNames[i], status:'planned', note:'', host:existingDk.host||null};
     if(themeId) bumpThemeUsage(themeId, dk);
   }
   await db.ref().update(updates);
-  toast(`Filled in ${themeNames.length} week${themeNames.length===1?'':'s'}.`);
+  toast(`Filled in ${Math.min(themeNames.length,bfDates.length)} date${Math.min(themeNames.length,bfDates.length)===1?'':'s'}.`);
   document.getElementById('bulk-panel').classList.remove('open');
   renderVdTimeline();
 }
@@ -2634,6 +2731,9 @@ function openVenueModal(id){
   document.getElementById('v-host').value = v.host||'';
   document.getElementById('v-notes').value = v.notes||'';
   document.getElementById('venue-delete-btn').style.display = id ? 'inline-block' : 'none';
+  document.getElementById('v-cadence').value = v.cadence||'weekly';
+  document.getElementById('v-anchor').value = v.cadenceAnchor||'';
+  syncCadenceUI();
   if(id){
     // Editing one existing night — same single day/time it's always been.
     document.getElementById('v-single-daytime').style.display='';
@@ -2651,34 +2751,49 @@ function openVenueModal(id){
   }
   openModal('venue-modal-overlay');
 }
+function syncCadenceUI(){
+  const c = document.getElementById('v-cadence').value;
+  const wrap = document.getElementById('v-anchor-wrap'), hint = document.getElementById('v-anchor-hint');
+  wrap.style.display = c==='weekly' ? 'none' : '';
+  hint.style.display = c==='weekly' ? 'none' : '';
+  document.getElementById('v-anchor-label').textContent = c==='single' ? 'Date' : (c==='biweekly' ? 'A date it happens' : 'A date it happens');
+  hint.textContent = c==='single' ? 'Only this one date. The day is taken from it.'
+    : c==='biweekly' ? 'Pick any date it runs — it repeats every 14 days from there.'
+    : 'Pick one date it runs — it repeats on that same weekday of the month (e.g. the 2nd Thursday).';
+}
 function saveVenue(){
   const name = document.getElementById('v-name').value.trim();
   if(!name) return toast('Venue needs a name.', true);
+  const cadence = document.getElementById('v-cadence').value;
+  const cadenceAnchor = cadence==='weekly' ? '' : document.getElementById('v-anchor').value;
+  if(cadence!=='weekly' && !cadenceAnchor) return toast('Pick the date for this '+(CADENCE_LABELS[cadence]||'').toLowerCase()+' venue.', true);
+  const anchorDayAbbr = cadenceAnchor ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][fromKey(cadenceAnchor).getDay()] : '';
   const shared = {
     pay: { amount: parseInt(document.getElementById('v-pay-amount').value)||null, method: document.getElementById('v-pay-method').value },
     status: document.getElementById('v-status').value,
     source: document.getElementById('v-source').value,
     host: document.getElementById('v-host').value.trim(),
     notes: document.getElementById('v-notes').value.trim(),
-    cadence: 'weekly',
+    cadence, cadenceAnchor,
     locationId: selectedLocationId
   };
   setSyncStatus('syncing');
   if(editingVenueId){
     // Editing one existing night in place — untouched from how this always worked.
     const data = Object.assign({name}, shared, {
-      day: document.getElementById('v-day').value,
+      day: cadence==='single' ? anchorDayAbbr : document.getElementById('v-day').value,
       time: document.getElementById('v-time').value.trim()
     });
     db.ref(MODE_PATHS[plannerMode].venues+'/'+editingVenueId).update(data).then(()=>{ toast('Venue saved.'); closeModal('venue-modal-overlay'); });
     return;
   }
-  const slots = collectVenueSlots();
+  let slots = collectVenueSlots();
+  if(cadence==='single' && !slots.length) slots = [{day:anchorDayAbbr,time:''}];
   if(!slots.length) return toast('Add at least one night.', true);
   const updates = {};
   slots.forEach(slot=>{
     const id = db.ref(MODE_PATHS[plannerMode].venues).push().key;
-    updates[MODE_PATHS[plannerMode].venues+'/'+id] = Object.assign({name, groupName:name}, shared, {day:slot.day, time:slot.time});
+    updates[MODE_PATHS[plannerMode].venues+'/'+id] = Object.assign({name, groupName:name}, shared, {day: cadence==='single' ? anchorDayAbbr : slot.day, time:slot.time});
   });
   db.ref().update(updates).then(()=>{
     toast(slots.length>1?`Venue saved — ${slots.length} nights added.`:'Venue saved.');
@@ -3339,7 +3454,7 @@ function onApplySeqVenueChange(){
   const venueId = document.getElementById('apply-seq-venue').value;
   const v = state.venues[venueId];
   let start = new Date(); start.setHours(0,0,0,0);
-  if(v && v.day && DAY_MAP[v.day]!==undefined) start = addDays(start, (DAY_MAP[v.day]-start.getDay()+7)%7);
+  if(v){ const f=venueNextDates(v,start,1)[0]; if(f) start=fromKey(f); }
   document.getElementById('apply-seq-date').value = toKey(start);
 }
 async function submitApplySequence(){
@@ -3349,9 +3464,12 @@ async function submitApplySequence(){
   if(!venueId || !startVal || !s) return toast('Pick a venue and a start date.', true);
   setSyncStatus('syncing');
   const updates = {};
+  const seqV = state.venues[venueId];
+  const seqDates = seqV ? venueNextDates(seqV, fromKey(startVal), (s.themes||[]).length) : [];
+  let seqI = 0;
   let d = fromKey(startVal);
   for(const themeName of (s.themes||[])){
-    const dk = toKey(d);
+    const dk = seqDates[seqI] || toKey(d); seqI++;
     const themeId = await resolveThemeIdByName(themeName);
     const existingDk = (state.gigs[venueId]||{})[dk]||{};
     updates[(MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dk] = {themeId, themeName, status:'planned', note:'', host:existingDk.host||null};
@@ -3706,14 +3824,7 @@ function renderGigSchedulePreview(){
   const today = new Date(); today.setHours(0,0,0,0);
   const rangeStart = addDays(today, -8*7), rangeEnd = addDays(today, 12*7);
   const dateSet = new Set();
-  if(v && v.day){
-    let d = new Date(rangeStart);
-    const target = DAY_MAP[v.day];
-    if(target!==undefined){
-      d = addDays(d, (target - d.getDay() + 7) % 7);
-      while(d <= rangeEnd){ dateSet.add(toKey(d)); d = addDays(d,7); }
-    }
-  }
+  if(v) venueDatesBetween(v, rangeStart, rangeEnd).forEach(k=>dateSet.add(k));
   Object.keys(gigs).forEach(dk=>{ if(dk>=toKey(rangeStart) && dk<=toKey(rangeEnd)) dateSet.add(dk); });
   const dates = Array.from(dateSet).sort();
   const prevVenueDetailId = currentVenueDetailId;
@@ -3728,7 +3839,9 @@ function renderGigSchedulePreview(){
   // deferred: the modal is still display:none at this point in the call order
   // (openGigModal calls this, then opens the modal right after), so scrollIntoView
   // would have no layout to work with if run synchronously here.
-  setTimeout(()=>{ const row = box.querySelector('.tl-row.tl-today'); if(row) row.scrollIntoView({block:'start'}); }, 0);
+  const focusKey = document.getElementById('gig-date').value || toKey(new Date());
+  setTimeout(()=>scrollBoxToDate(box, focusKey), 0);
+  setTimeout(()=>scrollBoxToDate(box, focusKey), 120);
   currentVenueDetailId = prevVenueDetailId;
 }
 function renderGigWarnings(){
@@ -3824,6 +3937,107 @@ function saveGig(){
 // Category must be picked from the existing library (typed exactly matching
 // one), same as choosing an existing Trivia theme by name — new categories
 // need an image, so those still get created in the Bingo app's own admin.
+// ── Bingo: liked categories + randomizer ──
+let likedDraft = new Set();
+function renderBingoTools(){
+  const html = (()=>{
+    if(plannerMode!=='bingo') return '';
+    const v = state.venues[currentVenueDetailId]; if(!v) return '';
+    const n = (v.likedCategoryIds||[]).filter(c=>state.themes[c]).length;
+    return `<div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin:0.6rem 0;padding:0.6rem;border:1px solid var(--border2);border-radius:10px;">
+      <span style="font-size:12px;color:var(--text3);margin-right:0.3rem;">🎲 Bingo categories</span>
+      <button class="btn btn-ghost btn-sm" onclick="openLikedCats()">♥ Liked categories (${n})</button>
+      <button class="btn btn-primary btn-sm" onclick="randomizeBingo(false)" title="Fills every empty bingo night in the next 3 months">Randomize next 3 months</button>
+      <button class="btn btn-ghost btn-sm" onclick="randomizeBingo(true)" title="Overwrites the next 3 months using the current liked list">Re-randomize</button>
+    </div>`;
+  })();
+  ['vd-bingo-tools','qs-bingo-tools'].forEach(i=>{ const el=document.getElementById(i); if(el) el.innerHTML = html; });
+}
+function openLikedCats(){
+  const v = state.venues[currentVenueDetailId]; if(!v) return;
+  likedDraft = new Set((v.likedCategoryIds||[]).filter(c=>state.themes[c]));
+  document.getElementById('bingo-liked-title').textContent = (v.name||'Venue')+' — liked categories';
+  document.getElementById('bingo-liked-search').value = '';
+  renderLikedCats();
+  openModal('bingo-liked-overlay');
+}
+function likedShownIds(){
+  const q = document.getElementById('bingo-liked-search').value.trim().toLowerCase();
+  return Object.entries(state.themes||{}).filter(([id,t])=>!q||nameOrAltHas(t,q)).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'')).map(([id])=>id);
+}
+function renderLikedCats(){
+  const ids = likedShownIds();
+  document.getElementById('bingo-liked-list').innerHTML = ids.length ? ids.map(id=>`<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;">
+    <input type="checkbox" style="width:auto;margin:0" ${likedDraft.has(id)?'checked':''} onchange="toggleLikedCat('${id}',this.checked)"><span>${escapeHtml(state.themes[id].name||'')}</span></label>`).join('') : '<div class="empty-state">No categories match.</div>';
+  document.getElementById('bingo-liked-count').textContent = likedDraft.size+' liked';
+}
+function toggleLikedCat(id,on){ if(on) likedDraft.add(id); else likedDraft.delete(id); document.getElementById('bingo-liked-count').textContent = likedDraft.size+' liked'; }
+function likedCatsBulk(on){ likedShownIds().forEach(id=>{ if(on) likedDraft.add(id); else likedDraft.delete(id); }); renderLikedCats(); }
+function saveLikedCats(){
+  const id = currentVenueDetailId; if(!id) return;
+  const arr = [...likedDraft];
+  db.ref(MODE_PATHS.bingo.venues+'/'+id+'/likedCategoryIds').set(arr.length?arr:null).then(()=>{
+    toast(arr.length+' liked categor'+(arr.length===1?'y':'ies')+' saved.');
+    closeModal('bingo-liked-overlay');
+    renderBingoTools();
+  });
+}
+// Picks two categories for a night: from the venue's liked list, preferring whichever
+// ran at this venue the longest time ago (never-used first, ties random). `assigned`
+// is {dateKey:[catId,...]} for that venue and is read as the venue's history.
+function bingoPickPair(pool, assigned, dk){
+  const last = {};
+  Object.entries(assigned).forEach(([d,ids])=>{ if(d<dk) (ids||[]).forEach(c=>{ if(!last[c]||d>last[c]) last[c]=d; }); });
+  const shuffled = pool.slice().sort(()=>Math.random()-0.5);
+  shuffled.sort((a,b)=>(last[a]||'').localeCompare(last[b]||''));
+  return shuffled.slice(0,2);
+}
+function likedPoolFor(v){ return (v.likedCategoryIds||[]).filter(c=>state.themes[c]); }
+function randomizeBingoModal(){
+  const venueId = document.getElementById('gig-venue').value;
+  const dk = document.getElementById('gig-date').value;
+  const v = state.venues[venueId]; if(!v||!dk) return toast('Pick a venue and date.', true);
+  const pool = likedPoolFor(v);
+  if(!pool.length) return toast("Set this venue's liked categories first (open the venue → ♥ Liked categories).", true);
+  const assigned = {};
+  Object.entries(state.gigs[venueId]||{}).forEach(([d,g])=>{ if(d!==dk && g._bingoRounds&&g._bingoRounds.length) assigned[d]=g._bingoRounds; });
+  const pick = bingoPickPair(pool, assigned, dk);
+  document.getElementById('gig-bingo-cat1').value = pick[0] ? state.themes[pick[0]].name : '';
+  document.getElementById('gig-bingo-cat2').value = pick[1] ? state.themes[pick[1]].name : '';
+  const st = document.getElementById('gig-status'); if(st.value==='unplanned') st.value='planned';
+}
+async function randomizeBingo(overwrite){
+  if(plannerMode!=='bingo') return;
+  const id = currentVenueDetailId, v = state.venues[id]; if(!v) return;
+  const pool = likedPoolFor(v);
+  if(!pool.length){ toast('Pick the categories this venue likes first.', true); openLikedCats(); return; }
+  const today = new Date(); today.setHours(0,0,0,0);
+  const end = new Date(today); end.setMonth(end.getMonth()+3);
+  const dates = venueDatesBetween(v, today, end);
+  if(!dates.length) return toast('No bingo nights found for this venue — set its day (and frequency) in Edit Venue.', true);
+  const gigs = state.gigs[id]||{};
+  const assigned = {};
+  Object.entries(gigs).forEach(([dk,g])=>{ if(g._bingoRounds&&g._bingoRounds.length) assigned[dk]=g._bingoRounds.slice(); });
+  let todo;
+  if(overwrite){
+    if(!confirm(`Re-randomize all ${dates.length} bingo nights at ${v.name} through ${fmtMDY(toKey(end))}? This replaces what's planned there now.`)) return;
+    todo = dates; dates.forEach(dk=>{ delete assigned[dk]; });
+  } else {
+    todo = dates.filter(dk=>!assigned[dk]);
+    if(!todo.length) return toast('Every night in the next 3 months is already planned. Use Re-randomize to redo them.');
+  }
+  setSyncStatus('syncing');
+  const updates = {};
+  todo.sort().forEach((dk,i)=>{
+    const pick = bingoPickPair(pool, assigned, dk);
+    assigned[dk] = pick;
+    const ex = gigs[dk]||{};
+    const eid = ex._bingoEntryId || ('sched_'+Date.now()+'_'+i+'_'+Math.random().toString(36).slice(2,5));
+    updates[MODE_PATHS.bingo.gigs+'/'+eid] = {id:eid, date:dk, venueId:id, rounds:pick, categoryIds:pick, notes:ex.note||'', host:ex.host||null, locationId:selectedLocationId};
+  });
+  await db.ref().update(updates);
+  toast(`Planned ${todo.length} night${todo.length===1?'':'s'} through ${fmtMDY(toKey(end))}.`+(pool.length<2?' (Only 1 liked category — round 2 left empty.)':''));
+}
 function saveBingoGig(venueId,dateKey,status,note,typedName1,typedName2,host){
   const cancelled = status==='cancelled';
   const existingEntryId = ((state.gigs[venueId]||{})[dateKey]||{})._bingoEntryId || null;
