@@ -1034,6 +1034,131 @@ function rebuildThemesState(){
   onDataChange();
   updateThemeDatalist();
 }
+function VMX_RTDB(){return db;}
+const VMX_KIND_OF_MODE={trivia:'Trivia',karaoke:'Karaoke',events:'Events',bingo:'Bingo'};
+// ═══ VENUE MASTER SYNC (vmx) ═══ one record per venue at RTDB venues/<venueId>.
+// Rules: the master is the truth. Anything edited in HQ or the Planner is written to the master AND
+// pushed out to every app's own venue record, so a time/day/host/frequency is the same everywhere.
+// Pushing OUT never writes back IN (only a person's edit does), so nothing can loop.
+const VMX_KIND_PATH={Trivia:'trivia/planner/venues',Karaoke:'trivia/planner/karaokeVenues',Events:'trivia/planner/eventVenues',Bingo:'bingo/landing/venues'};
+const VMX_DAY_FULL={Sun:'Sunday',Mon:'Monday',Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday',Sat:'Saturday'};
+function vmxAbbr(d){d=String(d||'').trim();return d?d.slice(0,3).replace(/^./,c=>c.toUpperCase()):'';}
+function vmxKey(n){return String(n||'').toLowerCase().replace(/^the\s+/,'').replace(/[^a-z0-9]/g,'');}
+function vmxSlug(n){return String(n||'').toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
+// any way a time gets typed → "HH:MM" (24h). Unpadded hour with no am/pm ("6:00", "7") = evening.
+function vmxT24(t){
+  if(t==null||t==='')return '';
+  const m=/^\s*(\d{1,2})(?::(\d{2}))?\s*([ap])?\.?m?\.?/i.exec(String(t));if(!m)return '';
+  let h=+m[1];const ap=(m[3]||'').toLowerCase();
+  if(ap==='p'&&h<12)h+=12;if(ap==='a'&&h===12)h=0;
+  if(!ap&&m[1].length===1&&h>=1&&h<=11)h+=12;
+  if(h>23)return '';
+  return String(h).padStart(2,'0')+':'+(m[2]||'00');
+}
+// how each app's own record stores a time: Bingo = "18:30"; Planner kinds = "6:30pm" (the style already in use)
+function vmxFmt(kind,t24){
+  if(!t24)return '';
+  if(kind==='Bingo')return t24;
+  let h=+t24.slice(0,2);const mm=t24.slice(3);const ap=h>=12?'pm':'am';h=h%12||12;return h+(mm==='00'?'':':'+mm)+ap;
+}
+function vmxLive(st){return !st||st==='active'||st==='seasonal'||st==='one-time';}
+async function vmxReadAll(){
+  const db_=VMX_RTDB();const out=[];
+  for(const [kind,path] of Object.entries(VMX_KIND_PATH)){
+    const v=(await db_.ref(path).once('value')).val()||{};
+    Object.entries(v).forEach(([id,rec])=>{if(rec&&rec.name)out.push({kind,id,v:rec});});
+  }
+  return out;
+}
+async function vmxFindOrCreate(name,venueId,locationId){
+  const db_=VMX_RTDB();
+  if(venueId){const sn=(await db_.ref('venues/'+venueId).once('value')).val();if(sn)return {id:venueId,rec:sn};}
+  const all=(await db_.ref('venues').once('value')).val()||{};
+  const k=vmxKey(name);
+  const hit=Object.entries(all).find(([id,r])=>r&&vmxKey(r.name)===k);
+  if(hit)return {id:hit[0],rec:hit[1]};
+  const id=venueId||vmxSlug(name);
+  const rec={id,name,locationId:locationId||null,active:true,host:'',slots:{},links:{},migratedAt:Date.now(),updatedAt:Date.now()};
+  await db_.ref('venues/'+id).set(rec);return {id,rec};
+}
+// a person edited one Planner/Bingo venue night → master slot (and VenueID stamped on it)
+async function vmxPushLegacy(kind,legacyId,v){
+  try{
+    const db_=VMX_RTDB();if(!db_||!v||!v.name)return;
+    const m=await vmxFindOrCreate(v.name,v.venueId,v.locationId);
+    const slots=Object.assign({},m.rec.slots||{});
+    let sid=Object.keys(slots).find(k=>slots[k].ref&&slots[k].ref.kind===kind&&slots[k].ref.id===legacyId);
+    if(!sid)sid=kind.toLowerCase()+'-'+legacyId;
+    const s={kind,day:VMX_DAY_FULL[vmxAbbr(v.day)]||'',time:vmxT24(v.time),cadence:v.cadence||'weekly',anchor:v.cadenceAnchor||'',host:v.host||'',status:v.status||'active',ref:{kind,id:legacyId}};
+    Object.keys(s).forEach(k=>{if(s[k]===''&&k!=='time')delete s[k];});
+    const old=slots[sid]||{};
+    const next=Object.assign({},old,s);if(!s.time)delete next.time;if(!('host' in s))delete next.host;
+    const upd={};upd['venues/'+m.id+'/slots/'+sid]=next;upd['venues/'+m.id+'/updatedAt']=Date.now();
+    if(v.name&&!m.rec.name)upd['venues/'+m.id+'/name']=v.name;
+    upd[VMX_KIND_PATH[kind]+'/'+legacyId+'/venueId']=m.id;
+    await db_.ref().update(upd);
+    return m.id;
+  }catch(e){console.warn('vmxPushLegacy',e);}
+}
+async function vmxRemoveLegacy(kind,legacyId,v){
+  try{
+    const db_=VMX_RTDB();if(!db_||!v||!v.venueId)return;
+    const sn=(await db_.ref('venues/'+v.venueId+'/slots').once('value')).val()||{};
+    const sid=Object.keys(sn).find(k=>sn[k].ref&&sn[k].ref.kind===kind&&sn[k].ref.id===legacyId);
+    if(sid){
+      if(sn[sid].hqId)await db_.ref('venues/'+v.venueId+'/slots/'+sid+'/ref').remove();
+      else await db_.ref('venues/'+v.venueId+'/slots/'+sid).remove();
+    }
+  }catch(e){console.warn('vmxRemoveLegacy',e);}
+}
+// master → every app's own venue record (idempotent; only writes what differs)
+let _vmxApplying=false;
+async function vmxApplyToLegacy(masterId,master,legacyAll){
+  if(_vmxApplying)return;_vmxApplying=true;
+  try{
+    const db_=VMX_RTDB();if(!db_||!master||!master.slots)return;
+    const legacy=(legacyAll||await vmxReadAll()).filter(l=>l.v.venueId===masterId||vmxKey(l.v.name)===vmxKey(master.name));
+    const used=new Set();const upd={};const slotUpd={};
+    Object.entries(master.slots).forEach(([sid,sl])=>{if(sl.ref)used.add(sl.ref.kind+'|'+sl.ref.id);});
+    // slots without a link yet: attach to the legacy record on the same kind + day (+frequency)
+    Object.entries(master.slots).forEach(([sid,sl])=>{
+      if(sl.ref||!sl.kind)return;
+      const hit=legacy.find(l=>l.kind===sl.kind&&!used.has(l.kind+'|'+l.id)&&vmxAbbr(l.v.day)===vmxAbbr(sl.day)&&(l.v.cadence||'weekly')===(sl.cadence||'weekly'));
+      if(hit){used.add(hit.kind+'|'+hit.id);sl.ref={kind:hit.kind,id:hit.id};slotUpd['venues/'+masterId+'/slots/'+sid+'/ref']=sl.ref;}
+    });
+    legacy.forEach(l=>{if(l.v.venueId!==masterId)upd[VMX_KIND_PATH[l.kind]+'/'+l.id+'/venueId']=masterId;});
+    Object.entries(master.slots).forEach(([sid,sl])=>{
+      if(!sl.ref)return;const l=legacy.find(x=>x.kind===sl.ref.kind&&x.id===sl.ref.id);if(!l)return;
+      const base=VMX_KIND_PATH[l.kind]+'/'+l.id+'/';
+      const set=(f,val)=>{if((l.v[f]||'')!==(val||''))upd[base+f]=val||'';};
+      if(sl.day){const a=vmxAbbr(sl.day);if(a&&vmxAbbr(l.v.day)!==a)upd[base+'day']=a;}
+      if(sl.time&&vmxT24(l.v.time)!==sl.time)upd[base+'time']=vmxFmt(l.kind,sl.time);
+      if(sl.cadence)set('cadence',sl.cadence);
+      if(sl.cadence)set('cadenceAnchor',sl.anchor||'');
+      // host and status stay owned by the apps' own regular-host / status controls (they already sync HQ <-> Planner)
+    });
+    const all=Object.assign({},upd,slotUpd);
+    if(Object.keys(all).length)await db_.ref().update(all);
+  }catch(e){console.warn('vmxApplyToLegacy',e);}
+  finally{_vmxApplying=false;}
+}
+let _vmxT=null;
+// Sync is OFF until HQ's Venue Master Records window turns it on (venues/_sync/on), so a master that
+// still needs a once-over can't overwrite anything.
+function vmxListen(onChange){
+  const db_=VMX_RTDB();if(!db_)return;
+  db_.ref('venues').on('value',sn=>{
+    const all=sn.val()||{};window.__vmxMaster=all;window.__vmxSyncOn=!!(all._sync&&all._sync.on);
+    clearTimeout(_vmxT);
+    if(!window.__vmxSyncOn)return;
+    _vmxT=setTimeout(async()=>{
+      const legacyAll=await vmxReadAll();
+      for(const [id,m] of Object.entries(all)){if(id[0]!=='_'&&m&&m.slots)await vmxApplyToLegacy(id,m,legacyAll);}
+      if(onChange)onChange(all);
+    },1500);
+  },()=>{});
+}
+
 auth.onAuthStateChanged(function(user){
   if(!user){
     window.location.href='https://belladonnanights.github.io/belladonna-gateway/accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;
@@ -1070,6 +1195,7 @@ auth.onAuthStateChanged(function(user){
   attachTriviaMirrorListener();
   attachBingoPairLibraryListener();
   attachVenueMenuPairLibraryListener();
+  vmxListen();
 });
 // A read-only, always-on mirror of the real Bingo category library, kept
 // separate from state.themes (which only ever holds the CURRENT mode's
@@ -2857,7 +2983,8 @@ function saveVenue(){
       day: cadence==='single' ? anchorDayAbbr : document.getElementById('v-day').value,
       time: document.getElementById('v-time').value.trim()
     });
-    db.ref(MODE_PATHS[plannerMode].venues+'/'+editingVenueId).update(data).then(()=>{ toast('Venue saved.'); closeModal('venue-modal-overlay'); });
+    const _eid=editingVenueId,_mode=plannerMode;
+    db.ref(MODE_PATHS[plannerMode].venues+'/'+editingVenueId).update(data).then(()=>{ toast('Venue saved.'); closeModal('venue-modal-overlay'); vmxPushLegacy(VMX_KIND_OF_MODE[_mode],_eid,Object.assign({},state.venues[_eid]||{},data)); });
     return;
   }
   let slots = collectVenueSlots();
@@ -2868,9 +2995,11 @@ function saveVenue(){
     const id = db.ref(MODE_PATHS[plannerMode].venues).push().key;
     updates[MODE_PATHS[plannerMode].venues+'/'+id] = Object.assign({name, groupName:name}, shared, {day: cadence==='single' ? anchorDayAbbr : slot.day, time:slot.time});
   });
+  const _mode2=plannerMode;
   db.ref().update(updates).then(()=>{
     toast(slots.length>1?`Venue saved — ${slots.length} nights added.`:'Venue saved.');
     closeModal('venue-modal-overlay');
+    Object.keys(updates).forEach(k=>{const id=k.split('/').pop();vmxPushLegacy(VMX_KIND_OF_MODE[_mode2],id,updates[k]);});
   });
 }
 function deleteVenue(){
@@ -2879,6 +3008,7 @@ function deleteVenue(){
   setSyncStatus('syncing');
   const p = MODE_PATHS[plannerMode];
   const updates = {};
+  vmxRemoveLegacy(VMX_KIND_OF_MODE[plannerMode],editingVenueId,state.venues[editingVenueId]);
   updates[p.venues+'/'+editingVenueId] = null;
   if(plannerMode==='bingo'){
     // Flat list — remove every schedule entry that pointed at this venue, individually.
