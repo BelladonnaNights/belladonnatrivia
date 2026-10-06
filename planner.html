@@ -873,6 +873,26 @@ const firebaseConfig = {
 };
 if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+// Any save the database refuses (permission rules, offline) now says so on screen, with the exact path,
+// instead of the row just flashing "saved" and quietly reverting.
+(function(){
+  const _ref=db.ref.bind(db);
+  db.ref=function(p){
+    const r=_ref(p);
+    if(r&&!r.__wrapped){
+      ['set','update','remove'].forEach(m=>{
+        const f=r[m]; if(typeof f!=='function') return;
+        r[m]=function(...a){
+          const pr=f.apply(this,a);
+          if(pr&&pr.catch) pr.catch(e=>{ console.error('NOT SAVED',p,e); try{ toast('NOT SAVED to '+(p||'/')+' — '+((e&&(e.code||e.message))||e),true); }catch(_){} });
+          return pr;
+        };
+      });
+      r.__wrapped=true;
+    }
+    return r;
+  };
+})();
 
 // -- Light/dark mode — applied immediately, before anything else, to avoid a flash --
 function applyStoredTheme(){
