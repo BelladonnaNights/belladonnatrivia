@@ -2385,8 +2385,17 @@ function gigsForDate(dk){
     if(!recurs && !rec) return;
     out.push({ venueId:id, venueName:v.name, gig: rec });
   });
-  return out;
+  // the same venue listed twice for the same night (duplicate venue records) shows once — keep the one with a plan / host
+  const best = {};
+  out.forEach(it=>{
+    const k = vmxKey(it.venueName||'');
+    const sc = (it.gig&&it.gig.themeName?4:0) + (it.gig?2:0) + (((it.gig&&it.gig.host)||(state.venues[it.venueId]||{}).host)?1:0);
+    if(!best[k] || sc>best[k].sc) best[k] = { it, sc };
+  });
+  return plannerMode==='events' ? out : Object.values(best).map(b=>b.it);
 }
+function unplannedLabel(){ return plannerMode==='karaoke' ? 'regular karaoke' : 'unplanned'; }
+function dispTime(t){ const x = vmxT24(t||''); if(!x) return ''; const [h,m] = x.split(':').map(Number); return ((h+11)%12+1) + (m?':'+String(m).padStart(2,'0'):'') + ' ' + (h>=12?'PM':'AM'); }
 function renderMonthCalendar(){
   if(activeTab!=='dashboard') return;
   document.getElementById('monthcal-label').textContent = monthCalDate.toLocaleDateString('en-US',{month:'long', year:'numeric'});
@@ -2417,7 +2426,7 @@ function openDayAgenda(dk){
   document.getElementById('agenda-title').textContent = fromKey(dk).toLocaleDateString('en-US',{weekday:'long', month:'long', day:'numeric', year:'numeric'});
   document.getElementById('agenda-body').innerHTML = items.length ? items.map(it=>{
     const g = it.gig;
-    const label = g && g.themeName ? escapeHtml(g.themeName) : g && g.status==='cancelled' ? 'Cancelled' : 'Unplanned';
+    const label = g && g.themeName ? escapeHtml(g.themeName) : g && g.status==='cancelled' ? 'Cancelled' : (plannerMode==='karaoke' ? 'Regular karaoke' : 'Unplanned');
     const round3 = g && g.round3Name ? ` · ♪ ${escapeHtml(g.round3Name)}` : '';
     return `<div class="tl-row" style="grid-template-columns:1fr 90px 64px">
       <div style="font-size:12.5px">${escapeHtml(it.venueName)}<br><span class="empty-cell" style="font-style:normal;color:var(--text2)">${label}${round3}</span></div>
@@ -2445,7 +2454,7 @@ function renderDayBoxes(){
       ${items.length ? items.map(it=>{
         const v = state.venues[it.venueId]||{};
         const gig = it.gig;
-        const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? 'cancelled' : 'unplanned';
+        const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? 'cancelled' : unplannedLabel();
         const round3 = gig && gig.round3Name ? ` · ♪ ${escapeHtml(gig.round3Name)}` : '';
         const hostName = (gig && gig.host) || v.host || '';
         // A one-off fill-in: the regular host struck through, the fill-in in purple beneath.
@@ -2453,7 +2462,7 @@ function renderDayBoxes(){
         const hostHtml = !hostName ? '<span style="color:var(--text3)">no host</span>'
           : fillIn ? `<span style="text-decoration:line-through;color:var(--text3)">${escapeHtml(v.host)}</span><br><span style="color:#c9a0dc;margin-left:12px">${escapeHtml(gig.host)}</span>`
           : escapeHtml(hostName);
-        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${it.venueId}','${dk}')">${escapeHtml(v.name||it.venueName)}<small>${v.time||''} — ${label}${round3}</small><small style="color:var(--text2)">${hostHtml}</small></div>`;
+        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${it.venueId}','${dk}')">${escapeHtml(v.name||it.venueName)}<small>${dispTime((gig&&gig.time)||v.time)} — ${label}${round3}</small><small style="color:var(--text2)">${hostHtml}</small></div>`;
       }).join('') : '<div class="daybox-item" style="color:var(--text3)">Nothing scheduled</div>'}
     </div>`;
   }).join('');
