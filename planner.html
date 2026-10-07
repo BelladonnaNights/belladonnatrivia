@@ -442,7 +442,7 @@ a{color:inherit}
     <div id="movie-showings"></div>
     <div class="section-title" style="font-size:15px;margin-top:1.5rem">Movie list</div>
     <table class="gtable">
-      <thead><tr><th>Title</th><th>Year</th><th>Runtime</th><th>Genre</th><th>Theme nights</th><th style="min-width:240px">Notes</th><th>On Venue Menu</th><th>Shown</th><th></th></tr></thead>
+      <thead><tr><th>Title</th><th>Year</th><th>Runtime</th><th>Genre</th><th>Links</th><th>Theme nights</th><th style="min-width:240px">Notes</th><th>On Venue Menu</th><th>Shown</th><th></th></tr></thead>
       <tbody id="movie-rows"></tbody>
     </table>
     <div id="movie-empty" class="empty-state" style="display:none">No movies yet — add one, or use Bulk Add to paste your whole list.</div>
@@ -731,8 +731,10 @@ a{color:inherit}
     <div class="theme-suggest" id="mv-pair-suggest" style="display:none"></div>
     <label class="form-label">Poster image URL <span style="opacity:.6;font-weight:normal">(4:5 portrait, e.g. 800×1000)</span></label>
     <input type="text" class="form-input" id="mv-poster" placeholder="https://…">
-    <label class="form-label">Where to get it <span style="opacity:.6;font-weight:normal">(Internet Archive / file link — internal only)</span></label>
-    <input type="text" class="form-input" id="mv-url" placeholder="https://archive.org/details/…">
+    <label class="form-label">Where to find it <span style="opacity:.6;font-weight:normal">(links to the movie — add backups, and label each one: Black &amp; white, Colorized, Backup…)</span></label>
+    <div id="mv-links"></div>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="addMovieLinkRow()" style="margin-bottom:12px">+ Add another link</button>
+    <datalist id="mv-link-labels"><option value="Black &amp; white"><option value="Colorized"><option value="Backup"><option value="Best quality"><option value="With subtitles"></datalist>
     <label class="form-label">Notes <span style="opacity:.6;font-weight:normal">(internal — well-known actors, silent film, best print…)</span></label>
     <textarea class="form-textarea" id="mv-notes" rows="2" placeholder="e.g. SILENT FILM · stars Bela Lugosi · best print on archive.org"></textarea>
     <label style="display:flex;align-items:center;gap:8px;margin-top:10px;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" id="mv-published" style="width:auto;margin:0"> Show on the Venue Menu</label>
@@ -1414,13 +1416,14 @@ function renderMoviesTab(){
   const stats = {};
   Object.values(movieShowings).forEach(sh=>{ if(!sh||!sh.movieId) return; const s=stats[sh.movieId]=stats[sh.movieId]||{n:0,last:''}; s.n++; if(sh.date>s.last) s.last=sh.date; });
   let list = Object.entries(moviesRaw).map(([id,m])=>({id,...m})).sort((a,b)=>(a.title||'').localeCompare(b.title||''));
-  if(q) list = list.filter(m=>[m.title,m.genre,m.notes,m.desc,m.year,m.runtime,(m.pairs||[]).map(p=>p.name).join(' ')].some(f=>String(f||'').toLowerCase().includes(q)));
+  if(q) list = list.filter(m=>[m.title,m.genre,m.notes,m.desc,m.year,m.runtime,(m.pairs||[]).map(p=>p.name).join(' '),movieLinksOf(m).map(l=>l.label).join(' ')].some(f=>String(f||'').toLowerCase().includes(q)));
   document.getElementById('movie-empty').style.display = list.length ? 'none' : 'block';
   document.getElementById('movie-rows').innerHTML = list.map(m=>{
     const st = stats[m.id];
     return `<tr style="cursor:pointer" onclick="openMovieModal('${m.id}')">
       <td><b>${escapeHtml(m.title||'(untitled)')}</b></td><td>${escapeHtml(m.year||'')}</td><td>${m.runtime?escapeHtml(m.runtime)+' min':''}</td>
       <td>${escapeHtml(m.genre||'')}</td>
+      <td>${movieLinkChips(m)}</td>
       <td>${moviePairChips(m)}</td>
       <td onclick="event.stopPropagation()"><input class="form-input" style="margin:0;padding:4px 8px;font-size:12px;min-width:220px" value="${escapeHtml(m.notes||'')}" placeholder="Cast, silent film…" onchange="saveMovieNote('${m.id}',this.value)"></td>
       <td onclick="event.stopPropagation()" style="text-align:center"><input type="checkbox" style="width:auto;margin:0;cursor:pointer" ${m.published===true?'checked':''} onchange="saveMoviePublished('${m.id}',this.checked)" title="Show on the Venue Menu"></td>
@@ -1478,12 +1481,32 @@ function addMoviePair(id){
   renderMoviePairChips();
 }
 function removeMoviePair(i){ editingMoviePairs.splice(i,1); renderMoviePairChips(); }
+function movieLinksOf(m){
+  const l = (m.links||[]).filter(x=>x && x.url);
+  return l.length ? l : (m.watchUrl ? [{label:'', url:m.watchUrl}] : []);
+}
+function addMovieLinkRow(label, url){
+  const box = document.getElementById('mv-links');
+  const d = document.createElement('div'); d.className='mv-link-row'; d.style.cssText='display:flex;gap:6px;margin-bottom:6px';
+  d.innerHTML = '<input type="text" class="form-input mv-link-label" list="mv-link-labels" placeholder="Label (e.g. Colorized)" style="margin:0;flex:0 0 38%" value="'+escapeHtml(label||'')+'">'
+    + '<input type="text" class="form-input mv-link-url" placeholder="https://…" style="margin:0;flex:1" value="'+escapeHtml(url||'')+'">'
+    + '<button type="button" class="btn btn-ghost btn-sm" onclick="this.parentNode.remove()" title="Remove">✕</button>';
+  box.appendChild(d);
+}
+function collectMovieLinks(){
+  return [...document.querySelectorAll('#mv-links .mv-link-row')].map(r=>({label:r.querySelector('.mv-link-label').value.trim(), url:r.querySelector('.mv-link-url').value.trim()})).filter(l=>l.url);
+}
+function movieLinkChips(m){
+  return movieLinksOf(m).map((l,i)=>`<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" class="tag-chip" style="margin:1px;text-decoration:none" onclick="event.stopPropagation()">${escapeHtml(l.label||('Link '+(i+1)))} ↗</a>`).join('') || '<span style="color:var(--text3)">—</span>';
+}
 function openMovieModal(id){
   editingMovieId = id||null;
   const m = id ? (moviesRaw[id]||{}) : {};
   document.getElementById('movie-modal-title').textContent = id ? 'Edit Movie' : 'Add Movie';
-  [['title','title'],['year','year'],['runtime','runtime'],['genre','genre'],['desc','desc'],['poster','poster'],['url','watchUrl'],['notes','notes']].forEach(([el,f])=>{ document.getElementById('mv-'+el).value = m[f]||''; });
+  document.getElementById('mv-links').innerHTML='';
+  [['title','title'],['year','year'],['runtime','runtime'],['genre','genre'],['desc','desc'],['poster','poster'],['notes','notes']].forEach(([el,f])=>{ document.getElementById('mv-'+el).value = m[f]||''; });
   document.getElementById('mv-published').checked = m.published===true;
+  movieLinksOf(m).forEach(l=>addMovieLinkRow(l.label,l.url)); if(!movieLinksOf(m).length) addMovieLinkRow();
   editingMoviePairs = (m.pairs||[]).map(p=>({...p}));
   renderMoviePairChips(); document.getElementById('mv-pair-search').value=''; document.getElementById('mv-pair-suggest').style.display='none';
   document.getElementById('mv-delete-btn').style.display = id ? 'inline-block' : 'none';
@@ -1495,7 +1518,7 @@ function saveMovie(){
   const id = editingMovieId || ('mv_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5));
   const prev = moviesRaw[id]||{};
   const v = n=>document.getElementById('mv-'+n).value.trim();
-  const obj = {...prev, id, title, year:v('year'), runtime:v('runtime'), genre:v('genre'), desc:v('desc'), poster:v('poster'), watchUrl:v('url'), notes:v('notes'),
+  const obj = {...prev, id, title, year:v('year'), runtime:v('runtime'), genre:v('genre'), desc:v('desc'), poster:v('poster'), links:collectMovieLinks(), watchUrl:(collectMovieLinks()[0]||{}).url||'', notes:v('notes'),
     pairs: themeNightList().length ? editingMoviePairs.map(p=>{ const t=themeNightList().find(x=>x.id===p.id); return t ? {id:t.id,name:t.name,nightId:t.nightId} : p; }) : editingMoviePairs,
     published: document.getElementById('mv-published').checked, updatedAt: Date.now()};
   if(!prev.addedAt) obj.addedAt = Date.now();
@@ -1520,7 +1543,7 @@ function saveMovieBulk(){
     if(have.has(p[0].toLowerCase())){ skipped++; return; }
     have.add(p[0].toLowerCase());
     const id = 'mv_'+Date.now().toString(36)+i+Math.random().toString(36).slice(2,4);
-    items[id] = {id, title:p[0], year:p[1]||'', runtime:p[2]||'', watchUrl:p[3]||'', genre:'', desc:'', poster:'', notes:p[4]||'', published:false, addedAt:Date.now(), updatedAt:Date.now()};
+    items[id] = {id, title:p[0], year:p[1]||'', runtime:p[2]||'', watchUrl:p[3]||'', links:p[3]?[{label:'',url:p[3]}]:[], genre:'', desc:'', poster:'', notes:p[4]||'', published:false, addedAt:Date.now(), updatedAt:Date.now()};
     n++;
   });
   if(!n) return toast(skipped ? 'Those titles are already in the list.' : 'Nothing to add.', true);
