@@ -442,7 +442,7 @@ a{color:inherit}
     <div id="movie-showings"></div>
     <div class="section-title" style="font-size:15px;margin-top:1.5rem">Movie list</div>
     <table class="gtable">
-      <thead><tr><th>Title</th><th>Year</th><th>Runtime</th><th>Genre</th><th>Venue Menu</th><th>Shown</th><th></th></tr></thead>
+      <thead><tr><th>Title</th><th>Year</th><th>Runtime</th><th>Genre</th><th style="min-width:240px">Notes</th><th>On Venue Menu</th><th>Shown</th><th></th></tr></thead>
       <tbody id="movie-rows"></tbody>
     </table>
     <div id="movie-empty" class="empty-state" style="display:none">No movies yet — add one, or use Bulk Add to paste your whole list.</div>
@@ -729,9 +729,9 @@ a{color:inherit}
     <input type="text" class="form-input" id="mv-poster" placeholder="https://…">
     <label class="form-label">Where to get it <span style="opacity:.6;font-weight:normal">(Internet Archive / file link — internal only)</span></label>
     <input type="text" class="form-input" id="mv-url" placeholder="https://archive.org/details/…">
-    <label class="form-label">Internal notes</label>
-    <textarea class="form-textarea" id="mv-notes" rows="2" placeholder="Best print, content warnings, public-domain proof…"></textarea>
-    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" id="mv-published" style="width:auto;margin:0" checked> Show on the Venue Menu</label>
+    <label class="form-label">Notes <span style="opacity:.6;font-weight:normal">(internal — well-known actors, silent film, best print…)</span></label>
+    <textarea class="form-textarea" id="mv-notes" rows="2" placeholder="e.g. SILENT FILM · stars Bela Lugosi · best print on archive.org"></textarea>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" id="mv-published" style="width:auto;margin:0"> Show on the Venue Menu</label>
     <div class="modal-actions">
       <button class="btn btn-danger btn-sm" id="mv-delete-btn" onclick="deleteMovie()" style="display:none">Delete</button>
       <span style="flex:1"></span>
@@ -743,7 +743,7 @@ a{color:inherit}
 <div class="modal-overlay" id="movie-bulk-overlay">
   <div class="modal">
     <h3>Bulk Add Movies</h3>
-    <div class="section-sub">One movie per line: <b>Title | Year | Runtime | Link</b> — everything after the title is optional. Titles already in the list are skipped.</div>
+    <div class="section-sub">One movie per line: <b>Title | Year | Runtime | Link | Notes</b> — everything after the title is optional. Titles already in the list are skipped.</div>
     <textarea class="form-textarea" id="mv-bulk-text" rows="10" placeholder="Night of the Living Dead | 1968 | 96 | https://archive.org/…&#10;Nosferatu | 1922&#10;Plan 9 from Outer Space"></textarea>
     <div class="modal-actions"><span style="flex:1"></span>
       <button class="btn btn-ghost" onclick="closeModal('movie-bulk-overlay')">Cancel</button>
@@ -1415,7 +1415,9 @@ function renderMoviesTab(){
     const st = stats[m.id];
     return `<tr style="cursor:pointer" onclick="openMovieModal('${m.id}')">
       <td><b>${escapeHtml(m.title||'(untitled)')}</b></td><td>${escapeHtml(m.year||'')}</td><td>${m.runtime?escapeHtml(m.runtime)+' min':''}</td>
-      <td>${escapeHtml(m.genre||'')}</td><td>${m.published===false?'<span style="color:var(--text3)">Hidden</span>':'On menu'}</td>
+      <td>${escapeHtml(m.genre||'')}</td>
+      <td onclick="event.stopPropagation()"><input class="form-input" style="margin:0;padding:4px 8px;font-size:12px;min-width:220px" value="${escapeHtml(m.notes||'')}" placeholder="Cast, silent film…" onchange="saveMovieNote('${m.id}',this.value)"></td>
+      <td onclick="event.stopPropagation()" style="text-align:center"><input type="checkbox" style="width:auto;margin:0;cursor:pointer" ${m.published===true?'checked':''} onchange="saveMoviePublished('${m.id}',this.checked)" title="Show on the Venue Menu"></td>
       <td>${st?st.n+'× · last '+fmtMDY(st.last):'—'}</td>
       <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openShowingModal('${m.id}')">Schedule</button></td></tr>`;
   }).join('');
@@ -1429,12 +1431,25 @@ function renderMoviesTab(){
   document.getElementById('movie-showings').innerHTML = (up.length ? up.map(row).join('') : '<div class="empty-state" style="padding:12px">Nothing scheduled yet — click Schedule next to a movie.</div>')
     + (past.length ? `<div class="section-sub" style="margin-top:10px">Recent past showings</div>`+past.map(row).join('') : '');
 }
+function saveMovieNote(id, val){
+  const m = moviesRaw[id]; if(!m) return;
+  const notes = (val||'').trim();
+  dbFs.collection('venueMenuConfig').doc('movies').set({items:{[id]:{notes, updatedAt:Date.now()}}}, {merge:true})
+    .then(()=>{ m.notes = notes; toast('Note saved.'); })
+    .catch(e=>toast('Note not saved: '+(e.code||e.message), true));
+}
+function saveMoviePublished(id, on){
+  const m = moviesRaw[id]; if(!m) return;
+  dbFs.collection('venueMenuConfig').doc('movies').set({items:{[id]:{published:!!on, updatedAt:Date.now()}}}, {merge:true})
+    .then(()=>{ m.published = !!on; toast(on?'Now showing on the Venue Menu.':'Removed from the Venue Menu.'); })
+    .catch(e=>{ toast('Not saved: '+(e.code||e.message), true); renderMoviesTab(); });
+}
 function openMovieModal(id){
   editingMovieId = id||null;
   const m = id ? (moviesRaw[id]||{}) : {};
   document.getElementById('movie-modal-title').textContent = id ? 'Edit Movie' : 'Add Movie';
   [['title','title'],['year','year'],['runtime','runtime'],['genre','genre'],['desc','desc'],['poster','poster'],['url','watchUrl'],['notes','notes']].forEach(([el,f])=>{ document.getElementById('mv-'+el).value = m[f]||''; });
-  document.getElementById('mv-published').checked = m.published!==false;
+  document.getElementById('mv-published').checked = m.published===true;
   document.getElementById('mv-delete-btn').style.display = id ? 'inline-block' : 'none';
   openModal('movie-modal-overlay');
 }
@@ -1468,7 +1483,7 @@ function saveMovieBulk(){
     if(have.has(p[0].toLowerCase())){ skipped++; return; }
     have.add(p[0].toLowerCase());
     const id = 'mv_'+Date.now().toString(36)+i+Math.random().toString(36).slice(2,4);
-    items[id] = {id, title:p[0], year:p[1]||'', runtime:p[2]||'', watchUrl:p[3]||'', genre:'', desc:'', poster:'', notes:'', published:true, addedAt:Date.now(), updatedAt:Date.now()};
+    items[id] = {id, title:p[0], year:p[1]||'', runtime:p[2]||'', watchUrl:p[3]||'', genre:'', desc:'', poster:'', notes:p[4]||'', published:false, addedAt:Date.now(), updatedAt:Date.now()};
     n++;
   });
   if(!n) return toast(skipped ? 'Those titles are already in the list.' : 'Nothing to add.', true);
