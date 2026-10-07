@@ -315,6 +315,7 @@ a{color:inherit}
   <button class="tab-btn" data-tab="planning" onclick="switchTab('planning')">Planning <span class="tab-badge" id="needs-count" style="display:none">0</span></button>
   <button class="tab-btn" data-tab="venues" onclick="switchTab('venues')">Venues</button>
   <button class="tab-btn" data-tab="themes" onclick="switchTab('themes')"><span id="theme-tab-label">Theme Library</span></button>
+  <button class="tab-btn" data-tab="movies" onclick="switchTab('movies')">Movies</button>
 </div>
 
 <div class="wrap">
@@ -426,6 +427,25 @@ a{color:inherit}
       <tbody id="venues-rows"></tbody>
     </table>
     <div id="venues-empty" class="empty-state" style="display:none">No venues match that filter.</div>
+  </div>
+
+  <div class="panel" id="panel-movies">
+    <div class="section-title">Public-Domain Movies</div>
+    <div class="section-sub">Films we can show without paying for a license. Keep the list here, schedule showings at venues, and anything marked "On menu" appears on the Venue Menu where venues can Wish List it. Shared with the Venue Menu's Movies tab.</div>
+    <div class="filter-bar">
+      <input class="search-input" id="movie-search" placeholder="Search movies…" oninput="renderMoviesTab()">
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost btn-sm" onclick="openMovieBulk()">Bulk Add</button>
+      <button class="btn btn-primary btn-sm" onclick="openMovieModal()">+ Add Movie</button>
+    </div>
+    <div class="section-title" style="font-size:15px;margin-top:1rem">Scheduled showings</div>
+    <div id="movie-showings"></div>
+    <div class="section-title" style="font-size:15px;margin-top:1.5rem">Movie list</div>
+    <table class="gtable">
+      <thead><tr><th>Title</th><th>Year</th><th>Runtime</th><th>Genre</th><th>Venue Menu</th><th>Shown</th><th></th></tr></thead>
+      <tbody id="movie-rows"></tbody>
+    </table>
+    <div id="movie-empty" class="empty-state" style="display:none">No movies yet — add one, or use Bulk Add to paste your whole list.</div>
   </div>
 
   <!-- VENUE DETAIL -->
@@ -692,6 +712,64 @@ a{color:inherit}
   </div>
 </div>
 
+<div class="modal-overlay" id="movie-modal-overlay">
+  <div class="modal">
+    <h3 id="movie-modal-title">Add Movie</h3>
+    <label class="form-label">Title</label>
+    <input type="text" class="form-input" id="mv-title" placeholder="e.g. Night of the Living Dead">
+    <div class="form-row2">
+      <div><label class="form-label">Year</label><input type="text" class="form-input" id="mv-year" placeholder="1968"></div>
+      <div><label class="form-label">Runtime (minutes)</label><input type="text" class="form-input" id="mv-runtime" placeholder="96"></div>
+    </div>
+    <label class="form-label">Genre / tags <span style="opacity:.6;font-weight:normal">(comma separated)</span></label>
+    <input type="text" class="form-input" id="mv-genre" placeholder="Horror, Classic, B-Movie">
+    <label class="form-label">Description <span style="opacity:.6;font-weight:normal">(what venues see on the menu)</span></label>
+    <textarea class="form-textarea" id="mv-desc" rows="3"></textarea>
+    <label class="form-label">Poster image URL</label>
+    <input type="text" class="form-input" id="mv-poster" placeholder="https://…">
+    <label class="form-label">Where to get it <span style="opacity:.6;font-weight:normal">(Internet Archive / file link — internal only)</span></label>
+    <input type="text" class="form-input" id="mv-url" placeholder="https://archive.org/details/…">
+    <label class="form-label">Internal notes</label>
+    <textarea class="form-textarea" id="mv-notes" rows="2" placeholder="Best print, content warnings, public-domain proof…"></textarea>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;text-transform:none;letter-spacing:0;cursor:pointer"><input type="checkbox" id="mv-published" style="width:auto;margin:0" checked> Show on the Venue Menu</label>
+    <div class="modal-actions">
+      <button class="btn btn-danger btn-sm" id="mv-delete-btn" onclick="deleteMovie()" style="display:none">Delete</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('movie-modal-overlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMovie()">Save</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="movie-bulk-overlay">
+  <div class="modal">
+    <h3>Bulk Add Movies</h3>
+    <div class="section-sub">One movie per line: <b>Title | Year | Runtime | Link</b> — everything after the title is optional. Titles already in the list are skipped.</div>
+    <textarea class="form-textarea" id="mv-bulk-text" rows="10" placeholder="Night of the Living Dead | 1968 | 96 | https://archive.org/…&#10;Nosferatu | 1922&#10;Plan 9 from Outer Space"></textarea>
+    <div class="modal-actions"><span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('movie-bulk-overlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMovieBulk()">Add Movies</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="movie-sched-overlay">
+  <div class="modal">
+    <h3>Schedule a showing</h3>
+    <label class="form-label">Movie</label>
+    <select class="form-select" id="ms-movie"></select>
+    <label class="form-label">Venue</label>
+    <select class="form-select" id="ms-venue"></select>
+    <div class="form-row2">
+      <div><label class="form-label">Date</label><input type="date" class="form-input" id="ms-date"></div>
+      <div><label class="form-label">Start time</label><input type="time" class="form-input" id="ms-time"></div>
+    </div>
+    <label class="form-label">Notes</label>
+    <input type="text" class="form-input" id="ms-notes" placeholder="e.g. Halloween double feature, host bringing projector">
+    <div class="modal-actions"><span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('movie-sched-overlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveShowing()">Schedule</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="theme-modal-overlay">
   <div class="modal">
     <h3 id="theme-modal-title">Add Theme</h3>
@@ -1235,6 +1313,7 @@ auth.onAuthStateChanged(function(user){
   attachTriviaMirrorListener();
   attachBingoPairLibraryListener();
   attachVenueMenuPairLibraryListener();
+  attachMoviesListeners();
   vmxListen();
 });
 // A read-only, always-on mirror of the real Bingo category library, kept
@@ -1302,6 +1381,122 @@ function attachTriviaMirrorListener(){
     recomputeVmPairLib();
     refreshLibraryViews();
   }, err=>{ console.warn('Planner: trivia library mirror listener failed:', err); });
+}
+// ═══ PUBLIC-DOMAIN MOVIES ═══
+// List lives in Firestore venueMenuConfig/movies { items:{id:{...}} } — the same doc the Venue Menu's Movies tab and the
+// customer menu read, so one edit shows everywhere. Showings live at RTDB trivia/planner/movieGigs/<id>.
+let moviesRaw = {}, movieShowings = {}, editingMovieId = null;
+function attachMoviesListeners(){
+  try{
+    dbFs.collection('venueMenuConfig').doc('movies').onSnapshot(snap=>{
+      moviesRaw = (snap.exists && snap.data().items) || {};
+      if(activeTab==='movies') renderMoviesTab();
+    }, err=>console.warn('Planner: movies listener failed:', err));
+  }catch(e){ console.warn(e); }
+  db.ref('trivia/planner/movieGigs').on('value', snap=>{
+    movieShowings = snap.val()||{};
+    if(activeTab==='movies') renderMoviesTab();
+  }, err=>console.warn('Planner: movie showings listener failed:', err));
+}
+function movieVenueOptions(){
+  const seen = new Map();
+  Object.entries(window.__vmxMaster||{}).forEach(([id,m])=>{ if(id[0]!=='_' && m && m.name) seen.set(vmxKey(m.name), {id, name:m.name}); });
+  Object.values(state.venues||{}).forEach(v=>{ if(v&&v.name&&!seen.has(vmxKey(v.name))) seen.set(vmxKey(v.name), {id:v.venueId||('name:'+vmxKey(v.name)), name:v.name}); });
+  return [...seen.values()].sort((a,b)=>a.name.localeCompare(b.name));
+}
+function renderMoviesTab(){
+  const q = (document.getElementById('movie-search')||{value:''}).value.trim().toLowerCase();
+  const stats = {};
+  Object.values(movieShowings).forEach(sh=>{ if(!sh||!sh.movieId) return; const s=stats[sh.movieId]=stats[sh.movieId]||{n:0,last:''}; s.n++; if(sh.date>s.last) s.last=sh.date; });
+  let list = Object.entries(moviesRaw).map(([id,m])=>({id,...m})).sort((a,b)=>(a.title||'').localeCompare(b.title||''));
+  if(q) list = list.filter(m=>(m.title||'').toLowerCase().includes(q)||(m.genre||'').toLowerCase().includes(q)||String(m.year||'').includes(q));
+  document.getElementById('movie-empty').style.display = list.length ? 'none' : 'block';
+  document.getElementById('movie-rows').innerHTML = list.map(m=>{
+    const st = stats[m.id];
+    return `<tr style="cursor:pointer" onclick="openMovieModal('${m.id}')">
+      <td><b>${escapeHtml(m.title||'(untitled)')}</b></td><td>${escapeHtml(m.year||'')}</td><td>${m.runtime?escapeHtml(m.runtime)+' min':''}</td>
+      <td>${escapeHtml(m.genre||'')}</td><td>${m.published===false?'<span style="color:var(--text3)">Hidden</span>':'On menu'}</td>
+      <td>${st?st.n+'× · last '+fmtMDY(st.last):'—'}</td>
+      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openShowingModal('${m.id}')">Schedule</button></td></tr>`;
+  }).join('');
+  const today = toKey(new Date());
+  const shows = Object.entries(movieShowings).map(([id,s])=>({id,...s})).filter(s=>s&&s.date).sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+  const up = shows.filter(s=>s.date>=today), past = shows.filter(s=>s.date<today).reverse().slice(0,10);
+  const row = s=>`<div class="tl-row" style="display:flex;gap:12px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--border2)">
+      <span style="min-width:120px">${fmtMDY(s.date)}${s.time?' · '+escapeHtml(dispTime(s.time)):''}</span>
+      <span style="flex:1"><b>${escapeHtml(s.movieTitle||'?')}</b> at ${escapeHtml(s.venueName||'?')}${s.notes?` <span style="color:var(--text3)">— ${escapeHtml(s.notes)}</span>`:''}</span>
+      <button class="btn btn-ghost btn-sm" onclick="removeShowing('${s.id}')">Remove</button></div>`;
+  document.getElementById('movie-showings').innerHTML = (up.length ? up.map(row).join('') : '<div class="empty-state" style="padding:12px">Nothing scheduled yet — click Schedule next to a movie.</div>')
+    + (past.length ? `<div class="section-sub" style="margin-top:10px">Recent past showings</div>`+past.map(row).join('') : '');
+}
+function openMovieModal(id){
+  editingMovieId = id||null;
+  const m = id ? (moviesRaw[id]||{}) : {};
+  document.getElementById('movie-modal-title').textContent = id ? 'Edit Movie' : 'Add Movie';
+  [['title','title'],['year','year'],['runtime','runtime'],['genre','genre'],['desc','desc'],['poster','poster'],['url','watchUrl'],['notes','notes']].forEach(([el,f])=>{ document.getElementById('mv-'+el).value = m[f]||''; });
+  document.getElementById('mv-published').checked = m.published!==false;
+  document.getElementById('mv-delete-btn').style.display = id ? 'inline-block' : 'none';
+  openModal('movie-modal-overlay');
+}
+function saveMovie(){
+  const title = document.getElementById('mv-title').value.trim();
+  if(!title) return toast('Give the movie a title.', true);
+  const id = editingMovieId || ('mv_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5));
+  const prev = moviesRaw[id]||{};
+  const v = n=>document.getElementById('mv-'+n).value.trim();
+  const obj = {...prev, id, title, year:v('year'), runtime:v('runtime'), genre:v('genre'), desc:v('desc'), poster:v('poster'), watchUrl:v('url'), notes:v('notes'),
+    published: document.getElementById('mv-published').checked, updatedAt: Date.now()};
+  if(!prev.addedAt) obj.addedAt = Date.now();
+  dbFs.collection('venueMenuConfig').doc('movies').set({items:{[id]:obj}}, {merge:true})
+    .then(()=>{ moviesRaw[id]=obj; toast('Movie saved.'); closeModal('movie-modal-overlay'); })
+    .catch(e=>toast('Save failed: '+(e.code||e.message), true));
+}
+function deleteMovie(){
+  if(!editingMovieId) return;
+  const m = moviesRaw[editingMovieId]||{};
+  if(!confirm('Delete "'+m.title+'" from the movie list? Showings already scheduled stay on the calendar.')) return;
+  dbFs.collection('venueMenuConfig').doc('movies').update({['items.'+editingMovieId]: firebase.firestore.FieldValue.delete()})
+    .then(()=>{ delete moviesRaw[editingMovieId]; toast('Movie deleted.'); closeModal('movie-modal-overlay'); })
+    .catch(e=>toast('Delete failed: '+(e.code||e.message), true));
+}
+function openMovieBulk(){ document.getElementById('mv-bulk-text').value=''; openModal('movie-bulk-overlay'); }
+function saveMovieBulk(){
+  const have = new Set(Object.values(moviesRaw).map(m=>(m.title||'').trim().toLowerCase()));
+  const items = {}; let n=0, skipped=0;
+  document.getElementById('mv-bulk-text').value.split('\n').forEach((line,i)=>{
+    const p = line.split('|').map(x=>x.trim()); if(!p[0]) return;
+    if(have.has(p[0].toLowerCase())){ skipped++; return; }
+    have.add(p[0].toLowerCase());
+    const id = 'mv_'+Date.now().toString(36)+i+Math.random().toString(36).slice(2,4);
+    items[id] = {id, title:p[0], year:p[1]||'', runtime:p[2]||'', watchUrl:p[3]||'', genre:'', desc:'', poster:'', notes:'', published:true, addedAt:Date.now(), updatedAt:Date.now()};
+    n++;
+  });
+  if(!n) return toast(skipped ? 'Those titles are already in the list.' : 'Nothing to add.', true);
+  dbFs.collection('venueMenuConfig').doc('movies').set({items}, {merge:true})
+    .then(()=>{ Object.assign(moviesRaw, items); toast('Added '+n+' movie'+(n===1?'':'s')+(skipped?' ('+skipped+' already there)':'')+'.'); closeModal('movie-bulk-overlay'); })
+    .catch(e=>toast('Save failed: '+(e.code||e.message), true));
+}
+function openShowingModal(movieId){
+  const movies = Object.entries(moviesRaw).map(([id,m])=>({id,title:m.title||''})).sort((a,b)=>a.title.localeCompare(b.title));
+  if(!movies.length) return toast('Add a movie first.', true);
+  document.getElementById('ms-movie').innerHTML = movies.map(m=>`<option value="${m.id}" ${m.id===movieId?'selected':''}>${escapeHtml(m.title)}</option>`).join('');
+  document.getElementById('ms-venue').innerHTML = movieVenueOptions().map(v=>`<option value="${escapeHtml(v.id)}" data-name="${escapeHtml(v.name)}">${escapeHtml(v.name)}</option>`).join('');
+  document.getElementById('ms-date').value = ''; document.getElementById('ms-time').value = ''; document.getElementById('ms-notes').value = '';
+  openModal('movie-sched-overlay');
+}
+function saveShowing(){
+  const movieId = document.getElementById('ms-movie').value;
+  const vSel = document.getElementById('ms-venue'), opt = vSel.options[vSel.selectedIndex];
+  const date = document.getElementById('ms-date').value;
+  if(!movieId || !opt) return toast('Pick a movie and a venue.', true);
+  if(!date) return toast('Pick a date.', true);
+  const id = db.ref('trivia/planner/movieGigs').push().key;
+  const rec = {id, movieId, movieTitle:(moviesRaw[movieId]||{}).title||'', venueId:opt.value, venueName:opt.dataset.name, date, time:document.getElementById('ms-time').value||'', notes:document.getElementById('ms-notes').value.trim(), createdAt:Date.now(), locationId:selectedLocationId||null};
+  db.ref('trivia/planner/movieGigs/'+id).set(rec).then(()=>{ toast('Showing scheduled.'); closeModal('movie-sched-overlay'); });
+}
+function removeShowing(id){
+  if(!confirm('Remove this showing?')) return;
+  db.ref('trivia/planner/movieGigs/'+id).remove().then(()=>toast('Removed.'));
 }
 function attachVenueMenuPairLibraryListener(){
   dbFs.collection('venueMenuCategories').onSnapshot(snap=>{
@@ -1831,7 +2026,7 @@ function switchTab(tab){
   activeTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  const map = {dashboard:'panel-dashboard', planning:'panel-planning', venues:'panel-venues', themes:'panel-themes'};
+  const map = {dashboard:'panel-dashboard', planning:'panel-planning', venues:'panel-venues', themes:'panel-themes', movies:'panel-movies'};
   if(map[tab]) document.getElementById(map[tab]).classList.add('active');
   renderActiveTab();
 }
@@ -1839,6 +2034,7 @@ function renderActiveTab(){
   if(activeTab==='dashboard') { renderDayBoxes(); renderMonthCalendar(); renderSpreadsheetView(); }
   else if(activeTab==='planning') renderPlanning();
   else if(activeTab==='venues') renderVenues();
+  else if(activeTab==='movies') renderMoviesTab();
   else if(activeTab==='themes') {
     // Theme Library is the complete, all-types library in BOTH modes.
     renderThemes(); renderSequences();
