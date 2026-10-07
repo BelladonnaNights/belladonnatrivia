@@ -3594,34 +3594,23 @@ function updateThemeBulkBar(){
 }
 
 function bulkDeleteThemes(){
-  const n = selectedThemeIds.size;
-  if(!n) return;
-  // Only Trivia-library categories can be deleted from the Planner — Bingo
-  // categories (with images) and Venue Menu categories are deleted in the
-  // app that owns them, so a stray click here can't wipe them.
-  const allIds = Array.from(selectedThemeIds);
-  const ids = allIds.filter(k=>k.indexOf('trivia:')===0).map(k=>k.slice(7));
-  const skipped = allIds.length - ids.length;
-  if(!ids.length){ return toast('Bingo and Venue Menu categories are deleted in Bingo Admin / the Venue Menu.', true); }
-  if(!confirm(`Delete ${ids.length} categor${ids.length===1?'y':'ies'} everywhere — Trivia Admin, the Venue Menu, scheduling — not just from this list? This can't be undone.${skipped?`\n\n(${skipped} Bingo/Venue Menu categor${skipped===1?'y':'ies'} in your selection will be left alone.)`:''}`)) return;
+  const keys = Array.from(selectedThemeIds);
+  if(!keys.length) return;
+  const recs = keys.map(k=>getLibRecord(k)).filter(Boolean);
+  if(!recs.length) return;
+  const by = {trivia:0, bingo:0, vm:0}; recs.forEach(r=>by[r.source]++);
+  const parts = [];
+  if(by.trivia) parts.push(`${by.trivia} shared Trivia record${by.trivia===1?'':'s'} (removed from Trivia Admin and the Venue Menu too)`);
+  if(by.bingo) parts.push(`${by.bingo} Bingo record${by.bingo===1?'':'s'} (removed from Bingo Admin too)`);
+  if(by.vm) parts.push(`${by.vm} Venue Menu record${by.vm===1?'':'s'} (removed from the Venue Menu)`);
+  if(!confirm('Delete '+recs.length+' categor'+(recs.length===1?'y':'ies')+'?\n\n• '+parts.join('\n• ')+'\n\nThis can\'t be undone.')) return;
   setSyncStatus('syncing');
-  const rtdbUpdates = {};
-  const karaokeIdsToUnmirror = [];
-  ids.forEach(id=>{
-    rtdbUpdates[MODE_PATHS.trivia.library+'/'+id] = null;
-    const t = triviaLibMirrorRaw[id];
-    if(t && t.plannerTier==='karaoke') karaokeIdsToUnmirror.push(toVmCategoryId(t.name));
-  });
-  db.ref().update(rtdbUpdates).then(()=>{
-    return Promise.all(karaokeIdsToUnmirror.map(vmId => dbFs.collection('venueMenuCategories').doc(vmId).delete().catch(()=>{})));
-  }).then(()=>{
-    toast(`Deleted ${ids.length} categor${ids.length===1?'y':'ies'}.`);
-    selectedThemeIds.clear();
-  }).catch(err=>{
-    console.error('Bulk delete failed:', err);
-    toast('Delete failed: '+(err.code||err.message), true);
-    setSyncStatus('synced');
-  });
+  Promise.all(recs.map(r=>deleteOneThemeRecord(r.source, r.id).then(()=>null, e=>e)))
+    .then(res=>{
+      const failed = res.filter(Boolean);
+      toast(failed.length ? `Deleted ${recs.length-failed.length}; ${failed.length} failed: ${failed[0].code||failed[0].message}` : `Deleted ${recs.length} categor${recs.length===1?'y':'ies'}.`, failed.length>0);
+      selectedThemeIds.clear(); updateThemeBulkBar(); setSyncStatus('synced');
+    });
 }
 
 function openHistoryModal(key){
@@ -3678,7 +3667,7 @@ function openThemeModal(key){
   document.getElementById('t-karaoke-songs').value = (rec.karaokeSongs||[]).join('\n');
   // Delete stays Trivia-only (Bingo categories carry images; Venue Menu ones
   // are managed in the Venue Menu) — see bulkDeleteThemes.
-  document.getElementById('theme-delete-btn').style.display = (key && editingThemeSource==='trivia') ? 'inline-block' : 'none';
+  document.getElementById('theme-delete-btn').style.display = key ? 'inline-block' : 'none';
 
   renderTagChips();
   renderPairsWithSection();
@@ -3942,23 +3931,29 @@ async function syncOrCreateLinkedNight(themeId, existing, fields){
     await db.ref(MODE_PATHS.trivia.library+'/'+themeId+'/linkedBundleNames').set(uniqueBundle);
   }catch(e){ console.warn('Could not sync linked Venue Menu Night:', e); }
 }
+// Removes ONE library record from the store that owns it. Trivia records (also the shared Planner/Trivia Admin/Venue Menu
+// record) go from trivia/categories; a Bingo record from bingo/landing/categories; a Venue Menu record from Firestore.
+function deleteOneThemeRecord(source, id){
+  if(source==='bingo') return db.ref('bingo/landing/categories/'+id).remove();
+  if(source==='vm') return dbFs.collection('venueMenuCategories').doc(id).delete();
+  const deletedTheme = triviaLibMirrorRaw[id] || {};
+  return db.ref(MODE_PATHS.trivia.library+'/'+id).remove().then(()=>{
+    if(deletedTheme.plannerTier==='karaoke') return dbFs.collection('venueMenuCategories').doc(toVmCategoryId(deletedTheme.name)).delete().catch(()=>{});
+  });
+}
+function themeDeleteWarning(source, name){
+  return source==='bingo' ? `"${name}" is a record in the Bingo library — deleting it removes it from the Bingo Admin too (and its image, if it has one).`
+       : source==='vm' ? `"${name}" is a Venue Menu record — deleting it removes it from the Venue Menu too.`
+       : `"${name}" is the shared Trivia record — deleting it removes it from Trivia Admin and the Venue Menu too.`;
+}
 function deleteTheme(){
-  if(!editingThemeId || editingThemeSource!=='trivia') return;
-  // This deletes the real category everywhere — Trivia Admin and the Venue
-  // Menu too, once it reads the same record — not just from this list.
-  if(!confirm('Delete this category everywhere — Trivia Admin, the Venue Menu, scheduling — not just from this list? This can\'t be undone.')) return;
+  if(!editingThemeId) return;
+  const source = editingThemeSource, id = editingThemeId;
+  const rec = getLibRecord(editingThemeKey) || {};
+  if(!confirm(themeDeleteWarning(source, rec.name||'This category')+'\n\nThis can\'t be undone. Delete it?')) return;
   setSyncStatus('syncing');
-  const deletedTheme = triviaLibMirrorRaw[editingThemeId] || {};
-  db.ref(MODE_PATHS.trivia.library+'/'+editingThemeId).remove()
-    .then(()=>{
-      // Karaoke themes also exist as a mirrored Firestore doc (see
-      // syncKaraokeThemeToVenueMenu) — clean that up too so it doesn't
-      // linger in the Venue Menu after the Planner side is gone.
-      if(deletedTheme.plannerTier==='karaoke') {
-        return dbFs.collection('venueMenuCategories').doc(toVmCategoryId(deletedTheme.name)).delete().catch(()=>{});
-      }
-    })
-    .then(()=>{ toast('Category deleted.'); closeModal('theme-modal-overlay'); })
+  deleteOneThemeRecord(source, id)
+    .then(()=>{ toast('Deleted.'); closeModal('theme-modal-overlay'); })
     .catch(err=>{ console.error('Delete theme failed:', err); toast('Delete failed: '+(err.code||err.message), true); setSyncStatus('synced'); });
 }
 
