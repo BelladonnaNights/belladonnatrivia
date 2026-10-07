@@ -433,7 +433,7 @@ a{color:inherit}
     <div class="section-title">Public-Domain Movies</div>
     <div class="section-sub">Films we can show without paying for a license. Keep the list here, schedule showings at venues, and anything marked "On menu" appears on the Venue Menu where venues can Wish List it. Shared with the Venue Menu's Movies tab.</div>
     <div class="filter-bar">
-      <input class="search-input" id="movie-search" placeholder="Search movies…" oninput="renderMoviesTab()">
+      <input class="search-input" id="movie-search" placeholder="Search title, notes, tags, year…" oninput="renderMoviesTab()">
       <span style="flex:1"></span>
       <button class="btn btn-ghost btn-sm" onclick="openMovieBulk()">Bulk Add</button>
       <button class="btn btn-primary btn-sm" onclick="openMovieModal()">+ Add Movie</button>
@@ -442,7 +442,7 @@ a{color:inherit}
     <div id="movie-showings"></div>
     <div class="section-title" style="font-size:15px;margin-top:1.5rem">Movie list</div>
     <table class="gtable">
-      <thead><tr><th>Title</th><th>Year</th><th>Runtime</th><th>Genre</th><th style="min-width:240px">Notes</th><th>On Venue Menu</th><th>Shown</th><th></th></tr></thead>
+      <thead><tr><th>Title</th><th>Year</th><th>Runtime</th><th>Genre</th><th>Theme nights</th><th style="min-width:240px">Notes</th><th>On Venue Menu</th><th>Shown</th><th></th></tr></thead>
       <tbody id="movie-rows"></tbody>
     </table>
     <div id="movie-empty" class="empty-state" style="display:none">No movies yet — add one, or use Bulk Add to paste your whole list.</div>
@@ -725,6 +725,10 @@ a{color:inherit}
     <input type="text" class="form-input" id="mv-genre" placeholder="Horror, Classic, B-Movie">
     <label class="form-label">Description <span style="opacity:.6;font-weight:normal">(what venues see on the menu)</span></label>
     <textarea class="form-textarea" id="mv-desc" rows="3"></textarea>
+    <label class="form-label">Pairs with theme nights <span style="opacity:.6;font-weight:normal">(shown on the Venue Menu next to the movie)</span></label>
+    <div id="mv-pair-chips"></div>
+    <input type="text" class="form-input" id="mv-pair-search" placeholder="Search theme nights to pair…" oninput="renderMoviePairSuggest()" onfocus="renderMoviePairSuggest()">
+    <div class="theme-suggest" id="mv-pair-suggest" style="display:none"></div>
     <label class="form-label">Poster image URL</label>
     <input type="text" class="form-input" id="mv-poster" placeholder="https://…">
     <label class="form-label">Where to get it <span style="opacity:.6;font-weight:normal">(Internet Archive / file link — internal only)</span></label>
@@ -810,6 +814,7 @@ a{color:inherit}
       <label class="form-label">Description <span style="opacity:.6;font-weight:normal">(what this category is about — shown to venues on the Venue Menu and in the Trivia &amp; Bingo admins)</span></label>
       <textarea class="form-textarea" id="t-desc" rows="3" placeholder="e.g. Teen supernatural shows — vampires, witches, monsters and melodrama. Think Buffy, Vampire Diaries, Charmed…"></textarea>
     </div>
+    <div id="t-movies-wrap" style="display:none"><label class="form-label">Movies paired with this theme night</label><div id="t-movies-list" style="margin-bottom:12px"></div></div>
     <label class="form-label">Tags</label>
     <div id="t-tag-chips"></div>
     <div style="display:flex;gap:6px;margin-bottom:10px">
@@ -1409,13 +1414,14 @@ function renderMoviesTab(){
   const stats = {};
   Object.values(movieShowings).forEach(sh=>{ if(!sh||!sh.movieId) return; const s=stats[sh.movieId]=stats[sh.movieId]||{n:0,last:''}; s.n++; if(sh.date>s.last) s.last=sh.date; });
   let list = Object.entries(moviesRaw).map(([id,m])=>({id,...m})).sort((a,b)=>(a.title||'').localeCompare(b.title||''));
-  if(q) list = list.filter(m=>(m.title||'').toLowerCase().includes(q)||(m.genre||'').toLowerCase().includes(q)||String(m.year||'').includes(q));
+  if(q) list = list.filter(m=>[m.title,m.genre,m.notes,m.desc,m.year,m.runtime,(m.pairs||[]).map(p=>p.name).join(' ')].some(f=>String(f||'').toLowerCase().includes(q)));
   document.getElementById('movie-empty').style.display = list.length ? 'none' : 'block';
   document.getElementById('movie-rows').innerHTML = list.map(m=>{
     const st = stats[m.id];
     return `<tr style="cursor:pointer" onclick="openMovieModal('${m.id}')">
       <td><b>${escapeHtml(m.title||'(untitled)')}</b></td><td>${escapeHtml(m.year||'')}</td><td>${m.runtime?escapeHtml(m.runtime)+' min':''}</td>
       <td>${escapeHtml(m.genre||'')}</td>
+      <td>${moviePairChips(m)}</td>
       <td onclick="event.stopPropagation()"><input class="form-input" style="margin:0;padding:4px 8px;font-size:12px;min-width:220px" value="${escapeHtml(m.notes||'')}" placeholder="Cast, silent film…" onchange="saveMovieNote('${m.id}',this.value)"></td>
       <td onclick="event.stopPropagation()" style="text-align:center"><input type="checkbox" style="width:auto;margin:0;cursor:pointer" ${m.published===true?'checked':''} onchange="saveMoviePublished('${m.id}',this.checked)" title="Show on the Venue Menu"></td>
       <td>${st?st.n+'× · last '+fmtMDY(st.last):'—'}</td>
@@ -1444,12 +1450,42 @@ function saveMoviePublished(id, on){
     .then(()=>{ m.published = !!on; toast(on?'Now showing on the Venue Menu.':'Removed from the Venue Menu.'); })
     .catch(e=>{ toast('Not saved: '+(e.code||e.message), true); renderMoviesTab(); });
 }
+let editingMoviePairs = [];
+function themeNightList(){
+  return Object.entries(triviaLibMirrorRaw||{}).filter(([id,c])=>c && c.plannerTier==='theme-night')
+    .map(([id,c])=>({id, name:c.name||c.title||'', nightId:c.linkedNightId||null})).sort((a,b)=>a.name.localeCompare(b.name));
+}
+function moviePairChips(m){
+  const live = Object.fromEntries(themeNightList().map(t=>[t.id,t]));
+  return (m.pairs||[]).map(p=>`<span class="tag-chip" style="margin:1px">${escapeHtml((live[p.id]||p).name)}</span>`).join('') || '<span style="color:var(--text3)">—</span>';
+}
+function renderMoviePairChips(){
+  const live = Object.fromEntries(themeNightList().map(t=>[t.id,t]));
+  document.getElementById('mv-pair-chips').innerHTML = editingMoviePairs.map((p,i)=>`<span class="tag-chip">${escapeHtml((live[p.id]||p).name)}<span class="x" onclick="removeMoviePair(${i})">×</span></span>`).join('') || '<span style="color:var(--text3);font-size:12px">Not paired with any theme night yet</span>';
+}
+function renderMoviePairSuggest(){
+  const q = document.getElementById('mv-pair-search').value.trim().toLowerCase();
+  const have = new Set(editingMoviePairs.map(p=>p.id));
+  const list = themeNightList().filter(t=>!have.has(t.id) && (!q || t.name.toLowerCase().includes(q))).slice(0,30);
+  const box = document.getElementById('mv-pair-suggest');
+  box.style.display = 'block';
+  box.innerHTML = list.length ? list.map(t=>`<div class="theme-opt" onmousedown="event.preventDefault();addMoviePair('${t.id}')">${escapeHtml(t.name)}</div>`).join('') : '<div class="theme-opt" style="color:var(--text3)">No theme nights match.</div>';
+}
+function addMoviePair(id){
+  const t = themeNightList().find(x=>x.id===id); if(!t) return;
+  editingMoviePairs.push({id:t.id, name:t.name, nightId:t.nightId});
+  document.getElementById('mv-pair-search').value=''; document.getElementById('mv-pair-suggest').style.display='none';
+  renderMoviePairChips();
+}
+function removeMoviePair(i){ editingMoviePairs.splice(i,1); renderMoviePairChips(); }
 function openMovieModal(id){
   editingMovieId = id||null;
   const m = id ? (moviesRaw[id]||{}) : {};
   document.getElementById('movie-modal-title').textContent = id ? 'Edit Movie' : 'Add Movie';
   [['title','title'],['year','year'],['runtime','runtime'],['genre','genre'],['desc','desc'],['poster','poster'],['url','watchUrl'],['notes','notes']].forEach(([el,f])=>{ document.getElementById('mv-'+el).value = m[f]||''; });
   document.getElementById('mv-published').checked = m.published===true;
+  editingMoviePairs = (m.pairs||[]).map(p=>({...p}));
+  renderMoviePairChips(); document.getElementById('mv-pair-search').value=''; document.getElementById('mv-pair-suggest').style.display='none';
   document.getElementById('mv-delete-btn').style.display = id ? 'inline-block' : 'none';
   openModal('movie-modal-overlay');
 }
@@ -1460,6 +1496,7 @@ function saveMovie(){
   const prev = moviesRaw[id]||{};
   const v = n=>document.getElementById('mv-'+n).value.trim();
   const obj = {...prev, id, title, year:v('year'), runtime:v('runtime'), genre:v('genre'), desc:v('desc'), poster:v('poster'), watchUrl:v('url'), notes:v('notes'),
+    pairs: themeNightList().length ? editingMoviePairs.map(p=>{ const t=themeNightList().find(x=>x.id===p.id); return t ? {id:t.id,name:t.name,nightId:t.nightId} : p; }) : editingMoviePairs,
     published: document.getElementById('mv-published').checked, updatedAt: Date.now()};
   if(!prev.addedAt) obj.addedAt = Date.now();
   dbFs.collection('venueMenuConfig').doc('movies').set({items:{[id]:obj}}, {merge:true})
@@ -2729,7 +2766,7 @@ function primaryVenueId(id){
 function openVenueDetail(id){
   id = primaryVenueId(id);
   currentVenueDetailId = id;
-  noCreateMode = false;
+  noCreateMode = true;
   document.getElementById('vd-no-create-slot').innerHTML = noCreateToggleHtml();
   const v = state.venues[id]; if(!v) return;
   document.getElementById('vd-name').textContent = v.name||'';
@@ -3076,7 +3113,7 @@ function openQuickSchedule(venueId, startDateKey){
   venueId = primaryVenueId(venueId);
   currentVenueDetailId = venueId; // reuse vdInlineSave / bulk-fill logic as-is
   qsStartOverride = startDateKey || null;
-  noCreateMode = false;
+  noCreateMode = true;
   document.getElementById('qs-no-create-slot').innerHTML = noCreateToggleHtml();
   const v = state.venues[venueId]; if(!v) return;
   document.getElementById('qs-venue-name').textContent = v.name;
@@ -3632,6 +3669,9 @@ function openThemeModal(key){
   // its own Type field in the Venue Menu, so the tier selector is read-only there.
   document.getElementById('t-tier').disabled = (editingThemeSource==='bingo');
   document.getElementById('t-desc').value = rec.description||'';
+  { const pm = (key && editingThemeSource==='trivia') ? Object.values(moviesRaw||{}).filter(m=>(m.pairs||[]).some(p=>p.id===editingThemeId)) : [];
+    document.getElementById('t-movies-wrap').style.display = pm.length ? '' : 'none';
+    document.getElementById('t-movies-list').innerHTML = pm.map(m=>`<span class="tag-chip" style="margin:1px">🎬 ${escapeHtml(m.title||'')}${m.year?' ('+escapeHtml(m.year)+')':''}</span>`).join(''); }
   document.getElementById('t-desc-wrap').style.display = (editingThemeSource==='vm') ? 'none' : '';
   document.getElementById('t-times-used').value = rec.timesUsed||0;
   document.getElementById('t-last-used').value = rec.lastUsedDate||'';
@@ -4025,7 +4065,7 @@ let gigCtx = { venueId:null, dateKey:null, rounds:[{name:'',themeId:null}], regu
 // plain text on the gig record only — nothing new gets added to the library.
 // Resets to off each time a schedule view is opened, so it's a deliberate
 // choice each session rather than something that can be left on by accident.
-let noCreateMode = false;
+let noCreateMode = true;
 function findThemeIdByNameOnly(name){
   const key = name.trim().toLowerCase();
   const found = Object.entries(state.themes||{}).find(([id,t])=>(t.name||'').trim().toLowerCase()===key);
@@ -4039,7 +4079,7 @@ function noCreateToggleHtml(){
 }
 function openGigModal(venueId, dateKey){
   gigCtx = { venueId, dateKey: dateKey||null, rounds:[{name:'',themeId:null}], regularTrivia:true };
-  noCreateMode = false;
+  noCreateMode = true;
   document.getElementById('gig-no-create-slot').innerHTML = noCreateToggleHtml();
   const sel = document.getElementById('gig-venue');
   sel.innerHTML = Object.entries(state.venues||{}).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''))
