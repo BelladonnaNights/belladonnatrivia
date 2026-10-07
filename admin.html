@@ -1413,6 +1413,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
       </div>
 
       <div class="field" style="margin-top:1.25rem">
+        <div class="field-label">Description <span style="opacity:.6;font-weight:400;text-transform:none;letter-spacing:0">— what this category is about; shown to venues on the Venue Menu and in the Planner</span></div>
+        <textarea class="field-input" id="f-vm-description" rows="3" style="resize:vertical" placeholder="e.g. Teen supernatural shows — vampires, witches, monsters and melodrama…"></textarea>
+      </div>
+
+      <div class="field" style="margin-top:1.25rem">
         <div class="field-label">Notes (optional)</div>
         <input class="field-input" id="f-notes" placeholder="Any notes about this category…"/>
       </div>
@@ -2438,6 +2443,7 @@ function openModal(id) {
   document.getElementById('f-canva-id').value    = cat?.canvaDesignId || '';
   document.getElementById('f-canva-bg').value     = cat?.canvaBgUrl     || '';
   document.getElementById('f-notes').value       = cat?.notes      || '';
+  document.getElementById('f-vm-description').value = (cat && cat.venueMenu && cat.venueMenu.description) || '';
   fillVaultSelect(cat?.vaultCatId || '');
   { const vs = document.getElementById('f-vault'); if(vs){ vs.dataset.touched=''; vs.onchange = () => { vs.dataset.touched='1'; updateVaultLinkHint(); }; } }
   updateVaultLinkHint();
@@ -2582,16 +2588,17 @@ async function saveCategory() {
   const vaultOptOutUpdate = vaultCatId ? null : (_vs && _vs.dataset.touched === '1' ? true : undefined);
   const data = {name, altName, genre, type, sheetUrl, tabName, vaultCatId, linkedCatId, folderUrl, bgImage, bgIntro, bgQuestion, bgPlain, thankYouUrl, catType, canvaDesignId, canvaBgUrl, notes, attributions, defaultQCount, defaultShowAnswers, defaultTwoPass, defaultTimed, updatedAt: Date.now()};
   if(vaultOptOutUpdate !== undefined) data.vaultOptOut = vaultOptOutUpdate;
+  const descVal = (document.getElementById('f-vm-description').value||'').trim();
 
   try {
     let catId = editingId;
     if(editingId) {
-      await db.ref(`trivia/categories/${editingId}`).update(data);
+      await db.ref(`trivia/categories/${editingId}`).update(Object.assign({}, data, {'venueMenu/description': descVal || null}));
       toast('Category updated!');
     } else {
       const newRef = db.ref('trivia/categories').push();
       catId = newRef.key;
-      await newRef.set({...data, createdAt: Date.now()});
+      await newRef.set({...data, createdAt: Date.now(), ...(descVal ? {venueMenu:{description:descVal}} : {})});
       toast('Category added!');
     }
     syncCategoryToVm(catId, data); // fire-and-forget — mirror into Venue Menu/Planner
