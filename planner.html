@@ -728,6 +728,10 @@ a{color:inherit}
       <input type="text" class="form-input" id="t-pairs-search" placeholder="Search…" oninput="renderPairsSuggest()">
       <div class="theme-suggest" id="t-pairs-suggest"></div>
     </div>
+    <div id="t-desc-wrap">
+      <label class="form-label">Description <span style="opacity:.6;font-weight:normal">(what this category is about — shown to venues on the Venue Menu and in the Trivia &amp; Bingo admins)</span></label>
+      <textarea class="form-textarea" id="t-desc" rows="3" placeholder="e.g. Teen supernatural shows — vampires, witches, monsters and melodrama. Think Buffy, Vampire Diaries, Charmed…"></textarea>
+    </div>
     <label class="form-label">Tags</label>
     <div id="t-tag-chips"></div>
     <div style="display:flex;gap:6px;margin-bottom:10px">
@@ -819,7 +823,7 @@ a{color:inherit}
     <div class="form-row2" style="align-items:end">
       <div><label class="form-label">Weeks to show</label>
         <input type="number" class="form-input" id="qs-weeks-count" value="6" min="1" max="26" onchange="renderQuickScheduleRows()"></div>
-      <div></div>
+      <div style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" onclick="qsShiftWeeks(-4)">◀ 4 weeks earlier</button><button class="btn btn-ghost btn-sm" onclick="qsShiftWeeks(4)">4 weeks later ▶</button></div>
     </div>
     <div class="section-sub" style="margin-bottom:8px">Type a category (autocompletes against your library) or leave blank for unplanned. Saves as you go.</div>
     <div id="qs-no-create-slot"></div>
@@ -1324,6 +1328,7 @@ function libRecord(source, id, c){
     key: source+':'+id, source, id,
     name: c.name || c.title || '',
     altName: c.altName || '',
+    description: (c.venueMenu && c.venueMenu.description) || c.description || '',
     tier,
     typeLabel: source==='vm' ? (c.type||'') : '',
     tags: normalizeVmTags(c.tags),
@@ -2668,11 +2673,19 @@ function scrollBoxToDate(box, dk){
   if(row) box.scrollTop = Math.max(0, row.offsetTop - box.offsetTop - 40);
 }
 
+// Typing a category into a row that says "Unplanned" means the person is planning it — flip the status to Planned
+// instead of silently throwing the category away. (Choosing "Unplanned" from the status menu itself still clears it.)
+function rowStatus(row, hasText){
+  const sel = row.querySelector('.tl-select');
+  const ev = window.event, fromSelect = !!(ev && ev.target && ev.target.classList && ev.target.classList.contains('tl-select'));
+  if(sel.value==='unplanned' && hasText && !fromSelect) sel.value='planned';
+  return sel.value;
+}
 function vdInlineSaveBingo(row, dk){
   const id = row.dataset.vid || currentVenueDetailId;
   const inputs = row.querySelectorAll('.tl-input');
   const n1 = (inputs[0].value||'').trim(), n2 = (inputs[1].value||'').trim();
-  const status = row.querySelector('.tl-select').value;
+  const status = rowStatus(row, !!(n1||n2));
   const ex = (state.gigs[id]||{})[dk] || {};
   const entryId = ex._bingoEntryId || null;
   const path = MODE_PATHS.bingo.gigs+'/';
@@ -2697,7 +2710,7 @@ function vdInlineSave(row, dk){
   const inputs = row.querySelectorAll('.tl-input');
   const triviaName = (inputs[0].value||'').trim();
   const musicName = (inputs[1].value||'').trim();
-  const status = row.querySelector('.tl-select').value;
+  const status = rowStatus(row, !!(triviaName||musicName));
   const existing = (state.gigs[id]||{})[dk] || {};
 
   if(status==='unplanned' || (!triviaName && !musicName && status!=='cancelled')){
@@ -2840,6 +2853,14 @@ function bumpThemeUsage(themeId, dk){
 //  for scheduling the next few weeks without leaving where you are
 // ═══════════════════════════════════════════════
 let qsStartOverride = null;
+// Move the Plan window back (or forward) so past nights can be viewed and edited too.
+function qsShiftWeeks(n){
+  const v = state.venues[currentVenueDetailId]; if(!v) return;
+  const base = qsStartOverride ? fromKey(qsStartOverride) : (()=>{ const d=new Date(); d.setHours(0,0,0,0); return d; })();
+  qsStartOverride = toKey(addDays(base, n*7));
+  renderQuickScheduleRows();
+  const rows = document.getElementById('qs-rows'); if(rows) rows.scrollTop = 0;
+}
 function openQuickSchedule(venueId, startDateKey){
   venueId = primaryVenueId(venueId);
   currentVenueDetailId = venueId; // reuse vdInlineSave / bulk-fill logic as-is
@@ -3399,6 +3420,8 @@ function openThemeModal(key){
   // A Venue Menu record's type (Karaoke / Sing-Along / Mini Games…) is set by
   // its own Type field in the Venue Menu, so the tier selector is read-only there.
   document.getElementById('t-tier').disabled = (editingThemeSource==='bingo');
+  document.getElementById('t-desc').value = rec.description||'';
+  document.getElementById('t-desc-wrap').style.display = (editingThemeSource==='vm') ? 'none' : '';
   document.getElementById('t-times-used').value = rec.timesUsed||0;
   document.getElementById('t-last-used').value = rec.lastUsedDate||'';
   document.getElementById('t-karaoke-songs').value = (rec.karaokeSongs||[]).join('\n');
@@ -3507,6 +3530,7 @@ function saveTheme(){
     lastUsedDate: document.getElementById('t-last-used').value || null,
     lastUsedVenueId: existing.lastUsedVenueId || null
   };
+  const descVal = (document.getElementById('t-desc').value||'').trim();
   const commonFields = {
     name,
     altName: (source==='trivia') ? (document.getElementById('t-alt').value.trim() || null) : undefined,
@@ -3524,9 +3548,10 @@ function saveTheme(){
   if(source==='trivia'){
     if(isNew){
       rtdbUpdates[libPath+'/'+themeId] = { ...commonFields, type: 'trivia', createdAt: Date.now(), unified: true,
-        notes: 'Created from the Planner — add sheets/images/music in Trivia Admin.' };
+        notes: 'Created from the Planner — add sheets/images/music in Trivia Admin.', ...(descVal ? {venueMenu:{description:descVal}} : {}) };
     } else {
       ['name','altName','tags','plannerTier','pairsWith','karaokeSongs','plannerUsage'].forEach(f=>{ rtdbUpdates[libPath+'/'+themeId+'/'+f] = commonFields[f]; });
+      rtdbUpdates[libPath+'/'+themeId+'/venueMenu/description'] = descVal || null;
     }
   } else if(source==='bingo'){
     rtdbUpdates[bPath+'/'+themeId+'/title'] = name;
@@ -3534,6 +3559,7 @@ function saveTheme(){
     rtdbUpdates[bPath+'/'+themeId+'/plannerTier'] = commonFields.plannerTier;
     rtdbUpdates[bPath+'/'+themeId+'/pairsWith'] = commonFields.pairsWith;
     rtdbUpdates[bPath+'/'+themeId+'/plannerUsage'] = commonFields.plannerUsage;
+    rtdbUpdates[bPath+'/'+themeId+'/venueMenu/description'] = descVal || null;
   } else {
     const vmType = {karaoke:'Karaoke','sing-along':'Sing-Along','mini-games':'Mini Games'}[tier];
     const vmData = { name, tags: editingThemeTags.join(', '), pairsWith: commonFields.pairsWith || [], plannerTier: tier || null, updatedAt: Date.now() };
