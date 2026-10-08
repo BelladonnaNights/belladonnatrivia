@@ -1,0 +1,2232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Vault · Belladonna</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@500;700&family=DM+Sans:wght@400;500;700&family=EB+Garamond:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080808;--surface:#111111;--surface2:#181818;--surface3:#222222;
+  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.13);--border3:rgba(255,255,255,.22);
+  --text:#f0ede8;--text2:#b0a898;--text3:#5a5248;
+  --gold:#c9a84c;--gold2:#e8c96a;--gold3:#f5df90;
+  --gold-shine:linear-gradient(135deg,#c9a84c 0%,#f5df90 45%,#c9a84c 70%,#e2b84a 100%);
+  --gold-dim:rgba(201,168,76,.10);--gold-glow:rgba(201,168,76,.28);--gold-glow2:rgba(201,168,76,.5);
+  --red:#e74c3c;--red-dim:rgba(231,76,60,.12);
+  --green:#2ecc71;--green-dim:rgba(46,204,113,.12);
+  --radius:8px;--radius-lg:14px;
+  --display:'Bebas Neue',sans-serif;--cinzel:'Cinzel',serif;--serif:'EB Garamond',serif;--font:'DM Sans',sans-serif;
+}
+body{--muted:var(--text2);--danger:var(--red);--ok:var(--green);--line:var(--border);--line2:var(--border2);--panel:var(--surface);--panel2:var(--surface2);--zebra:#0c0c0c;--focusbg:#1b1810}
+body[data-theme="light"]{
+  --bg:#faf6ec;--surface:#ffffff;--surface2:#f6efe0;--surface3:#ede2c8;
+  --border:rgba(40,30,10,.10);--border2:rgba(40,30,10,.18);--border3:rgba(40,30,10,.28);
+  --text:#2a2118;--text2:#5c4f3e;--text3:#8a7a63;
+  --gold:#a97f22;--gold2:#8c6a1e;--gold3:#6e5417;
+  --gold-shine:linear-gradient(135deg,#a97f22 0%,#c99a30 45%,#a97f22 70%,#93711c 100%);
+  --gold-dim:rgba(169,127,34,.12);--gold-glow:rgba(169,127,34,.35);--gold-glow2:rgba(169,127,34,.6);
+  --red-dim:rgba(231,76,60,.14);--green-dim:rgba(46,204,113,.16);
+  --zebra:#fbf8ef;--focusbg:#f4ecd2;
+}
+html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;line-height:1.4;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:rgba(201,168,76,.25);border-radius:3px}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:inherit}
+.hidden{display:none!important}
+.muted{color:var(--text3)}
+
+/* ── sign-in hand-off screen: looks like the Belladonna gateway ── */
+.screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:1.5rem;background:#000;overflow:auto;z-index:600}
+.gwWrap{width:100%;max-width:420px}
+.gwLogo{display:block;margin:0 auto .9rem;width:64px;height:64px;object-fit:contain}
+.gwBrand{font-family:'Bebas Neue',sans-serif;font-size:2.4rem;color:#f0ece0;letter-spacing:.08em;text-transform:uppercase;text-align:center;line-height:1}
+.gwBrand .accent{color:#c9a96e}
+.gwSub{font-family:'EB Garamond',serif;font-style:italic;font-size:.95rem;color:#8a8272;margin:.5rem 0 2rem;text-align:center}
+.gwCard{background:#0d0d0d;border:1px solid rgba(180,150,100,.16);border-radius:10px;padding:1.75rem 1.5rem}
+.gwMsg{text-align:center;color:#8a8272;font-size:.85rem;padding:.4rem 0}
+.gwBtn{width:100%;background:rgba(201,169,110,.1);border:1px solid rgba(201,169,110,.4);border-radius:999px;color:#c9a96e;padding:.8rem;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;transition:all .2s}
+.gwBtn:hover{background:rgba(201,169,110,.2)}
+.gwFoot{text-align:center;font-size:.62rem;letter-spacing:.16em;color:#4a4638;margin-top:1.75rem;text-transform:uppercase}
+
+/* ── NAV (same bar as the planner / trivia admin) ── */
+#app{display:flex;flex-direction:column;height:100vh}
+.nav{position:sticky;top:0;z-index:200;background:rgba(8,8,8,.95);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 2rem;height:64px;flex:none;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.nav-left{display:flex;align-items:center;gap:14px}
+.nav-logo-img{width:38px;height:38px;object-fit:contain}
+.nav-title{font-family:var(--display);font-size:24px;letter-spacing:.06em;line-height:1;color:#f0ede8}
+.nav-title span{background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.nav-subtitle{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-left:4px;padding-left:14px;border-left:1px solid var(--border2)}
+.nav-right{display:flex;align-items:center;gap:10px}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0;transition:background .3s}
+.sync-dot.synced{background:var(--green)}
+.sync-dot.syncing{background:var(--gold);animation:pulse .8s ease-in-out infinite}
+.sync-dot.error{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+.sync-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
+
+/* ── buttons / pills / fields ── */
+.btn{font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;border-radius:var(--radius);padding:9px 16px;cursor:pointer;transition:all .2s;background:transparent;color:var(--text2);border:1px solid var(--border2);white-space:nowrap;text-decoration:none;display:inline-block;line-height:1.3}
+.btn:hover{background:var(--surface2);color:var(--text)}
+.btn.ghost{color:var(--gold);border-color:var(--gold-glow)}
+.btn.ghost:hover{background:var(--gold-dim);color:var(--gold)}
+.btn.primary{background:var(--gold-shine);color:#000;border:none;font-weight:600}
+.btn.primary:hover{opacity:.88;background:var(--gold-shine);color:#000}
+.btn.danger{color:var(--red);border-color:rgba(231,76,60,.35)}
+.btn.danger:hover{background:var(--red-dim);color:var(--red)}
+.btn:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
+.btn.sm{padding:5px 11px;font-size:9px}
+.pill{font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:transparent;border:1px solid var(--border2);border-radius:99px;padding:5px 14px;color:var(--text3);cursor:pointer;transition:all .2s;white-space:nowrap}
+.pill:hover{border-color:var(--gold-glow);color:var(--gold2)}
+.pill.active,.pill.on{background:var(--gold-dim);border-color:var(--gold-glow2);color:var(--gold2)}
+.pill small{font-family:var(--font);letter-spacing:0;opacity:.7;margin-left:4px;font-size:10px}
+.linkbtn{background:none;border:0;color:var(--text3);text-decoration:underline;padding:0;font-size:12px;font-family:var(--serif);font-style:italic;cursor:pointer;text-align:left}
+.linkbtn:hover{color:var(--gold2)}
+.fld{display:flex;flex-direction:column;gap:5px;margin:0 0 1rem;font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
+.fld input,.fld select{width:100%;padding:10px 13px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none;transition:border-color .2s}
+.fld input:focus,.fld select:focus{border-color:var(--gold-glow2)}
+.msg{min-height:18px;margin-top:8px;font-size:13px;color:var(--red)}
+.msg.ok{color:var(--green)}
+.hint{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--text2);margin:0 0 .9rem;line-height:1.5}
+.hint strong{font-style:normal}
+
+/* ── layout ── */
+.shell{display:grid;grid-template-columns:300px 1fr;flex:1;min-height:0}
+aside{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
+.sideTop{padding:1rem 1rem .6rem;display:flex;flex-direction:column;gap:10px}
+#catSearch,#q{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 13px;color:var(--text);font:14px var(--font);outline:none;transition:border-color .2s}
+#catSearch{width:100%}
+#q{width:210px}
+#catSearch:focus,#q:focus{border-color:var(--gold-glow2)}
+#catSearch::placeholder,#q::placeholder{color:var(--text3)}
+#catList{flex:1;overflow-y:auto;padding:2px 8px 12px}
+.grpHead{display:flex;width:100%;align-items:center;gap:8px;background:none;border:0;padding:10px 8px 6px;color:var(--gold);font-family:var(--cinzel);letter-spacing:.14em;text-transform:uppercase;font-size:10px;font-weight:600;text-align:left}
+.grpHead em{margin-left:auto;font-style:normal;color:var(--text3);font-family:var(--font);letter-spacing:0;font-weight:400}
+.sortBtn{display:inline-block;padding:1px 6px;border:1px solid var(--border2);border-radius:99px;color:var(--text3);font-size:10px;letter-spacing:0;cursor:pointer}
+.sortBtn:hover{color:var(--gold);border-color:var(--gold)}
+.sortBtn.on{color:#080808;background:var(--gold);border-color:var(--gold)}
+.chev{display:inline-block;transition:transform .15s;font-size:9px}
+.grp.closed .chev{transform:rotate(-90deg)}
+.grp.closed .grpBody{display:none}
+.cat{display:flex;width:100%;align-items:center;gap:8px;background:none;border:0;border-radius:var(--radius);padding:7px 10px;text-align:left;color:var(--text2);font-size:13px}
+.cat:hover{background:var(--surface2);color:var(--text)}
+.cat.active{background:var(--gold-dim);box-shadow:inset 2px 0 0 var(--gold);color:var(--gold2)}
+.cat .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cat .ct{color:var(--text3);font-size:12px}
+.cat.arch{opacity:.5}
+.sideFoot{border-top:1px solid var(--border);padding:12px 16px;font-size:12px;color:var(--text3)}
+.sideFoot label{display:flex;align-items:center;gap:7px;font-family:var(--serif);font-style:italic;font-size:13px;cursor:pointer}
+main{display:flex;flex-direction:column;min-width:0;min-height:0}
+#empty{margin:auto;text-align:center;padding:40px}
+#empty h3{font-family:var(--display);font-weight:400;font-size:34px;letter-spacing:.05em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:4px}
+#empty div{font-family:var(--serif);font-style:italic;font-size:15px;color:var(--text3)}
+.top{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center;justify-content:space-between;padding:1rem 1.5rem .9rem;border-bottom:1px solid var(--border)}
+.titleBlock{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
+.catTitle{font-family:var(--display);font-size:32px;letter-spacing:.05em;line-height:1.2;background:transparent;border:1px solid transparent;border-radius:var(--radius);color:var(--gold2);padding:0 8px;min-width:140px;width:min(440px,56vw);outline:none}
+.catTitle:hover{border-color:var(--border2)}
+.catTitle:focus{border-color:var(--gold-glow2);background:var(--surface)}
+#catType{font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold2);background:transparent;border:1px solid var(--gold-glow);border-radius:99px;padding:5px 12px;outline:none;cursor:pointer}
+#catType option{background:var(--surface);color:var(--text)}
+#catCount{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--text3)}
+.tag{font-family:var(--cinzel);font-size:9px;letter-spacing:.08em;text-transform:uppercase;padding:2px 9px;border-radius:99px;border:1px solid var(--border2);color:var(--text3)}
+.tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.chips{display:flex;gap:6px}
+.tools .chk{display:flex;align-items:center;gap:6px;color:var(--text3);font-family:var(--serif);font-style:italic;font-size:13px;cursor:pointer}
+#tagBar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:.6rem 1.5rem;border-bottom:1px solid var(--border);max-height:92px;overflow:auto}
+.tagLbl{font-family:var(--cinzel);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-right:4px}
+#loading{padding:22px 24px;color:var(--text3);font-family:var(--serif);font-style:italic;font-size:1.05rem}
+
+/* ── the grid ── */
+.gridWrap{flex:1;overflow:auto;position:relative;scroll-padding-top:48px;scroll-padding-left:330px;overflow-anchor:none}
+table#grid{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}
+#grid th{position:sticky;top:0;z-index:4;background:var(--surface2);text-align:left;font-family:var(--cinzel);font-weight:600;letter-spacing:.12em;text-transform:uppercase;font-size:9px;color:var(--text3);padding:12px 10px;border-bottom:1px solid var(--border2);border-right:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
+#grid th.num,#grid th.act{cursor:default}
+td.fb,th.fb{position:sticky;left:86px;z-index:2;width:120px;min-width:120px;max-width:120px;background:var(--surface)!important;white-space:nowrap;padding:6px 6px!important;font-size:12px;vertical-align:top}
+th.fb{z-index:6;background:var(--surface2)!important;cursor:default}
+td.fb .star{background:none;border:0;cursor:pointer;color:var(--gold2);font-size:15px;line-height:1;padding:2px 3px;margin-right:2px}
+td.fb .star:hover{color:#fff}
+td.fb .fbup,td.fb .fbdn{color:var(--text2);margin-right:5px}
+td.fb .fbdn.has{color:var(--red)}
+#notesBtn .nb{display:inline-block;min-width:18px;padding:0 6px;margin-left:6px;border-radius:99px;background:var(--gold);color:#080808;font-weight:700;font-size:11px;text-align:center}
+#notesBtn .nb.zero{display:none}
+tr.flash td{background:rgba(201,168,76,.28)!important;transition:background 1s}
+.nrCat{font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin:16px 0 6px}
+.nrCard{border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--surface2)}
+.nrQ{font-weight:600;font-size:14px}
+.nrA{color:var(--text2);font-size:13px;margin-top:2px}
+.nrMeta{display:flex;gap:10px;align-items:center;margin-top:6px;font-size:12px;color:var(--text3);flex-wrap:wrap}
+.nrNote{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;border-top:1px solid var(--border);margin-top:8px;padding-top:8px;font-size:13px;color:var(--text)}
+.nrNote small{display:block;color:var(--text3);font-size:11px;margin-top:2px}
+#grid th.dragging{opacity:.4}
+#grid th.dropL{box-shadow:inset 3px 0 0 var(--gold)}
+#grid th.dropR{box-shadow:inset -3px 0 0 var(--gold)}
+.list .item.dragging{opacity:.4}
+.list .item.dropT{box-shadow:0 -2px 0 var(--gold)}
+.list .item .grab{cursor:grab;color:var(--text3);padding:0 8px 0 2px;user-select:none}
+.list .item .mv{background:none;border:1px solid var(--border2);color:var(--text2);border-radius:6px;width:26px;height:26px;cursor:pointer;margin-left:4px}
+.list .item .mv:hover:not(:disabled){color:var(--gold2);border-color:var(--gold)}
+.list .item .mv:disabled{opacity:.3;cursor:default}
+#grid th:hover:not(.num):not(.act){color:var(--gold2)}
+#grid td{padding:0;border-bottom:1px solid var(--border);border-right:1px solid var(--border);vertical-align:top;background:var(--bg)}
+#grid tbody tr:nth-child(even) td{background:var(--zebra)}
+#grid td:focus-within{background:var(--focusbg)!important;box-shadow:inset 0 0 0 1px var(--gold-glow2)}
+#grid td input[type=text],#grid td textarea,#grid td select{display:block;width:100%;background:transparent;border:0;color:var(--text);font:14px/1.35 var(--font);padding:8px 10px;outline:none;resize:none;border-radius:0}
+#grid td textarea{overflow:hidden;min-height:34px}
+#grid td select{appearance:none;-webkit-appearance:none;text-align:center;cursor:pointer;font-weight:700}
+#grid td select option{background:var(--surface);color:var(--text)}
+#grid td select.d1{color:var(--green)}#grid td select.d2{color:var(--gold2)}#grid td select.d3{color:var(--red)}
+#grid td.c-check{text-align:center;padding-top:9px}
+#grid td .thumb{display:block;width:100%;background:none;border:0;padding:7px 4px;font-size:16px;opacity:.9}
+#grid td .thumb[data-v='']{opacity:.3}
+td.num,th.num{position:sticky;left:0;z-index:2;width:86px;min-width:86px;text-align:right;color:var(--text3);padding:9px 8px 0 4px!important;font-size:12px;background:var(--surface)!important;white-space:nowrap}
+th.num{z-index:6}
+td.stickyQ,th.stickyQ{position:sticky;left:206px;z-index:2;box-shadow:2px 0 0 var(--border2)}
+th.stickyQ{z-index:6}
+tbody{counter-reset:r}
+td.num .n::before{counter-increment:r;content:counter(r)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:transparent;transition:background .4s}
+tr.saving .dot{background:var(--gold)}
+tr.saved .dot{background:var(--green)}
+tr.error .dot{background:var(--red)}
+tr.draft .dot{background:var(--border3)}
+tr.dup td.num{box-shadow:inset 3px 0 0 var(--red)}
+tr.arch{display:none}
+body.showArch tr.arch{display:table-row;opacity:.5}
+tr[hidden]{display:none!important}
+td.act,th.act{width:70px;min-width:70px;text-align:center;border-right:0!important}
+td.act .ico{background:none;border:0;color:var(--text3);padding:6px 5px;font-size:15px;opacity:0;transition:.1s}
+tr:hover td.act .ico,td.act .ico:focus{opacity:1}
+td.act .ico:hover{color:var(--gold2)}
+td.act .ico.del:hover{color:var(--red)}
+.addBar{padding:12px 24px 60px;min-height:calc(100vh - 200px)}
+.sortInd{color:var(--gold2)}
+
+/* ── modal + toast (same as the other apps) ── */
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;padding:16px;z-index:500;backdrop-filter:blur(6px)}
+#modal.open{display:flex}
+.mBox{width:min(520px,95vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg)}
+.mBox.wide{width:min(1000px,96vw)}
+.mHead{display:flex;align-items:center;justify-content:space-between;padding:1.25rem 1.5rem;border-bottom:1px solid var(--border)}
+.mHead h2{font-family:var(--display);font-weight:400;font-size:24px;letter-spacing:.06em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.mHead .x{background:none;border:0;color:var(--text3);font-size:20px;padding:2px 6px}
+.mHead .x:hover{color:var(--text)}
+.mBody{padding:1.5rem;overflow-y:auto}
+.mFoot{display:flex;gap:8px;justify-content:flex-end;padding:1rem 1.5rem;border-top:1px solid var(--border)}
+.drop{border:1.5px dashed var(--gold-glow);border-radius:var(--radius-lg);padding:18px;text-align:center;margin-bottom:1rem;background:var(--surface2)}
+.drop.over{border-color:var(--gold);background:var(--gold-dim)}
+table.pv{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+table.pv th{text-align:left;color:var(--text3);font-family:var(--cinzel);font-weight:600;font-size:9px;letter-spacing:.12em;text-transform:uppercase;padding:6px;border-bottom:1px solid var(--border2)}
+table.pv td{padding:5px 6px;border-bottom:1px solid var(--border);vertical-align:middle}
+table.pv input,table.pv select{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font:inherit;outline:none}
+table.pv input:focus{border-color:var(--gold-glow2)}
+table.pv input.bad{border-color:var(--red)}
+table.pv .bad{color:var(--red)}
+table.pv .good{color:var(--green)}
+table.pv tr.hit{cursor:pointer}
+table.pv tr.hit:hover td{background:var(--gold-dim)}
+.list{display:flex;flex-direction:column;gap:6px}
+.list .item{display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px}
+.list .item .lb{flex:1}
+.list .item small{color:var(--text3)}
+.menuList{display:flex;flex-direction:column;gap:8px}
+.menuList .btn{text-align:left}
+#toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(10px);background:var(--surface);border:1px solid var(--gold-glow);border-radius:99px;padding:8px 20px;font-family:var(--cinzel);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);opacity:0;transition:all .3s;z-index:999;pointer-events:none;display:flex;align-items:center;gap:14px;max-width:92vw}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+#toast.error{border-color:rgba(231,76,60,.4);color:var(--red)}
+#toast button{background:none;border:0;color:var(--gold2);text-decoration:underline;padding:0;font-family:var(--cinzel);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+
+@media (max-width:820px){
+  .shell{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  aside{max-height:34vh}
+  .nav{height:auto;padding:8px 1rem}
+  .nav-subtitle{display:none}
+  .catTitle{font-size:26px}
+}
+
+.rowx{background:none;border:0;padding:0 5px 0 0;margin:0;cursor:pointer;color:#6b6b6b;font-size:12px;line-height:1;opacity:.75;transition:color .15s,opacity .15s}
+.rowx:hover,.rowx:focus-visible{color:var(--red);opacity:1;outline:0}
+#grid th{position:sticky}
+#grid th .rz{position:absolute;top:0;right:-3px;bottom:0;width:8px;cursor:col-resize;z-index:7}
+#grid th .rz::after{content:'';position:absolute;top:22%;bottom:22%;left:3px;width:1px;background:var(--border2);transition:background .15s,width .15s}
+#grid th .rz:hover::after,body.resizing #grid th .rz::after{background:var(--gold);width:2px}
+body.resizing{cursor:col-resize;user-select:none}
+
+.menuList .btn.danger{white-space:normal;line-height:1.5;padding:10px 16px}
+/* row icons: edit-all-fields + delete */
+.rowx.rowedit{padding:0 4px 0 0;display:inline-flex;vertical-align:-2px}
+.rowx.rowedit svg{width:13px;height:13px;display:block}
+.rowx.rowedit:hover,.rowx.rowedit:focus-visible{color:var(--gold2)}
+/* question editor (profile-style form) */
+.mBox.mid{width:min(660px,95vw)}
+.qeNav{display:flex;align-items:center;gap:8px;margin-right:auto;font-family:var(--cinzel);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)}
+.qeSec{font-family:var(--cinzel);font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);border-bottom:1px solid var(--border2);padding:6px 0 7px;margin:1.3rem 0 .9rem}
+.qeSec:first-child{margin-top:0}
+.qeForm .fld textarea{width:100%;padding:10px 13px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px/1.45 var(--font);letter-spacing:0;text-transform:none;outline:none;resize:vertical;min-height:44px}
+.qeForm .fld textarea:focus{border-color:var(--gold-glow2)}
+.qeForm .fld .qeHelp{font:11px var(--font);letter-spacing:0;text-transform:none;color:var(--text3)}
+.qeSeg{display:flex;gap:6px}
+.qeSeg button{flex:1;padding:9px 0;background:var(--surface2);border:1px solid var(--border2);color:var(--text2);font:13px var(--font);border-radius:var(--radius);cursor:pointer}
+.qeSeg button.on{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
+.qeChk{display:flex;align-items:center;gap:10px;font:14px var(--font);letter-spacing:0;text-transform:none;color:var(--text)}
+/* ── mode switch (Trivia | Bingo) ── */
+.modeSw{display:flex;border:1px solid var(--gold-glow);border-radius:99px;overflow:hidden;margin-left:6px}
+.modeSw button{font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;background:transparent;border:0;color:var(--text3);padding:6px 16px;cursor:pointer;transition:all .2s}
+.modeSw button:hover{color:var(--gold2)}
+.modeSw button.on{background:var(--gold-shine);color:#000;font-weight:700}
+/* ── bingo mode ── */
+.bSortRow{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:2px 4px 8px}
+.bSortRow .lbl{font-family:var(--cinzel);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-right:2px}
+.bList{display:block;width:100%;background:none;border:0;border-radius:var(--radius);padding:8px 10px 9px;text-align:left;color:var(--text2);font-size:13px;cursor:pointer}
+.bList:hover{background:var(--surface2);color:var(--text)}
+.bList.active{background:var(--gold-dim);box-shadow:inset 2px 0 0 var(--gold);color:var(--gold2)}
+.bList.arch{opacity:.5}
+.bList .row1{display:flex;align-items:center;gap:8px}
+.bList .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bList .ct{color:var(--text3);font-size:12px;white-space:nowrap}
+.bList .ct b{color:var(--gold2);font-weight:600}
+.bBar{height:3px;border-radius:3px;background:var(--surface3);margin-top:6px;overflow:hidden}
+.bBar i{display:block;height:100%;background:var(--gold-shine);width:0}
+.bBar.full i{background:var(--green)}
+.bSpecial{margin:2px 0 8px}
+.bStats{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--text3)}
+.bStats b{font-style:normal;color:var(--gold2);font-weight:500}
+#bGridWrap{flex:1;overflow:auto;position:relative}
+table#bGrid{border-collapse:separate;border-spacing:0;width:100%;min-width:560px}
+#bGrid th{position:sticky;top:0;z-index:4;background:var(--surface2);text-align:left;font-family:var(--cinzel);font-weight:600;letter-spacing:.12em;text-transform:uppercase;font-size:9px;color:var(--text3);padding:12px 10px;border-bottom:1px solid var(--border2);border-right:1px solid var(--border);white-space:nowrap}
+#bGrid td{padding:0;border-bottom:1px solid var(--border);border-right:1px solid var(--border);background:var(--bg);vertical-align:middle}
+#bGrid tr:nth-child(even) td{background:var(--zebra)}
+#bGrid tr.have td{background:rgba(46,204,113,.06)}
+#bGrid td.n{width:52px;text-align:right;padding:0 10px;color:var(--text3);font-size:12px}
+#bGrid td.ck{width:92px;text-align:center}
+#bGrid td.ck input{width:18px;height:18px;accent-color:var(--gold);cursor:pointer;vertical-align:middle}
+#bGrid td input[type=text]{display:block;width:100%;background:transparent;border:0;color:var(--text);font:14px/1.35 var(--font);padding:9px 10px;outline:none}
+#bGrid td input[type=text]:focus{background:var(--focusbg);box-shadow:inset 0 0 0 1px var(--gold-glow2)}
+#bGrid td.txt{padding:9px 10px;font-size:14px;color:var(--text)}
+#bGrid td.on{width:120px;padding:0 10px;font-size:12px;color:var(--text3);white-space:nowrap}
+#bGrid td.on[title]{cursor:help}
+#bGrid td.x{width:40px;text-align:center}
+#bGrid td.x button{background:none;border:0;color:var(--text3);cursor:pointer;font-size:14px;padding:4px 8px}
+#bGrid td.x button:hover{color:var(--red)}
+#bGrid td.l{color:var(--text3);font-size:12px;padding:9px 10px;max-width:340px}
+.bEmpty{padding:40px;text-align:center;font-family:var(--serif);font-style:italic;color:var(--text3);font-size:15px}
+.bTop .catTitle{width:min(440px,56vw)}
+.bImp textarea{width:100%;min-height:210px;padding:10px 13px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:13px/1.5 var(--font);outline:none;resize:vertical;letter-spacing:0;text-transform:none}
+.bImp textarea:focus{border-color:var(--gold-glow2)}
+.bImp .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:820px){.modeSw button{padding:6px 11px}#bGrid td.on{display:none}#bGrid th.on{display:none}}
+</style>
+</head>
+<body>
+
+<!-- Sign-in hand-off (the real login lives in the Belladonna gateway) -->
+<div id="gate" class="screen">
+  <div class="gwWrap">
+    <img src="https://belladonnanights.github.io/belladonna-gateway/logo.png" alt="Belladonna" class="gwLogo" onerror="this.style.display='none'">
+    <div class="gwBrand">BELLADONNA <span class="accent">TRIVIA</span></div>
+    <div class="gwSub">The Vault</div>
+    <div class="gwCard">
+      <div id="gateBusy" class="gwMsg">Checking your sign-in…</div>
+      <div id="gateDenied" class="hidden">
+        <div id="gateDeniedMsg" class="gwMsg" style="padding:.25rem 0 1.25rem;line-height:1.7;color:#b0a890"></div>
+        <button class="gwBtn" id="gateBack">Sign in as someone else</button>
+      </div>
+    </div>
+    <div class="gwFoot">Belladonna Nights</div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app" class="hidden">
+  <div class="nav">
+    <div class="nav-left">
+      <img src="logo.png" alt="Belladonna" class="nav-logo-img" onerror="this.style.display='none'">
+      <div class="nav-title">BELLADONNA <span>THE VAULT</span></div>
+      <div class="modeSw"><button data-mode="trivia" class="on">Trivia</button><button data-mode="bingo">Bingo</button></div>
+      <div class="nav-subtitle" id="navSub">Trivia question bank</div>
+    </div>
+    <div class="nav-right">
+      <span class="sync-label" id="userLabel" style="margin-right:.5rem"></span>
+      <button class="btn ghost sm" id="notesBtn" title="Host notes waiting for review">★ Notes to review<span class="nb zero" id="notesBadge">0</span></button>
+      <button class="btn ghost sm" id="themeBtn">☀ Light Mode</button>
+      <a class="btn ghost sm" href="https://belladonnanights.github.io/belladonna-gateway/accounts.html?view=account">My Account</a>
+      <button class="btn ghost sm" id="signOutBtn">Sign Out</button>
+      <span class="sync-dot" id="syncDot"></span><span class="sync-label" id="syncLabel">connecting…</span>
+    </div>
+  </div>
+
+  <div class="shell" id="triviaShell">
+    <aside>
+      <div class="sideTop">
+        <button class="btn primary" id="newCatBtn">+ New category</button>
+        <input id="catSearch" placeholder="Search categories…" autocomplete="off">
+        <button class="linkbtn" id="tagSearchBtn">Search all categories by tag…</button>
+      </div>
+      <div id="catList"></div>
+      <div class="sideFoot" style="display:flex;flex-direction:column;gap:8px"><label><input type="checkbox" id="showArchCats"> Show archived categories</label><button class="linkbtn" id="manageTypesBtn">Manage category types…</button></div>
+    </aside>
+
+    <main>
+      <div id="empty">
+        <h3>Pick a category</h3>
+        <div>Choose one on the left, create a new one, or import your CSVs.</div>
+        <div style="margin-top:18px"><button class="btn ghost" id="emptyImport">Import CSVs</button></div>
+      </div>
+
+      <div id="editor" class="hidden" style="display:none;flex-direction:column;flex:1;min-height:0">
+        <div class="top">
+          <div class="titleBlock">
+            <input id="catName" class="catTitle" spellcheck="false" autocomplete="off" title="Click to rename — it renames everywhere">
+            <select id="catType" title="Category type"></select>
+            <span id="catCount"></span>
+            <span id="catArchTag" class="tag hidden">Archived</span>
+            <button class="btn ghost sm" id="catMenuBtn">More ⋯</button>
+          </div>
+          <div class="tools">
+            <input id="q" placeholder="Search this category…" autocomplete="off">
+            <div class="chips" id="diffChips">
+              <button class="pill on" data-d="0">All</button><button class="pill" data-d="1">1</button><button class="pill" data-d="2">2</button><button class="pill" data-d="3">3</button>
+            </div>
+            <label class="chk"><input type="checkbox" id="showArch"> Archived</label>
+            <button class="btn ghost hidden" id="resetOrderBtn" title="Put the columns back in their saved order">Reset column order</button>
+            <button class="btn ghost" id="colsBtn">Columns</button>
+            <button class="btn ghost" id="importBtn">Import CSVs</button>
+            <button class="btn primary" id="addBtn">+ Add question</button>
+          </div>
+        </div>
+        <div id="tagBar" class="hidden"></div>
+        <div class="gridWrap" id="gridWrap">
+          <div id="loading" class="hidden">Loading questions…</div>
+          <table id="grid"><thead></thead><tbody></tbody></table>
+          <div class="addBar"><button class="btn ghost" id="addBtn2">+ Add question</button></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div class="shell hidden" id="bingoShell">
+    <aside>
+      <div class="sideTop">
+        <button class="btn primary" id="bNew">+ New list</button>
+        <input id="bSearch" placeholder="Search lists…" autocomplete="off" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 13px;color:var(--text);font:14px var(--font);outline:none;width:100%">
+      </div>
+      <div id="bList" style="flex:1;overflow-y:auto;padding:2px 8px 12px"></div>
+      <div class="sideFoot"><label><input type="checkbox" id="bShowArch"> Show archived lists</label></div>
+    </aside>
+    <main>
+      <div id="bEmpty" style="margin:auto;text-align:center;padding:40px">
+        <div id="emptyB" style="font-family:var(--display);font-size:34px;letter-spacing:.05em;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Pick a bingo list</div>
+        <div style="font-family:var(--serif);font-style:italic;font-size:15px;color:var(--text3);margin-top:4px">Choose one on the left, or paste in a new list of songs.</div>
+        <div style="margin-top:18px"><button class="btn ghost" id="bEmptyNew">+ New list</button></div>
+      </div>
+      <div id="bEditor" class="hidden" style="display:none;flex-direction:column;flex:1;min-height:0">
+        <div class="top bTop">
+          <div class="titleBlock">
+            <input id="bName" class="catTitle" spellcheck="false" autocomplete="off" title="Click to rename">
+            <span id="bStats" class="bStats"></span>
+            <span id="bArch" class="tag hidden">Archived</span>
+          </div>
+          <div class="tools">
+            <input id="bQ" placeholder="Search songs…" autocomplete="off" style="width:200px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 13px;color:var(--text);font:14px var(--font);outline:none">
+            <div class="chips" id="bFilter"><button class="pill on" data-f="all">All</button><button class="pill" data-f="have">In catalog</button><button class="pill" data-f="missing">Missing</button></div>
+            <button class="btn ghost hidden" id="bExportMissing">Export CSV</button>
+            <button class="btn ghost" id="bMore">More ⋯</button>
+            <button class="btn ghost" id="bImport">Import songs</button>
+            <button class="btn primary" id="bAdd">+ Add song</button>
+          </div>
+        </div>
+        <div id="bGridWrap"><table id="bGrid"><thead></thead><tbody></tbody></table><div id="bNone" class="bEmpty hidden"></div></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script type="module">
+/* ═══════════════════════════════════════════════════════════
+   1. FIREBASE CONFIG (belladonna-hq)
+   ═══════════════════════════════════════════════════════════ */
+const firebaseConfig = {
+  apiKey: "AIzaSyCIfAE1JGHsUGzzVH2pz1Vyj5b5OhA0tDQ",
+  authDomain: "belladonna-hq.firebaseapp.com",
+  databaseURL: "https://belladonna-hq-default-rtdb.firebaseio.com",
+  projectId: "belladonna-hq",
+  storageBucket: "belladonna-hq.firebasestorage.app",
+  messagingSenderId: "1021873183587",
+  appId: "1:1021873183587:web:def283bb7b5ca48e4f9156"
+};
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getDatabase, ref as rref, onChildAdded, onChildChanged, onChildRemoved, remove as rremove, get as rget, set as rset, push as rpush, update as rupdate } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+import {
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, onSnapshot,
+  query, where, limit, writeBatch, deleteField, increment, serverTimestamp, getCountFromServer
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+/* ═══════════════════════════════════════════════════════════
+   2. PURE HELPERS (CSV parsing, column mapping, naming)
+   ═══════════════════════════════════════════════════════════ */
+// <pure>
+const BUILTIN = [
+  { key:'question',      label:'Question',       exportLabel:'Question',         type:'long', w:380 },
+  { key:'answer',        label:'Answer',         exportLabel:'Answer',           type:'long', w:220 },
+  { key:'altAnswers',    label:'Variable Answers', exportLabel:'Variable Answers', type:'long', w:240 },
+  { key:'difficulty',    label:'Diff',           exportLabel:'Difficulty (1-3)', type:'diff', w:70  },
+  { key:'tags',          label:'Tags',           exportLabel:'Tags',             type:'tags', w:200 },
+  { key:'optionA',       label:'Option A',       exportLabel:'Option A',         type:'long', w:160 },
+  { key:'optionB',       label:'Option B',       exportLabel:'Option B',         type:'long', w:160 },
+  { key:'optionC',       label:'Option C',       exportLabel:'Option C',         type:'long', w:160 },
+  { key:'optionD',       label:'Option D',       exportLabel:'Option D',         type:'long', w:160 },
+  { key:'imgUrl',        label:'IMG URL',        exportLabel:'IMG URL',          type:'text', w:170 },
+  { key:'soundUrl',      label:'SOUND URL',      exportLabel:'SOUND URL',        type:'text', w:170 },
+  { key:'bonusQuestion', label:'Bonus Question', exportLabel:'Bonus Question',   type:'long', w:280 },
+  { key:'notes',         label:'Notes',          exportLabel:'Notes',            type:'long', w:260 },
+  { key:'whisperQ',      label:'Whisper: Question', exportLabel:'Whisper (During Question)', type:'long', w:260 },
+  { key:'whisperA',      label:'Whisper: Reveal',   exportLabel:'Whisper (At Reveal)',       type:'long', w:260 },
+];
+const RESERVED = new Set(['categoryId','order','archived','createdAt','updatedAt','id']);
+const CUSTOM_TYPES = { text:'Short text', long:'Long text / notes', thumbs:'Thumbs up / down', check:'Checkbox', number:'Number' };
+const CUSTOM_W = { text:170, long:280, thumbs:80, check:70, number:90 };
+const HEADER_MAP = {
+  question:'question', answer:'answer',
+  variableanswers:'altAnswers', variableanswer:'altAnswers', altanswers:'altAnswers', alternateanswers:'altAnswers', acceptedanswers:'altAnswers', alsoaccept:'altAnswers',
+  difficulty:'difficulty', difficulty13:'difficulty', diff:'difficulty',
+  imgurl:'imgUrl', imageurl:'imgUrl', img:'imgUrl', image:'imgUrl',
+  soundurl:'soundUrl', audiourl:'soundUrl', sound:'soundUrl', audio:'soundUrl',
+  optiona:'optionA', optionb:'optionB', optionc:'optionC', optiond:'optionD',
+  bonusquestion:'bonusQuestion', bonus:'bonusQuestion',
+  tags:'tags', tag:'tags', notes:'notes', note:'notes',
+  whisperduringquestion:'whisperQ', whisperquestion:'whisperQ', whisperq:'whisperQ', whisper1:'whisperQ', whisperduring:'whisperQ',
+  whisperatreveal:'whisperA', whisperreveal:'whisperA', whispera:'whisperA', whisper2:'whisperA', whisperanswer:'whisperA'
+};
+
+const norm = s => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const normName = s => String(s ?? '').toLowerCase().replace(/[\u2018\u2019`´]/g, "'").replace(/\s+/g, ' ').trim();
+const normQ = s => {
+  const t = String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  return t || String(s ?? '').trim().toLowerCase();
+};
+
+const GENERIC_TAB = /^(sheet|tab|page|worksheet)\s*\d*$/i;
+const isGenericName = s => GENERIC_TAB.test(String(s ?? '').trim());
+// Google names downloads "Workbook name - Tab name.csv". Each of your categories is its own
+// workbook with one generic tab ("Sheet1"), so the category is the workbook name, not the tab.
+function nameFromFile(fn){
+  let n = String(fn).replace(/\.csv$/i, '').replace(/\s\(\d+\)$/, '').trim();
+  const i = n.lastIndexOf(' - ');
+  if (i >= 0){
+    const book = n.slice(0, i).trim(), tab = n.slice(i + 3).trim();
+    n = (GENERIC_TAB.test(tab) && book) ? book : tab;
+  }
+  return n.trim();
+}
+
+function parseCSV(text){
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = []; let row = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (inQ){
+      if (c === '"'){ if (text[i+1] === '"'){ field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else {
+      if (c === '"' && field === '') inQ = true;
+      else if (c === ','){ row.push(field); field = ''; }
+      else if (c === '\n' || c === '\r'){
+        if (c === '\r' && text[i+1] === '\n') i++;
+        row.push(field); field = ''; rows.push(row); row = [];
+      } else field += c;
+    }
+  }
+  if (field !== '' || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+
+function parseTags(s){
+  return [...new Set(String(s ?? '').split(/[,;\n]+/).map(t => t.trim().replace(/^#/, '').toLowerCase().replace(/\s+/g, ' ')).filter(Boolean))];
+}
+function keyFromLabel(label, taken){
+  const words = String(label).replace(/[^A-Za-z0-9 ]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  let k = words.map((w,i) => i ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase()).join('') || 'field';
+  if (/^[0-9]/.test(k)) k = 'f' + k;
+  const base = k; let n = 2;
+  while (taken.has(k) || RESERVED.has(k)) k = base + n++;
+  return k;
+}
+function guessType(label){
+  if (/note|comment|feedback/i.test(label)) return 'long';
+  if (/thumb|vote|rating|like/i.test(label)) return 'thumbs';
+  return 'text';
+}
+function defaultFor(c){
+  return c.type === 'diff' || c.type === 'number' ? null : c.type === 'check' ? false : c.type === 'tags' ? [] : '';
+}
+function convert(c, raw){
+  const v = String(raw ?? '').trim();
+  switch (c.type){
+    case 'diff':   { const n = parseInt(v, 10); return n >= 1 && n <= 3 ? n : null; }
+    case 'number': { const n = Number(v); return v !== '' && isFinite(n) ? n : null; }
+    case 'check':  return /^(true|yes|y|1|x|✓|✔)$/i.test(v);
+    case 'thumbs': return /up|👍|^\+|^yes|^true/i.test(v) ? 'up' : /down|👎|^-|^no/i.test(v) ? 'down' : '';
+    case 'tags':   return parseTags(v);
+    default:       return v;
+  }
+}
+
+// Music sheets have no "Question" column: Song Title / Artist / Audio URL / Start / End / Album Art.
+// For those, song -> Question, artist -> Answer, audio -> SOUND URL, album art -> IMG URL, and start/end
+// times become custom columns (Start Time / End Time) that the trivia app reads for music rounds.
+const MUSIC_MAP = {
+  song:'question', songtitle:'question', songname:'question', title:'question', track:'question', trackname:'question', tracktitle:'question',
+  artist:'answer', artists:'answer', performer:'answer', band:'answer', singer:'answer', artistname:'answer',
+  audio:'soundUrl', audiourl:'soundUrl', url:'soundUrl', link:'soundUrl', songurl:'soundUrl', mp3:'soundUrl', preview:'soundUrl', previewurl:'soundUrl', file:'soundUrl', fileurl:'soundUrl',
+  albumart:'imgUrl', albumarturl:'imgUrl', art:'imgUrl', cover:'imgUrl', albumcover:'imgUrl', coverart:'imgUrl', artwork:'imgUrl', albumimage:'imgUrl',
+  start:{ key:'startTime', label:'Start Time' }, starttime:{ key:'startTime', label:'Start Time' }, startat:{ key:'startTime', label:'Start Time' }, clipstart:{ key:'startTime', label:'Start Time' },
+  end:{ key:'endTime', label:'End Time' }, endtime:{ key:'endTime', label:'End Time' }, endat:{ key:'endTime', label:'End Time' }, clipend:{ key:'endTime', label:'End Time' }
+};
+const MUSIC_POSITIONAL = ['question', 'answer', 'soundUrl', { key:'startTime', label:'Start Time' }, { key:'endTime', label:'End Time' }, 'imgUrl'];
+
+function customColFor(def, ctx){
+  return ctx.custom.find(c => c.key === def.key) || ctx.pending.get(norm(def.label)) ||
+    (() => { const col = { key:def.key, label:def.label, type:'text', isNew:true }; ctx.pending.set(norm(def.label), col); return col; })();
+}
+function colFromSpec(spec, ctx){ return typeof spec === 'string' ? BUILTIN.find(c => c.key === spec) : customColFor(spec, ctx); }
+
+// ctx = { custom: [existing custom cols], pending: Map(normLabel -> new col) }
+function mapHeaders(headerRow, ctx, extraMap){
+  const map = [], seen = new Set();
+  headerRow.forEach((h, i) => {
+    const n = norm(h);
+    if (!n){ map[i] = null; return; }
+    let col = null;
+    const bk = HEADER_MAP[n];
+    if (bk) col = BUILTIN.find(c => c.key === bk);
+    else if (extraMap && extraMap[n]) col = colFromSpec(extraMap[n], ctx);
+    else {
+      col = ctx.custom.find(c => norm(c.label) === n) || ctx.pending.get(n);
+      if (!col){
+        const taken = new Set([...BUILTIN.map(c => c.key), ...ctx.custom.map(c => c.key), ...[...ctx.pending.values()].map(c => c.key)]);
+        col = { key: keyFromLabel(h, taken), label: String(h).trim(), type: guessType(h), isNew: true };
+        ctx.pending.set(n, col);
+      }
+    }
+    if (seen.has(col.key)){ map[i] = null; return; }
+    seen.add(col.key); map[i] = col;
+  });
+  return map;
+}
+
+function recordsFromCSV(rows, ctx){
+  const out = { records: [], blank: 0, noQ: 0, newCols: [], error: '' };
+  if (!rows.length){ out.error = 'Empty file'; return out; }
+  let map = mapHeaders(rows[0], ctx);
+  if (!map.some(c => c && c.key === 'question')){
+    // Not a regular question sheet — treat it as a music sheet.
+    map = mapHeaders(rows[0], ctx, MUSIC_MAP);
+    out.layout = 'music';
+    const hasQ = map.some(c => c && c.key === 'question'), hasA = map.some(c => c && c.key === 'answer');
+    if (!hasQ || !hasA){
+      // Headers weren't recognizable: use the music sheet's fixed order (A song, B artist, C audio, D start, E end, F album art).
+      map = rows[0].map((_, i) => MUSIC_POSITIONAL[i] ? colFromSpec(MUSIC_POSITIONAL[i], ctx) : null);
+      out.layout = 'music (by column order)';
+    }
+  }
+  out.newCols = [...new Set(map.filter(c => c && c.isNew))];
+  for (let r = 1; r < rows.length; r++){
+    const row = rows[r];
+    if (row.every(x => !String(x).trim())){ out.blank++; continue; }
+    const rec = {};
+    for (const c of BUILTIN) rec[c.key] = defaultFor(c);
+    for (const c of ctx.custom) rec[c.key] = defaultFor(c);
+    map.forEach((c, i) => { if (c) rec[c.key] = convert(c, row[i]); });
+    if (!rec.question){ out.noQ++; continue; }
+    out.records.push(rec);
+  }
+  return out;
+}
+
+function csvEscape(v){
+  if (v === null || v === undefined) return '';
+  if (Array.isArray(v)) v = v.join(', ');
+  const s = typeof v === 'boolean' ? (v ? 'TRUE' : '') : String(v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function toCSV(cols, items){
+  const lines = [cols.map(c => csvEscape(c.exportLabel || c.label)).join(',')];
+  for (const it of items) lines.push(cols.map(c => csvEscape(it[c.key])).join(','));
+  return '\uFEFF' + lines.join('\r\n');
+}
+// </pure>
+
+/* ═══════════════════════════════════════════════════════════
+   3. BOOT / AUTH
+   ═══════════════════════════════════════════════════════════ */
+const $  = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LS = { get:(k,d)=>{ try{ const v=localStorage.getItem('qv_'+k); return v===null?d:JSON.parse(v);}catch(e){return d;} },
+             set:(k,v)=>{ try{ localStorage.setItem('qv_'+k, JSON.stringify(v)); }catch(e){} } };
+const SESSION_MS = 6 * 60 * 60 * 1000;
+const DEFAULT_TYPES = ['Evergreen', 'Music', 'Mini Games', 'Feature'];
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+let db;
+try { db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }); }
+catch (e) { db = initializeFirestore(app, { localCache: memoryLocalCache() }); }
+
+const S = {
+  user: null, cats: new Map(), fb: new Map(), custom: [], order: null, tempOrder: null, types: null, curId: null, unsubQ: null,
+  rows: new Map(), maxOrder: 0, sort: { key:'order', dir:1 }, filter: { q:'', diff:0, tags:new Set() },
+  hidden: new Set(LS.get('hiddenCols', [])), collapsed: new Set(LS.get('collapsed', [])), sortCount: new Set(LS.get('sortCount', [])), colW: LS.get('colW', {}) || {},
+  pending: 0, listening: false, unsubs: [], firstQ: true
+};
+const catRef = id => doc(db, 'triviaCategories', id);
+const qColl  = () => collection(db, 'triviaQuestions');
+
+function applyTheme(){
+  let m = 'dark'; try { m = localStorage.getItem('vaultTheme') || 'dark'; } catch (e) {}
+  document.body.dataset.theme = m;
+  const b = $('#themeBtn'); if (b) b.textContent = m === 'light' ? '☾ Dark Mode' : '☀ Light Mode';
+}
+$('#themeBtn').addEventListener('click', () => {
+  const n = document.body.dataset.theme === 'light' ? 'dark' : 'light';
+  try { localStorage.setItem('vaultTheme', n); } catch (e) {}
+  applyTheme();
+});
+applyTheme();
+
+const GATEWAY = 'https://belladonnanights.github.io/belladonna-gateway/accounts.html';
+const APP_KEY = 'trivia';
+const toGateway = () => { location.href = GATEWAY + '?return=' + encodeURIComponent(location.href.split('#')[0]) + '&app=' + APP_KEY; };
+function hasValidSession(uid){
+  try {
+    const raw = localStorage.getItem('gatewaySession_' + APP_KEY); if (!raw) return false;
+    const s = JSON.parse(raw);
+    return (Date.now() - s.ts) < SESSION_MS && (!s.uid || !uid || s.uid === uid);
+  } catch (e) { return false; }
+}
+function showScreen(which){
+  $('#gate').classList.toggle('hidden', which === 'app');
+  $('#app').classList.toggle('hidden', which !== 'app');
+}
+function showGate(state, msg){
+  showScreen('gate');
+  $('#gateBusy').classList.toggle('hidden', state !== 'busy');
+  $('#gateDenied').classList.toggle('hidden', state !== 'denied');
+  if (msg) $('#gateDeniedMsg').textContent = msg;
+}
+function gatewaySignOut(){
+  S.unsubs.forEach(u => u()); S.unsubs = []; S.listening = false;
+  dropAllSubs();
+  try { Object.keys(localStorage).filter(k => k.startsWith('gatewaySession_')).forEach(k => localStorage.removeItem(k)); } catch (e) {}
+  signOut(auth).catch(() => {}).finally(toGateway);
+}
+$('#gateBack').addEventListener('click', gatewaySignOut);
+$('#signOutBtn').addEventListener('click', gatewaySignOut);
+
+onAuthStateChanged(auth, async user => {
+  S.user = user;
+  if (!user || !hasValidSession(user.uid)){ toGateway(); return; }
+  await enter(user);
+});
+
+async function enter(user){
+  showGate('busy');
+  let p = {};
+  try {
+    const s = await getDoc(doc(db, 'users', user.uid));
+    p = s.exists() ? s.data() : {};
+    // Same rule as the Trivia Admin: a Trivia admin (adminAccess.trivia, set in HQ's Accounts tab) or a full admin.
+    if (p.status === 'banned'){ showGate('denied', 'This account is currently restricted.'); return; }
+    if (!(p.role === 'admin' || (p.adminAccess && p.adminAccess.trivia))){ showGate('denied', 'This account doesn\u2019t have Trivia Admin access, so it can\u2019t edit the question bank. Ask Belladonna to turn on Trivia under Admin Access in HQ\u2019s Accounts tab.'); return; }
+  } catch (e) { showGate('denied', 'Couldn\u2019t verify your account right now. Check your connection and try again.'); return; }
+  $('#userLabel').textContent = p.name || user.email || '';
+  B.canTrivia = true; B.canBingo = true;
+  showScreen('app');
+  startListeners();
+  startBingo();
+  setMode((location.hash === '#bingo') ? 'bingo' : (LS.get('mode', 'trivia')));
+}
+
+/* ═══════════════════════════════════════════════════════════
+   4. UI HELPERS (toast, modal, ask)
+   ═══════════════════════════════════════════════════════════ */
+let toastTimer;
+function toast(msg, action){
+  const t = $('#toast'); t.innerHTML = `<span>${esc(msg)}</span>`;
+  if (action){ const b = document.createElement('button'); b.textContent = action.label; b.onclick = () => { t.classList.remove('show'); action.fn(); }; t.appendChild(b); }
+  t.classList.toggle('error', /couldn|blocked|wrong|can.t |stopped|failed/i.test(msg)); t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), action ? 8000 : 4500);
+}
+async function run(fn){ try { return await fn(); } catch (e){ console.error(e); toast(/permission/i.test(e.message) ? 'Firestore blocked that — publish the updated rules first.' : 'Something went wrong: ' + e.message); } }
+
+let modalOnClose = null;
+function openModal({ title, body, wide, actions = [], onClose }){
+  const m = $('#modal');
+  m.innerHTML = `<div class="mBox ${wide ? 'wide' : ''}"><div class="mHead"><h2>${esc(title)}</h2><button class="x" data-x>✕</button></div><div class="mBody"></div><div class="mFoot"></div></div>`;
+  const b = $('.mBody', m); if (typeof body === 'string') b.innerHTML = body; else b.appendChild(body);
+  const foot = $('.mFoot', m);
+  actions.forEach(a => { const btn = document.createElement('button'); btn.className = 'btn' + (a.primary ? ' primary' : '') + (a.danger ? ' danger' : ''); btn.textContent = a.label; btn.onclick = () => a.onClick(btn); foot.appendChild(btn); a.el = btn; });
+  modalOnClose = onClose || null; m.classList.add('open');
+  return m;
+}
+function closeModal(){ const m = $('#modal'); if (!m.classList.contains('open')) return; m.classList.remove('open'); m.innerHTML = ''; const f = modalOnClose; modalOnClose = null; if (f) f(); }
+$('#modal').addEventListener('mousedown', e => { if (e.target.id === 'modal' || e.target.closest('[data-x]')) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function askText({ title, label, value = '', ok = 'Save' }){
+  return new Promise(res => {
+    let done = false; const finish = v => { if (done) return; done = true; res(v); };
+    const body = document.createElement('div');
+    body.innerHTML = `<label class="fld">${esc(label)}<input type="text" id="askIn" value="${esc(value)}" autocomplete="off"></label>`;
+    const submit = () => { const v = $('#askIn').value.trim(); if (!v) return; finish(v); closeModal(); };
+    openModal({ title, body, actions: [{ label: 'Cancel', onClick: () => { finish(null); closeModal(); } }, { label: ok, primary: true, onClick: submit }], onClose: () => finish(null) });
+    const inp = $('#askIn'); inp.focus(); inp.select(); inp.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+  });
+}
+function confirmBox({ title, message, ok = 'Confirm', danger }){
+  return new Promise(res => {
+    let done = false; const finish = v => { if (done) return; done = true; res(v); };
+    openModal({ title, body: `<p class="hint" style="margin:0">${esc(message)}</p>`,
+      actions: [{ label: 'Cancel', onClick: () => { finish(false); closeModal(); } }, { label: ok, primary: !danger, danger, onClick: () => { finish(true); closeModal(); } }], onClose: () => finish(false) });
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   5. LISTENERS: categories + custom columns
+   ═══════════════════════════════════════════════════════════ */
+function startListeners(){
+  if (S.listening) { renderSide(); return; }
+  S.listening = true;
+  startFeedback();
+  S.unsubs.push(onSnapshot(collection(db, 'triviaCategories'), snap => {
+    S.cats = new Map(snap.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
+    if (!S.pending) setSync('synced', 'connected');
+    renderSide(); renderHead();
+    if (!S.curId){ const last = LS.get('lastCat', null); if (last && S.cats.has(last)) selectCategory(last); }
+  }, err => {
+    $('#catList').innerHTML = `<p class="hint" style="padding:12px">Can't read categories yet.<br>${/permission/i.test(err.message) ? 'Publish the updated Firestore rules, then refresh.' : esc(err.message)}</p>`;
+  }));
+  S.unsubs.push(onSnapshot(doc(db, 'triviaConfig', 'types'), snap => {
+    S.types = snap.exists() ? (snap.data().list || []) : null;
+    renderSide(); renderHead();
+  }, () => {}));
+  S.unsubs.push(onSnapshot(doc(db, 'triviaConfig', 'columns'), snap => {
+    S.custom = snap.exists() ? (snap.data().custom || []) : [];
+    S.order = snap.exists() ? (snap.data().order || null) : null;
+    if (S.curId) renderAll();
+  }, () => {}));
+}
+
+const baseCols = () => [...BUILTIN, ...S.custom.filter(c => !BUILTIN.some(b => b.key === c.key)).map(c => ({ ...c, w: c.w || CUSTOM_W[c.type] || 170 }))];
+// Column order: Question is always first (pinned). Then the permanent order saved in Firestore (shared by all
+// devices), or a temporary drag-and-drop order for this session if one is active. Columns not in the saved
+// order (newly added ones) follow in their default position.
+function orderCols(ord){
+  const base = baseCols();
+  if (!ord || !ord.length) return base;
+  const by = new Map(base.map(c => [c.key, c])), out = [];
+  const q = by.get('question'); if (q){ out.push(q); by.delete('question'); }
+  for (const k of ord){ if (by.has(k)){ out.push(by.get(k)); by.delete(k); } }
+  for (const c of base) if (by.has(c.key)) out.push(c);
+  return out;
+}
+const allCols = () => orderCols(S.tempOrder || S.order);
+const colWidth = c => Math.max(60, Math.round(Number(S.colW && S.colW[c.key]) || c.w || 170));
+const visibleCols = () => allCols().filter(c => c.key === 'question' || !S.hidden.has(c.key));
+
+/* ═══════════════════════════════════════════════════════════
+   6. SIDEBAR + HEADER
+   ═══════════════════════════════════════════════════════════ */
+// Category types: the saved list (triviaConfig/types) in its saved order, then
+// any type still in use by a category but missing from the list. Until a list
+// has been saved, the defaults stand in.
+function typeList(){
+  const base = S.types && S.types.length ? S.types : DEFAULT_TYPES;
+  const seen = new Set(base.map(normName)), out = [...base], extra = [];
+  for (const c of S.cats.values()) if (c.type && !seen.has(normName(c.type))){ seen.add(normName(c.type)); extra.push(c.type); }
+  return [...out, ...extra.sort((a, b) => a.localeCompare(b))];
+}
+async function saveTypes(list){ await setDoc(doc(db, 'triviaConfig', 'types'), { list, updatedAt: serverTimestamp() }); }
+async function addType(name){
+  name = String(name || '').trim(); if (!name) return null;
+  const hit = typeList().find(t => normName(t) === normName(name)); if (hit) return hit;
+  await saveTypes([...typeList(), name]); return name;
+}
+function catByNorm(name){ const k = normName(name); for (const c of S.cats.values()) if (normName(c.name) === k) return c; return null; }
+
+function renderSide(){
+  const q = $('#catSearch').value.trim().toLowerCase(), showArch = $('#showArchCats').checked;
+  const groups = new Map(typeList().map(t => [t, []]));
+  for (const c of S.cats.values()){
+    if (c.archived && !showArch) continue;
+    if (q && !String(c.name).toLowerCase().includes(q)) continue;
+    const t = c.type || 'Uncategorized'; if (!groups.has(t)) groups.set(t, []);
+    groups.get(t).push(c);
+  }
+  let html = '';
+  for (const [t, list] of groups){
+    if (!list.length && q) continue;
+    const byCount = S.sortCount.has(t);
+    list.sort((a, b) => (byCount ? (Number(b.questionCount) || 0) - (Number(a.questionCount) || 0) : 0) || String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: 'base' }));
+    const closed = !q && S.collapsed.has(t);
+    html += `<div class="grp ${closed ? 'closed' : ''}"><button class="grpHead" data-type="${esc(t)}"><span class="chev">▾</span><span class="sortBtn ${byCount ? 'on' : ''}" role="button" data-sort="${esc(t)}" title="${byCount ? 'Sorted by most questions — click for A–Z' : 'Sort by most questions'}">⇅ ${byCount ? '#' : ''}</span>${esc(t)}<em>${list.length}</em></button><div class="grpBody">` +
+      list.map(c => `<button class="cat ${c.id === S.curId ? 'active' : ''} ${c.archived ? 'arch' : ''}" data-id="${c.id}"><span class="nm">${esc(c.name)}</span><span class="ct">${c.questionCount ?? ''}</span></button>`).join('') +
+      `</div></div>`;
+  }
+  $('#catList').innerHTML = html || '<p class="hint" style="padding:12px">No categories yet — create one or import your CSVs.</p>';
+}
+$('#catList').addEventListener('click', e => {
+  const sb = e.target.closest('.sortBtn');
+  if (sb){ const t = sb.dataset.sort; S.sortCount.has(t) ? S.sortCount.delete(t) : S.sortCount.add(t); LS.set('sortCount', [...S.sortCount]); renderSide(); return; }
+  const g = e.target.closest('.grpHead');
+  if (g){ const t = g.dataset.type; S.collapsed.has(t) ? S.collapsed.delete(t) : S.collapsed.add(t); LS.set('collapsed', [...S.collapsed]); renderSide(); return; }
+  const c = e.target.closest('.cat'); if (c) selectCategory(c.dataset.id);
+});
+$('#catSearch').addEventListener('input', renderSide);
+$('#showArchCats').addEventListener('change', renderSide);
+
+function renderHead(){
+  const c = S.cats.get(S.curId);
+  if (!c){ if (S.curId){ S.curId = null; showEditor(false); } return; }
+  const nm = $('#catName'); if (document.activeElement !== nm) nm.value = c.name;
+  const sel = $('#catType');
+  sel.innerHTML = typeList().map(t => `<option ${t === c.type ? 'selected' : ''}>${esc(t)}</option>`).join('') + (c.type && !typeList().includes(c.type) ? `<option selected>${esc(c.type)}</option>` : '') + `<option value="__new">＋ New type…</option>`;
+  $('#catArchTag').classList.toggle('hidden', !c.archived);
+  updateCount();
+}
+function showEditor(on){
+  $('#empty').style.display = on ? 'none' : '';
+  const ed = $('#editor'); ed.classList.toggle('hidden', !on); ed.style.display = on ? 'flex' : 'none';
+}
+
+$('#catName').addEventListener('change', async e => {
+  const c = S.cats.get(S.curId); if (!c) return;
+  const v = e.target.value.trim();
+  const dupe = catByNorm(v);
+  if (!v || (dupe && dupe.id !== c.id)){ toast(!v ? 'A category needs a name.' : 'Another category already has that name.'); e.target.value = c.name; return; }
+  if (v === c.name) return;
+  const oldName = c.name;
+  await run(() => updateDoc(catRef(c.id), { name: v, updatedAt: serverTimestamp() }));
+  renameLinkedCategory(c.id, oldName, v);
+});
+// The Trivia app finds a round's questions through this sheet's link (vaultCatId) or its NAME, and the Planner /
+// Venue Menu list the same category by name — so a rename here has to follow into those linked records.
+async function renameLinkedCategory(vaultId, oldName, newName){
+  try {
+    rtdb = rtdb || getDatabase(app);
+    const snap = await rget(rref(rtdb, 'trivia/categories'));
+    const all = snap.val() || {};
+    const old = normName(oldName);
+    let hit = Object.entries(all).find(([id, t]) => t && t.vaultCatId === vaultId);
+    if (!hit) hit = Object.entries(all).find(([id, t]) => t && normName(t.name) === old);   // one that relied on the name (or got linked to a blank copy)
+    if (!hit) return;
+    const [tid, t] = hit;
+    await rupdate(rref(rtdb, 'trivia/categories/' + tid), { name: newName, vaultCatId: vaultId, updatedAt: Date.now() });
+    const vmId = t.vmCatId;
+    if (vmId) { try { await updateDoc(doc(db, 'venueMenuCategories', vmId), { name: newName }); } catch (e) { console.warn('Venue Menu rename skipped', e && e.message); } }
+    toast('Renamed everywhere (Trivia, Planner, Venue Menu).');
+  } catch (e) { console.warn('Could not rename the linked Trivia / Planner category:', e && e.message); toast('Renamed here, but the linked Trivia category could not be renamed: ' + (e && e.message || e)); }
+}
+$('#catName').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape'){ const c = S.cats.get(S.curId); if (c) e.target.value = c.name; e.target.blur(); } });
+$('#catType').addEventListener('change', async e => {
+  const c = S.cats.get(S.curId); if (!c) return;
+  let v = e.target.value;
+  if (v === '__new'){ const t = await askText({ title: 'New category type', label: 'Type name (for example: Holiday)', ok: 'Add' }); if (!t){ renderHead(); return; } v = t; }
+  await run(async () => { v = await addType(v) || v; });
+  await run(() => updateDoc(catRef(c.id), { type: v, updatedAt: serverTimestamp() }));
+});
+
+function updateCount(){
+  const c = S.cats.get(S.curId); if (!c) return;
+  let shown = 0, total = 0, dups = 0;
+  for (const r of S.rows.values()){ if (!r.persisted || r.data.archived) continue; total++; if (r.tr && !r.tr.hidden) shown++; if (r.tr && r.tr.classList.contains('dup')) dups++; }
+  const filtered = shown !== total;
+  $('#catCount').textContent = `${filtered ? shown + ' of ' : ''}${total} question${total === 1 ? '' : 's'}`;
+  if (dups) $('#catCount').textContent += ` · ${dups} possible duplicate${dups === 1 ? '' : 's'} (marked red)`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   7. CATEGORY SELECT + QUESTION GRID
+   ═══════════════════════════════════════════════════════════ */
+const tbody = $('#grid tbody'), thead = $('#grid thead');
+
+/* Live subscriptions are kept warm per category, so switching back to one you've
+   already opened is instant, and hovering a category starts loading it early. */
+const SUBS = new Map(); // id -> { id, rows, maxOrder, loaded, unsub }
+const MAX_SUBS = 10;
+function dropSub(id){ const st = SUBS.get(id); if (st){ if (st.unsub) st.unsub(); SUBS.delete(id); } }
+function dropAllSubs(){ for (const st of SUBS.values()) if (st.unsub) st.unsub(); SUBS.clear(); }
+function maxOrderOf(rows){ let m = 0; for (const r of rows.values()) if (r.persisted) m = Math.max(m, Number(r.data.order) || 0); return m; }
+function setLoading(on){ $('#loading').classList.toggle('hidden', !on); }
+
+function ensureSub(id){
+  let st = SUBS.get(id);
+  if (st){ SUBS.delete(id); SUBS.set(id, st); return st; }
+  st = { id, rows: new Map(), maxOrder: 0, loaded: false, unsub: null };
+  SUBS.set(id, st);
+  st.unsub = onSnapshot(query(qColl(), where('categoryId', '==', id)), snap => {
+    const cur = S.curId === id, changes = snap.docChanges();
+    // a cache-only "empty" answer isn't trustworthy yet; wait for the server before calling it empty
+    if (!st.loaded && snap.metadata.fromCache && snap.empty && navigator.onLine) return;
+    if (!st.loaded || changes.length > 40 || !cur){
+      changes.forEach(ch => {
+        if (ch.type === 'removed'){ st.rows.delete(ch.doc.id); return; }
+        const old = st.rows.get(ch.doc.id);
+        st.rows.set(ch.doc.id, { id: ch.doc.id, ref: ch.doc.ref, data: ch.doc.data(), persisted: true, tr: null, ready: old ? old.ready : undefined });
+      });
+      st.maxOrder = Math.max(st.maxOrder, maxOrderOf(st.rows)); st.loaded = true;
+      if (cur){ S.maxOrder = Math.max(S.maxOrder, st.maxOrder); setLoading(false); renderAll(); }
+      return;
+    }
+    changes.forEach(applyChange);
+    st.maxOrder = Math.max(st.maxOrder, maxOrderOf(st.rows)); S.maxOrder = Math.max(S.maxOrder, st.maxOrder);
+    applyFilter(); scheduleDupes(); updateCount();
+  }, err => {
+    if (S.curId === id){ setLoading(false); toast(/permission/i.test(err.message) ? 'Can’t read questions — publish the updated Firestore rules.' : err.message); }
+    dropSub(id);
+  });
+  while (SUBS.size > MAX_SUBS){ const k = [...SUBS.keys()].find(x => x !== S.curId); if (!k) break; dropSub(k); }
+  return st;
+}
+
+function selectCategory(id){
+  if (!S.cats.has(id)) return;
+  const prev = SUBS.get(S.curId); if (prev) prev.maxOrder = Math.max(prev.maxOrder, S.maxOrder);
+  S.curId = id; LS.set('lastCat', id);
+  const st = ensureSub(id);
+  S.rows = st.rows; S.maxOrder = st.maxOrder;
+  S.filter = { q: '', diff: 0, tags: new Set() }; $('#q').value = ''; $$('#diffChips button').forEach(b => b.classList.toggle('on', b.dataset.d === '0'));
+  showEditor(true); renderSide(); renderHead(); renderAll();
+  setLoading(!st.loaded);
+}
+let hoverT;
+$('#catList').addEventListener('mouseover', e => {
+  const c = e.target.closest('.cat'); if (!c) return;
+  clearTimeout(hoverT); hoverT = setTimeout(() => { if (S.cats.has(c.dataset.id)) ensureSub(c.dataset.id); }, 180);
+});
+
+function applyChange(ch){
+  const id = ch.doc.id, data = ch.doc.data();
+  if (ch.type === 'removed'){ const r = S.rows.get(id); if (r?.tr) r.tr.remove(); S.rows.delete(id); return; }
+  let r = S.rows.get(id);
+  if (!r){
+    r = { id, ref: ch.doc.ref, data, persisted: true, tr: null };
+    S.rows.set(id, r); r.tr = buildRow(r); insertSorted(r); autosizeRow(r.tr);
+  } else {
+    r.persisted = true; r.ref = ch.doc.ref; r.data = { ...data };
+    if (r.tr){ r.tr.classList.remove('draft'); updateRowDom(r); }
+  }
+}
+
+function cmpRows(a, b){
+  const k = S.sort.key, sv = v => (v === null || v === undefined || v === '') ? null : v;
+  const x = sv(a.data[k]), y = sv(b.data[k]);
+  if (x === null && y !== null) return 1;
+  if (y === null && x !== null) return -1;
+  let c = 0;
+  if (x !== null && y !== null) c = (typeof x === 'number' && typeof y === 'number') ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true, sensitivity: 'base' });
+  if (c !== 0) return c * S.sort.dir;
+  return (Number(a.data.order) || 0) - (Number(b.data.order) || 0);
+}
+function insertSorted(r){
+  const firstDraft = tbody.querySelector('tr.draft');
+  for (const tr of tbody.children){
+    if (tr.classList.contains('draft')) break;
+    const other = S.rows.get(tr.dataset.id);
+    if (other && cmpRows(r, other) < 0){ tbody.insertBefore(r.tr, tr); return; }
+  }
+  if (firstDraft) tbody.insertBefore(r.tr, firstDraft); else tbody.appendChild(r.tr);
+}
+
+function renderAll(){
+  const cols = visibleCols();
+  thead.innerHTML = '<tr><th class="num">#</th><th class="fb" title="Host feedback from live games: ★ = notes to review, then 👍 / 👎 counts">Feedback</th>' + cols.map(c =>
+    `<th data-key="${c.key}" ${c.key === 'question' ? '' : 'draggable="true"'} title="${c.key === 'question' ? 'Click to sort' : 'Click to sort · drag to move this column for now'}" class="${c.key === 'question' ? 'stickyQ' : ''}" style="min-width:${colWidth(c)}px;width:${colWidth(c)}px">${esc(c.label)} <span class="sortInd">${S.sort.key === c.key ? (S.sort.dir === 1 ? '▲' : '▼') : ''}</span><span class="rz" data-rz="${c.key}" title="Drag to resize · double-click to reset"></span></th>`).join('') + '<th class="act"></th></tr>';
+  tbody.innerHTML = '';
+  const persisted = [...S.rows.values()].filter(r => r.persisted).sort(cmpRows);
+  const drafts = [...S.rows.values()].filter(r => !r.persisted);
+  const frag = document.createDocumentFragment();
+  [...persisted, ...drafts].forEach(r => { r.tr = buildRow(r); frag.appendChild(r.tr); });
+  tbody.appendChild(frag);
+  $('#resetOrderBtn').classList.toggle('hidden', !S.tempOrder);
+  document.body.classList.toggle('showArch', $('#showArch').checked);
+  applyFilter(); refreshDupes(); updateCount(); renderTagBar();
+  requestAnimationFrame(() => autosizeAll($$('textarea', tbody)));
+}
+/* ── Drag a column header to move it for this session only (Columns ▸ Move columns to make it permanent) ── */
+let dragKey = null;
+/* ── Resize a column by dragging the edge of its header (saved on this device) ── */
+thead.addEventListener('mousedown', e => {
+  const h = e.target.closest('.rz'); if (!h) return;
+  e.preventDefault(); e.stopPropagation();
+  const th = h.closest('th'), key = h.dataset.rz, startX = e.clientX, startW = th.getBoundingClientRect().width;
+  const move = ev => { const w = Math.max(60, Math.round(startW + ev.clientX - startX)); th.style.width = th.style.minWidth = w + 'px'; };
+  const up = ev => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); document.body.classList.remove('resizing');
+    S.colW[key] = Math.max(60, Math.round(startW + ev.clientX - startX)); LS.set('colW', S.colW); requestAnimationFrame(() => autosizeAll($$('textarea', tbody))); };
+  document.body.classList.add('resizing'); document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+});
+thead.addEventListener('dblclick', e => { const h = e.target.closest('.rz'); if (!h) return; delete S.colW[h.dataset.rz]; LS.set('colW', S.colW); renderAll(); });
+thead.addEventListener('dragstart', e => { if (e.target.closest && e.target.closest('.rz')) e.preventDefault(); }, true);
+const clearDrop = () => $$('#grid th.dropL,#grid th.dropR,#grid th.dragging').forEach(t => t.classList.remove('dropL', 'dropR', 'dragging'));
+thead.addEventListener('dragstart', e => {
+  const th = e.target.closest('th[data-key]'); if (!th || th.dataset.key === 'question') { e.preventDefault(); return; }
+  dragKey = th.dataset.key; th.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragKey); } catch (_) {}
+});
+thead.addEventListener('dragover', e => {
+  if (!dragKey) return; const th = e.target.closest('th[data-key]'); if (!th || th.dataset.key === dragKey) return;
+  e.preventDefault(); $$('#grid th.dropL,#grid th.dropR').forEach(t => t.classList.remove('dropL', 'dropR'));
+  const r = th.getBoundingClientRect(); th.classList.add(e.clientX < r.left + r.width / 2 ? 'dropL' : 'dropR');
+});
+thead.addEventListener('drop', e => {
+  if (!dragKey) return; const th = e.target.closest('th[data-key]'); if (!th) return; e.preventDefault();
+  const r = th.getBoundingClientRect(), after = e.clientX >= r.left + r.width / 2, target = th.dataset.key;
+  const keys = allCols().map(c => c.key).filter(k => k !== 'question' && k !== dragKey);
+  if (target === 'question') keys.unshift(dragKey); else { const i = keys.indexOf(target); keys.splice(i + (after ? 1 : 0), 0, dragKey); }
+  dragKey = null; clearDrop(); S.tempOrder = keys; renderAll();
+});
+thead.addEventListener('dragend', () => { dragKey = null; clearDrop(); });
+$('#resetOrderBtn').addEventListener('click', () => { S.tempOrder = null; renderAll(); });
+thead.addEventListener('click', e => {
+  if (e.target.closest('.rz')) return;
+  const th = e.target.closest('th[data-key]'); if (!th) return;
+  const k = th.dataset.key;
+  S.sort = S.sort.key === k ? { key: k, dir: -S.sort.dir } : { key: k, dir: 1 };
+  renderAll();
+});
+
+function cellHTML(c, v){
+  const key = `data-key="${c.key}"`;
+  switch (c.type){
+    case 'long':   return `<textarea rows="1" ${key} spellcheck="true">${esc(v)}</textarea>`;
+    case 'diff':   return `<select ${key} class="d${v || 0}"><option value=""></option>${[1,2,3].map(n => `<option value="${n}" ${Number(v) === n ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
+    case 'thumbs': return `<button type="button" class="thumb" ${key} data-v="${esc(v || '')}">${v === 'up' ? '👍' : v === 'down' ? '👎' : '·'}</button>`;
+    case 'tags':   return `<input type="text" ${key} value="${esc((v || []).join(', '))}" autocomplete="off" placeholder="tag, tag…">`;
+    case 'check':  return `<input type="checkbox" ${key} ${v ? 'checked' : ''}>`;
+    default:       return `<input type="text" ${key} value="${esc(v)}" autocomplete="off">`;
+  }
+}
+/* ═══════════════════════════════════════════════════════════
+   FEEDBACK — host 👍 / 👎 and notes from live games. Stored by the trivia app in the realtime database at
+   trivia/questionFeedback/<key>; for Vault questions the key is vault__<categoryId>__<questionId>.
+   ═══════════════════════════════════════════════════════════ */
+let rtdb = null, fbRedraw = null, fbWarned = false;
+const fbKeyOf = r => 'vault__' + ((r.data && r.data.categoryId) || S.curId) + '__' + r.id;
+const fbNotes = rec => Object.entries((rec && rec.notes) || {}).map(([id, n]) => ({ id, ...n })).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+function fbHTML(r){
+  const rec = S.fb.get(fbKeyOf(r)); if (!rec) return '';
+  const n = fbNotes(rec).length, up = rec.thumbsUp || 0, dn = rec.thumbsDown || 0;
+  return (n ? `<button class="star" data-fbnotes title="${n} note${n > 1 ? 's' : ''} to review — click to read">★</button>` : '') +
+         (up || dn ? `<span class="fbup" title="Thumbs up">👍 ${up}</span><span class="fbdn ${dn ? 'has' : ''}" title="Thumbs down">👎 ${dn}</span>` : '');
+}
+function fbRefreshRow(key){
+  const m = /^vault__(.+?)__(.+)$/.exec(key); if (!m) return;
+  const st = SUBS.get(m[1]), r = st && st.rows.get(m[2]); if (!r || !r.tr) return;
+  const td = r.tr.querySelector('td.fb'); if (td) td.innerHTML = fbHTML(r);
+}
+function fbUpdateBadge(){
+  const n = [...S.fb.values()].filter(rec => fbNotes(rec).length).length;
+  const b = $('#notesBadge'); if (b){ b.textContent = n; b.classList.toggle('zero', !n); }
+}
+function fbSet(key, val){ S.fb.set(key, val); fbRefreshRow(key); fbUpdateBadge(); if (fbRedraw) fbRedraw(); }
+function fbDel(key){ S.fb.delete(key); fbRefreshRow(key); fbUpdateBadge(); if (fbRedraw) fbRedraw(); }
+function startFeedback(){
+  S.fb.clear();
+  try {
+    rtdb = rtdb || getDatabase(app);
+    const f = rref(rtdb, 'trivia/questionFeedback');
+    const err = e => { if (!fbWarned){ fbWarned = true; toast('Can’t read host feedback: ' + (e && e.message || e)); } };
+    S.unsubs.push(onChildAdded(f, s => fbSet(s.key, s.val()), err));
+    S.unsubs.push(onChildChanged(f, s => fbSet(s.key, s.val()), err));
+    S.unsubs.push(onChildRemoved(f, s => fbDel(s.key), err));
+  } catch (e){ console.warn('Feedback unavailable', e); }
+}
+// A category made here also gets its Trivia-app / Planner category and Venue Menu entry,
+// linked by ID (vaultCatId / vmCatId / triviaCatId). Skipped quietly if one already exists by name
+// or if this account can't write there.
+async function mirrorNewVaultCategory(vaultId, name, type){
+  try {
+    rtdb = rtdb || getDatabase(app);
+    const snap = await rget(rref(rtdb, 'trivia/categories'));
+    const all = snap.val() || {};
+    const want = normName(name);
+    const hit = Object.entries(all).find(([id, c]) => normName(c && c.name) === want);
+    if (hit){ if (!hit[1].vaultCatId) await rupdate(rref(rtdb, 'trivia/categories/' + hit[0]), { vaultCatId: vaultId }); return; }
+    const r = rpush(rref(rtdb, 'trivia/categories'));
+    const isMusic = /music/i.test(type || '');
+    await rset(r, { name, genre: '', type: isMusic ? 'music' : 'trivia', vaultCatId: vaultId, unified: true, notes: 'Created from the Question Vault', createdAt: Date.now(), updatedAt: Date.now() });
+    const vm = await addDoc(collection(db, 'venueMenuCategories'), { name, type: 'Trivia', tags: '', image: '', plannerTier: null, linked: true, triviaCatId: r.key, createdAt: Date.now(), updatedAt: Date.now() });
+    await rupdate(rref(rtdb, 'trivia/categories/' + r.key), { vmCatId: vm.id });
+  } catch (e){ console.warn('Could not mirror the new category into Trivia / Venue Menu:', e && e.message); }
+}
+const fbPath = (key, sub) => rref(rtdb, 'trivia/questionFeedback/' + key + (sub ? '/' + sub : ''));
+
+function jumpToQuestion(catId, qid){
+  closeModal(); if (S.cats.has(catId)) selectCategory(catId);
+  let tries = 0; const t = setInterval(() => {
+    const r = S.rows.get(qid); tries++;
+    if (r && r.tr){ clearInterval(t); r.tr.scrollIntoView({ block: 'center' }); r.tr.classList.add('flash'); setTimeout(() => r.tr.classList.remove('flash'), 2600); }
+    else if (tries > 30) clearInterval(t);
+  }, 150);
+}
+
+function openNotesReview(onlyKey){
+  const body = document.createElement('div');
+  const when = ts => ts ? new Date(ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const draw = () => {
+    let items = [...S.fb.entries()].map(([key, rec]) => ({ key, rec, notes: fbNotes(rec) })).filter(x => x.notes.length && (!onlyKey || x.key === onlyKey));
+    if (!items.length){ body.innerHTML = `<p class="hint" style="margin:0">${onlyKey ? 'No notes on this question.' : 'Nothing to review — no host notes waiting. 🎉'}</p>`; return; }
+    const groups = new Map();
+    for (const x of items){
+      const m = /^vault__(.+?)__(.+)$/.exec(x.key);
+      x.catId = m ? m[1] : null; x.qid = m ? m[2] : null;
+      const label = m ? (S.cats.get(m[1])?.name || 'Deleted category') : ('Old sheet' + (x.rec.tabName ? ' · ' + x.rec.tabName : ''));
+      if (!groups.has(label)) groups.set(label, []); groups.get(label).push(x);
+    }
+    body.innerHTML = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([label, list]) =>
+      `<div class="nrCat">${esc(label)}</div>` + list.map(x => `<div class="nrCard" data-key="${esc(x.key)}">
+        <div class="nrQ">${esc(x.rec.question || '(question text unavailable)')}</div>
+        <div class="nrA">Answer: ${esc(x.rec.answer || '—')}</div>
+        <div class="nrMeta"><span>👍 ${x.rec.thumbsUp || 0}</span><span>👎 ${x.rec.thumbsDown || 0}</span>
+          ${x.catId ? `<button class="linkbtn" data-go="${esc(x.catId)}:${esc(x.qid)}">Go to question</button>` : ''}
+          <button class="linkbtn" data-clearnotes="${esc(x.key)}">Done — clear all notes</button></div>
+        ${x.notes.map(n => `<div class="nrNote"><div>${esc(n.text)}<small>${n.byName ? esc(n.byName) + ' · ' : ''}${when(n.ts)}</small></div><button class="btn ghost sm" data-delnote="${esc(x.key)}:${esc(n.id)}">Delete</button></div>`).join('')}
+      </div>`).join('')).join('');
+  };
+  draw(); fbRedraw = draw;
+  body.addEventListener('click', async e => {
+    const g = e.target.closest('[data-go]'); if (g){ const [c, q] = g.dataset.go.split(':'); jumpToQuestion(c, q); return; }
+    const dn = e.target.closest('[data-delnote]'); if (dn){ const i = dn.dataset.delnote.lastIndexOf(':'); const key = dn.dataset.delnote.slice(0, i), id = dn.dataset.delnote.slice(i + 1); await run(() => rremove(fbPath(key, 'notes/' + id))); return; }
+    const cn = e.target.closest('[data-clearnotes]'); if (cn){ await run(() => rremove(fbPath(cn.dataset.clearnotes, 'notes'))); }
+  });
+  openModal({ title: onlyKey ? 'Notes on this question' : 'Host notes to review', body, wide: !onlyKey, actions: [{ label: 'Close', primary: true, onClick: closeModal }], onClose: () => { fbRedraw = null; } });
+}
+$('#notesBtn').addEventListener('click', () => openNotesReview());
+
+function buildRow(r){
+  const tr = document.createElement('tr'); tr.dataset.id = r.id;
+  if (!r.persisted) tr.classList.add('draft');
+  if (r.data.archived) tr.classList.add('arch');
+  let h = '<td class="num"><button class="rowx rowedit" data-act="rowedit" tabindex="-1" title="Open this question as a form (edit every column)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.4" r="2.6"/><path d="M2.8 14c.5-2.9 2.6-4.4 5.2-4.4s4.7 1.5 5.2 4.4"/></svg></button><button class="rowx" data-act="rowdelete" tabindex="-1" title="Delete this question">\u2715</button><span class="dot"></span><span class="n"></span></td><td class="fb">' + fbHTML(r) + '</td>';
+  for (const c of visibleCols()) h += `<td class="c-${c.type}${c.key === 'question' ? ' stickyQ' : ''}">${cellHTML(c, r.data[c.key])}</td>`;
+  h += r.data.archived
+    ? '<td class="act"><button class="ico" data-act="restore" tabindex="-1" title="Restore">↺</button><button class="ico del" data-act="delete" tabindex="-1" title="Delete forever">🗑</button></td>'
+    : '<td class="act"><button class="ico" data-act="archive" tabindex="-1" title="Archive this question">✕</button></td>';
+  tr.innerHTML = h; return tr;
+}
+function updateRowDom(r){
+  const tr = r.tr; const act = document.activeElement;
+  tr.classList.toggle('arch', !!r.data.archived);
+  const cell = tr.querySelector('td.act'); const wantArch = !!r.data.archived;
+  if (cell && (cell.querySelector('[data-act=restore]') ? !wantArch : wantArch)){
+    cell.innerHTML = wantArch ? '<button class="ico" data-act="restore" tabindex="-1" title="Restore">↺</button><button class="ico del" data-act="delete" tabindex="-1" title="Delete forever">🗑</button>' : '<button class="ico" data-act="archive" tabindex="-1" title="Archive this question">✕</button>';
+  }
+  for (const c of visibleCols()){
+    const el = tr.querySelector(`[data-key="${c.key}"]`); if (!el || el === act) continue;
+    const v = r.data[c.key];
+    if (c.type === 'tags') el.value = (v || []).join(', ');
+    else if (c.type === 'check') el.checked = !!v;
+    else if (c.type === 'thumbs'){ el.dataset.v = v || ''; el.textContent = v === 'up' ? '👍' : v === 'down' ? '👎' : '·'; }
+    else if (c.type === 'diff'){ el.value = v ?? ''; el.className = 'd' + (v || 0); }
+    else { const nv = v ?? ''; if (el.value !== String(nv)){ el.value = nv; if (el.tagName === 'TEXTAREA') autosize(el); } }
+  }
+}
+// Collapsing a textarea to height:auto briefly shrinks the whole sheet, which
+// made the browser jump the scroll position. Remember it and put it back.
+function keepScroll(fn){ const w = document.querySelector('.gridWrap'); const t = w ? w.scrollTop : 0, l = w ? w.scrollLeft : 0; fn(); if (w){ if (w.scrollTop !== t) w.scrollTop = t; if (w.scrollLeft !== l) w.scrollLeft = l; } }
+function autosizeAll(els){ keepScroll(() => { els.forEach(e => { e.style.height = 'auto'; }); const hs = els.map(e => Math.max(e.scrollHeight, 34)); els.forEach((e, i) => { e.style.height = hs[i] + 'px'; }); }); }
+function autosize(el){ keepScroll(() => { el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight, 34) + 'px'; }); }
+function autosizeRow(tr){ requestAnimationFrame(() => $$('textarea', tr).forEach(autosize)); }
+
+/* editing ---------------------------------------------------- */
+function readEl(el, col){
+  if (col.type === 'check') return el.checked;
+  if (col.type === 'thumbs') return el.dataset.v || '';
+  return convert(col, el.value);
+}
+function colOf(el){ return allCols().find(c => c.key === el.dataset.key); }
+function rowOf(el){ return S.rows.get(el.closest('tr')?.dataset.id); }
+function setDot(r, cls){ if (!r?.tr) return; r.tr.classList.remove('saving', 'saved', 'error'); if (cls) r.tr.classList.add(cls); if (cls === 'saved') setTimeout(() => r.tr && r.tr.classList.remove('saved'), 1600); }
+function setSync(cls, txt){ const d = $('#syncDot'), l = $('#syncLabel'); if (d) d.className = 'sync-dot ' + cls; if (l) l.textContent = txt; }
+function pend(n){ S.pending += n; if (!navigator.onLine) return; S.pending > 0 ? setSync('syncing', 'saving…') : setSync('synced', 'all changes saved'); }
+
+async function onEdit(el){
+  const col = colOf(el), r = rowOf(el); if (!col || !r) return;
+  const v = readEl(el, col);
+  if (col.type === 'diff') el.className = 'd' + (v || 0);
+  if (col.type === 'tags') el.value = v.join(', ');
+  r.data[col.key] = v;
+  await saveField(r, col.key, v);
+}
+async function saveField(r, key, v){
+  setDot(r, 'saving'); pend(1);
+  try {
+    if (!r.persisted){
+      r.persisted = true; r.tr.classList.remove('draft');
+      const data = { ...r.data, categoryId: S.curId, archived: false, order: ++S.maxOrder, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+      const batch = writeBatch(db);
+      batch.set(r.ref, data);
+      batch.update(catRef(S.curId), { questionCount: increment(1), updatedAt: serverTimestamp() });
+      r.ready = batch.commit();
+      await r.ready;
+    } else {
+      if (r.ready) await r.ready;
+      await updateDoc(r.ref, { [key]: v, updatedAt: serverTimestamp() });
+    }
+    setDot(r, 'saved');
+  } catch (e){
+    console.error(e); setDot(r, 'error');
+    toast(/permission/i.test(e.message) ? 'Save blocked — publish the updated Firestore rules.' : 'Couldn\u2019t save that edit: ' + e.message);
+  } finally { pend(-1); scheduleDupes(); }
+}
+
+tbody.addEventListener('focusin', e => { const el = e.target; if (el.matches('input[type=text],textarea')) el.dataset.orig = el.value; });
+tbody.addEventListener('focusout', e => { const el = e.target; if (el.matches('input[type=text],textarea') && el.value !== el.dataset.orig) onEdit(el); });
+tbody.addEventListener('change', e => { const el = e.target; if (el.matches('select,input[type=checkbox]')) onEdit(el); });
+tbody.addEventListener('input', e => { if (e.target.matches('textarea')) autosize(e.target); });
+tbody.addEventListener('keydown', e => {
+  const el = e.target;
+  if (!el.matches('input[type=text],textarea')) return;
+  if (e.key === 'Escape'){ el.value = el.dataset.orig ?? el.value; el.blur(); return; }
+  if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); moveDown(el); }
+});
+tbody.addEventListener('click', async e => {
+  const st = e.target.closest('[data-fbnotes]'); if (st){ const rr = S.rows.get(st.closest('tr').dataset.id); if (rr) openNotesReview(fbKeyOf(rr)); return; }
+  const th = e.target.closest('.thumb');
+  if (th){ const r = rowOf(th); const cur = th.dataset.v; const nx = cur === '' ? 'up' : cur === 'up' ? 'down' : ''; th.dataset.v = nx; th.textContent = nx === 'up' ? '👍' : nx === 'down' ? '👎' : '·'; r.data[th.dataset.key] = nx; saveField(r, th.dataset.key, nx); return; }
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const r = S.rows.get(b.closest('tr').dataset.id); if (!r) return;
+  if (b.dataset.act === 'archive') archiveRow(r, true);
+  if (b.dataset.act === 'restore') archiveRow(r, false);
+  if (b.dataset.act === 'rowedit'){ openQuestionEditor(r); return; }
+  if (b.dataset.act === 'rowdelete'){
+    if (!r.persisted){ r.tr.remove(); S.rows.delete(r.id); scheduleDupes(); updateCount(); return; }
+    const preview = String(r.data.question || '').trim().slice(0, 140);
+    if (await confirmBox({ title: 'Delete this question?', message: (preview ? '\u201c' + preview + (String(r.data.question).length > 140 ? '\u2026' : '') + '\u201d\n\n' : '') + 'It will be permanently deleted. This can\u2019t be undone.', ok: 'Delete', danger: true })) run(async () => { await deleteDoc(r.ref); });
+    return;
+  }
+  if (b.dataset.act === 'delete'){
+    if (await confirmBox({ title: 'Delete forever?', message: 'This question will be permanently deleted. This can\u2019t be undone.', ok: 'Delete forever', danger: true })) run(async () => { await deleteDoc(r.ref); });
+  }
+});
+
+/* ── Question editor: every column of one question as a fill-in form ── */
+const QE_ORDER = [
+  ['The question', ['question']],
+  ['Answer', ['answer', 'altAnswers']],
+  ['Difficulty', ['difficulty']],
+  ['Multiple choice options', ['optionA', 'optionB', 'optionC', 'optionD']],
+  ['Media', ['imgUrl', 'soundUrl']],
+  ['Extras', ['bonusQuestion', 'tags']],
+  ['Whispers', ['whisperQ', 'whisperA']],
+  ['Notes', ['notes']]
+];
+const QE_HELP = {
+  altAnswers: 'Other wordings that count as correct — one per line.',
+  difficulty: '1 = easy · 2 = medium · 3 = hard',
+  optionA: 'Leave all four blank for an open-answer question.',
+  tags: 'Separate tags with commas.'
+};
+function openQuestionEditor(r){
+  let cur = r;
+  const body = document.createElement('div'); body.className = 'qeForm';
+  const colsFor = () => {
+    const all = allCols(), used = new Set(), groups = [];
+    QE_ORDER.forEach(([title, keys]) => { const cs = keys.map(k => all.find(c => c.key === k) || baseCols().find(c => c.key === k)).filter(Boolean); cs.forEach(c => used.add(c.key)); if (cs.length) groups.push([title, cs]); });
+    const rest = baseCols().filter(c => !used.has(c.key)); if (rest.length) groups.push(['Custom columns', rest]);
+    return groups;
+  };
+  const fieldHTML = (c, v) => {
+    const k = `data-qe="${esc(c.key)}"`, lab = esc(c.label), help = QE_HELP[c.key] ? `<span class="qeHelp">${esc(QE_HELP[c.key])}</span>` : '';
+    switch (c.type){
+      case 'long':   return `<label class="fld">${lab}<textarea ${k} rows="${c.key === 'question' ? 3 : 2}" spellcheck="true">${esc(v)}</textarea>${help}</label>`;
+      case 'diff':   return `<div class="fld">${lab}<div class="qeSeg" ${k} data-v="${v || ''}">${[1,2,3].map(n => `<button type="button" data-n="${n}" class="${Number(v) === n ? 'on' : ''}">${n}</button>`).join('')}<button type="button" data-n="" class="${v ? '' : 'on'}" title="Not set">–</button></div>${help}</div>`;
+      case 'tags':   return `<label class="fld">${lab}<input type="text" ${k} value="${esc((v || []).join(', '))}" autocomplete="off" placeholder="tag, tag…">${help}</label>`;
+      case 'check':  return `<label class="fld"><span class="qeChk"><input type="checkbox" ${k} ${v ? 'checked' : ''}> ${lab}</span></label>`;
+      case 'thumbs': return `<div class="fld">${lab}<div class="qeSeg" ${k} data-v="${esc(v || '')}"><button type="button" data-n="up" class="${v === 'up' ? 'on' : ''}">👍</button><button type="button" data-n="down" class="${v === 'down' ? 'on' : ''}">👎</button><button type="button" data-n="" class="${v ? '' : 'on'}">–</button></div></div>`;
+      case 'number': return `<label class="fld">${lab}<input type="number" ${k} value="${esc(v ?? '')}" autocomplete="off"></label>`;
+      default:       return `<label class="fld">${lab}<input type="text" ${k} value="${esc(v)}" autocomplete="off">${help}</label>`;
+    }
+  };
+  const colByKey = k => baseCols().find(c => c.key === k);
+  const commit = async (el) => {
+    const c = colByKey(el.dataset.qe); if (!c || !cur) return;
+    let v;
+    if (el.classList.contains('qeSeg')) v = c.type === 'diff' ? (el.dataset.v ? Number(el.dataset.v) : null) : (el.dataset.v || '');
+    else if (c.type === 'check') v = el.checked;
+    else v = convert(c, el.value);
+    const old = cur.data[c.key];
+    if (JSON.stringify(old ?? (c.type === 'tags' ? [] : '')) === JSON.stringify(v ?? (c.type === 'tags' ? [] : ''))) return;
+    cur.data[c.key] = v; try { updateRowDom(cur); } catch (_) {}
+    await saveField(cur, c.key, v);
+  };
+  const commitAll = () => $$('[data-qe]', body).forEach(el => { if (el.classList.contains('qeSeg')) return; commit(el); });
+  const rowIds = () => [...tbody.children].filter(tr => !tr.hidden && tr.offsetParent !== null).map(tr => tr.dataset.id);
+  const numberOf = () => { const i = rowIds().indexOf(cur.id); return i >= 0 ? i + 1 : '–'; };
+  const draw = () => {
+    body.innerHTML = colsFor().map(([t, cs]) => `<div class="qeSec">${esc(t)}</div>` + cs.map(c => fieldHTML(c, cur.data[c.key])).join('')).join('');
+    $$('textarea', body).forEach(autosize);
+    const h = $('#modal h2'); if (h) h.textContent = 'Question ' + numberOf();
+  };
+  body.addEventListener('focusout', e => { const el = e.target; if (el.matches('input,textarea') && !el.classList.contains('qeSeg')) commit(el); });
+  body.addEventListener('change', e => { const el = e.target; if (el.matches('input[type=checkbox]')) commit(el); });
+  body.addEventListener('input', e => { if (e.target.matches('textarea')) autosize(e.target); });
+  body.addEventListener('click', e => {
+    const b = e.target.closest('.qeSeg button'); if (!b) return;
+    const seg = b.parentElement; seg.dataset.v = b.dataset.n; $$('button', seg).forEach(x => x.classList.toggle('on', x === b)); commit(seg);
+  });
+  const go = d => { commitAll(); const ids = rowIds(), i = ids.indexOf(cur.id), nx = S.rows.get(ids[i + d]); if (!nx) return; cur = nx; draw(); body.scrollTop = 0; const mb = $('#modal .mBody'); if (mb) mb.scrollTop = 0; };
+  const m = openModal({ title: 'Question', body, actions: [{ label: 'Done', primary: true, onClick: () => { commitAll(); closeModal(); } }], onClose: () => commitAll() });
+  $('.mBox', m).classList.add('mid');
+  const foot = $('.mFoot', m);
+  const nav = document.createElement('div'); nav.className = 'qeNav';
+  nav.innerHTML = '<button class="btn" data-d="-1">\u2039 Prev</button><button class="btn" data-d="1">Next \u203a</button>';
+  nav.addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (b) go(Number(b.dataset.d)); });
+  foot.insertBefore(nav, foot.firstChild);
+  draw();
+}
+
+function moveDown(el){
+  const key = el.dataset.key; let tr = el.closest('tr').nextElementSibling;
+  while (tr && tr.offsetParent === null) tr = tr.nextElementSibling;
+  if (tr){ const t = tr.querySelector(`[data-key="${key}"]`); if (t){ t.focus(); if (t.select) t.select(); } return; }
+  const last = S.rows.get(el.closest('tr').dataset.id);
+  if (last && (last.persisted || String(last.data.question || '').trim() || el.value.trim())) addDraft(key);
+}
+function addDraft(focusKey = 'question'){
+  const blank = [...S.rows.values()].find(r => !r.persisted && !String(r.data.question || '').trim());
+  if (blank && blank.tr && blank.tr.isConnected){ focusRowTop(blank.tr, blank.tr.querySelector(`[data-key="${focusKey}"]`)); return; }
+  if (blank) { S.rows.delete(blank.id); }
+  const ref = doc(qColl());
+  const data = {}; for (const c of allCols()) data[c.key] = defaultFor(c);
+  if (S.filter.diff) data.difficulty = S.filter.diff;
+  const r = { id: ref.id, ref, data, persisted: false, tr: null };
+  S.rows.set(r.id, r); r.tr = buildRow(r); tbody.appendChild(r.tr); autosizeRow(r.tr);
+  const t = r.tr.querySelector(`[data-key="${focusKey}"]`) || r.tr.querySelector('[data-key="question"]');
+  focusRowTop(r.tr, t);
+  // Re-assert once layout has settled so the very first press always lands.
+  requestAnimationFrame(() => { if (r.tr.isConnected) focusRowTop(r.tr, t); });
+}
+// Bring a row to the top of the sheet (just under the header) and focus it, so
+// the newest question sits where typing is comfortable.
+function focusRowTop(tr, el){
+  const w = document.querySelector('.gridWrap'); if (!w || !tr) return;
+  const head = w.querySelector('thead')?.offsetHeight || 40;
+  w.scrollTop = Math.max(0, tr.offsetTop - head - 4);
+  if (el){ try { el.focus({ preventScroll: true }); } catch (_) { el.focus(); } }
+}
+$('#addBtn').addEventListener('click', () => addDraft());
+$('#addBtn2').addEventListener('click', () => addDraft());
+$('#emptyImport').addEventListener('click', () => openImport());
+$('#importBtn').addEventListener('click', () => openImport());
+
+async function archiveRow(r, val){
+  if (!r.persisted){ r.tr.remove(); S.rows.delete(r.id); scheduleDupes(); updateCount(); return; }
+  await run(async () => {
+    const batch = writeBatch(db);
+    batch.update(r.ref, { archived: val, updatedAt: serverTimestamp() });
+    batch.update(catRef(S.curId), { questionCount: increment(val ? -1 : 1), updatedAt: serverTimestamp() });
+    await batch.commit();
+    if (val) toast('Question archived', { label: 'Undo', fn: () => archiveRow(r, false) });
+  });
+}
+
+/* tag bar: click tags to filter this category (a question must have every selected tag) */
+function renderTagBar(){
+  const bar = $('#tagBar'); if (!bar) return;
+  const counts = new Map();
+  for (const r of S.rows.values()){ if (!r.persisted || r.data.archived) continue; for (const t of (r.data.tags || [])) counts.set(t, (counts.get(t) || 0) + 1); }
+  const tags = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  if (!tags.length && !S.filter.tags.size){ bar.classList.add('hidden'); bar.innerHTML = ''; return; }
+  bar.classList.remove('hidden');
+  bar.innerHTML = '<span class="tagLbl">Tags</span>' +
+    tags.slice(0, 80).map(([t, n]) => `<button class="pill ${S.filter.tags.has(t) ? 'on' : ''}" data-tag="${esc(t)}">${esc(t)} <small>${n}</small></button>`).join('') +
+    (S.filter.tags.size ? '<button class="pill" data-clear="1">clear ✕</button>' : '');
+}
+$('#tagBar').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.clear) S.filter.tags.clear();
+  else if (b.dataset.tag) S.filter.tags.has(b.dataset.tag) ? S.filter.tags.delete(b.dataset.tag) : S.filter.tags.add(b.dataset.tag);
+  applyFilter(); renderTagBar();
+});
+
+/* filters + dupes --------------------------------------------- */
+function applyFilter(){
+  const q = S.filter.q.toLowerCase(), d = S.filter.diff;
+  for (const r of S.rows.values()){
+    if (!r.tr) continue;
+    let vis = true;
+    if (r.persisted){
+      if (d && Number(r.data.difficulty) !== d) vis = false;
+      if (vis && S.filter.tags.size){ const have = r.data.tags || []; for (const t of S.filter.tags) if (!have.includes(t)) vis = false; }
+      if (vis && q){ const hay = [r.data.question, r.data.answer, r.data.optionA, r.data.optionB, r.data.optionC, r.data.optionD, r.data.bonusQuestion, r.data.notes, (r.data.tags || []).join(' ')].join(' ').toLowerCase(); if (!hay.includes(q)) vis = false; }
+    }
+    r.tr.hidden = !vis;
+  }
+  updateCount();
+  requestAnimationFrame(() => autosizeAll($$('tr:not([hidden]) textarea', tbody)));
+}
+let dupTimer; function scheduleDupes(){ clearTimeout(dupTimer); dupTimer = setTimeout(() => { refreshDupes(); updateCount(); renderTagBar(); }, 250); }
+function refreshDupes(){
+  const m = new Map();
+  for (const r of S.rows.values()){ if (!r.persisted || r.data.archived) continue; const k = normQ(r.data.question); if (!k) continue; if (!m.has(k)) m.set(k, 0); m.set(k, m.get(k) + 1); }
+  for (const r of S.rows.values()){
+    if (!r.tr) continue;
+    const isDup = r.persisted && !r.data.archived && (m.get(normQ(r.data.question)) || 0) > 1 && !!String(r.data.question || '').trim();
+    r.tr.classList.toggle('dup', isDup); r.tr.firstElementChild.title = isDup ? 'Possible duplicate question' : '';
+  }
+}
+$('#q').addEventListener('input', e => { S.filter.q = e.target.value.trim(); applyFilter(); });
+$('#diffChips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.filter.diff = Number(b.dataset.d); $$('#diffChips button').forEach(x => x.classList.toggle('on', x === b)); applyFilter(); });
+$('#showArch').addEventListener('change', e => { document.body.classList.toggle('showArch', e.target.checked); applyFilter(); });
+
+window.addEventListener('beforeunload', e => { if (S.pending > 0){ e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('offline', () => setSync('error', 'offline — edits will sync later'));
+window.addEventListener('online',  () => pend(0));
+
+/* ═══════════════════════════════════════════════════════════
+   8. NEW CATEGORY / CATEGORY MENU / COLUMNS
+   ═══════════════════════════════════════════════════════════ */
+/* ── Manage category types: add, rename (updates every category using it), delete empty ones ── */
+function openTypes(){
+  const body = document.createElement('div');
+  const draw = () => {
+    const counts = new Map(); for (const c of S.cats.values()) if (c.type) counts.set(c.type, (counts.get(c.type) || 0) + 1);
+    body.innerHTML = `<p class="hint" style="margin:0 0 10px">Types group your categories in the sidebar, in this order — drag ⠿ or use ▲▼ to rearrange. Renaming a type renames it on every category that uses it.</p>
+      <div id="typeRows">${typeList().map((t, i) => `<div class="fld" style="display:flex;gap:8px;align-items:center;margin:6px 0">
+        <span class="tgrab" draggable="true" data-drag="${i}" title="Drag to reorder" style="cursor:grab;color:var(--text3);user-select:none;padding:0 2px">⠿</span>
+        <button class="btn ghost sm" data-up="${i}" ${i === 0 ? 'disabled' : ''} title="Move up">▲</button><button class="btn ghost sm" data-dn="${i}" ${i === typeList().length - 1 ? 'disabled' : ''} title="Move down">▼</button>
+        <input type="text" value="${esc(t)}" data-i="${i}" data-old="${esc(t)}" style="flex:1" autocomplete="off">
+        <span class="hint" style="min-width:70px;text-align:right">${counts.get(t) || 0} categor${(counts.get(t) || 0) === 1 ? 'y' : 'ies'}</span>
+        <button class="btn ghost sm" data-del="${i}" ${(counts.get(t) || 0) ? 'disabled title="Move or delete its categories first"' : ''}>Delete</button></div>`).join('')}</div>
+      <div class="fld" style="display:flex;gap:8px;margin-top:14px"><input type="text" id="newTypeIn" placeholder="New type name (for example: Holiday)" style="flex:1" autocomplete="off"><button class="btn primary sm" id="newTypeAdd">Add type</button></div>
+      <div class="msg" id="typeMsg"></div>`;
+  };
+  draw();
+  body.addEventListener('change', async e => {
+    const el = e.target.closest('input[data-old]'); if (!el) return;
+    const old = el.dataset.old, nu = el.value.trim();
+    if (!nu || nu === old){ el.value = old; return; }
+    if (typeList().some(t => t !== old && normName(t) === normName(nu))){ $('#typeMsg').textContent = 'That type already exists.'; el.value = old; return; }
+    await run(async () => {
+      const list = typeList().map(t => t === old ? nu : t); await saveTypes(list);
+      const ids = [...S.cats.values()].filter(c => c.type === old).map(c => c.id);
+      for (let i = 0; i < ids.length; i += 400){ const b = writeBatch(db); ids.slice(i, i + 400).forEach(id => b.update(catRef(id), { type: nu, updatedAt: serverTimestamp() })); await b.commit(); }
+      toast(`Renamed to “${nu}”`);
+    });
+    setTimeout(draw, 300);
+  });
+  const add = async () => {
+    const v = $('#newTypeIn').value.trim(); if (!v) return;
+    if (typeList().some(t => normName(t) === normName(v))){ $('#typeMsg').textContent = 'That type already exists.'; return; }
+    await run(() => addType(v)); setTimeout(draw, 300);
+  };
+  const moveType = async (from, to) => {
+    const list = typeList(); if (to < 0 || to >= list.length || from === to) return;
+    const [m] = list.splice(from, 1); list.splice(to, 0, m);
+    await run(() => saveTypes(list)); setTimeout(draw, 250);
+  };
+  let dragI = null;
+  body.addEventListener('dragstart', e => { const g = e.target.closest('[data-drag]'); if (!g) return; dragI = +g.dataset.drag; try { e.dataTransfer.setData('text/plain', String(dragI)); } catch (_) {} });
+  body.addEventListener('dragover', e => { if (dragI !== null) e.preventDefault(); });
+  body.addEventListener('drop', e => { if (dragI === null) return; e.preventDefault(); const row = e.target.closest('#typeRows .fld'); if (!row) { dragI = null; return; } const to = [...row.parentNode.children].indexOf(row); const from = dragI; dragI = null; moveType(from, to); });
+  body.addEventListener('click', async e => {
+    const up = e.target.closest('[data-up]'); if (up && !up.disabled){ moveType(+up.dataset.up, +up.dataset.up - 1); return; }
+    const dn = e.target.closest('[data-dn]'); if (dn && !dn.disabled){ moveType(+dn.dataset.dn, +dn.dataset.dn + 1); return; }
+    if (e.target.id === 'newTypeAdd'){ add(); return; }
+    const d = e.target.closest('[data-del]'); if (!d || d.disabled) return;
+    const t = typeList()[+d.dataset.del];
+    if (!await confirmBox({ title: 'Delete type', message: `Delete the type “${t}”? No categories use it.`, ok: 'Delete', danger: true })) return;
+    await run(() => saveTypes(typeList().filter(x => x !== t))); setTimeout(draw, 300); 
+  });
+  body.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'newTypeIn') add(); });
+  openModal({ title: 'Category types', body, actions: [{ label: 'Done', primary: true, onClick: closeModal }] });
+}
+$('#manageTypesBtn').addEventListener('click', openTypes);
+
+$('#newCatBtn').addEventListener('click', () => {
+  const body = document.createElement('div');
+  body.innerHTML = `<label class="fld">Category name<input type="text" id="ncName" autocomplete="off"></label>
+    <label class="fld">Type<select id="ncType">${typeList().map(t => `<option>${esc(t)}</option>`).join('')}<option value="__new">＋ New type…</option></select></label>
+    <label class="fld hidden" id="ncNewWrap">New type name<input type="text" id="ncNew" autocomplete="off"></label>
+    <div class="msg" id="ncMsg"></div>`;
+  const submit = async () => {
+    const name = $('#ncName').value.trim(); let type = $('#ncType').value;
+    if (type === '__new') type = $('#ncNew').value.trim();
+    if (type && type !== '__new') await run(async () => { type = await addType(type) || type; });
+    if (!name) return $('#ncMsg').textContent = 'Give it a name.';
+    if (!type) return $('#ncMsg').textContent = 'Pick or name a type.';
+    if (catByNorm(name)) return $('#ncMsg').textContent = 'A category with that name already exists.';
+    closeModal();
+    await run(async () => { const ref = await addDoc(collection(db, 'triviaCategories'), { name, type, questionCount: 0, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); selectCategory(ref.id); mirrorNewVaultCategory(ref.id, name, type); });
+  };
+  openModal({ title: 'New category', body, actions: [{ label: 'Cancel', onClick: closeModal }, { label: 'Create', primary: true, onClick: submit }] });
+  $('#ncType').addEventListener('change', e => $('#ncNewWrap').classList.toggle('hidden', e.target.value !== '__new'));
+  $('#ncName').focus(); body.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+});
+
+$('#catMenuBtn').addEventListener('click', () => {
+  const c = S.cats.get(S.curId); if (!c) return;
+  const body = document.createElement('div'); body.className = 'menuList';
+  body.innerHTML = `<button class="btn" data-a="export">Export this category as CSV</button>
+    <button class="btn" data-a="recount">Recount questions</button>
+    <button class="btn" data-a="archive">${c.archived ? 'Restore this category' : 'Archive this category'}</button>
+    <p class="hint" style="margin:0 0 6px">Archiving hides the category from the list. Its questions are kept.</p>
+    <button class="btn danger" data-a="delete">Delete this sheet<br>and all its questions…</button>`;
+  openModal({ title: c.name, body, actions: [{ label: 'Close', onClick: closeModal }] });
+  body.addEventListener('click', async e => {
+    const b = e.target.closest('[data-a]'); if (!b) return;
+    if (b.dataset.a === 'export'){ closeModal(); exportCSV(); }
+    if (b.dataset.a === 'recount'){ closeModal(); await run(async () => { const snap = await getCountFromServer(query(qColl(), where('categoryId', '==', c.id), where('archived', '==', false))); await updateDoc(catRef(c.id), { questionCount: snap.data().count }); toast(`Recounted: ${snap.data().count} questions`); }); }
+    if (b.dataset.a === 'archive'){ closeModal(); await run(() => updateDoc(catRef(c.id), { archived: !c.archived, updatedAt: serverTimestamp() })); }
+    if (b.dataset.a === 'delete'){ closeModal(); askDeleteCategory(c); }
+  });
+});
+
+// Deleting a Vault sheet only removes the sheet and its questions. The category stays in Trivia, the Planner and
+// the Venue Menu — it is just marked "no Vault sheet" so nothing re-creates a blank one.
+async function unlinkDeletedSheet(vaultId){
+  try {
+    rtdb = rtdb || getDatabase(app);
+    const all = (await rget(rref(rtdb, 'trivia/categories'))).val() || {};
+    for (const [id, t] of Object.entries(all)) if (t && t.vaultCatId === vaultId) await rupdate(rref(rtdb, 'trivia/categories/' + id), { vaultCatId: null, vaultOptOut: true });
+  } catch (e) { console.warn('Could not unlink the deleted sheet from Trivia:', e && e.message); }
+}
+function askDeleteCategory(c){
+  const body = document.createElement('div');
+  body.innerHTML = `<p class="hint">This permanently deletes this <strong style="color:var(--text)">${esc(c.name)}</strong> Vault sheet and <strong style="color:var(--text)">every question in it</strong>, including archived ones. It can’t be undone.</p>
+    <p class="hint">The category itself stays in Trivia, the Planner and the Venue Menu — only the question sheet goes.</p>
+    <label class="fld">Type the category name to confirm<input type="text" id="delConfirm" autocomplete="off"></label>
+    <div class="msg" id="delMsg"></div>`;
+  const actions = [{ label: 'Cancel', onClick: closeModal }, { label: 'Delete forever', danger: true, onClick: () => go() }];
+  openModal({ title: 'Delete category?', body, actions });
+  const cancel = actions[0].el, btn = actions[1].el; btn.disabled = true;
+  $('#delConfirm').focus();
+  $('#delConfirm').addEventListener('input', e => { btn.disabled = normName(e.target.value) !== normName(c.name); });
+  async function go(){
+    btn.disabled = true; cancel.disabled = true;
+    const msg = $('#delMsg'); msg.className = 'msg ok'; msg.textContent = 'Deleting…';
+    dropSub(c.id);
+    if (S.curId === c.id){ S.curId = null; S.rows = new Map(); LS.set('lastCat', null); showEditor(false); renderSide(); }
+    let n = 0;
+    try {
+      for (;;){
+        const snap = await getDocs(query(qColl(), where('categoryId', '==', c.id), limit(400)));
+        if (snap.empty) break;
+        const batch = writeBatch(db); snap.docs.forEach(d => batch.delete(d.ref)); await batch.commit();
+        n += snap.size; msg.textContent = `Deleted ${n.toLocaleString()} questions…`;
+      }
+      await deleteDoc(catRef(c.id));
+      await unlinkDeletedSheet(c.id);
+      msg.textContent = `Done — removed the category and ${n.toLocaleString()} question${n === 1 ? '' : 's'}.`;
+      btn.textContent = 'Close'; btn.classList.remove('danger'); btn.classList.add('primary'); btn.disabled = false; btn.onclick = closeModal;
+    } catch (err){
+      console.error(err); msg.className = 'msg';
+      msg.textContent = (/permission/i.test(err.message) ? 'Firestore blocked the delete — check the rules are published.' : 'Stopped: ' + err.message) + ` (${n.toLocaleString()} questions removed so far — run it again to finish.)`;
+      cancel.disabled = false; btn.disabled = false;
+    }
+  }
+}
+
+function exportCSV(){
+  const c = S.cats.get(S.curId); if (!c) return;
+  const items = [...S.rows.values()].filter(r => r.persisted && !r.data.archived).sort((a, b) => (Number(a.data.order) || 0) - (Number(b.data.order) || 0)).map(r => r.data);
+  const blob = new Blob([toCSV(allCols(), items)], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = c.name.replace(/[\/\\:*?"<>|]+/g, '-') + '.csv';
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+async function saveCustom(list){ await setDoc(doc(db, 'triviaConfig', 'columns'), { custom: list, updatedAt: serverTimestamp() }, { merge: true }); }
+async function saveOrder(keys){ S.order = keys; await setDoc(doc(db, 'triviaConfig', 'columns'), { order: keys, updatedAt: serverTimestamp() }, { merge: true }); }
+
+$('#colsBtn').addEventListener('click', openColumns);
+function openColumns(){
+  const body = document.createElement('div');
+  const draw = () => {
+    body.innerHTML = `<p class="hint">Tick the columns you want to see. Custom columns you add here become a field on every question.</p>
+      ${S.tempOrder ? `<div class="hint" style="margin:0 0 10px;padding:8px 10px;border:1px solid var(--gold-glow);border-radius:8px">You've rearranged the columns on the main page for now. <button class="linkbtn" id="makePerm">Make this arrangement permanent</button></div>` : ''}
+      <p class="hint" style="margin-top:0">Drag ⠿ or use ▲ ▼ to set the permanent column order — it's saved for everyone and every device. Question always stays first.</p>
+      <div class="list" id="colList">` + orderCols(S.order).map((c, i, arr) => {
+        const custom = S.custom.some(x => x.key === c.key) && !BUILTIN.some(b => b.key === c.key);
+        const pinned = c.key === 'question';
+        return `<div class="item" data-k="${c.key}" ${pinned ? '' : 'draggable="true"'}><span class="grab" title="${pinned ? 'Pinned first' : 'Drag to move'}">${pinned ? '📌' : '⠿'}</span><label style="display:flex;gap:10px;align-items:center;flex:1"><input type="checkbox" data-vis="${c.key}" ${c.key === 'question' ? 'checked disabled' : (S.hidden.has(c.key) ? '' : 'checked')}><span class="lb">${esc(c.label)}${custom ? ` <small>${CUSTOM_TYPES[c.type] || ''}</small>` : ''}</span></label>${custom ? `<button class="linkbtn" data-ren="${c.key}">Rename</button><button class="linkbtn" data-rm="${c.key}">Remove</button>` : ''}${pinned ? '' : `<button class="mv" data-mv="-1:${c.key}" ${i <= 1 ? 'disabled' : ''} title="Move left">▲</button><button class="mv" data-mv="1:${c.key}" ${i === arr.length - 1 ? 'disabled' : ''} title="Move right">▼</button>`}</div>`;
+      }).join('') + `</div>
+      <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+        <label class="fld">Add a column<input type="text" id="ncolName" placeholder="e.g. Host notes" autocomplete="off"></label>
+        <label class="fld">Kind<select id="ncolType">${Object.entries(CUSTOM_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
+        <button class="btn primary" id="ncolAdd">Add column</button>
+        <div class="msg" id="ncolMsg"></div>
+      </div>`;
+  };
+  draw();
+  openModal({ title: 'Columns', body, actions: [{ label: 'Done', primary: true, onClick: closeModal }], onClose: () => renderAll() });
+  body.addEventListener('change', e => { const k = e.target.dataset.vis; if (!k) return; e.target.checked ? S.hidden.delete(k) : S.hidden.add(k); LS.set('hiddenCols', [...S.hidden]); });
+  const permKeys = () => orderCols(S.order).map(c => c.key).filter(k => k !== 'question');
+  const commitOrder = async keys => { S.tempOrder = null; await run(() => saveOrder(keys)); draw(); };
+  body.addEventListener('click', async e => {
+    if (e.target.id === 'makePerm'){ await commitOrder(allCols().map(c => c.key).filter(k => k !== 'question')); return; }
+    const mv = e.target.dataset.mv; if (!mv) return;
+    const [d, k] = mv.split(':'), keys = permKeys(), i = keys.indexOf(k), j = i + (+d);
+    if (i < 0 || j < 0 || j >= keys.length) return;
+    keys.splice(j, 0, keys.splice(i, 1)[0]); await commitOrder(keys);
+  });
+  let dragK = null;
+  body.addEventListener('dragstart', e => { const it = e.target.closest('.item[data-k]'); if (!it || it.dataset.k === 'question') return; dragK = it.dataset.k; it.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragK); } catch (_) {} });
+  body.addEventListener('dragover', e => { if (!dragK) return; const it = e.target.closest('.item[data-k]'); if (!it || it.dataset.k === dragK) return; e.preventDefault(); $$('.item.dropT', body).forEach(x => x.classList.remove('dropT')); it.classList.add('dropT'); });
+  body.addEventListener('drop', async e => {
+    if (!dragK) return; const it = e.target.closest('.item[data-k]'); if (!it) return; e.preventDefault();
+    const keys = permKeys().filter(k => k !== dragK), t = it.dataset.k, i = t === 'question' ? 0 : keys.indexOf(t);
+    keys.splice(i, 0, dragK); dragK = null; await commitOrder(keys);
+  });
+  body.addEventListener('dragend', () => { dragK = null; $$('.item.dragging,.item.dropT', body).forEach(x => x.classList.remove('dragging', 'dropT')); });
+  body.addEventListener('click', async e => {
+    const rn = e.target.dataset.ren, rm = e.target.dataset.rm;
+    if (rn){ const c = S.custom.find(x => x.key === rn); const t = await askText({ title: 'Rename column', label: 'Column name', value: c.label }); if (t) await run(async () => { await saveCustom(S.custom.map(x => x.key === rn ? { ...x, label: t } : x)); setTimeout(draw, 250); }); }
+    if (rm){ const c = S.custom.find(x => x.key === rm); if (await confirmBox({ title: 'Remove column?', message: `"${c.label}" will disappear from the editor. The data already saved on questions is kept.`, ok: 'Remove', danger: true })) await run(async () => { await saveCustom(S.custom.filter(x => x.key !== rm)); setTimeout(draw, 250); }); }
+    if (e.target.id === 'ncolAdd'){
+      const label = $('#ncolName', body).value.trim(), type = $('#ncolType', body).value, msg = $('#ncolMsg', body);
+      if (!label) { msg.textContent = 'Name the column.'; return; }
+      if (allCols().some(c => norm(c.label) === norm(label))) { msg.textContent = 'There\u2019s already a column with that name.'; return; }
+      const taken = new Set(allCols().map(c => c.key));
+      await run(async () => { await saveCustom([...S.custom, { key: keyFromLabel(label, taken), label, type }]); setTimeout(draw, 250); });
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   9. CSV IMPORT (many files at once)
+   ═══════════════════════════════════════════════════════════ */
+const existingCache = new Map();
+async function ensureExisting(catId){
+  if (!existingCache.has(catId)){
+    const snap = await getDocs(query(qColl(), where('categoryId', '==', catId)));
+    existingCache.set(catId, snap.docs.map(d => d.data()));
+  }
+  return existingCache.get(catId);
+}
+
+function openImport(){
+  existingCache.clear();
+  const st = { entries: [], ctx: { custom: S.custom, pending: new Map() }, ver: 0, busy: false };
+  const body = document.createElement('div');
+  body.innerHTML = `
+    <p class="hint">In Google Sheets, open a category tab → <strong>File → Download → Comma-separated values (.csv)</strong>. Download as many as you like, then drop them all here. The category name comes from the file name — fix any that look off. Duplicates of questions already in a category are skipped.</p>
+    <div class="drop" id="impDrop"><input type="file" id="impFiles" multiple accept=".csv,text/csv"><div class="muted" style="margin-top:8px;font-size:12px">…or drag CSV files onto this box</div></div>
+    <label class="fld" style="max-width:300px">Type for new categories
+      <select id="impType">${typeList().map(t => `<option ${S.cats.get(S.curId)?.type === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+    <div id="impPv"></div><div id="impNote" class="hint"></div><div class="msg" id="impMsg"></div>`;
+  const actions = [{ label: 'Cancel', onClick: closeModal }, { label: 'Import', primary: true, onClick: () => doImport() }];
+  openModal({ title: 'Import CSVs', body, wide: true, actions });
+  const importBtn = actions[1].el; importBtn.disabled = true;
+
+  async function addFiles(files){
+    for (const f of files){
+      if (!/\.csv$/i.test(f.name) && f.type !== 'text/csv') continue;
+      const text = await f.text();
+      const parsed = recordsFromCSV(parseCSV(text), st.ctx);
+      st.entries.push({ file: f.name, name: nameFromFile(f.name), type: $('#impType').value, parsed });
+    }
+    recompute();
+  }
+  $('#impFiles').addEventListener('change', e => addFiles([...e.target.files]));
+  const drop = $('#impDrop');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
+  $('#impType').addEventListener('change', e => { st.entries.forEach(en => { if (!catByNorm(en.name)) en.type = e.target.value; }); recompute(); });
+
+  async function recompute(){
+    const my = ++st.ver, seen = new Map();
+    for (const en of st.entries){
+      en.toAdd = []; en.dupCount = 0; en.status = '';
+      if (en.parsed.error){ en.status = en.parsed.error; continue; }
+      const key = normName(en.name), cat = catByNorm(en.name);
+      if (!seen.has(key)){
+        const set = new Set();
+        if (cat){ const ex = await ensureExisting(cat.id); ex.forEach(q => set.add(normQ(q.question))); if (my !== st.ver) return; }
+        seen.set(key, { set, used: false });
+      }
+      const g = seen.get(key);
+      for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)) en.dupCount++; else { g.set.add(k); en.toAdd.push(rec); } }
+      en.status = isGenericName(en.name) ? 'Needs a real category name' : cat ? `Adds to existing` : g.used ? 'Merges with file above' : 'New category';
+      if (en.parsed.layout) en.status += ' · ' + en.parsed.layout;
+      g.used = true;
+    }
+    if (my !== st.ver) return;
+    drawPreview();
+  }
+  function drawPreview(){
+    const act = document.activeElement;
+    const keep = act && act.dataset && act.dataset.f === 'name' ? { i: act.dataset.i, s: act.selectionStart, e: act.selectionEnd } : null;
+    const types = typeList();
+    const ok = st.entries.filter(e => !e.parsed.error);
+    const newQ = ok.reduce((n, e) => n + e.toAdd.length, 0), dups = ok.reduce((n, e) => n + e.dupCount, 0);
+    $('#impPv').innerHTML = st.entries.length ? `<table class="pv"><thead><tr><th>File</th><th>Category name</th><th style="width:140px">Type</th><th>New</th><th title="New questions with an IMG URL">Img</th><th title="New questions with a SOUND URL">Sound</th><th>Skipped</th><th>Status</th><th></th></tr></thead><tbody>` +
+      st.entries.map((e, i) => `<tr><td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.file)}">${esc(e.file)}</td>
+        <td><input data-i="${i}" data-f="name" class="${isGenericName(e.name) ? 'bad' : ''}" value="${esc(e.name)}"></td>
+        <td><select data-i="${i}" data-f="type">${types.map(t => `<option ${t === e.type ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></td>
+        <td class="${e.parsed.error ? 'bad' : 'good'}">${e.parsed.error ? '—' : e.toAdd.length}</td>
+        <td>${e.parsed.error ? '' : e.toAdd.filter(r => r.imgUrl).length}</td>
+        <td>${e.parsed.error ? '' : e.toAdd.filter(r => r.soundUrl).length}</td>
+        <td class="muted" title="duplicates / blank rows / rows without a question">${e.parsed.error ? '' : (e.dupCount + e.parsed.blank + e.parsed.noQ)}</td>
+        <td class="${e.parsed.error || isGenericName(e.name) ? 'bad' : ''}">${esc(e.status)}</td>
+        <td><button class="linkbtn" data-rm="${i}">remove</button></td></tr>`).join('') + `</tbody></table>` : '';
+    const newCols = [...new Map(ok.flatMap(e => e.parsed.newCols).map(c => [c.key, c])).values()];
+    const generic = ok.filter(e => isGenericName(e.name)).length;
+    const merging = ok.filter(e => e.status === 'Merges with file above').length;
+    $('#impNote').innerHTML = st.entries.length ? `<strong>${ok.length}</strong> file${ok.length === 1 ? '' : 's'} · <strong>${newQ.toLocaleString()}</strong> new questions · ${dups.toLocaleString()} duplicates skipped` +
+      (newCols.length ? `<br>Extra columns found: ${newCols.map(c => `<strong>${esc(c.label)}</strong>`).join(', ')} — they'll be added as custom columns.` : '') +
+      (merging ? `<br><span style="color:var(--gold2)">${merging} file${merging === 1 ? '' : 's'} share a category name with another file and will be merged into it. If that's not what you want, rename them.</span>` : '') +
+      (generic ? `<br><span style="color:var(--danger)">${generic} file${generic === 1 ? ' has' : 's have'} a generic name like "Sheet1". Type the real category name before importing.</span>` : '') : '';
+    importBtn.disabled = (!newQ && !newCols.length) || generic > 0;
+    if (keep){ const el = $(`#impPv input[data-f="name"][data-i="${keep.i}"]`); if (el){ el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} } }
+  }
+  $('#impPv').addEventListener('input', e => { const i = e.target.dataset.i; if (i === undefined) return; if (e.target.dataset.f === 'name') { st.entries[i].name = e.target.value; clearTimeout(st.t); st.t = setTimeout(recompute, 450); } });
+  $('#impPv').addEventListener('change', e => { const i = e.target.dataset.i; if (i !== undefined && e.target.dataset.f === 'type') st.entries[i].type = e.target.value; });
+  $('#impPv').addEventListener('click', e => { const i = e.target.dataset.rm; if (i === undefined) return; st.entries.splice(Number(i), 1); recompute(); });
+
+  async function doImport(){
+    if (st.busy) return; st.busy = true; importBtn.disabled = true;
+    const msg = $('#impMsg'); msg.className = 'msg ok';
+    const ok = st.entries.filter(e => !e.parsed.error && e.name.trim());
+    try {
+      const newCols = [...new Map(ok.flatMap(e => e.parsed.newCols).map(c => [c.key, c])).values()].map(({ key, label, type }) => ({ key, label, type }));
+      if (newCols.length) await saveCustom([...S.custom, ...newCols]);
+      const groups = new Map();
+      ok.forEach(e => { const k = normName(e.name); if (!groups.has(k)) groups.set(k, { name: e.name.trim(), type: e.type, adds: [] }); groups.get(k).adds.push(...e.toAdd); });
+      let done = 0, total = 0;
+      for (const [k, g] of groups){
+        msg.textContent = `Importing ${++done} of ${groups.size}: ${g.name}…`;
+        let cat = catByNorm(g.name), id, order = 1;
+        if (cat){ id = cat.id; const ex = await ensureExisting(id); order = ex.reduce((m, q) => Math.max(m, Number(q.order) || 0), 0) + 1; }
+        else { const ref = await addDoc(collection(db, 'triviaCategories'), { name: g.name, type: g.type, questionCount: 0, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); id = ref.id; mirrorNewVaultCategory(id, g.name, g.type); }
+        for (let i = 0; i < g.adds.length; i += 250){
+          const batch = writeBatch(db);
+          g.adds.slice(i, i + 250).forEach(rec => batch.set(doc(qColl()), { ...rec, categoryId: id, order: order++, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+          await batch.commit();
+        }
+        if (g.adds.length) await updateDoc(catRef(id), { questionCount: increment(g.adds.length), archived: false, updatedAt: serverTimestamp() });
+        total += g.adds.length;
+      }
+      msg.textContent = `Done — ${total.toLocaleString()} questions imported into ${groups.size} categor${groups.size === 1 ? 'y' : 'ies'}.`;
+      importBtn.textContent = 'Close'; importBtn.disabled = false; importBtn.onclick = closeModal;
+      if (S.curId) { const cur = S.curId; S.curId = null; selectCategory(cur); }
+    } catch (err){
+      console.error(err); msg.className = 'msg';
+      msg.textContent = /permission/i.test(err.message) ? 'Firestore blocked the import — publish the updated rules first.' : 'Import stopped: ' + err.message + ' (anything already written is saved; re-running skips duplicates).';
+      importBtn.disabled = false;
+    } finally { st.busy = false; }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   10. SEARCH BY TAG ACROSS ALL CATEGORIES
+   ═══════════════════════════════════════════════════════════ */
+$('#tagSearchBtn').addEventListener('click', () => {
+  const body = document.createElement('div');
+  body.innerHTML = `<label class="fld">Tags — a question must have all of them (separate with commas)<input type="text" id="tsIn" placeholder="e.g. halloween, easy" autocomplete="off"></label><div id="tsOut"></div>`;
+  openModal({ title: 'Search by tag', body, wide: true, actions: [{ label: 'Close', onClick: closeModal }, { label: 'Search', primary: true, onClick: go }] });
+  const inp = $('#tsIn'); inp.focus(); inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  async function go(){
+    const tags = parseTags(inp.value), out = $('#tsOut'); if (!tags.length) return;
+    out.innerHTML = '<p class="hint">Searching…</p>';
+    try {
+      const snap = await getDocs(query(qColl(), where('tags', 'array-contains', tags[0]), limit(500)));
+      const hits = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(q => !q.archived && tags.every(t => (q.tags || []).includes(t)));
+      hits.sort((a, b) => String(S.cats.get(a.categoryId)?.name || '').localeCompare(String(S.cats.get(b.categoryId)?.name || '')) || (a.order || 0) - (b.order || 0));
+      if (!hits.length){ out.innerHTML = '<p class="hint">No questions have all of those tags.</p>'; return; }
+      out.innerHTML = `<p class="hint">${hits.length} question${hits.length === 1 ? '' : 's'}${snap.size >= 500 ? ' (showing the first 500 matches for the first tag)' : ''}. Click a row to open its category.</p>
+        <table class="pv"><thead><tr><th>Category</th><th>Question</th><th>Answer</th><th>Diff</th><th>Tags</th></tr></thead><tbody>` +
+        hits.map(q => `<tr class="hit" data-cat="${esc(q.categoryId)}"><td>${esc(S.cats.get(q.categoryId)?.name || '—')}</td><td>${esc(q.question)}</td><td>${esc(q.answer)}</td><td>${q.difficulty ?? ''}</td><td class="muted">${esc((q.tags || []).join(', '))}</td></tr>`).join('') + '</tbody></table>';
+      $$('tr.hit', out).forEach(tr => tr.addEventListener('click', () => { closeModal(); selectCategory(tr.dataset.cat); }));
+    } catch (e){ out.innerHTML = `<p class="msg">${esc(/permission/i.test(e.message) ? 'Firestore blocked that — publish the updated rules.' : e.message)}</p>`; }
+  }
+});
+/* ═══════════════════════════════════════════════════════════
+   BINGO MODE — song lists + one shared "in my catalog" checklist
+   bingoLists/{id}     = { name, songs:[{t,a}], order, archived }
+   bingoConfig/catalog = { owned:{ <songKey>: true } }
+   A song's key is built from its title + artist, so ticking it on
+   ANY list ticks it on EVERY list that has the same song.
+   ═══════════════════════════════════════════════════════════ */
+const B = {
+  lists: new Map(), owned: new Set(), curId: null, loaded: false,
+  sort: LS.get('bSort', { by:'order', dir:1 }), showArch: false, filter: 'all', q: '',
+  unsubs: [], listening: false, mode: 'trivia'
+};
+const bListRef = id => doc(db, 'bingoLists', id);
+const bCatalogRef = () => doc(db, 'bingoConfig', 'catalog');
+const MISSING = '__missing';
+
+function hash53(str, seed = 0){
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0; i < str.length; i++){ const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+}
+function normSong(s){
+  return String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[\(\[][^\)\]]*(feat|ft|with)\b[^\)\]]*[\)\]]/g, ' ')
+    .replace(/\b(feat|ft|featuring)\b.*$/g, ' ')
+    .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '').replace(/^the/, '');
+}
+const songKey = (t, a) => hash53(normSong(t) + '|' + normSong(a));
+function cleanSongs(arr){ return (arr || []).filter(s => s && (s.t || s.a)).map(s => ({ t: String(s.t || '').trim(), a: String(s.a || '').trim() })); }
+function listStats(l){
+  const songs = l.songs || []; let have = 0;
+  for (const s of songs) if (B.owned.has(s._k)) have++;
+  return { total: songs.length, have, missing: songs.length - have };
+}
+function prepList(id, d){
+  const songs = cleanSongs(d.songs).map(s => ({ ...s, _k: songKey(s.t, s.a) }));
+  return { id, ...d, songs };
+}
+
+function startBingo(){
+  if (B.listening) return;
+  B.listening = true;
+  B.unsubs.push(onSnapshot(collection(db, 'bingoLists'), snap => {
+    B.lists = new Map(snap.docs.map(d => [d.id, prepList(d.id, d.data())]));
+    B.loaded = true;
+    if (B.mode === 'bingo') renderBingoAll();
+    if (!B.curId){ const last = LS.get('bLast', null); if (last && (last === MISSING || B.lists.has(last))) { B.curId = last; if (B.mode === 'bingo') renderBingoAll(); } }
+  }, err => {
+    $('#bList').innerHTML = `<p class="hint" style="padding:12px">Can't read the bingo lists yet.<br>${/permission/i.test(err.message) ? 'Publish the updated Firestore rules, then refresh.' : esc(err.message)}</p>`;
+  }));
+  B.unsubs.push(onSnapshot(bCatalogRef(), snap => {
+    B.owned = new Set(Object.keys((snap.exists() && snap.data().owned) || {}));
+    if (B.mode === 'bingo') renderBingoAll();
+  }, () => {}));
+}
+
+/* ── mode switch ── */
+function setMode(m){
+  if (m === 'trivia' && !B.canTrivia) m = 'bingo';
+  if (m === 'bingo' && !B.canBingo) m = 'trivia';
+  B.mode = m; LS.set('mode', m);
+  try { history.replaceState(null, '', m === 'bingo' ? '#bingo' : location.pathname + location.search); } catch (e) {}
+  $('#triviaShell').classList.toggle('hidden', m !== 'trivia');
+  $('#bingoShell').classList.toggle('hidden', m !== 'bingo');
+  $$('.modeSw button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  $('#navSub').textContent = m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank';
+  $('#notesBtn').classList.toggle('hidden', m !== 'trivia');
+  document.title = 'The Vault · Belladonna';
+  if (m === 'bingo') renderBingoAll();
+}
+$$('.modeSw button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+/* ── sidebar ── */
+function sortedLists(){
+  const q = B.q.trim().toLowerCase();
+  const out = [...B.lists.values()].filter(l => (B.showArch || !l.archived) && (!q || String(l.name).toLowerCase().includes(q)));
+  const { by, dir } = B.sort;
+  const val = l => { const s = listStats(l); return by === 'have' ? s.have : by === 'missing' ? s.missing : by === 'total' ? s.total : (Number(l.order) || 0); };
+  out.sort((a, b) => ((val(a) - val(b)) * dir) || ((Number(a.order) || 0) - (Number(b.order) || 0)) || String(a.name).localeCompare(String(b.name)));
+  return out;
+}
+function renderBingoSide(){
+  const mk = (by, label, title) => {
+    const on = B.sort.by === by, arrow = on ? (B.sort.dir === 1 ? ' ▲' : ' ▼') : '';
+    return `<span class="sortBtn ${on ? 'on' : ''}" role="button" data-bsort="${by}" title="${esc(title)}">${label}${arrow}</span>`;
+  };
+  const uniq = missingSongs();
+  let html = `<div class="bSortRow"><span class="lbl">Order by</span>` +
+    mk('order', 'My order', 'Your own order of the lists (use Move up / down under More)') +
+    mk('have', 'In catalog', 'Most songs already in your catalog — click again to flip') +
+    mk('missing', 'Missing', 'Most songs still missing from your catalog — click again to flip') +
+    mk('total', 'Songs', 'Number of songs in the list — click again to flip') + `</div>`;
+  html += `<div class="bSpecial"><button class="bList ${B.curId === MISSING ? 'active' : ''}" data-bid="${MISSING}"><div class="row1"><span class="nm">⚑ Everything I'm missing</span><span class="ct"><b>${uniq.length}</b> songs</span></div></button></div>`;
+  const list = sortedLists();
+  html += list.map(l => {
+    const s = listStats(l), pct = s.total ? Math.round(s.have / s.total * 100) : 0;
+    return `<button class="bList ${l.id === B.curId ? 'active' : ''} ${l.archived ? 'arch' : ''}" data-bid="${l.id}"><div class="row1"><span class="nm">${esc(l.name)}</span><span class="ct"><b>${s.have}</b> / ${s.total}</span></div><div class="bBar ${s.total && s.have === s.total ? 'full' : ''}"><i style="width:${pct}%"></i></div></button>`;
+  }).join('');
+  if (!list.length) html += `<p class="hint" style="padding:12px">${B.loaded ? 'No bingo lists yet — click “+ New list” to add your first one.' : 'Loading…'}</p>`;
+  $('#bList').innerHTML = html;
+}
+$('#bList').addEventListener('click', e => {
+  const sb = e.target.closest('[data-bsort]');
+  if (sb){
+    const by = sb.dataset.bsort;
+    B.sort = B.sort.by === by ? { by, dir: -B.sort.dir } : { by, dir: by === 'order' ? 1 : -1 };
+    LS.set('bSort', B.sort); renderBingoSide(); return;
+  }
+  const c = e.target.closest('.bList'); if (c) selectBingo(c.dataset.bid);
+});
+$('#bSearch').addEventListener('input', e => { B.q = e.target.value; renderBingoSide(); });
+$('#bShowArch').addEventListener('change', e => { B.showArch = e.target.checked; renderBingoSide(); });
+function selectBingo(id){ B.curId = id; LS.set('bLast', id); B.filter = 'all'; $('#bQ').value = ''; B.songQ = ''; renderBingoAll(); }
+
+/* ── "everything I'm missing": every unique song not yet in the catalog, across all lists ── */
+function allSongs(){
+  const m = new Map();
+  for (const l of B.lists.values()){
+    if (l.archived && !B.showArch) continue;
+    for (const s of l.songs){
+      let e = m.get(s._k); if (!e){ e = { t: s.t, a: s.a, _k: s._k, lists: [] }; m.set(s._k, e); }
+      if (!e.lists.includes(l.name)) e.lists.push(l.name);
+    }
+  }
+  return [...m.values()];
+}
+const missingSongs = () => allSongs().filter(s => !B.owned.has(s._k));
+
+/* ── main panel ── */
+function currentRows(){
+  if (B.curId === MISSING){
+    return missingSongs().sort((a, b) => b.lists.length - a.lists.length || a.t.localeCompare(b.t)).map((s, i) => ({ ...s, idx: i, ro: true }));
+  }
+  const l = B.lists.get(B.curId); if (!l) return [];
+  return l.songs.map((s, i) => ({ ...s, idx: i, lists: songListNames(s._k, l.id) }));
+}
+function songListNames(k, exceptId){
+  const out = [];
+  for (const l of B.lists.values()) if (l.id !== exceptId && !l.archived && l.songs.some(s => s._k === k)) out.push(l.name);
+  return out;
+}
+function renderBingoAll(){
+  renderBingoSide();
+  const isMissing = B.curId === MISSING, l = B.lists.get(B.curId);
+  const show = isMissing || !!l;
+  $('#bEmpty').style.display = show ? 'none' : '';
+  const ed = $('#bEditor'); ed.classList.toggle('hidden', !show); ed.style.display = show ? 'flex' : 'none';
+  if (!show) return;
+  const nm = $('#bName');
+  $('#bAdd').classList.toggle('hidden', isMissing); $('#bImport').classList.toggle('hidden', isMissing);
+  $('#bMore').classList.toggle('hidden', isMissing); $('#bExportMissing').classList.toggle('hidden', !isMissing);
+  nm.readOnly = isMissing;
+  if (isMissing){ nm.value = 'Everything I’m missing'; $('#bArch').classList.add('hidden'); }
+  else { if (document.activeElement !== nm) nm.value = l.name; $('#bArch').classList.toggle('hidden', !l.archived); }
+  const rows = currentRows();
+  const have = rows.filter(r => B.owned.has(r._k)).length;
+  $('#bStats').innerHTML = isMissing
+    ? `<b>${rows.length}</b> different song${rows.length === 1 ? '' : 's'} on your lists aren’t in the catalog yet &middot; sorted by how many lists they’re on`
+    : `<b>${rows.length}</b> song${rows.length === 1 ? '' : 's'} &middot; <b>${have}</b> in catalog &middot; <b>${rows.length - have}</b> missing${rows.length ? ' &middot; ' + Math.round(have / rows.length * 100) + '%' : ''}`;
+  $$('#bFilter .pill').forEach(p => p.classList.toggle('on', p.dataset.f === B.filter));
+  $('#bFilter').style.display = isMissing ? 'none' : '';
+  const qq = (B.songQ || '').toLowerCase().trim();
+  let shown = rows;
+  if (!isMissing && B.filter === 'have') shown = shown.filter(r => B.owned.has(r._k));
+  if (!isMissing && B.filter === 'missing') shown = shown.filter(r => !B.owned.has(r._k));
+  if (qq) shown = shown.filter(r => (r.t + ' ' + r.a).toLowerCase().includes(qq));
+  const wrap = $('#bGridWrap'), st = wrap.scrollTop;
+  $('#bGrid thead').innerHTML = isMissing
+    ? `<tr><th>#</th><th>In catalog</th><th>Song</th><th>Artist</th><th>On these lists</th></tr>`
+    : `<tr><th>#</th><th>In catalog</th><th>Song</th><th>Artist</th><th class="on">Also on</th><th></th></tr>`;
+  $('#bGrid tbody').innerHTML = shown.map(r => {
+    const own = B.owned.has(r._k);
+    const ck = `<td class="ck"><input type="checkbox" data-k="${r._k}" ${own ? 'checked' : ''} title="${own ? 'In your catalog — uncheck to remove it from every list' : 'Tick when this song is in your catalog — it ticks on every list'}"></td>`;
+    if (isMissing) return `<tr class="${own ? 'have' : ''}"><td class="n">${r.idx + 1}</td>${ck}<td class="txt">${esc(r.t)}</td><td class="txt">${esc(r.a)}</td><td class="l">${esc(r.lists.join(' · '))}</td></tr>`;
+    const also = r.lists.length;
+    return `<tr class="${own ? 'have' : ''}" data-i="${r.idx}"><td class="n">${r.idx + 1}</td>${ck}` +
+      `<td><input type="text" data-f="t" value="${esc(r.t)}" spellcheck="false" autocomplete="off"></td>` +
+      `<td><input type="text" data-f="a" value="${esc(r.a)}" spellcheck="false" autocomplete="off"></td>` +
+      `<td class="on" ${also ? `title="${esc(r.lists.join('\n'))}"` : ''}>${also ? also + ' other list' + (also === 1 ? '' : 's') : '—'}</td>` +
+      `<td class="x"><button data-del="${r.idx}" title="Remove this song from the list">✕</button></td></tr>`;
+  }).join('') || '';
+  const none = !shown.length;
+  $('#bNone').classList.toggle('hidden', !none);
+  $('#bNone').textContent = !rows.length ? (isMissing ? (B.lists.size ? 'Every song on your lists is in your catalog. 🎉' : 'Add some bingo lists first.') : 'No songs yet — click “Import songs” to paste a list in, or “+ Add song”.') : 'No songs match.';
+  wrap.scrollTop = st;
+}
+
+/* ── catalog tick ── */
+async function setOwned(keys, on){
+  keys = [...new Set(keys)]; if (!keys.length) return;
+  keys.forEach(k => on ? B.owned.add(k) : B.owned.delete(k));
+  renderBingoAll();
+  const owned = {}; keys.forEach(k => { owned[k] = on ? true : deleteField(); });
+  await run(() => setDoc(bCatalogRef(), { owned, updatedAt: serverTimestamp() }, { merge: true }));
+}
+$('#bGrid').addEventListener('change', e => {
+  const cb = e.target.closest('input[type=checkbox][data-k]'); if (!cb) return;
+  setOwned([cb.dataset.k], cb.checked);
+});
+
+/* ── song edits ── */
+async function saveSongs(listId, songs){
+  const l = B.lists.get(listId); if (!l) return;
+  l.songs = songs.map(s => ({ ...s, _k: songKey(s.t, s.a) }));   // optimistic
+  renderBingoAll();
+  await run(() => updateDoc(bListRef(listId), { songs: cleanSongs(songs), updatedAt: serverTimestamp() }));
+}
+$('#bGrid').addEventListener('change', e => {
+  const inp = e.target.closest('input[type=text][data-f]'); if (!inp) return;
+  const tr = inp.closest('tr'), i = Number(tr.dataset.i), l = B.lists.get(B.curId); if (!l) return;
+  const songs = l.songs.map(s => ({ t: s.t, a: s.a }));
+  songs[i][inp.dataset.f] = inp.value.trim();
+  saveSongs(l.id, songs);
+});
+$('#bGrid').addEventListener('click', e => {
+  const d = e.target.closest('[data-del]'); if (!d) return;
+  const l = B.lists.get(B.curId); if (!l) return;
+  const i = Number(d.dataset.del), s = l.songs[i];
+  const songs = l.songs.map(x => ({ t: x.t, a: x.a })); songs.splice(i, 1);
+  saveSongs(l.id, songs);
+  toast('Removed “' + s.t + '”.', { label: 'Undo', fn: () => { const cur = B.lists.get(l.id); if (!cur) return; const back = cur.songs.map(x => ({ t: x.t, a: x.a })); back.splice(i, 0, { t: s.t, a: s.a }); saveSongs(l.id, back); } });
+});
+$('#bQ').addEventListener('input', e => { B.songQ = e.target.value; renderBingoAll(); });
+$('#bFilter').addEventListener('click', e => { const p = e.target.closest('.pill'); if (!p) return; B.filter = p.dataset.f; renderBingoAll(); });
+
+$('#bName').addEventListener('change', async e => {
+  const l = B.lists.get(B.curId); if (!l) return;
+  const v = e.target.value.trim();
+  const dupe = [...B.lists.values()].find(x => x.id !== l.id && normName(x.name) === normName(v));
+  if (!v || dupe){ toast(!v ? 'A list needs a name.' : 'Another bingo list already has that name.'); e.target.value = l.name; return; }
+  if (v === l.name) return;
+  await run(() => updateDoc(bListRef(l.id), { name: v, updatedAt: serverTimestamp() }));
+});
+
+/* ── add one song ── */
+$('#bAdd').addEventListener('click', () => {
+  const l = B.lists.get(B.curId); if (!l) return;
+  const body = document.createElement('div');
+  body.innerHTML = `<label class="fld">Song title<input type="text" id="bsT" autocomplete="off"></label><label class="fld">Artist<input type="text" id="bsA" autocomplete="off"></label><p class="hint" id="bsMsg" style="margin:0">Press Enter to add it and keep going.</p>`;
+  const add = () => {
+    const t = $('#bsT').value.trim(), a = $('#bsA').value.trim(); if (!t) { $('#bsT').focus(); return; }
+    const cur = B.lists.get(l.id); const songs = cur.songs.map(x => ({ t: x.t, a: x.a }));
+    if (songs.some(x => songKey(x.t, x.a) === songKey(t, a))){ $('#bsMsg').textContent = '“' + t + '” is already on this list.'; return; }
+    songs.push({ t, a }); saveSongs(l.id, songs);
+    $('#bsMsg').textContent = 'Added “' + t + '” ✓ — ' + songs.length + ' songs now.'; $('#bsT').value = ''; $('#bsA').value = ''; $('#bsT').focus();
+  };
+  openModal({ title: 'Add a song to ' + l.name, body, actions: [{ label: 'Done', onClick: closeModal }, { label: 'Add song', primary: true, onClick: add }] });
+  $('#bsT').focus(); $$('#bsT,#bsA').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') add(); }));
+});
+
+/* ── import / paste songs (new list or add to the open one) ── */
+function parseSongLines(text, order){
+  const out = [];
+  for (let line of String(text || '').split(/\r?\n/)){
+    line = line.replace(/^\s*\d+\s*[.)\-:]\s+/, '').trim();
+    if (!line) continue;
+    let a, b;
+    if (line.includes('\t')){ [a, b] = line.split('\t').map(x => x.trim()); }
+    else { const m = line.match(/^(.*?)\s+[\-–—]\s+(.*)$/); if (m){ a = m[1].trim(); b = m[2].trim(); } else { a = line; b = ''; } }
+    a = a.replace(/^["“]|["”]$/g, ''); b = (b || '').replace(/^["“]|["”]$/g, '');
+    out.push(order === 'artist' ? { t: b || a, a: b ? a : '' } : { t: a, a: b });
+  }
+  return out;
+}
+function songsFromCSV(text, order){
+  const rows = parseCSV(text).filter(r => r.some(c => String(c).trim()));
+  if (!rows.length) return [];
+  const head = rows[0].map(norm);
+  const ti = head.findIndex(h => h === 'song' || h === 'title' || h === 'songtitle' || h === 'songname' || h === 'track');
+  const ai = head.findIndex(h => h === 'artist' || h === 'artists' || h === 'band' || h === 'performer');
+  if (ti >= 0 && ai >= 0) return rows.slice(1).map(r => ({ t: String(r[ti] || '').trim(), a: String(r[ai] || '').trim() })).filter(s => s.t);
+  return rows.map(r => order === 'artist' ? { t: String(r[1] || r[0] || '').trim(), a: r[1] ? String(r[0] || '').trim() : '' } : { t: String(r[0] || '').trim(), a: String(r[1] || '').trim() }).filter(s => s.t);
+}
+function openBingoImport(addTo){
+  const l = addTo ? B.lists.get(addTo) : null;
+  const body = document.createElement('div'); body.className = 'bImp';
+  body.innerHTML = (l ? '' : `<label class="fld">List name<input type="text" id="biName" placeholder="e.g. 90s Pop, Halloween Bingo…" autocomplete="off"></label>`) +
+    `<div class="two"><label class="fld">Each line looks like<select id="biOrder"><option value="song">Song – Artist</option><option value="artist">Artist – Song</option></select></label>
+     <label class="fld">…or choose a CSV / text file<input type="file" id="biFile" accept=".csv,.txt,.tsv,text/*"></label></div>
+     <label class="fld" style="margin-bottom:.4rem">Paste your songs — one per line (numbering at the start of a line is ignored)<textarea id="biText" placeholder="Don't Stop Believin' - Journey\nBohemian Rhapsody - Queen"></textarea></label>
+     <p class="hint" id="biInfo" style="margin:0">Nothing pasted yet.</p>`;
+  const parse = () => {
+    const order = $('#biOrder').value, file = $('#biFile').files[0];
+    let songs;
+    if (file && file._text != null && /\.csv$/i.test(file.name) && !$('#biText').value.trim()) songs = songsFromCSV(file._text, order);
+    else songs = parseSongLines($('#biText').value, order);
+    return songs.filter(s => s.t);
+  };
+  const info = () => {
+    const songs = parse(); let msg = songs.length ? `Found <b>${songs.length}</b> song${songs.length === 1 ? '' : 's'}.` : 'Nothing pasted yet.';
+    if (songs.length){
+      const seen = new Set(); let dup = 0, inCat = 0;
+      for (const s of songs){ const k = songKey(s.t, s.a); if (seen.has(k)) dup++; seen.add(k); if (B.owned.has(k)) inCat++; }
+      msg += ` <b>${inCat}</b> already in your catalog and will come in ticked.`; if (dup) msg += ` ${dup} repeat${dup === 1 ? '' : 's'} will be skipped.`;
+    }
+    $('#biInfo').innerHTML = msg;
+  };
+  const go = async btn => {
+    const songs = parse(); if (!songs.length){ toast('Paste some songs first.'); return; }
+    const uniq = [], seen = new Set(l ? l.songs.map(s => s._k) : []);
+    for (const s of songs){ const k = songKey(s.t, s.a); if (seen.has(k)) continue; seen.add(k); uniq.push({ t: s.t, a: s.a }); }
+    if (l){
+      closeModal();
+      await saveSongs(l.id, [...l.songs.map(x => ({ t: x.t, a: x.a })), ...uniq]);
+      toast('Added ' + uniq.length + ' song' + (uniq.length === 1 ? '' : 's') + ' to ' + l.name + '.');
+    } else {
+      const name = $('#biName').value.trim(); if (!name){ toast('Give the list a name.'); $('#biName').focus(); return; }
+      if ([...B.lists.values()].some(x => normName(x.name) === normName(name))){ toast('Another bingo list already has that name.'); return; }
+      btn.disabled = true;
+      const order = Math.max(0, ...[...B.lists.values()].map(x => Number(x.order) || 0)) + 1;
+      const id = doc(collection(db, 'bingoLists')).id;
+      await run(() => setDoc(bListRef(id), { name, songs: uniq, order, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+      closeModal(); selectBingo(id);
+      toast('Created “' + name + '” with ' + uniq.length + ' songs.');
+    }
+  };
+  openModal({ title: l ? 'Import songs into ' + l.name : 'New bingo list', body, wide: false, actions: [{ label: 'Cancel', onClick: closeModal }, { label: l ? 'Add songs' : 'Create list', primary: true, onClick: go }] });
+  $('#biText').addEventListener('input', info); $('#biOrder').addEventListener('change', info);
+  $('#biFile').addEventListener('change', async e => {
+    const f = e.target.files[0]; if (!f) return;
+    f._text = await f.text();
+    if (/\.csv$/i.test(f.name)){ $('#biText').value = ''; } else { $('#biText').value = f._text; }
+    info();
+  });
+  (l ? $('#biText') : $('#biName')).focus();
+}
+$('#bNew').addEventListener('click', () => openBingoImport(null));
+$('#bImport').addEventListener('click', () => { if (B.curId && B.curId !== MISSING) openBingoImport(B.curId); });
+$('#bEmptyNew').addEventListener('click', () => openBingoImport(null));
+
+/* ── More ⋯ ── */
+function exportBingoCSV(rows, name){
+  const csv = ['Song,Artist,In catalog', ...rows.map(r => [csvEscape(r.t), csvEscape(r.a), B.owned.has(r._k) ? 'Yes' : 'No'].join(','))].join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = name.replace(/[^\w\- ]+/g, '') + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+$('#bExportMissing').addEventListener('click', () => exportBingoCSV(missingSongs(), 'Songs I am missing'));
+$('#bMore').addEventListener('click', () => {
+  const l = B.lists.get(B.curId); if (!l) return;
+  const all = [...B.lists.values()].sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0) || String(a.name).localeCompare(String(b.name)));
+  const pos = all.findIndex(x => x.id === l.id);
+  const body = document.createElement('div'); body.className = 'menuList';
+  body.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px">
+    <button class="btn ghost" data-a="up" ${pos <= 0 ? 'disabled' : ''}>↑ Move up in my order</button>
+    <button class="btn ghost" data-a="down" ${pos >= all.length - 1 ? 'disabled' : ''}>↓ Move down in my order</button>
+    <button class="btn ghost" data-a="all">✓ Mark every song on this list as in my catalog</button>
+    <button class="btn ghost" data-a="none">Clear every tick on this list</button>
+    <button class="btn ghost" data-a="csv">Export this list as CSV</button>
+    <button class="btn ghost" data-a="arch">${l.archived ? 'Un-archive this list' : 'Archive this list (hide it)'}</button>
+    <button class="btn danger" data-a="del">Delete this list…</button></div>`;
+  openModal({ title: l.name, body, actions: [{ label: 'Close', onClick: closeModal }] });
+  body.addEventListener('click', async e => {
+    const b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
+    const a = b.dataset.a;
+    if (a === 'up' || a === 'down'){
+      const j = a === 'up' ? pos - 1 : pos + 1, other = all[j];
+      // re-number the whole sequence so order is always clean 1..n
+      const seq = all.map(x => x.id); [seq[pos], seq[j]] = [seq[j], seq[pos]];
+      closeModal();
+      const batch = writeBatch(db); seq.forEach((id, i) => batch.update(bListRef(id), { order: i + 1 }));
+      await run(() => batch.commit());
+      if (B.sort.by !== 'order'){ B.sort = { by: 'order', dir: 1 }; LS.set('bSort', B.sort); renderBingoSide(); }
+    } else if (a === 'all'){ closeModal(); setOwned(l.songs.map(s => s._k), true); toast('Marked ' + l.songs.length + ' songs as in your catalog — they’re ticked on every list.'); }
+    else if (a === 'none'){
+      if (!(await confirmBox({ title: 'Clear ticks?', message: 'This un-ticks every song on “' + l.name + '” — and, because ticks are shared, on every other list that has the same songs.', ok: 'Clear ticks', danger: true }))) return;
+      closeModal(); setOwned(l.songs.map(s => s._k), false);
+    }
+    else if (a === 'csv'){ closeModal(); exportBingoCSV(l.songs, l.name); }
+    else if (a === 'arch'){ closeModal(); await run(() => updateDoc(bListRef(l.id), { archived: !l.archived, updatedAt: serverTimestamp() })); }
+    else if (a === 'del'){
+      closeModal();
+      if (!(await confirmBox({ title: 'Delete “' + l.name + '”?', message: 'This removes the list and its ' + l.songs.length + ' songs. Your catalog ticks are kept (a song that’s on another list stays ticked there).', ok: 'Delete list', danger: true }))) return;
+      await run(() => deleteDoc(bListRef(l.id)));
+      B.curId = null; LS.set('bLast', null); renderBingoAll();
+    }
+  });
+});
+
+</script>
+</body>
+</html>
