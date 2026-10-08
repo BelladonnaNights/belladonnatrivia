@@ -432,7 +432,7 @@ table#bGrid{border-collapse:separate;border-spacing:0;width:100%;min-width:560px
           </div>
           <div class="tools">
             <input id="bQ" placeholder="Search songs…" autocomplete="off" style="width:200px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 13px;color:var(--text);font:14px var(--font);outline:none">
-            <div class="chips" id="bFilter"><button class="pill on" data-f="all">All</button><button class="pill" data-f="have">In catalog</button><button class="pill" data-f="missing">Missing</button></div>
+            <div class="chips" id="bFilter"><button class="pill on" data-f="all">All</button><button class="pill" data-f="have">In catalog</button><button class="pill" data-f="missing">Missing</button><button class="pill" data-f="tosearch" title="Not in your catalog and not searched for yet">To search</button><button class="pill" data-f="searched" title="Not in your catalog but already searched for on BPM Supreme">Searched</button></div>
             <button class="btn ghost hidden" id="bExportMissing">Export CSV</button>
             <button class="btn ghost" id="bMore">More ⋯</button>
             <button class="btn ghost" id="bImport">Import songs</button>
@@ -1861,7 +1861,7 @@ const B = {
   lists: new Map(), owned: new Set(), curId: null, loaded: false,
   sort: LS.get('bSort', { by:'order', dir:1 }), showArch: false, filter: 'all', q: '',
   unsubs: [], listening: false, mode: 'trivia',
-  removed: new Set(), cat: new Set(), catMode: 'exact', catCount: 0, catChunks: new Map(), catSongs: [], catUpdated: null, limit: 500
+  removed: new Set(), searched: new Set(), cat: new Set(), catMode: 'exact', catCount: 0, catChunks: new Map(), catSongs: [], catUpdated: null, limit: 500
 };
 // A song counts as "in my catalog" if it was ticked by hand OR is in the imported full catalog — unless it was un-ticked afterwards.
 const isOwned = s => !B.removed.has(s._k) && (B.owned.has(s._k) || B.cat.has(B.catMode === 'title' ? s._tk : s._k));
@@ -1908,11 +1908,11 @@ function startBingo(){
     $('#bList').innerHTML = `<p class="hint" style="padding:12px">Can't read the bingo lists yet.<br>${/permission/i.test(err.message) ? 'Publish the updated Firestore rules, then refresh.' : esc(err.message)}</p>`;
   }));
   B.unsubs.push(onSnapshot(collection(db, 'bingoConfig'), snap => {
-    B.catChunks = new Map(); B.owned = new Set(); B.removed = new Set(); B.catMode = 'exact'; B.catCount = 0; B.catUpdated = null;
+    B.catChunks = new Map(); B.owned = new Set(); B.removed = new Set(); B.searched = new Set(); B.catMode = 'exact'; B.catCount = 0; B.catUpdated = null;
     const songChunks = [];
     for (const d of snap.docs){
       const v = d.data();
-      if (d.id === 'catalog'){ B.owned = new Set(Object.keys(v.owned || {})); B.removed = new Set(Object.keys(v.removed || {})); }
+      if (d.id === 'catalog'){ B.owned = new Set(Object.keys(v.owned || {})); B.removed = new Set(Object.keys(v.removed || {})); B.searched = new Set(Object.keys(v.searched || {})); }
       else if (d.id === 'catalogMeta'){ B.catMode = v.mode === 'title' ? 'title' : 'exact'; B.catCount = v.count || 0; B.catUpdated = v.updatedAtMs || null; }
       else if (d.id.startsWith('full_')) B.catChunks.set(d.id, v.s || '');       // older imports: keys only
       else if (d.id.startsWith('songs_')){ B.catChunks.set(d.id, ''); songChunks.push([Number(d.id.slice(6)), v.txt || '']); }
@@ -2046,37 +2046,42 @@ function renderBingoAll(){
     const onList = rows.filter(r => r.lists.length).length;
     stats = `<b>${rows.length.toLocaleString()}</b> song${rows.length === 1 ? '' : 's'} in your catalog &middot; <b>${onList.toLocaleString()}</b> on at least one bingo list &middot; <b>${(rows.length - onList).toLocaleString()}</b> on none` + (B.cat.size > B.catSongs.length && B.catCount ? ' &middot; <i>older import: re-import your catalog once to see every song name</i>' : '');
   } else if (isMissing){
-    stats = `<b>${rows.length}</b> different song${rows.length === 1 ? '' : 's'} on your lists aren’t in the catalog yet &middot; sorted by how many lists they’re on`;
+    stats = `<b>${rows.length}</b> different song${rows.length === 1 ? '' : 's'} on your lists aren’t in the catalog yet &middot; <b>${rows.filter(r => B.searched.has(r._k)).length}</b> already searched on BPM Supreme &middot; <b>${rows.filter(r => !B.searched.has(r._k)).length}</b> still to search`;
   } else {
-    stats = `<b>${rows.length}</b> song${rows.length === 1 ? '' : 's'} &middot; <b>${have}</b> in catalog &middot; <b>${rows.length - have}</b> missing${rows.length ? ' &middot; ' + Math.round(have / rows.length * 100) + '%' : ''}`;
+    stats = `<b>${rows.length}</b> song${rows.length === 1 ? '' : 's'} &middot; <b>${have}</b> in catalog &middot; <b>${rows.length - have}</b> missing${rows.length ? ' &middot; ' + Math.round(have / rows.length * 100) + '%' : ''}` + (rows.length - have ? ` &middot; <b>${rows.filter(r => !isOwned(r) && B.searched.has(r._k)).length}</b> already searched on BPM Supreme` : '');
   }
   $('#bStats').innerHTML = stats;
   $$('#bFilter .pill').forEach(p => p.classList.toggle('on', p.dataset.f === B.filter));
-  $('#bFilter').style.display = special ? 'none' : '';
+  $('#bFilter').style.display = isCat ? 'none' : '';
+  $$('#bFilter .pill').forEach(p => { const f = p.dataset.f; p.classList.toggle('hidden', isMissing ? (f === 'have' || f === 'missing') : false); });
   $('#bExportMissing').textContent = isCat ? 'Export catalog CSV' : 'Export CSV';
   const qq = (B.songQ || '').toLowerCase().trim();
   let shown = rows;
   if (!special && B.filter === 'have') shown = shown.filter(isOwned);
   if (!special && B.filter === 'missing') shown = shown.filter(r => !isOwned(r));
+  if (!isCat && B.filter === 'tosearch') shown = shown.filter(r => !isOwned(r) && !B.searched.has(r._k));
+  if (!isCat && B.filter === 'searched') shown = shown.filter(r => !isOwned(r) && B.searched.has(r._k));
   if (qq) shown = shown.filter(r => (r.t + ' ' + r.a).toLowerCase().includes(qq));
   const total = shown.length, capped = special && total > B.limit;
   if (capped) shown = shown.slice(0, B.limit);
   const wrap = $('#bGridWrap'), st = wrap.scrollTop;
+  const BPM = '<th class="ck" title="Tick once you\u2019ve looked for this song on BPM Supreme \u2014 it ticks everywhere the song appears">Searched on BPM Supreme</th>';
   $('#bGrid thead').innerHTML = special
-    ? `<tr><th>#</th><th>In catalog</th><th>Song</th><th>Artist</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
-    : `<tr><th>#</th><th>In catalog</th><th>Song</th><th>Artist</th><th class="on">Also on</th><th></th></tr>`;
+    ? `<tr><th>#</th><th>In catalog</th>${isMissing ? BPM : ''}<th>Song</th><th>Artist</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
+    : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th class="on">Also on</th><th></th></tr>`;
   $('#bGrid tbody').innerHTML = shown.map(r => {
     const own = isOwned(r);
     const ck = `<td class="ck"><input type="checkbox" data-k="${r._k}" ${own ? 'checked' : ''} title="${own ? 'In your catalog — uncheck to remove it from every list' : 'Tick when this song is in your catalog — it ticks on every list'}"></td>`;
+    const bp = own ? `<td class="ck" style="color:var(--text3)">\u2014</td>` : `<td class="ck"><input type="checkbox" data-s="${r._k}" ${B.searched.has(r._k) ? 'checked' : ''} title="${B.searched.has(r._k) ? 'Already searched for on BPM Supreme \u2014 untick to undo' : 'Tick once you\u2019ve searched for this on BPM Supreme \u2014 it ticks on every list'}"></td>`;
     if (special){
       const n = r.lists.length;
-      return `<tr class="${own ? 'have' : ''}"><td class="n">${r.idx + 1}</td>${ck}<td class="txt">${esc(r.t)}</td><td class="txt">${esc(r.a)}</td>` +
+      return `<tr class="${own ? 'have' : ''}"><td class="n">${r.idx + 1}</td>${ck}${isMissing ? bp : ''}<td class="txt">${esc(r.t)}</td><td class="txt">${esc(r.a)}</td>` +
         `<td class="on" style="width:90px"><b style="color:var(--gold2)">${n}</b> of ${nLists}</td>` +
         (isMissing ? `<td class="on" style="width:90px">${Math.max(0, nLists - n)}</td>` : '') +
         `<td class="l">${n ? esc(r.lists.join(' · ')) : '<span style="opacity:.6">not on any list</span>'}</td></tr>`;
     }
     const also = r.lists.length;
-    return `<tr class="${own ? 'have' : ''}" data-i="${r.idx}"><td class="n">${r.idx + 1}</td>${ck}` +
+    return `<tr class="${own ? 'have' : ''}" data-i="${r.idx}"><td class="n">${r.idx + 1}</td>${ck}${bp}` +
       `<td><input type="text" data-f="t" value="${esc(r.t)}" spellcheck="false" autocomplete="off"></td>` +
       `<td><input type="text" data-f="a" value="${esc(r.a)}" spellcheck="false" autocomplete="off"></td>` +
       `<td class="on" ${also ? `title="${esc(r.lists.join('\n'))}"` : ''}>${also ? also + ' other list' + (also === 1 ? '' : 's') : '—'}</td>` +
@@ -2101,7 +2106,13 @@ async function setOwned(keys, on){
   keys.forEach(k => { owned[k] = on ? true : deleteField(); removed[k] = on ? deleteField() : true; });
   await run(() => setDoc(bCatalogRef(), { owned, removed, updatedAt: serverTimestamp() }, { merge: true }));
 }
+async function setSearched(key, on){
+  on ? B.searched.add(key) : B.searched.delete(key);
+  renderBingoAll();
+  await run(() => setDoc(bCatalogRef(), { searched: { [key]: on ? true : deleteField() }, updatedAt: serverTimestamp() }, { merge: true }));
+}
 $('#bGrid').addEventListener('change', e => {
+  const sb = e.target.closest('input[type=checkbox][data-s]'); if (sb){ setSearched(sb.dataset.s, sb.checked); return; }
   const cb = e.target.closest('input[type=checkbox][data-k]'); if (!cb) return;
   setOwned([cb.dataset.k], cb.checked);
 });
