@@ -2023,7 +2023,7 @@ $('#bList').addEventListener('click', e => {
 });
 $('#bSearch').addEventListener('input', e => { B.q = e.target.value; renderBingoSide(); });
 $('#bShowArch').addEventListener('change', e => { B.showArch = e.target.checked; renderBingoSide(); });
-function selectBingo(id){ B.limit = 500; B.curId = id; LS.set('bLast', id); B.filter = 'all'; $('#bQ').value = ''; B.songQ = ''; renderBingoAll(); }
+function selectBingo(id){ B.rowSort = false; B.limit = 500; B.curId = id; LS.set('bLast', id); B.filter = 'all'; $('#bQ').value = ''; B.songQ = ''; renderBingoAll(); }
 
 /* ── "everything I'm missing": every unique song not yet in the catalog, across all lists ── */
 function allSongs(){
@@ -2058,7 +2058,9 @@ function currentRows(){
     return missingSongs().sort((a, b) => b.lists.length - a.lists.length || a.t.localeCompare(b.t)).map((s, i) => ({ ...s, idx: i, ro: true }));
   }
   const l = B.lists.get(B.curId); if (!l) return [];
-  return l.songs.map((s, i) => ({ ...s, idx: i, lists: songListNames(s._k, l.id) }));
+  const rows = l.songs.map((s, i) => ({ ...s, idx: i, lists: songListNames(s._k, l.id) }));
+  if (B.rowSort) rows.sort((a, b) => (b.lists.length - a.lists.length) || (a.idx - b.idx));
+  return rows;
 }
 function songListNames(k, exceptId){
   const out = [];
@@ -2107,7 +2109,7 @@ function renderBingoAll(){
   const BPM = '<th class="ck" title="Tick once you\u2019ve looked for this song on BPM Supreme \u2014 it ticks everywhere the song appears">Searched on BPM Supreme</th>';
   $('#bGrid thead').innerHTML = special
     ? `<tr><th>#</th>${isCat ? '' : '<th>In catalog</th>'}${isMissing ? BPM : ''}<th>Song</th><th>Artist</th><th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
-    : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th>Movie / show</th><th class="on">Also on</th><th></th></tr>`;
+    : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th class="on" data-rsort="1" style="cursor:pointer;color:var(--gold)" title="How many of your OTHER bingo lists also have this song \u2014 click to put the songs on the most lists first">On other lists${B.rowSort ? ' \u25bc' : ' \u21c5'}</th><th>Movie / show</th><th></th></tr>`;
   $('#bGrid tbody').innerHTML = shown.map(r => {
     const own = isOwned(r);
     const ck = `<td class="ck"><input type="checkbox" data-k="${r._k}" ${own ? 'checked' : ''} title="${own ? 'In your catalog — uncheck to remove it from every list' : 'Tick when this song is in your catalog — it ticks on every list'}"></td>`;
@@ -2123,8 +2125,8 @@ function renderBingoAll(){
     return `<tr class="${own ? 'have' : ''}" data-i="${r.idx}"><td class="n">${r.idx + 1}</td>${ck}${bp}` +
       `<td><input type="text" data-f="t" value="${esc(r.t)}" spellcheck="false" autocomplete="off"></td>` +
       `<td><input type="text" data-f="a" value="${esc(r.a)}" spellcheck="false" autocomplete="off"></td>` +
+      `<td class="on" style="white-space:nowrap" title="${also ? esc('Also on:\n' + r.lists.join('\n')) : 'Not on any other list'}">${also ? `<b style="color:var(--gold2);font-size:1.05em">${also}</b> other list${also === 1 ? '' : 's'}` : '<span style="opacity:.5">none</span>'}</td>` +
       `<td><input type="text" data-f="m" value="${esc(r.m || '')}" placeholder="—" spellcheck="false" autocomplete="off"></td>` +
-      `<td class="on" ${also ? `title="${esc(r.lists.join('\n'))}"` : ''}>${also ? also + ' other list' + (also === 1 ? '' : 's') : '—'}</td>` +
       `<td class="x"><button data-del="${r.idx}" title="Remove this song from the list">✕</button></td></tr>`;
   }).join('') || '';
   const none = !shown.length;
@@ -2179,6 +2181,7 @@ $('#bGrid').addEventListener('click', e => {
   saveSongs(l.id, songs);
   toast('Removed “' + s.t + '”.', { label: 'Undo', fn: () => { const cur = B.lists.get(l.id); if (!cur) return; const back = cur.songs.map(x => ({ t: x.t, a: x.a, m: x.m })); back.splice(i, 0, { t: s.t, a: s.a, m: s.m }); saveSongs(l.id, back); } });
 });
+$('#bGrid').addEventListener('click', e => { if (e.target.closest('[data-rsort]')){ B.rowSort = !B.rowSort; renderBingoAll(); } });
 $('#bQ').addEventListener('input', e => { B.songQ = e.target.value; B.limit = 500; renderBingoAll(); });
 $('#bMoreRows').addEventListener('click', e => { if (e.target.id === 'bShowMore'){ B.limit += 500; renderBingoAll(); } if (e.target.id === 'bShowAll'){ B.limit = 1e9; renderBingoAll(); } });
 $('#bFilter').addEventListener('click', e => { const p = e.target.closest('.pill'); if (!p) return; B.filter = p.dataset.f; renderBingoAll(); });
