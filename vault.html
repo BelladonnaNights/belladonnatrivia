@@ -1885,7 +1885,7 @@ function normSong(s){
 const songKey = (t, a) => hash53(normSong(t) + '|' + normSong(a));
 const titleKey = t => hash53(normSong(t) + '|');
 const withKeys = s => ({ ...s, _k: songKey(s.t, s.a), _tk: titleKey(s.t) });
-function cleanSongs(arr){ return (arr || []).filter(s => s && (s.t || s.a)).map(s => ({ t: String(s.t || '').trim(), a: String(s.a || '').trim() })); }
+function cleanSongs(arr){ return (arr || []).filter(s => s && (s.t || s.a)).map(s => ({ t: String(s.t || '').trim(), a: String(s.a || '').trim(), ...(s.m && String(s.m).trim() ? { m: String(s.m).trim() } : {}) })); }
 function listStats(l){
   const songs = l.songs || []; let have = 0;
   for (const s of songs) if (isOwned(s)) have++;
@@ -1919,7 +1919,7 @@ function startBingo(){
     }
     B.catSongs = [];
     songChunks.sort((a, b) => a[0] - b[0]);
-    for (const [, txt] of songChunks) for (const line of txt.split('\n')){ if (!line) continue; const i = line.indexOf('\t'); const t = i < 0 ? line : line.slice(0, i), a = i < 0 ? '' : line.slice(i + 1); B.catSongs.push(withKeys({ t, a })); }
+    for (const [, txt] of songChunks) for (const line of txt.split('\n')){ if (!line) continue; const i = line.indexOf('\t'); const t = i < 0 ? line : line.slice(0, i), rest = i < 0 ? '' : line.slice(i + 1), j = rest.indexOf('\t'), a = j < 0 ? rest : rest.slice(0, j), m = j < 0 ? '' : rest.slice(j + 1); B.catSongs.push(withKeys(m ? { t, a, m } : { t, a })); }
     B.cat = new Set();
     for (const str of B.catChunks.values()) if (str) for (const k of str.split(',')) if (k) B.cat.add(k);
     for (const x of B.catSongs) B.cat.add(B.catMode === 'title' ? x._tk : x._k);
@@ -1993,7 +1993,8 @@ function allSongs(){
   for (const l of B.lists.values()){
     if (l.archived && !B.showArch) continue;
     for (const s of l.songs){
-      let e = m.get(s._k); if (!e){ e = { t: s.t, a: s.a, _k: s._k, _tk: s._tk, lists: [] }; m.set(s._k, e); }
+      let e = m.get(s._k); if (!e){ e = { t: s.t, a: s.a, m: s.m || '', _k: s._k, _tk: s._tk, lists: [] }; m.set(s._k, e); }
+      if (!e.m && s.m) e.m = s.m;
       if (!e.lists.includes(l.name)) e.lists.push(l.name);
     }
   }
@@ -2061,21 +2062,21 @@ function renderBingoAll(){
   if (!special && B.filter === 'missing') shown = shown.filter(r => !isOwned(r));
   if (!isCat && B.filter === 'tosearch') shown = shown.filter(r => !isOwned(r) && !B.searched.has(r._k));
   if (!isCat && B.filter === 'searched') shown = shown.filter(r => !isOwned(r) && B.searched.has(r._k));
-  if (qq) shown = shown.filter(r => (r.t + ' ' + r.a).toLowerCase().includes(qq));
+  if (qq) shown = shown.filter(r => (r.t + ' ' + r.a + ' ' + (r.m || '')).toLowerCase().includes(qq));
   const total = shown.length, capped = special && total > B.limit;
   if (capped) shown = shown.slice(0, B.limit);
   const wrap = $('#bGridWrap'), st = wrap.scrollTop;
   const BPM = '<th class="ck" title="Tick once you\u2019ve looked for this song on BPM Supreme \u2014 it ticks everywhere the song appears">Searched on BPM Supreme</th>';
   $('#bGrid thead').innerHTML = special
-    ? `<tr><th>#</th><th>In catalog</th>${isMissing ? BPM : ''}<th>Song</th><th>Artist</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
-    : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th class="on">Also on</th><th></th></tr>`;
+    ? `<tr><th>#</th><th>In catalog</th>${isMissing ? BPM : ''}<th>Song</th><th>Artist</th><th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
+    : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th>Movie / show</th><th class="on">Also on</th><th></th></tr>`;
   $('#bGrid tbody').innerHTML = shown.map(r => {
     const own = isOwned(r);
     const ck = `<td class="ck"><input type="checkbox" data-k="${r._k}" ${own ? 'checked' : ''} title="${own ? 'In your catalog — uncheck to remove it from every list' : 'Tick when this song is in your catalog — it ticks on every list'}"></td>`;
     const bp = own ? `<td class="ck" style="color:var(--text3)">\u2014</td>` : `<td class="ck"><input type="checkbox" data-s="${r._k}" ${B.searched.has(r._k) ? 'checked' : ''} title="${B.searched.has(r._k) ? 'Already searched for on BPM Supreme \u2014 untick to undo' : 'Tick once you\u2019ve searched for this on BPM Supreme \u2014 it ticks on every list'}"></td>`;
     if (special){
       const n = r.lists.length;
-      return `<tr class="${own ? 'have' : ''}"><td class="n">${r.idx + 1}</td>${ck}${isMissing ? bp : ''}<td class="txt">${esc(r.t)}</td><td class="txt">${esc(r.a)}</td>` +
+      return `<tr class="${own ? 'have' : ''}"><td class="n">${r.idx + 1}</td>${ck}${isMissing ? bp : ''}<td class="txt">${esc(r.t)}</td><td class="txt">${esc(r.a)}</td><td class="txt">${esc(r.m || '')}</td>` +
         `<td class="on" style="width:90px"><b style="color:var(--gold2)">${n}</b> of ${nLists}</td>` +
         (isMissing ? `<td class="on" style="width:90px">${Math.max(0, nLists - n)}</td>` : '') +
         `<td class="l">${n ? esc(r.lists.join(' · ')) : '<span style="opacity:.6">not on any list</span>'}</td></tr>`;
@@ -2084,6 +2085,7 @@ function renderBingoAll(){
     return `<tr class="${own ? 'have' : ''}" data-i="${r.idx}"><td class="n">${r.idx + 1}</td>${ck}${bp}` +
       `<td><input type="text" data-f="t" value="${esc(r.t)}" spellcheck="false" autocomplete="off"></td>` +
       `<td><input type="text" data-f="a" value="${esc(r.a)}" spellcheck="false" autocomplete="off"></td>` +
+      `<td><input type="text" data-f="m" value="${esc(r.m || '')}" placeholder="—" spellcheck="false" autocomplete="off"></td>` +
       `<td class="on" ${also ? `title="${esc(r.lists.join('\n'))}"` : ''}>${also ? also + ' other list' + (also === 1 ? '' : 's') : '—'}</td>` +
       `<td class="x"><button data-del="${r.idx}" title="Remove this song from the list">✕</button></td></tr>`;
   }).join('') || '';
@@ -2127,7 +2129,7 @@ async function saveSongs(listId, songs){
 $('#bGrid').addEventListener('change', e => {
   const inp = e.target.closest('input[type=text][data-f]'); if (!inp) return;
   const tr = inp.closest('tr'), i = Number(tr.dataset.i), l = B.lists.get(B.curId); if (!l) return;
-  const songs = l.songs.map(s => ({ t: s.t, a: s.a }));
+  const songs = l.songs.map(s => ({ t: s.t, a: s.a, m: s.m }));
   songs[i][inp.dataset.f] = inp.value.trim();
   saveSongs(l.id, songs);
 });
@@ -2135,9 +2137,9 @@ $('#bGrid').addEventListener('click', e => {
   const d = e.target.closest('[data-del]'); if (!d) return;
   const l = B.lists.get(B.curId); if (!l) return;
   const i = Number(d.dataset.del), s = l.songs[i];
-  const songs = l.songs.map(x => ({ t: x.t, a: x.a })); songs.splice(i, 1);
+  const songs = l.songs.map(x => ({ t: x.t, a: x.a, m: x.m })); songs.splice(i, 1);
   saveSongs(l.id, songs);
-  toast('Removed “' + s.t + '”.', { label: 'Undo', fn: () => { const cur = B.lists.get(l.id); if (!cur) return; const back = cur.songs.map(x => ({ t: x.t, a: x.a })); back.splice(i, 0, { t: s.t, a: s.a }); saveSongs(l.id, back); } });
+  toast('Removed “' + s.t + '”.', { label: 'Undo', fn: () => { const cur = B.lists.get(l.id); if (!cur) return; const back = cur.songs.map(x => ({ t: x.t, a: x.a, m: x.m })); back.splice(i, 0, { t: s.t, a: s.a, m: s.m }); saveSongs(l.id, back); } });
 });
 $('#bQ').addEventListener('input', e => { B.songQ = e.target.value; B.limit = 500; renderBingoAll(); });
 $('#bMoreRows').addEventListener('click', e => { if (e.target.id === 'bShowMore'){ B.limit += 500; renderBingoAll(); } if (e.target.id === 'bShowAll'){ B.limit = 1e9; renderBingoAll(); } });
@@ -2159,7 +2161,7 @@ $('#bAdd').addEventListener('click', () => {
   body.innerHTML = `<label class="fld">Song title<input type="text" id="bsT" autocomplete="off"></label><label class="fld">Artist<input type="text" id="bsA" autocomplete="off"></label><p class="hint" id="bsMsg" style="margin:0">Press Enter to add it and keep going.</p>`;
   const add = () => {
     const t = $('#bsT').value.trim(), a = $('#bsA').value.trim(); if (!t) { $('#bsT').focus(); return; }
-    const cur = B.lists.get(l.id); const songs = cur.songs.map(x => ({ t: x.t, a: x.a }));
+    const cur = B.lists.get(l.id); const songs = cur.songs.map(x => ({ t: x.t, a: x.a, m: x.m }));
     if (songs.some(x => songKey(x.t, x.a) === songKey(t, a))){ $('#bsMsg').textContent = '“' + t + '” is already on this list.'; return; }
     songs.push({ t, a }); saveSongs(l.id, songs);
     $('#bsMsg').textContent = 'Added “' + t + '” ✓ — ' + songs.length + ' songs now.'; $('#bsT').value = ''; $('#bsA').value = ''; $('#bsT').focus();
@@ -2174,10 +2176,18 @@ function parseSongLines(text, order){
   for (let line of String(text || '').split(/\r?\n/)){
     line = line.replace(/^\s*\d+\s*[.)\-:]\s+/, '').trim();
     if (!line) continue;
+    const unq = x => (x || '').trim().replace(/^["“]|["”]$/g, '');
+    if (order === 'movie'){   // Movie – Song – Category   (e.g. Aladdin - A Whole New World - Disney)
+      const parts = (line.includes('\t') ? line.split('\t') : line.split(/\s+[\-–—]\s+/)).map(unq).filter(Boolean);
+      if (parts.length >= 3) out.push({ t: parts.slice(1, -1).join(' - '), a: parts[parts.length - 1], m: parts[0] });
+      else if (parts.length === 2) out.push({ t: parts[0], a: parts[1] });
+      else if (parts.length === 1) out.push({ t: parts[0], a: '' });
+      continue;
+    }
     let a, b;
     if (line.includes('\t')){ [a, b] = line.split('\t').map(x => x.trim()); }
     else { const m = line.match(/^(.*?)\s+[\-–—]\s+(.*)$/); if (m){ a = m[1].trim(); b = m[2].trim(); } else { a = line; b = ''; } }
-    a = a.replace(/^["“]|["”]$/g, ''); b = (b || '').replace(/^["“]|["”]$/g, '');
+    a = unq(a); b = unq(b);
     out.push(order === 'artist' ? { t: b || a, a: b ? a : '' } : { t: a, a: b });
   }
   return out;
@@ -2188,14 +2198,15 @@ function songsFromCSV(text, order){
   const head = rows[0].map(norm);
   const ti = head.findIndex(h => h === 'song' || h === 'title' || h === 'songtitle' || h === 'songname' || h === 'track');
   const ai = head.findIndex(h => h === 'artist' || h === 'artists' || h === 'band' || h === 'performer');
-  if (ti >= 0 && ai >= 0) return rows.slice(1).map(r => ({ t: String(r[ti] || '').trim(), a: String(r[ai] || '').trim() })).filter(s => s.t);
+  const mi = head.findIndex(h => h === 'movie' || h === 'show' || h === 'film' || h === 'movieshow');
+  if (ti >= 0 && ai >= 0) return rows.slice(1).map(r => ({ t: String(r[ti] || '').trim(), a: String(r[ai] || '').trim(), ...(mi >= 0 && String(r[mi] || '').trim() ? { m: String(r[mi]).trim() } : {}) })).filter(s => s.t);
   return rows.map(r => order === 'artist' ? { t: String(r[1] || r[0] || '').trim(), a: r[1] ? String(r[0] || '').trim() : '' } : { t: String(r[0] || '').trim(), a: String(r[1] || '').trim() }).filter(s => s.t);
 }
 function openBingoImport(addTo){
   const l = addTo ? B.lists.get(addTo) : null;
   const body = document.createElement('div'); body.className = 'bImp';
   body.innerHTML = (l ? '' : `<label class="fld">List name<input type="text" id="biName" placeholder="e.g. 90s Pop, Halloween Bingo…" autocomplete="off"></label>`) +
-    `<div class="two"><label class="fld">Each line looks like<select id="biOrder"><option value="song">Song – Artist</option><option value="artist">Artist – Song</option></select></label>
+    `<div class="two"><label class="fld">Each line looks like<select id="biOrder"><option value="song">Song – Artist</option><option value="artist">Artist – Song</option><option value="movie">Movie – Song – Category (e.g. Aladdin – A Whole New World – Disney)</option></select></label>
      <label class="fld">…or choose a CSV / text file<input type="file" id="biFile" accept=".csv,.txt,.tsv,text/*"></label></div>
      <label class="fld" style="margin-bottom:.4rem">Paste your songs — one per line (numbering at the start of a line is ignored)<textarea id="biText" placeholder="Don't Stop Believin' - Journey\nBohemian Rhapsody - Queen"></textarea></label>
      <p class="hint" id="biInfo" style="margin:0">Nothing pasted yet.</p>`;
@@ -2218,10 +2229,10 @@ function openBingoImport(addTo){
   const go = async btn => {
     const songs = parse(); if (!songs.length){ toast('Paste some songs first.'); return; }
     const uniq = [], seen = new Set(l ? l.songs.map(s => s._k) : []);
-    for (const s of songs){ const k = songKey(s.t, s.a); if (seen.has(k)) continue; seen.add(k); uniq.push({ t: s.t, a: s.a }); }
+    for (const s of songs){ const k = songKey(s.t, s.a); if (seen.has(k)) continue; seen.add(k); uniq.push({ t: s.t, a: s.a, m: s.m }); }
     if (l){
       closeModal();
-      await saveSongs(l.id, [...l.songs.map(x => ({ t: x.t, a: x.a })), ...uniq]);
+      await saveSongs(l.id, [...l.songs.map(x => ({ t: x.t, a: x.a, m: x.m })), ...uniq]);
       toast('Added ' + uniq.length + ' song' + (uniq.length === 1 ? '' : 's') + ' to ' + l.name + '.');
     } else {
       const name = $('#biName').value.trim(); if (!name){ toast('Give the list a name.'); $('#biName').focus(); return; }
@@ -2253,7 +2264,7 @@ const CHUNK = 20000;
 function openCatalogImport(){
   const body = document.createElement('div'); body.className = 'bImp';
   body.innerHTML = `<p class="hint">Paste your whole catalog (or load a CSV / text file). Every song on every bingo list that\u2019s in it gets ticked automatically \u2014 and lists you add later will tick themselves too.</p>
-    <div class="two"><label class="fld">Each line looks like<select id="ciOrder"><option value="song">Song \u2013 Artist</option><option value="artist">Artist \u2013 Song</option></select></label>
+    <div class="two"><label class="fld">Each line looks like<select id="ciOrder"><option value="song">Song \u2013 Artist</option><option value="artist">Artist \u2013 Song</option><option value="movie">Movie \u2013 Song \u2013 Category (e.g. Aladdin \u2013 A Whole New World \u2013 Disney)</option></select></label>
     <label class="fld">Match songs by<select id="ciMode"><option value="exact">Title + artist (most accurate)</option><option value="title">Title only (use if artist names differ between your catalog and the lists)</option></select></label></div>
     <label class="fld">\u2026or choose a CSV / text file<input type="file" id="ciFile" accept=".csv,.txt,.tsv,text/*"></label>
     <label class="fld" style="margin-bottom:.4rem">Paste your catalog \u2014 one song per line<textarea id="ciText" style="min-height:170px" placeholder="Don't Stop Believin' - Journey\nBohemian Rhapsody - Queen"></textarea></label>
@@ -2278,9 +2289,9 @@ function openCatalogImport(){
     const mode = $('#ciMode').value, replace = $('#ciReplace').checked || (B.catCount && B.catMode !== mode);
     const keyOf = x => mode === 'title' ? titleKey(x.t) : songKey(x.t, x.a);
     const merged = new Map();
-    if (!replace && B.catCount && B.catMode === mode) for (const x of B.catSongs) merged.set(mode === 'title' ? x._tk : x._k, { t: x.t, a: x.a });
+    if (!replace && B.catCount && B.catMode === mode) for (const x of B.catSongs) merged.set(mode === 'title' ? x._tk : x._k, { t: x.t, a: x.a, m: x.m });
     const legacyOnly = !replace && B.catCount && B.catMode === mode && !B.catSongs.length && B.cat.size;   // older import saved keys only
-    for (const x of songs) merged.set(keyOf(x), { t: x.t, a: x.a });
+    for (const x of songs) merged.set(keyOf(x), { t: x.t, a: x.a, m: x.m });
     const arr = [...merged.values()], chunks = [];
     for (let i = 0; i < arr.length; i += 4000) chunks.push(arr.slice(i, i + 4000));
     btn.disabled = true; btn.textContent = 'Saving\u2026';
@@ -2288,7 +2299,7 @@ function openCatalogImport(){
     const ok = await run(async () => {
       for (let i = 0; i < chunks.length; i += 6){
         const b = writeBatch(db);
-        chunks.slice(i, i + 6).forEach((c, j) => b.set(doc(db, 'bingoConfig', 'songs_' + (i + j)), { txt: c.map(x => clean(x.t) + '\t' + clean(x.a)).join('\n'), n: c.length }));
+        chunks.slice(i, i + 6).forEach((c, j) => b.set(doc(db, 'bingoConfig', 'songs_' + (i + j)), { txt: c.map(x => clean(x.t) + '\t' + clean(x.a) + (x.m ? '\t' + clean(x.m) : '')).join('\n'), n: c.length }));
         await b.commit();
       }
       const b = writeBatch(db);
