@@ -1905,12 +1905,49 @@ function prepList(id, d){
   return { id, ...d, songs };
 }
 
+/* ── keep the Media Player's copy of every bingo list in step (Realtime Database: bingo/vaultLists) ── */
+const PUB = { sig: null, busy: false, warned: false, again: false };
+const pubSongs = l => (l.songs || []).map(x => ({ t: x.t, a: x.a || '', ...(x.m ? { m: x.m } : {}) }));
+const pubSig = l => hash53(JSON.stringify([l.name, !!l.archived, pubSongs(l)]));
+async function mirrorToPlayer(){
+  if (!B.canBingo || !B.loaded) return;
+  if (PUB.busy){ PUB.again = true; return; }
+  PUB.busy = true;
+  try {
+    rtdb = rtdb || getDatabase(app);
+    if (!PUB.sig){
+      PUB.sig = new Map();
+      const snap = await rget(rref(rtdb, 'bingo/vaultLists'));
+      const cur = snap.val() || {};
+      for (const id of Object.keys(cur)) PUB.sig.set(id, cur[id] && cur[id].sig || '');
+    }
+    const ups = {};
+    for (const l of B.lists.values()){
+      const sg = pubSig(l);
+      if (PUB.sig.get(l.id) !== sg) ups[l.id] = { name: l.name, archived: !!l.archived, songs: pubSongs(l), sig: sg, updatedAt: Date.now() };
+    }
+    for (const id of [...PUB.sig.keys()]) if (!B.lists.has(id)) ups[id] = null;
+    const ids = Object.keys(ups);
+    if (ids.length){
+      await rupdate(rref(rtdb, 'bingo/vaultLists'), ups);
+      for (const id of ids){ if (ups[id]) PUB.sig.set(id, ups[id].sig); else PUB.sig.delete(id); }
+    }
+  } catch (e){
+    console.warn('Media Player mirror failed', e);
+    PUB.sig = null;
+    if (!PUB.warned){ PUB.warned = true; toast(/permission/i.test(e.message || '') ? 'Your lists are saved, but the Media Player copy couldn\u2019t update \u2014 the Realtime Database rules need the vaultLists rule.' : 'Your lists are saved, but the Media Player copy couldn\u2019t update: ' + e.message); }
+  }
+  PUB.busy = false;
+  if (PUB.again){ PUB.again = false; mirrorToPlayer(); }
+}
+
 function startBingo(){
   if (B.listening) return;
   B.listening = true;
   B.unsubs.push(onSnapshot(collection(db, 'bingoLists'), snap => {
     B.lists = new Map(snap.docs.map(d => [d.id, prepList(d.id, d.data())]));
     B.loaded = true;
+    mirrorToPlayer();
     if (B.mode === 'bingo') renderBingoAll();
     if (!B.curId){ const last = LS.get('bLast', null); if (last && (last === MISSING || last === CATALOG || B.lists.has(last))) { B.curId = last; if (B.mode === 'bingo') renderBingoAll(); } }
   }, err => {
