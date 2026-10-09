@@ -109,6 +109,9 @@ aside{background:var(--surface);border-right:1px solid var(--border);display:fle
 .sortBtn{display:inline-block;padding:1px 6px;border:1px solid var(--border2);border-radius:99px;color:var(--text3);font-size:10px;letter-spacing:0;cursor:pointer}
 .sortBtn:hover{color:var(--gold);border-color:var(--gold)}
 .sortBtn.on{color:#080808;background:var(--gold);border-color:var(--gold)}
+.sortDia{display:inline-flex;align-items:center;justify-content:center;width:30px;height:26px;padding:0;border:1px solid var(--border2);border-radius:99px;background:transparent;color:var(--text3);cursor:pointer}
+.sortDia:hover{color:var(--gold);border-color:var(--gold)}
+.sortDia.on{color:#080808;background:var(--gold);border-color:var(--gold)}
 .chev{display:inline-block;transition:transform .15s;font-size:9px}
 .grp.closed .chev{transform:rotate(-90deg)}
 .grp.closed .grpBody{display:none}
@@ -1859,12 +1862,12 @@ $('#tagSearchBtn').addEventListener('click', () => {
    ═══════════════════════════════════════════════════════════ */
 const B = {
   lists: new Map(), owned: new Set(), curId: null, loaded: false,
-  sort: LS.get('bSort3', { by:'have', dir:-1 }), showArch: false, filter: 'all', q: '',
+  sort: (LS.get('bSort4', null) || { by:'name', dir:1 }), showArch: false, filter: 'all', q: '',
   unsubs: [], listening: false, mode: 'trivia',
   removed: new Set(), searched: new Set(), cat: new Set(), catMode: 'exact', catCount: 0, catChunks: new Map(), catSongs: [], catUpdated: null, limit: 500
 };
 // A song counts as "in my catalog" if it was ticked by hand OR is in the imported full catalog — unless it was un-ticked afterwards.
-const isOwned = s => !B.removed.has(s._k) && (B.owned.has(s._k) || B.cat.has(B.catMode === 'title' ? s._tk : s._k));
+const isOwned = s => !B.removed.has(s._k) && (B.owned.has(s._k) || B.cat.has(B.catMode === 'title' ? s._tk : s._k) || (s.m && B.catMode !== 'title' && B.cat.has(songKey(s.t, s.m))));
 const bListRef = id => doc(db, 'bingoLists', id);
 const bCatalogRef = () => doc(db, 'bingoConfig', 'catalog');
 const MISSING = '__missing', CATALOG = '__catalog';
@@ -1928,7 +1931,7 @@ function startBingo(){
     for (const [, txt] of songChunks) for (const line of txt.split('\n')){ if (!line) continue; const i = line.indexOf('\t'); const t = i < 0 ? line : line.slice(0, i), rest = i < 0 ? '' : line.slice(i + 1), j = rest.indexOf('\t'), a = j < 0 ? rest : rest.slice(0, j), m = j < 0 ? '' : rest.slice(j + 1); B.catSongs.push(withKeys(m ? { t, a, m } : { t, a })); }
     B.cat = new Set();
     for (const str of B.catChunks.values()) if (str) for (const k of str.split(',')) if (k) B.cat.add(k);
-    for (const x of B.catSongs) B.cat.add(B.catMode === 'title' ? x._tk : x._k);
+    for (const x of B.catSongs){ B.cat.add(B.catMode === 'title' ? x._tk : x._k); if (x.m && B.catMode !== 'title') B.cat.add(songKey(x.t, x.m)); }   // movie songs also match a list that names the movie as the artist
     if (B.mode === 'bingo') renderBingoAll();
   }, () => {}));
 }
@@ -1953,22 +1956,15 @@ $$('.modeSw button').forEach(b => b.addEventListener('click', () => setMode(b.da
 function sortedLists(){
   const q = B.q.trim().toLowerCase();
   const out = [...B.lists.values()].filter(l => (B.showArch || !l.archived) && (!q || String(l.name).toLowerCase().includes(q)));
-  const { by, dir } = B.sort;
-  const val = l => { const s = listStats(l); return by === 'have' ? s.have : by === 'missing' ? s.missing : by === 'total' ? s.total : (Number(l.order) || 0); };
-  out.sort((a, b) => ((val(a) - val(b)) * dir) || ((Number(a.order) || 0) - (Number(b.order) || 0)) || String(a.name).localeCompare(String(b.name)));
+  const nm = (x, y) => String(x.name).localeCompare(String(y.name), undefined, { sensitivity: 'base', numeric: true });
+  if (B.sort.by === 'have') out.sort((a, b) => (listStats(b).have - listStats(a).have) || nm(a, b));
+  else out.sort(nm);
   return out;
 }
 function renderBingoSide(){
-  const mk = (by, label, title) => {
-    const on = B.sort.by === by, arrow = on ? (B.sort.dir === 1 ? ' ▲' : ' ▼') : '';
-    return `<span class="sortBtn ${on ? 'on' : ''}" role="button" data-bsort="${by}" title="${esc(title)}">${label}${arrow}</span>`;
-  };
   const uniq = missingSongs();
-  let html = `<div class="bSortRow"><span class="lbl">Order by</span>` +
-    mk('have', 'Songs I have', 'Lists with the most songs already in your catalog first \u2014 click again to flip') +
-    mk('missing', 'Missing', 'Lists with the most songs still missing first \u2014 click again to flip') +
-    mk('total', 'List size', 'Total number of songs on the list \u2014 click again to flip') +
-    mk('order', 'Manual', 'A hand-arranged order (use Move up / down under More)') + `</div>`;
+  const on = B.sort.by === 'have';
+  let html = `<div class="bSortRow"><button type="button" class="sortDia ${on ? 'on' : ''}" data-bsort="have" aria-pressed="${on}" title="${on ? 'Sorted by most songs in your catalog \u2014 click to go back to A\u2013Z' : 'Click to put the lists with the most songs in your catalog first'}"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 2.5 21.5 12 12 21.5 2.5 12Z" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button></div>`;
   html += `<div class="bSpecial"><button class="bList ${B.curId === CATALOG ? 'active' : ''}" data-bid="${CATALOG}"><div class="row1"><span class="nm">\u2630 My whole catalog</span><span class="ct"><b>${catalogRows().length.toLocaleString()}</b> songs</span></div></button>
     <button class="bList ${B.curId === MISSING ? 'active' : ''}" data-bid="${MISSING}"><div class="row1"><span class="nm">⚑ Everything I'm missing</span><span class="ct"><b>${uniq.length}</b> songs</span></div></button></div>`;
   const list = sortedLists();
@@ -1983,9 +1979,8 @@ function renderBingoSide(){
 $('#bList').addEventListener('click', e => {
   const sb = e.target.closest('[data-bsort]');
   if (sb){
-    const by = sb.dataset.bsort;
-    B.sort = B.sort.by === by ? { by, dir: -B.sort.dir } : { by, dir: by === 'order' ? 1 : -1 };
-    LS.set('bSort3', B.sort); renderBingoSide(); return;
+    B.sort = B.sort.by === 'have' ? { by: 'name', dir: 1 } : { by: 'have', dir: -1 };
+    LS.set('bSort4', B.sort); renderBingoSide(); return;
   }
   const c = e.target.closest('.bList'); if (c) selectBingo(c.dataset.bid);
 });
@@ -2015,7 +2010,7 @@ function catalogRows(){
   const m = new Map(), keyOf = x => B.catMode === 'title' ? titleKey(x.t) : songKey(x.t, x.a);
   const lists = new Map();
   for (const e of allSongs()) lists.set(B.catMode === 'title' ? e._tk : e._k, e.lists);
-  for (const x of B.catSongs){ const k = keyOf(x); if (!m.has(k)) m.set(k, { ...x, lists: lists.get(k) || [], _src: 'import' }); }
+  for (const x of B.catSongs){ const k = keyOf(x); if (!m.has(k)) m.set(k, { ...x, lists: lists.get(k) || (x.m && B.catMode !== 'title' ? lists.get(songKey(x.t, x.m)) : null) || [], _src: 'import' }); }
   for (const e of allSongs()){ const k = B.catMode === 'title' ? e._tk : e._k; if (!m.has(k) && isOwned(e)) m.set(k, { ...e, lists: e.lists, _src: 'list' }); }
   const out = [...m.values()].filter(r => !B.removed.has(r._k));
   return out.sort((a, b) => (a.t || '').localeCompare(b.t || '', undefined, { sensitivity: 'base', numeric: true })).map((r, i) => ({ ...r, idx: i, ro: true }));
@@ -2074,7 +2069,7 @@ function renderBingoAll(){
   const wrap = $('#bGridWrap'), st = wrap.scrollTop;
   const BPM = '<th class="ck" title="Tick once you\u2019ve looked for this song on BPM Supreme \u2014 it ticks everywhere the song appears">Searched on BPM Supreme</th>';
   $('#bGrid thead').innerHTML = special
-    ? `<tr><th>#</th><th>In catalog</th>${isMissing ? BPM : ''}<th>Song</th><th>Artist</th><th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
+    ? `<tr><th>#</th>${isCat ? '' : '<th>In catalog</th>'}${isMissing ? BPM : ''}<th>Song</th><th>Artist</th><th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
     : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th>Movie / show</th><th class="on">Also on</th><th></th></tr>`;
   $('#bGrid tbody').innerHTML = shown.map(r => {
     const own = isOwned(r);
@@ -2082,7 +2077,7 @@ function renderBingoAll(){
     const bp = own ? `<td class="ck" style="color:var(--text3)">\u2014</td>` : `<td class="ck"><input type="checkbox" data-s="${r._k}" ${B.searched.has(r._k) ? 'checked' : ''} title="${B.searched.has(r._k) ? 'Already searched for on BPM Supreme \u2014 untick to undo' : 'Tick once you\u2019ve searched for this on BPM Supreme \u2014 it ticks on every list'}"></td>`;
     if (special){
       const n = r.lists.length;
-      return `<tr class="${own ? 'have' : ''}"><td class="n">${r.idx + 1}</td>${ck}${isMissing ? bp : ''}<td class="txt">${esc(r.t)}</td><td class="txt">${esc(r.a)}</td><td class="txt">${esc(r.m || '')}</td>` +
+      return `<tr class="${own ? 'have' : ''}"><td class="n">${r.idx + 1}</td>${isCat ? '' : ck}${isMissing ? bp : ''}<td class="txt">${esc(r.t)}</td><td class="txt">${esc(r.a)}</td><td class="txt">${esc(r.m || '')}</td>` +
         `<td class="on" style="width:90px"><b style="color:var(--gold2)">${n}</b> of ${nLists}</td>` +
         (isMissing ? `<td class="on" style="width:90px">${Math.max(0, nLists - n)}</td>` : '') +
         `<td class="l">${n ? esc(r.lists.join(' · ')) : '<span style="opacity:.6">not on any list</span>'}</td></tr>`;
@@ -2354,8 +2349,6 @@ $('#bMore').addEventListener('click', () => {
   const pos = all.findIndex(x => x.id === l.id);
   const body = document.createElement('div'); body.className = 'menuList';
   body.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px">
-    <button class="btn ghost" data-a="up" ${pos <= 0 ? 'disabled' : ''}>↑ Move up in my order</button>
-    <button class="btn ghost" data-a="down" ${pos >= all.length - 1 ? 'disabled' : ''}>↓ Move down in my order</button>
     <button class="btn ghost" data-a="all">✓ Mark every song on this list as in my catalog</button>
     <button class="btn ghost" data-a="none">Clear every tick on this list</button>
     <button class="btn ghost" data-a="csv">Export this list as CSV</button>
@@ -2365,15 +2358,7 @@ $('#bMore').addEventListener('click', () => {
   body.addEventListener('click', async e => {
     const b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
     const a = b.dataset.a;
-    if (a === 'up' || a === 'down'){
-      const j = a === 'up' ? pos - 1 : pos + 1, other = all[j];
-      // re-number the whole sequence so order is always clean 1..n
-      const seq = all.map(x => x.id); [seq[pos], seq[j]] = [seq[j], seq[pos]];
-      closeModal();
-      const batch = writeBatch(db); seq.forEach((id, i) => batch.update(bListRef(id), { order: i + 1 }));
-      await run(() => batch.commit());
-      if (B.sort.by !== 'order'){ B.sort = { by: 'order', dir: 1 }; LS.set('bSort3', B.sort); renderBingoSide(); }
-    } else if (a === 'all'){ closeModal(); setOwned(l.songs.map(s => s._k), true); toast('Marked ' + l.songs.length + ' songs as in your catalog — they’re ticked on every list.'); }
+    if (false){    } else if (a === 'all'){ closeModal(); setOwned(l.songs.map(s => s._k), true); toast('Marked ' + l.songs.length + ' songs as in your catalog — they’re ticked on every list.'); }
     else if (a === 'none'){
       if (!(await confirmBox({ title: 'Clear ticks?', message: 'This un-ticks every song on “' + l.name + '” — and, because ticks are shared, on every other list that has the same songs.', ok: 'Clear ticks', danger: true }))) return;
       closeModal(); setOwned(l.songs.map(s => s._k), false);
