@@ -1859,7 +1859,7 @@ $('#tagSearchBtn').addEventListener('click', () => {
    ═══════════════════════════════════════════════════════════ */
 const B = {
   lists: new Map(), owned: new Set(), curId: null, loaded: false,
-  sort: LS.get('bSort2', { by:'total', dir:-1 }), showArch: false, filter: 'all', q: '',
+  sort: LS.get('bSort3', { by:'have', dir:-1 }), showArch: false, filter: 'all', q: '',
   unsubs: [], listening: false, mode: 'trivia',
   removed: new Set(), searched: new Set(), cat: new Set(), catMode: 'exact', catCount: 0, catChunks: new Map(), catSongs: [], catUpdated: null, limit: 500
 };
@@ -1884,7 +1884,13 @@ function normSong(s){
 }
 const songKey = (t, a) => hash53(normSong(t) + '|' + normSong(a));
 const titleKey = t => hash53(normSong(t) + '|');
-const withKeys = s => ({ ...s, _k: songKey(s.t, s.a), _tk: titleKey(s.t) });
+/* "Movie - Song - Category" lines that were stored as title=Movie, artist="Song - Category" get repaired as they load */
+function fixMovie(s){
+  if (!s || s.m || !s.a || /\s[\-–—]\s/.test(s.t || '')) return s;
+  const m = String(s.a).match(/^(.+?)\s+[\-–—]\s+(.+)$/);
+  return m ? { ...s, t: m[1].trim(), a: m[2].trim(), m: String(s.t || '').trim() } : s;
+}
+const withKeys = s0 => { const s = fixMovie(s0); return { ...s, _k: songKey(s.t, s.a), _tk: titleKey(s.t) }; };
 function cleanSongs(arr){ return (arr || []).filter(s => s && (s.t || s.a)).map(s => ({ t: String(s.t || '').trim(), a: String(s.a || '').trim(), ...(s.m && String(s.m).trim() ? { m: String(s.m).trim() } : {}) })); }
 function listStats(l){
   const songs = l.songs || []; let have = 0;
@@ -1959,9 +1965,9 @@ function renderBingoSide(){
   };
   const uniq = missingSongs();
   let html = `<div class="bSortRow"><span class="lbl">Order by</span>` +
-    mk('total', 'Songs in list', 'Number of songs in each list — click again to flip (most / fewest)') +
-    mk('have', 'In catalog', 'Most songs already in your catalog — click again to flip') +
-    mk('missing', 'Missing', 'Most songs still missing from your catalog — click again to flip') +
+    mk('have', 'Songs I have', 'Lists with the most songs already in your catalog first \u2014 click again to flip') +
+    mk('missing', 'Missing', 'Lists with the most songs still missing first \u2014 click again to flip') +
+    mk('total', 'List size', 'Total number of songs on the list \u2014 click again to flip') +
     mk('order', 'Manual', 'A hand-arranged order (use Move up / down under More)') + `</div>`;
   html += `<div class="bSpecial"><button class="bList ${B.curId === CATALOG ? 'active' : ''}" data-bid="${CATALOG}"><div class="row1"><span class="nm">\u2630 My whole catalog</span><span class="ct"><b>${catalogRows().length.toLocaleString()}</b> songs</span></div></button>
     <button class="bList ${B.curId === MISSING ? 'active' : ''}" data-bid="${MISSING}"><div class="row1"><span class="nm">⚑ Everything I'm missing</span><span class="ct"><b>${uniq.length}</b> songs</span></div></button></div>`;
@@ -1979,7 +1985,7 @@ $('#bList').addEventListener('click', e => {
   if (sb){
     const by = sb.dataset.bsort;
     B.sort = B.sort.by === by ? { by, dir: -B.sort.dir } : { by, dir: by === 'order' ? 1 : -1 };
-    LS.set('bSort2', B.sort); renderBingoSide(); return;
+    LS.set('bSort3', B.sort); renderBingoSide(); return;
   }
   const c = e.target.closest('.bList'); if (c) selectBingo(c.dataset.bid);
 });
@@ -2184,6 +2190,10 @@ function parseSongLines(text, order){
       else if (parts.length === 1) out.push({ t: parts[0], a: '' });
       continue;
     }
+    if (!line.includes('\t') && order === 'song'){
+      const parts = line.split(/\s+[\-–—]\s+/).map(unq).filter(Boolean);
+      if (parts.length >= 3){ out.push({ t: parts.slice(1, -1).join(' - '), a: parts[parts.length - 1], m: parts[0] }); continue; }
+    }
     let a, b;
     if (line.includes('\t')){ [a, b] = line.split('\t').map(x => x.trim()); }
     else { const m = line.match(/^(.*?)\s+[\-–—]\s+(.*)$/); if (m){ a = m[1].trim(); b = m[2].trim(); } else { a = line; b = ''; } }
@@ -2362,7 +2372,7 @@ $('#bMore').addEventListener('click', () => {
       closeModal();
       const batch = writeBatch(db); seq.forEach((id, i) => batch.update(bListRef(id), { order: i + 1 }));
       await run(() => batch.commit());
-      if (B.sort.by !== 'order'){ B.sort = { by: 'order', dir: 1 }; LS.set('bSort2', B.sort); renderBingoSide(); }
+      if (B.sort.by !== 'order'){ B.sort = { by: 'order', dir: 1 }; LS.set('bSort3', B.sort); renderBingoSide(); }
     } else if (a === 'all'){ closeModal(); setOwned(l.songs.map(s => s._k), true); toast('Marked ' + l.songs.length + ' songs as in your catalog — they’re ticked on every list.'); }
     else if (a === 'none'){
       if (!(await confirmBox({ title: 'Clear ticks?', message: 'This un-ticks every song on “' + l.name + '” — and, because ticks are shared, on every other list that has the same songs.', ok: 'Clear ticks', danger: true }))) return;
