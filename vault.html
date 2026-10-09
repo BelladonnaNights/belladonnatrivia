@@ -2245,7 +2245,7 @@ function openBingoImport(addTo){
       btn.disabled = true;
       const order = Math.max(0, ...[...B.lists.values()].map(x => Number(x.order) || 0)) + 1;
       const id = doc(collection(db, 'bingoLists')).id;
-      await run(() => setDoc(bListRef(id), { name, songs: uniq, order, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+      await run(() => setDoc(bListRef(id), { name, songs: cleanSongs(uniq), order, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
       closeModal(); selectBingo(id);
       toast('Created “' + name + '” with ' + uniq.length + ' songs.');
     }
