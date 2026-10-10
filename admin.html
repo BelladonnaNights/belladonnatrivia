@@ -104,6 +104,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   overflow:hidden;cursor:grab;transition:border-color .2s,transform .2s,box-shadow .2s;
   position:relative;user-select:none;
 }
+.cat-about{font-size:12px;line-height:1.35;color:var(--text2);margin:2px 0 6px;font-style:italic}
 .cat-card:hover{border-color:var(--gold-glow);transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,0,0,.4)}
 .cat-card.dragging{opacity:.45;transform:scale(.97);cursor:grabbing}
 .cat-card.drag-over{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-glow)}
@@ -2057,6 +2058,7 @@ function renderLibrary() {
       + bannerHtml
       + '<div class="cat-body">'
       + (cat.altName ? '<div class="cat-alt">' + cat.altName + '</div><div class="cat-title cat-title-indent">' + (cat.name||'Untitled') + '</div>' : '<div class="cat-title">' + (cat.name||'Untitled') + '</div>')
+      + aboutLine(cat)
       + '<div class="cat-meta">' + themeSetBadge + musicBadge + vaultBadge + slideshowBadge + canvaBadge + tagPills + seePairsBtn + '</div>'
       + pairsDropdown
       + '</div>'
@@ -2065,6 +2067,19 @@ function renderLibrary() {
       + '<div class="drag-hint">' + (adminMode ? 'drag to reorder or drop into round &rarr;' : 'drag to round &rarr;') + '</div>'
       + '</div>';
   }).join('');
+}
+
+// First sentence of the category's description (edited in the Question Vault or in the edit box here).
+function aboutFirstSentence(t){
+  t = String(t||'').trim(); if(!t) return '';
+  t = t.split(/\n/)[0].trim();
+  const m = t.match(/^.*?[.!?](?=\s|$)/);
+  return (m ? m[0] : t).trim();
+}
+function aboutLine(cat){
+  const a = aboutFirstSentence(cat && cat.venueMenu && cat.venueMenu.description);
+  if(!a) return '';
+  return '<div class="cat-about" title="' + a.replace(/"/g,'&quot;').replace(/</g,'&lt;') + '">' + a.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
 }
 
 function parseTags(genreStr) {
