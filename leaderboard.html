@@ -11,7 +11,7 @@
   --gold:#c9a84c;--gold2:#e8c96a;--gold3:#f5df90;
   --gold-shine:linear-gradient(135deg,#c9a84c 0%,#f5df90 45%,#c9a84c 70%,#e2b84a 100%);
   --gold-dim:rgba(201,168,76,.12);--gold-glow:rgba(201,168,76,.35);
-  --bg:#080808;--surface:rgba(10,10,10,.82);--surface2:rgba(15,15,15,.92);
+  --bg:#000;--surface:rgba(10,10,10,.82);--surface2:rgba(15,15,15,.92);
   --text:#f0ede8;--text2:#b0a898;--text3:#5a5248;
   --border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.15);
   --green:#2ecc71;--red:#e74c3c;--yellow:#e0b83a;
@@ -19,7 +19,7 @@
   --display:'Bebas Neue',sans-serif;--cinzel:'Cinzel',serif;--serif:'EB Garamond',serif;--font:'DM Sans',sans-serif;
 }
 html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh}
-body{background:radial-gradient(ellipse at 30% 0%,#1a1200 0%,#080808 65%) fixed}
+body{background:#000}
 .wrap{max-width:980px;margin:0 auto;padding:28px 18px 80px}
 header{text-align:center;margin-bottom:26px}
 header .logo{height:96px;width:auto;max-width:300px;object-fit:contain;display:block;margin:0 auto 10px}
@@ -32,8 +32,8 @@ label.lbl{display:block;font-family:var(--cinzel);font-size:10px;letter-spacing:
 select,input[type=text]{width:100%;background:rgba(255,255,255,.03);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;font:400 14px var(--font);outline:none;transition:border-color .2s,box-shadow .2s}
 select option{background:#111;color:var(--text)}
 select:focus,input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
-.seg{display:flex;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden}
-.seg button{flex:1;background:rgba(255,255,255,.03);color:var(--text2);border:0;padding:11px 6px;font:600 10px var(--cinzel);letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:.2s}
+.seg{display:flex;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden;min-width:0}
+.seg button{flex:1;background:rgba(255,255,255,.03);color:var(--text2);border:0;padding:11px 4px;font:600 9px var(--cinzel);letter-spacing:.06em;white-space:nowrap;min-width:0;text-transform:uppercase;cursor:pointer;transition:.2s}
 .seg button.on{background:var(--gold-shine);color:#000}
 .seasoninfo{text-align:center;font-family:var(--serif);font-style:italic;font-size:15px;color:var(--text2);margin:6px 0 16px}
 .podium{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
@@ -161,6 +161,7 @@ input[type=checkbox]{accent-color:var(--gold)}
 
   <h2>Night by Night</h2>
   <div id="nights"></div>
+  <div id="adminLinkWrap" style="text-align:center;margin-top:44px"><a href="leaderboard.html?admin=1" style="font:600 9px 'Cinzel',serif;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);text-decoration:none;border:1px solid var(--gold-glow);border-radius:99px;padding:7px 18px">Admin</a></div>
 
   </div>
 
@@ -658,22 +659,22 @@ function showBlocked(msg){
     +'<a href="leaderboard.html" style="font-family:\'DM Sans\',sans-serif;font-size:0.75rem;color:#b0a898;">View the public leaderboard</a>';
   document.body.appendChild(o);
 }
-if(ADMIN_MODE){
-  if(!hasValidGatewaySession()){window.location.href=GATEWAY_URL}
+const SOFT_CHECK=!ADMIN_MODE&&hasValidGatewaySession();
+if(ADMIN_MODE||SOFT_CHECK){
+  if(ADMIN_MODE&&!hasValidGatewaySession()){window.location.href=GATEWAY_URL}
   auth.onAuthStateChanged(function(user){
-    if(!user){window.location.href=GATEWAY_URL;return}
+    if(!user){if(ADMIN_MODE)window.location.href=GATEWAY_URL;return}
     dbFs.collection('users').doc(user.uid).get().then(function(snap){
       const p=snap.exists?snap.data():{};
-      if(p.status==='banned'){showBlocked('This account is currently restricted.');return}
+      if(p.status==='banned'){if(ADMIN_MODE)showBlocked('This account is currently restricted.');return}
       const ok=p.role==='admin'||!!(p.adminAccess&&p.adminAccess.trivia);
-      if(!ok){showBlocked((p.name?p.name+', your':'Your')+' account does not have Trivia Admin access. Ask Belladonna to grant it from the Accounts tab in HQ.');return}
+      if(!ok){if(ADMIN_MODE)showBlocked((p.name?p.name+', your':'Your')+' account does not have Trivia Admin access. Ask Belladonna to grant it from the Accounts tab in HQ.');return}
       $('gateway-user-label').textContent=user.email||'account';
-      $('adminBar').classList.remove('hidden');
+      $('adminBar').classList.remove('hidden');$('adminLinkWrap').classList.add('hidden');
       if(!IS_ADMIN){IS_ADMIN=true;startAdmin()}
-    }).catch(function(){showBlocked('Could not verify admin access. Please try again.')});
+    }).catch(function(){if(ADMIN_MODE)showBlocked('Could not verify admin access. Please try again.')});
   });
 }
-
 </script>
 </body>
 </html>
