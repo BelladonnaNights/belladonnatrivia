@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Belladonna Games — Leaderboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --gold:#c9a84c;--gold2:#e8c96a;--gold3:#f5df90;
+  --gold-shine:linear-gradient(135deg,#c9a84c 0%,#f5df90 45%,#c9a84c 70%,#e2b84a 100%);
+  --gold-dim:rgba(201,168,76,.12);--gold-glow:rgba(201,168,76,.35);
+  --bg:#000;--surface:rgba(10,10,10,.82);--surface2:rgba(15,15,15,.92);
+  --text:#f0ede8;--text2:#b0a898;--text3:#5a5248;
+  --border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.15);
+  --green:#2ecc71;--red:#e74c3c;--yellow:#e0b83a;
+  --radius:10px;--radius-lg:16px;
+  --display:'Bebas Neue',sans-serif;--cinzel:'Cinzel',serif;--serif:'EB Garamond',serif;--font:'DM Sans',sans-serif;
+}
+html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh}
+body{background:#000}
+.wrap{max-width:1400px;margin:0 auto;padding:28px 32px 80px}
+header{text-align:center;margin-bottom:22px}
+header .logo{height:96px;width:auto;max-width:300px;object-fit:contain;display:block;margin:0 auto 10px}
+header .brand{font-family:var(--display);font-size:clamp(44px,8vw,72px);letter-spacing:.06em;line-height:.9;color:#fff}
+header .page{font-family:var(--cinzel);font-size:13px;letter-spacing:.3em;text-transform:uppercase;margin-top:10px;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.rule{height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);margin:16px auto 0;max-width:420px}
+.box{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 0 22px rgba(201,168,76,.08);padding:18px;backdrop-filter:blur(8px)}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:10px}
+label.lbl{display:block;font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;color:var(--gold);text-transform:uppercase;margin-bottom:6px}
+select,input[type=text]{width:100%;background-color:rgba(255,255,255,.03);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;font:400 14px var(--font);outline:none;transition:border-color .2s,box-shadow .2s}
+select{-webkit-appearance:none;appearance:none;padding-right:34px;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23c9a84c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center}
+select option{background:#111;color:var(--text)}
+select:focus,input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
+.seg{display:flex;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden;min-width:0}
+.seg button{flex:1;background:rgba(255,255,255,.03);color:var(--text2);border:0;padding:11px 14px;font:600 10px var(--cinzel);letter-spacing:.08em;white-space:nowrap;min-width:0;text-transform:uppercase;cursor:pointer;transition:.2s}
+.seg button.on{background:var(--gold-shine);color:#000}
+.seasoninfo{text-align:center;font-family:var(--serif);font-style:italic;font-size:15px;color:var(--text2);margin:6px 0 16px}
+.podium{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.pod{text-align:center;padding:16px 8px}
+.pod .n{font-family:var(--display);font-size:56px;line-height:1;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.pod .t{font-family:var(--cinzel);font-weight:600;font-size:15px;letter-spacing:.04em;margin:4px 0}
+.pod .p{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--text2)}
+.pod.first{border-color:var(--gold-glow);box-shadow:0 0 30px var(--gold-glow)}
+table{width:100%;border-collapse:collapse}
+th{font-family:var(--cinzel);font-size:9px;letter-spacing:.14em;color:var(--gold);text-align:left;padding:8px 10px;text-transform:uppercase;border-bottom:1px solid var(--border2)}
+td{padding:11px 10px;border-bottom:1px solid var(--border);font-size:14px}
+td.rank{font-family:var(--display);font-size:26px;color:var(--gold);width:48px}
+td.team{font-family:var(--cinzel);font-size:14px;font-weight:600;letter-spacing:.03em}
+td.pts{font-family:var(--display);font-size:26px;color:var(--gold2);text-align:right}
+th.r,td.r{text-align:right}
+.muted{color:var(--text2)}
+.empty{text-align:center;color:var(--text3);padding:34px 10px;font-family:var(--serif);font-style:italic;font-size:17px}
+h2{font-family:var(--cinzel);font-size:12px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin:26px 0 12px}
+.night{margin-bottom:10px}
+.night summary{cursor:pointer;display:flex;justify-content:space-between;gap:10px;list-style:none}
+.night summary::-webkit-details-marker{display:none}
+.tag{display:inline-block;background:var(--gold-dim);border:1px solid var(--gold-glow);border-radius:99px;padding:2px 10px;font:600 9px var(--cinzel);letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-left:8px}
+.bonus{font-family:var(--serif);font-style:italic;font-size:12px;color:var(--green);margin-left:8px}
+.hidden{display:none!important}
+/* bracket */
+.bk{display:flex;gap:26px;overflow-x:auto;padding:6px 2px 16px}
+.bk-round{display:flex;flex-direction:column;justify-content:space-around;gap:14px;min-width:200px}
+.bk-title{font-family:var(--cinzel);font-size:9px;letter-spacing:.14em;color:var(--gold);text-transform:uppercase;text-align:center}
+.bk-m{border:1px solid var(--border2);border-radius:10px;overflow:hidden;background:var(--surface2)}
+.bk-s{display:flex;gap:8px;align-items:center;padding:8px 10px;font:600 12px var(--cinzel);border-bottom:1px solid var(--border)}
+.bk-s:last-child{border-bottom:0}
+.bk-s .sd{font-family:var(--display);color:var(--text3);font-size:15px;width:18px;flex-shrink:0}
+.bk-s.win{background:var(--gold-dim);color:var(--gold2)}
+.bk-s.lose{color:var(--text3)}
+.bk-s.tbd{color:var(--text3);font:italic 400 13px var(--serif)}
+.bk-champ{text-align:center;font-family:var(--display);font-size:34px;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px}
+@media(max-width:640px){.podium{grid-template-columns:1fr}.hide-sm{display:none}}
+
+.filters{padding:16px;margin-bottom:10px}
+.fgrid{display:grid;grid-template-columns:1fr 1fr 1.5fr 1.1fr;gap:14px}
+.fsearch{margin-top:12px}
+@media(max-width:900px){.fgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.wrap{padding:20px 16px 70px}}
+@media(max-width:440px){.fgrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img class="logo" src="logo.png" alt="" onerror="this.style.display='none'">
+    <div class="brand">BELLADONNA GAMES</div>
+    <div class="page">Season Leaderboard</div>
+    <div class="rule"></div>
+  </header>
+
+  <div>
+  <div class="box filters">
+    <div class="fgrid">
+      <div><label class="lbl">Season</label><select id="fSeason"></select></div>
+      <div><label class="lbl">Venue</label><select id="fVenue"></select></div>
+      <div><label class="lbl">Board</label>
+        <div class="seg" id="fGame"><button data-g="trivia" class="on">Trivia</button><button data-g="bingo">Bingo</button><button data-g="all">Both</button></div></div>
+      <div><label class="lbl">Standings</label>
+        <div class="seg" id="fView"><button data-v="teams" class="on">Teams</button><button data-v="venues">Venues</button></div></div>
+    </div>
+    <div class="fsearch"><input type="text" id="fSearch" placeholder="Find a team or venue"></div>
+  </div>
+  <div class="seasoninfo" id="seasonInfo"></div>
+
+  <div id="podium" class="podium"></div>
+  <div class="box" style="padding:6px 10px"><div id="standings"></div></div>
+
+  <div id="bkSection" class="hidden">
+    <h2>Brackets</h2>
+    <div class="controls" style="grid-template-columns:1fr"><select id="bkSel"></select></div>
+    <div class="box"><div id="bkChamp"></div><div id="bkView"></div></div>
+  </div>
+
+  <h2>Night by Night</h2>
+  <div id="nights"></div>
+
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyCIfAE1JGHsUGzzVH2pz1Vyj5b5OhA0tDQ",
+  authDomain:"belladonna-hq.firebaseapp.com",
+  databaseURL:"https://belladonna-hq-default-rtdb.firebaseio.com",
+  projectId:"belladonna-hq",
+  storageBucket:"belladonna-hq.firebasestorage.app",
+  messagingSenderId:"1021873183587",
+  appId:"1:1021873183587:web:def283bb7b5ca48e4f9156"
+});
+const db=firebase.database();
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const tkey=s=>String(s).trim().toLowerCase().replace(/\s+/g," ");
+const fmtDate=d=>{try{return new Date(d+"T12:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}catch(e){return d}};
+const addDays=(d,n)=>{const x=new Date(d+"T12:00:00");x.setDate(x.getDate()+n);return x.toISOString().slice(0,10)};
+const seasonEnd=s=>addDays(s.start,s.weeks*7-1);
+
+
+let seasons={},nights=[],brackets=[],activeId="",game="trivia",view="teams";
+db.ref("leaderboard/seasons").on("value",s=>{seasons=s.val()||{};render()});
+db.ref("leaderboard/activeSeason").on("value",s=>{activeId=s.val()||"";render()});
+db.ref("leaderboard/nights").on("value",s=>{nights=Object.entries(s.val()||{}).map(([id,n])=>({...n,id,results:n.results||[]}));render()});
+db.ref("leaderboard/brackets").on("value",s=>{brackets=Object.entries(s.val()||{}).map(([id,b])=>({...b,id}));render()});
+
+/* ---- bracket model (same logic as the admin page) ---- */
+function seedOrder(n){let o=[0];while(o.length<n){const m=o.length*2;o=o.flatMap(x=>[x,m-1-x])}return o}
+function bracketModel(b){
+  const seeds=b.seeds||[];let size=2;while(size<seeds.length)size*=2;
+  const order=seedOrder(size),rounds=Math.log2(size),W=b.winners||{},R=[];
+  for(let r=0;r<rounds;r++){
+    R.push([]);
+    for(let m=0;m<(size>>(r+1));m++){
+      let a,c;
+      if(r===0){a=seeds[order[2*m]]??null;c=seeds[order[2*m+1]]??null}
+      else{a=R[r-1][2*m].winnerName;c=R[r-1][2*m+1].winnerName}
+      let w=null;
+      if(r===0&&a&&!c)w=0;else if(r===0&&!a&&c)w=1;
+      else if(a&&c){const sw=W[r+"-"+m];if(sw===a)w=0;else if(sw===c)w=1}
+      R[r].push({r,m,a,b:c,winner:w,winnerName:w===0?a:w===1?c:null,sa:r===0?order[2*m]+1:null,sb:r===0?order[2*m+1]+1:null});
+    }
+  }
+  return {size,rounds,R,champion:R[rounds-1][0].winnerName};
+}
+function roundName(r,rounds){const left=rounds-r;return left===1?"Final":left===2?"Semifinals":left===3?"Quarterfinals":"Round "+(r+1)}
+function bracketHTML(b,clickable){
+  const M=bracketModel(b);
+  return `<div class="bk">`+M.R.map((col,r)=>`<div class="bk-round"><div class="bk-title">${roundName(r,M.rounds)}</div>`+col.map(x=>{
+    const side=(name,i,seed)=>{
+      if(!name)return `<div class="bk-s tbd">${x.r===0?"BYE":"TBD"}</div>`;
+      const cls=x.winner===null?"":(x.winner===i?"win":"lose");
+      return `<div class="bk-s ${cls}${clickable?" click":""}" ${clickable?`data-r="${x.r}" data-m="${x.m}" data-n="${esc(name)}"`:""}><span class="sd">${seed??""}</span><span>${esc(name)}</span></div>`;
+    };
+    return `<div class="bk-m">${side(x.a,0,x.sa)}${side(x.b,1,x.sb)}</div>`;
+  }).join("")+`</div>`).join("")+`</div>`;
+}
+
+/* ---- standings ---- */
+function teamRows(list){
+  const agg={};
+  list.forEach(n=>n.results.forEach(r=>{
+    const k=tkey(r.team),a=agg[k]||(agg[k]={name:r.team,pts:0,nights:0,wins:0,last:""});
+    a.pts+=+r.points||0;a.nights++;if(+r.place===1)a.wins++;if(n.date>a.last){a.last=n.date;a.name=r.team}
+  }));
+  return Object.values(agg).sort((a,b)=>b.pts-a.pts||b.wins-a.wins||b.nights-a.nights||a.name.localeCompare(b.name));
+}
+function venueRows(list){
+  const agg={};
+  list.forEach(n=>{
+    const a=agg[n.venue]||(agg[n.venue]={name:n.venue,pts:0,nights:0,teams:new Set()});
+    a.nights++;n.results.forEach(r=>{a.pts+=+r.points||0;a.teams.add(tkey(r.team))});
+  });
+  return Object.values(agg).map(a=>({...a,teams:a.teams.size,avg:a.nights?a.pts/a.nights:0})).sort((a,b)=>b.avg-a.avg||b.pts-a.pts||a.name.localeCompare(b.name));
+}
+function rank(rows,key){let rk=0,prev=null;rows.forEach((r,i)=>{if(r[key]!==prev){rk=i+1;prev=r[key]}r.rank=rk});return rows}
+
+function render(){
+  const ids=Object.keys(seasons).sort((a,b)=>seasons[b].start.localeCompare(seasons[a].start));
+  const sKeep=$("fSeason").value;
+  $("fSeason").innerHTML=ids.map(id=>`<option value="${id}">${esc(seasons[id].name)}${id===activeId?" (current)":""}</option>`).join("")||`<option value="">No seasons yet</option>`;
+  $("fSeason").value=ids.includes(sKeep)?sKeep:(ids.includes(activeId)?activeId:(ids[0]||""));
+  const sid=$("fSeason").value,S=seasons[sid];
+  $("seasonInfo").textContent=S?`${fmtDate(S.start)} – ${fmtDate(seasonEnd(S))} · ${S.weeks}-week season`:"";
+
+  const inSeason=nights.filter(n=>n.seasonId===sid);
+  const venues=[...new Set(inSeason.map(n=>n.venue))].sort(),vKeep=$("fVenue").value;
+  $("fVenue").innerHTML=`<option value="__all">All venues</option>`+venues.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  $("fVenue").value=venues.includes(vKeep)?vKeep:"__all";
+  const v=$("fVenue").value,q=tkey($("fSearch").value);
+  const list=inSeason.filter(n=>(game==="all"||n.game===game)&&(v==="__all"||n.venue===v));
+
+  let rows,head,cell,sortKey;
+  if(view==="venues"){
+    rows=rank(venueRows(list),"avg");
+    head=`<th>#</th><th>Venue</th><th class="r hide-sm">Nights</th><th class="r hide-sm">Teams</th><th class="r">Pts / Night</th>`;
+    cell=r=>`<td class="rank">${r.rank}</td><td class="team">${esc(r.name)}</td><td class="r hide-sm">${r.nights}</td><td class="r hide-sm">${r.teams}</td><td class="pts">${r.avg.toFixed(1)}</td>`;
+  }else{
+    rows=rank(teamRows(list),"pts");
+    head=`<th>#</th><th>Team</th><th class="r hide-sm">Nights</th><th class="r hide-sm">Wins</th><th class="r">Points</th>`;
+    cell=r=>`<td class="rank">${r.rank}</td><td class="team">${esc(r.name)}</td><td class="r hide-sm">${r.nights}</td><td class="r hide-sm">${r.wins}</td><td class="pts">${r.pts}</td>`;
+  }
+  const shown=q?rows.filter(r=>tkey(r.name).includes(q)):rows;
+  $("podium").innerHTML=rows.slice(0,3).map((r,i)=>`<div class="box pod ${i===0?"first":""}"><div class="n">${r.rank}</div><div class="t">${esc(r.name)}</div><div class="p">${view==="venues"?r.avg.toFixed(1)+" pts / night":r.pts+" pts"} · ${r.nights} night${r.nights===1?"":"s"}</div></div>`).join("");
+  $("standings").innerHTML=shown.length?`<table><thead><tr>${head}</tr></thead><tbody>${shown.map(r=>`<tr>${cell(r)}</tr>`).join("")}</tbody></table>`:`<div class="empty">No nights posted yet for this season.</div>`;
+
+  const bks=brackets.filter(b=>b.seasonId===sid);
+  $("bkSection").classList.toggle("hidden",!bks.length);
+  if(bks.length){
+    const bKeep=$("bkSel").value;
+    $("bkSel").innerHTML=bks.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join("");
+    $("bkSel").value=bks.some(b=>b.id===bKeep)?bKeep:bks[0].id;
+    const b=bks.find(x=>x.id===$("bkSel").value),M=bracketModel(b);
+    $("bkChamp").innerHTML=M.champion?`<div class="bk-champ">🏆 ${esc(M.champion)}</div>`:"";
+    $("bkView").innerHTML=bracketHTML(b,false);
+  }
+
+  const sc=(S&&S.scoring)||{},bn=id=>((sc.bonuses||[]).find(b=>b.id===id)||{label:id}).label;
+  $("nights").innerHTML=list.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(n=>`
+    <details class="box night"><summary><span>${fmtDate(n.date)} · ${esc(n.venue)}<span class="tag">${n.game==="bingo"?"Bingo":"Trivia"}</span></span><span class="muted">${n.results.length} teams</span></summary>
+    <table style="margin-top:10px"><tbody>${n.results.slice().sort((a,b)=>a.place-b.place).map(r=>`<tr><td class="rank">${r.place}</td><td class="team">${esc(r.team)}${(r.bonuses||[]).map(b=>`<span class="bonus">+ ${esc(bn(b))}</span>`).join("")}</td><td class="pts">${r.points}</td></tr>`).join("")}</tbody></table></details>`).join("")||`<div class="empty">Nothing here yet.</div>`;
+}
+$("fSeason").onchange=$("fVenue").onchange=$("bkSel").onchange=render;$("fSearch").oninput=render;
+$("fGame").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;game=b.dataset.g;[...$("fGame").children].forEach(x=>x.classList.toggle("on",x===b));render()});
+$("fView").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;view=b.dataset.v;[...$("fView").children].forEach(x=>x.classList.toggle("on",x===b));render()});
+render();
+
+
+</script>
+</body>
+</html>
