@@ -20,7 +20,7 @@
 }
 html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh}
 body{background:#000}
-.wrap{max-width:980px;margin:0 auto;padding:28px 18px 80px}
+.wrap{max-width:1400px;margin:0 auto;padding:28px 32px 80px}
 header{text-align:center;margin-bottom:22px}
 header .logo{height:96px;width:auto;max-width:300px;object-fit:contain;display:block;margin:0 auto 10px}
 header .brand{font-family:var(--display);font-size:clamp(44px,8vw,72px);letter-spacing:.06em;line-height:.9;color:#fff}
@@ -34,7 +34,7 @@ select{-webkit-appearance:none;appearance:none;padding-right:34px;cursor:pointer
 select option{background:#111;color:var(--text)}
 select:focus,input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
 .seg{display:flex;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden;min-width:0}
-.seg button{flex:1;background:rgba(255,255,255,.03);color:var(--text2);border:0;padding:11px 4px;font:600 9px var(--cinzel);letter-spacing:.06em;white-space:nowrap;min-width:0;text-transform:uppercase;cursor:pointer;transition:.2s}
+.seg button{flex:1;background:rgba(255,255,255,.03);color:var(--text2);border:0;padding:11px 14px;font:600 10px var(--cinzel);letter-spacing:.08em;white-space:nowrap;min-width:0;text-transform:uppercase;cursor:pointer;transition:.2s}
 .seg button.on{background:var(--gold-shine);color:#000}
 .seasoninfo{text-align:center;font-family:var(--serif);font-style:italic;font-size:15px;color:var(--text2);margin:6px 0 16px}
 .podium{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
@@ -75,16 +75,15 @@ h2{font-family:var(--cinzel);font-size:12px;letter-spacing:.2em;color:var(--gold
 
 /* ---- admin tools (only shown after Gateway check; styled like Trivia Admin) ---- */
 .filters{padding:16px;margin-bottom:10px}
-.fgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.fgrid{display:grid;grid-template-columns:1fr 1fr 1.5fr 1.1fr;gap:14px}
 .fsearch{margin-top:12px}
 #adminBar{border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:24px}
 .adminStrip{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .adminStrip .who{font:9px var(--cinzel);letter-spacing:.12em;text-transform:uppercase;color:var(--text2)}
 .adminStrip .acts{display:flex;gap:8px}
-@media(max-width:760px){.fgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){.fgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.wrap{padding:20px 16px 70px}}
 @media(max-width:440px){.fgrid{grid-template-columns:1fr}}
-.tabs{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start}
-.tabs>:first-child{margin-left:auto}.tabs>:last-child{margin-right:auto}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 #adminWrap{margin-top:4px}
 .pill{background:transparent;border:1px solid var(--border2);border-radius:99px;padding:7px 14px;font:10px var(--cinzel);letter-spacing:.08em;text-transform:uppercase;color:var(--text2);cursor:pointer;transition:all .2s;white-space:nowrap;flex-shrink:0}
 .pill:hover{border-color:var(--gold-glow);color:var(--gold2)}
