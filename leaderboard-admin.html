@@ -24,6 +24,7 @@ body{background:#000}
 header{text-align:center;margin-bottom:22px}
 header .logo{height:96px;width:auto;max-width:300px;object-fit:contain;display:block;margin:0 auto 10px}
 header .brand{font-family:var(--display);font-size:clamp(44px,8vw,72px);letter-spacing:.06em;line-height:.9;color:#fff}
+header .brand span{background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 header .page{font-family:var(--cinzel);font-size:13px;letter-spacing:.3em;text-transform:uppercase;margin-top:10px;background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .rule{height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);margin:16px auto 0;max-width:420px}
 .box{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 0 22px rgba(201,168,76,.08);padding:18px;backdrop-filter:blur(8px)}
@@ -144,7 +145,7 @@ input[type=checkbox]{accent-color:var(--gold)}
 
   <header>
     <img class="logo" src="logo.png" alt="" onerror="this.style.display='none'">
-    <div class="brand">BELLADONNA GAMES</div>
+    <div class="brand">BELLADONNA <span>GAMES</span></div>
     <div class="page">Leaderboard Admin</div>
     <div class="rule"></div>
   </header>
