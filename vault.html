@@ -394,6 +394,8 @@ table#bGrid{border-collapse:separate;border-spacing:0;width:100%;min-width:560px
             <select id="catType" title="Category type"></select>
             <span id="catCount"></span>
             <span id="catArchTag" class="tag hidden">Archived</span>
+            <button class="btn ghost sm" id="catEditBtn" title="See every song on this sheet as one list — edit it, or delete it all and paste a new one">Edit list</button>
+            <button class="btn ghost sm" id="catCopyBtn" title="Copy every song on this sheet as Song - Artist, one per line">Copy all</button>
             <button class="btn ghost sm" id="catMenuBtn">More ⋯</button>
           </div>
           <div class="aboutRow" id="aboutRow">
@@ -449,6 +451,8 @@ table#bGrid{border-collapse:separate;border-spacing:0;width:100%;min-width:560px
           <div class="tools">
             <input id="bQ" placeholder="Search songs…" autocomplete="off" style="width:200px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 13px;color:var(--text);font:14px var(--font);outline:none">
             <div class="chips" id="bFilter"><button class="pill on" data-f="all">All</button><button class="pill" data-f="have">In catalog</button><button class="pill" data-f="missing">Missing</button><button class="pill" data-f="tosearch" title="Not in your catalog and not searched for yet">To search</button><button class="pill" data-f="searched" title="Not in your catalog but already searched for on BPM Supreme">Searched</button></div>
+            <button class="btn ghost hidden" id="bEditAll" title="See every song on this list as text — edit it, or delete it all and paste a new one">Edit list</button>
+            <button class="btn ghost" id="bCopyAll" title="Copy every song shown here as Song - Artist, one per line">Copy all</button>
             <button class="btn ghost hidden" id="bExportMissing">Export CSV</button>
             <button class="btn ghost" id="bMore">More ⋯</button>
             <button class="btn ghost" id="bImport">Import songs</button>
@@ -1639,7 +1643,9 @@ $('#newCatBtn').addEventListener('click', () => {
 $('#catMenuBtn').addEventListener('click', () => {
   const c = S.cats.get(S.curId); if (!c) return;
   const body = document.createElement('div'); body.className = 'menuList';
-  body.innerHTML = `<button class="btn" data-a="export">Export this category as CSV</button>
+  body.innerHTML = `<button class="btn" data-a="edit">Edit list as text\u2026</button>
+    <button class="btn" data-a="copy">Copy all songs (Song - Artist)</button>
+    <button class="btn" data-a="export">Export this category as CSV</button>
     <button class="btn" data-a="recount">Recount questions</button>
     <button class="btn" data-a="archive">${c.archived ? 'Restore this category' : 'Archive this category'}</button>
     <p class="hint" style="margin:0 0 6px">Archiving hides the category from the list. Its questions are kept.</p>
@@ -1647,6 +1653,8 @@ $('#catMenuBtn').addEventListener('click', () => {
   openModal({ title: c.name, body, actions: [{ label: 'Close', onClick: closeModal }] });
   body.addEventListener('click', async e => {
     const b = e.target.closest('[data-a]'); if (!b) return;
+    if (b.dataset.a === 'edit'){ closeModal(); editCategoryList(); }
+    if (b.dataset.a === 'copy'){ closeModal(); copyCategorySongs(); }
     if (b.dataset.a === 'export'){ closeModal(); exportCSV(); }
     if (b.dataset.a === 'recount'){ closeModal(); await run(async () => { const snap = await getCountFromServer(query(qColl(), where('categoryId', '==', c.id), where('archived', '==', false))); await updateDoc(catRef(c.id), { questionCount: snap.data().count }); toast(`Recounted: ${snap.data().count} questions`); }); }
     if (b.dataset.a === 'archive'){ closeModal(); await run(() => updateDoc(catRef(c.id), { archived: !c.archived, updatedAt: serverTimestamp() })); }
@@ -1707,6 +1715,95 @@ function exportCSV(){
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
+/* Copy every song as "Song - Artist", one per line */
+function songLines(pairs){
+  const one = v => String(v == null ? '' : v).replace(/\s*[\r\n]+\s*/g, ' ').trim();
+  return pairs.map(([t, a]) => { t = one(t); a = one(a); return t ? (a ? t + ' - ' + a : t) : ''; }).filter(Boolean).join('\n');
+}
+async function copyLines(text, n){
+  if (!text){ toast('There are no songs to copy yet.'); return; }
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {}
+  if (!ok){ try { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); ta.remove(); } catch (e) {} }
+  toast(ok ? 'Copied ' + n.toLocaleString() + ' song' + (n === 1 ? '' : 's') + ' — paste anywhere, one per line.' : 'Couldn’t copy — your browser blocked it.');
+}
+function copyCategorySongs(){
+  const items = [...S.rows.values()].filter(r => r.persisted && !r.data.archived).sort((a, b) => (Number(a.data.order) || 0) - (Number(b.data.order) || 0)).map(r => r.data);
+  const pairs = items.map(d => [d.question, d.answer]).filter(p => String(p[0] || '').trim());
+  copyLines(songLines(pairs), pairs.length);
+}
+$('#catCopyBtn').addEventListener('click', copyCategorySongs);
+
+/* Edit a whole list as text: every song shows as "Song - Artist" — change it, or clear it and paste a new list */
+function splitSongLine(line){
+  line = line.trim(); if (!line) return null;
+  if (line.includes('\t')){ const [a, ...b] = line.split('\t'); return { t: a.trim(), a: b.join(' ').trim() }; }
+  const i = Math.max(line.lastIndexOf(' - '), line.lastIndexOf(' \u2013 '), line.lastIndexOf(' \u2014 '));
+  return i > 0 ? { t: line.slice(0, i).trim(), a: line.slice(i + 3).trim() } : { t: line, a: '' };
+}
+function parseEditedList(text){
+  const out = [], seen = new Set();
+  for (const raw of String(text || '').split(/\r?\n/)){
+    const x = splitSongLine(raw); if (!x || !x.t) continue;
+    const k = (x.t + '|' + x.a).toLowerCase().replace(/\s+/g, ' ');
+    if (seen.has(k)) continue; seen.add(k); out.push(x);
+  }
+  return out;
+}
+function openListEditor({ title, initial, saveLabel, onSave, extraHint }){
+  const body = document.createElement('div');
+  body.innerHTML = `<p class="hint" style="margin:0 0 8px">One song per line as <b style="color:var(--gold)">Song - Artist</b>. Change anything, or select it all, delete, and paste a brand-new list. Whatever is in this box becomes the list when you save.${extraHint || ''}</p>
+    <textarea id="leText" spellcheck="false" style="width:100%;min-height:340px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:10px 12px;font:inherit;font-size:13px;line-height:1.55;resize:vertical;white-space:pre"></textarea>
+    <p class="hint" id="leInfo" style="margin:8px 0 0"></p>`;
+  const was = parseEditedList(initial).length;
+  const actions = [{ label: 'Cancel', onClick: closeModal }, { label: saveLabel || 'Save list', primary: true, onClick: async () => {
+    const songs = parseEditedList($('#leText').value); if (!songs.length){ toast('The list is empty — paste at least one song, or use Delete to remove the list.'); return; }
+    actions[1].el.disabled = true; try { await onSave(songs); } finally { if (actions[1].el) actions[1].el.disabled = false; }
+  } }];
+  openModal({ title, body, wide: true, actions });
+  const ta = $('#leText'); ta.value = initial;
+  const upd = () => { const n = parseEditedList(ta.value).length; $('#leInfo').textContent = n + ' song' + (n === 1 ? '' : 's') + (n === was ? '' : ' (was ' + was + ')'); };
+  ta.addEventListener('input', upd); upd(); ta.focus();
+}
+async function editCategoryList(){
+  const c = S.cats.get(S.curId); if (!c) return;
+  const rows = [...S.rows.values()].filter(r => r.persisted && !r.data.archived).sort((a, b) => (Number(a.data.order) || 0) - (Number(b.data.order) || 0));
+  const initial = songLines(rows.map(r => [r.data.question, r.data.answer]).filter(p => String(p[0] || '').trim()));
+  const catId = c.id;
+  const show = init => openListEditor({ title: 'Edit list \u2014 ' + c.name, initial: init, saveLabel: 'Save list', extraHint: ' Songs you keep stay exactly as they are (audio links, start/end times and other columns are kept). Songs you remove are deleted from this sheet.',
+    onSave: async songs => {
+      const lk = (t, a) => (String(t || '') + '|' + String(a || '')).toLowerCase().replace(/\s+/g, ' ').trim();
+      const have = new Map(); for (const r of rows){ const k = lk(r.data.question, r.data.answer); if (!have.has(k)) have.set(k, r); }
+      const keep = new Set(), ops = []; let adds = 0, order = 0;
+      for (const x of songs){ const k = lk(x.t, x.a); order++; const r = have.get(k);
+        if (r){ keep.add(r); if (Number(r.data.order) !== order) ops.push(b => b.update(r.ref, { order, updatedAt: serverTimestamp() })); }
+        else { adds++; ops.push(b => b.set(doc(qColl()), { question: x.t, answer: x.a, categoryId: catId, order, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })); } }
+      const dels = rows.filter(r => !keep.has(r) ); dels.forEach(r => ops.push(b => b.delete(r.ref)));
+      if (dels.length && !(await confirmBox({ title: 'Replace this list?', message: 'This removes ' + dels.length + ' song' + (dels.length === 1 ? '' : 's') + ' from \u201c' + c.name + '\u201d and adds ' + adds + ' new one' + (adds === 1 ? '' : 's') + '.', ok: 'Replace list', danger: true }))){ show(songLines(songs.map(x => [x.t, x.a]))); return; }
+      closeModal();
+      await run(async () => {
+        for (let i = 0; i < ops.length; i += 400){ const b = writeBatch(db); ops.slice(i, i + 400).forEach(f => f(b)); await b.commit(); }
+        await updateDoc(catRef(catId), { questionCount: songs.length, updatedAt: serverTimestamp() });
+        if (S.curId === catId) S.maxOrder = songs.length;
+      });
+      toast('List saved \u2014 ' + songs.length + ' song' + (songs.length === 1 ? '' : 's') + ' (' + adds + ' new, ' + dels.length + ' removed).');
+    } });
+  show(initial);
+}
+$('#catEditBtn').addEventListener('click', editCategoryList);
+function editBingoList(){
+  const l = B.lists.get(B.curId); if (!l) return;
+  const id = l.id, old = l.songs;
+  openListEditor({ title: 'Edit list \u2014 ' + l.name, initial: songLines(old.map(s => [s.t, s.a])), saveLabel: 'Save list',
+    extraHint: ' Your catalog ticks follow the songs, so kept songs stay ticked.',
+    onSave: async songs => {
+      const byKey = new Map(old.map(s => [songKey(s.t, s.a), s]));
+      const next = songs.map(x => { const o = byKey.get(songKey(x.t, x.a)); return o && o.m ? { t: x.t, a: x.a, m: o.m } : { t: x.t, a: x.a }; });
+      closeModal(); await saveSongs(id, next);
+      toast('List saved \u2014 ' + next.length + ' song' + (next.length === 1 ? '' : 's') + '.');
+    } });
+}
+$('#bEditAll').addEventListener('click', editBingoList);
 async function saveCustom(list){ await setDoc(doc(db, 'triviaConfig', 'columns'), { custom: list, updatedAt: serverTimestamp() }, { merge: true }); }
 async function saveOrder(keys){ S.order = keys; await setDoc(doc(db, 'triviaConfig', 'columns'), { order: keys, updatedAt: serverTimestamp() }, { merge: true }); }
 
@@ -2136,7 +2233,7 @@ function renderBingoAll(){
   if (!show) return;
   const nm = $('#bName');
   $('#bAdd').classList.toggle('hidden', special); $('#bImport').classList.toggle('hidden', special);
-  $('#bMore').classList.toggle('hidden', special); $('#bExportMissing').classList.toggle('hidden', !special);
+  $('#bMore').classList.toggle('hidden', special); $('#bEditAll').classList.toggle('hidden', special); $('#bExportMissing').classList.toggle('hidden', !special);
   nm.readOnly = special;
   if (special){ nm.value = isCat ? 'My whole catalog' : 'Everything I’m missing'; $('#bArch').classList.add('hidden'); }
   else { if (document.activeElement !== nm) nm.value = l.name; $('#bArch').classList.toggle('hidden', !l.archived); }
@@ -2442,6 +2539,7 @@ function exportBingoCSV(rows, name){
   const csv = ['Song,Artist,In catalog', ...rows.map(r => [csvEscape(r.t), csvEscape(r.a), isOwned(r) ? 'Yes' : 'No'].join(','))].join('\r\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = name.replace(/[^\w\- ]+/g, '') + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
+$('#bCopyAll').addEventListener('click', () => { const rows = currentRows(); const pairs = rows.map(r => [r.t, r.a]).filter(p => String(p[0] || '').trim()); copyLines(songLines(pairs), pairs.length); });
 $('#bExportMissing').addEventListener('click', () => B.curId === CATALOG ? exportBingoCSV(catalogRows(), 'My catalog') : exportBingoCSV(missingSongs(), 'Songs I am missing'));
 $('#bMore').addEventListener('click', () => {
   const l = B.lists.get(B.curId); if (!l) return;
