@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Belladonna Leaderboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600&family=DM+Sans:wght@300;400;500;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+/* ===== Belladonna tokens — swap these for hq.html's :root values if they differ ===== */
+:root{
+  --black:#0a0a0a; --panel:#141210; --panel2:#1b1814; --line:rgba(201,162,75,.28);
+  --gold:#c9a24b; --gold-lt:#e6c878; --gold-dk:#8a6d2b;
+  --text:#f2ece0; --muted:#9a917f;
+  --ok:#4caf6a; --bad:#d9534f; --half:#e0b83a;
+  --glow:0 0 18px rgba(201,162,75,.18);
+  --r:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--black);color:var(--text);font-family:'DM Sans',sans-serif;font-weight:300;min-height:100vh}
+body{background:radial-gradient(1100px 500px at 50% -120px,rgba(201,162,75,.10),transparent 70%),var(--black)}
+.wrap{max-width:980px;margin:0 auto;padding:28px 18px 80px}
+header{text-align:center;margin-bottom:26px}
+header .brand{font-family:'Bebas Neue',sans-serif;font-size:2.6rem;letter-spacing:.28em;color:#fff;line-height:1}
+header .page{font-family:'Cinzel',serif;font-size:1.05rem;letter-spacing:.38em;color:var(--gold);margin-top:6px;text-transform:uppercase}
+.rule{height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);margin:16px auto 0;max-width:420px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--glow);padding:18px}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+label.lbl{display:block;font-family:'Cinzel',serif;font-size:.68rem;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin-bottom:6px}
+select,input[type=text],input[type=number],input[type=date],input[type=email],input[type=password]{
+  width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;
+  padding:10px 12px;font:400 .95rem 'DM Sans',sans-serif;outline:none}
+select:focus,input:focus{border-color:var(--gold);box-shadow:var(--glow)}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{flex:1;background:var(--panel2);color:var(--muted);border:0;padding:10px 6px;font:500 .8rem 'DM Sans',sans-serif;letter-spacing:.06em;cursor:pointer}
+.seg button.on{background:var(--gold);color:#120e05}
+.btn{background:transparent;color:var(--gold);border:1px solid var(--gold);border-radius:10px;padding:9px 16px;font:500 .8rem 'DM Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:.15s}
+.btn:hover{background:var(--gold);color:#120e05;box-shadow:var(--glow)}
+.btn.solid{background:var(--gold);color:#120e05}
+.btn.sm{padding:5px 10px;font-size:.7rem}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn.danger:hover{background:var(--bad);color:#fff}
+.podium{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.pod{text-align:center;padding:16px 8px}
+.pod .n{font-family:'Bebas Neue',sans-serif;font-size:2.2rem;color:var(--gold)}
+.pod .t{font-family:'EB Garamond',serif;font-size:1.25rem;margin:2px 0}
+.pod .p{font-size:.85rem;color:var(--muted)}
+.pod.first{border-color:var(--gold);box-shadow:0 0 26px rgba(201,162,75,.3)}
+table{width:100%;border-collapse:collapse}
+th{font-family:'Cinzel',serif;font-size:.66rem;letter-spacing:.18em;color:var(--gold);text-align:left;padding:8px 10px;text-transform:uppercase;border-bottom:1px solid var(--line)}
+td{padding:11px 10px;border-bottom:1px solid rgba(201,162,75,.10);font-size:.95rem}
+td.rank{font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--gold);width:48px}
+td.team{font-family:'EB Garamond',serif;font-size:1.15rem;font-weight:500}
+td.pts{font-weight:700;color:var(--gold-lt);text-align:right}
+th.r,td.r{text-align:right}
+tr.me td{background:rgba(201,162,75,.07)}
+.muted{color:var(--muted)} .empty{text-align:center;color:var(--muted);padding:34px 10px;font-family:'EB Garamond',serif;font-size:1.1rem}
+h2{font-family:'Cinzel',serif;font-size:.95rem;letter-spacing:.22em;color:var(--gold);text-transform:uppercase;margin:26px 0 12px}
+.night{margin-bottom:10px}
+.night summary{cursor:pointer;display:flex;justify-content:space-between;gap:10px;list-style:none;font-weight:400}
+.night summary::-webkit-details-marker{display:none}
+.tag{display:inline-block;border:1px solid var(--line);border-radius:20px;padding:2px 9px;font-size:.68rem;letter-spacing:.08em;color:var(--gold);margin-left:6px}
+.tag.draft{color:var(--half);border-color:var(--half)}
+.bonus{font-size:.72rem;color:var(--ok);margin-left:6px}
+.hidden{display:none!important}
+.admin-bar{display:flex;justify-content:flex-end;margin-bottom:10px}
+.row{display:grid;grid-template-columns:2fr .7fr .7fr 2.2fr .7fr auto;gap:8px;align-items:center;margin-bottom:8px}
+.row .chk{display:flex;flex-wrap:wrap;gap:8px;font-size:.78rem}
+.row .chk label{display:flex;align-items:center;gap:4px;cursor:pointer}
+input[type=checkbox]{accent-color:var(--gold)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--gold);border-radius:30px;padding:10px 22px;box-shadow:var(--glow);z-index:50;font-size:.85rem}
+.demo{background:rgba(224,184,58,.1);border:1px solid var(--half);color:var(--half);border-radius:10px;padding:8px 12px;font-size:.78rem;margin-bottom:14px;text-align:center}
+@media(max-width:640px){.row{grid-template-columns:1fr 1fr}.podium{grid-template-columns:1fr}.hide-sm{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">BELLADONNA</div>
+    <div class="page">Season Leaderboard</div>
+    <div class="rule"></div>
+  </header>
+
+  <div id="demoBanner" class="demo hidden">Preview mode — showing sample data. Paste your Firebase config in the script to go live.</div>
+
+  <div class="admin-bar">
+    <button class="btn sm" id="adminToggle">Admin</button>
+  </div>
+
+  <!-- Public view -->
+  <div class="controls">
+    <div><label class="lbl">Venue</label><select id="fVenue"></select></div>
+    <div><label class="lbl">Season</label><select id="fSeason"></select></div>
+    <div><label class="lbl">Board</label>
+      <div class="seg" id="fGame">
+        <button data-g="trivia" class="on">Trivia</button><button data-g="bingo">Bingo</button><button data-g="all">Combined</button>
+      </div></div>
+    <div><label class="lbl">Find a team</label><input type="text" id="fSearch" placeholder="Team name"></div>
+  </div>
+
+  <div id="podium" class="podium"></div>
+  <div class="box" style="padding:6px 10px"><div id="standings"></div></div>
+
+  <h2>Night by Night</h2>
+  <div id="nights"></div>
+
+  <!-- Admin -->
+  <section id="admin" class="hidden">
+    <h2>Admin</h2>
+    <div id="authBox" class="box">
+      <div class="grid2">
+        <div><label class="lbl">Email</label><input type="email" id="aEmail"></div>
+        <div><label class="lbl">Password</label><input type="password" id="aPass"></div>
+      </div>
+      <button class="btn solid" id="signIn">Sign in</button>
+    </div>
+
+    <div id="adminTools" class="hidden">
+      <div class="admin-bar" style="justify-content:space-between">
+        <span class="muted" id="who"></span><button class="btn sm" id="signOut">Sign out</button>
+      </div>
+
+      <div id="draftsBox" class="hidden">
+        <h2 style="margin-top:6px">Needs Review</h2>
+        <div id="drafts"></div>
+      </div>
+
+      <h2>Add / Edit a Night</h2>
+      <div class="box">
+        <div class="grid2">
+          <div><label class="lbl">Venue</label><input type="text" id="nVenue" list="venueList" placeholder="Venue name"><datalist id="venueList"></datalist></div>
+          <div><label class="lbl">Game</label><select id="nGame"><option value="trivia">Trivia</option><option value="bingo">Bingo</option></select></div>
+          <div><label class="lbl">Date</label><input type="date" id="nDate"></div>
+        </div>
+        <div id="rows"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+          <button class="btn sm" id="addRow">+ Team</button>
+          <button class="btn solid" id="saveNight">Post night</button>
+          <button class="btn sm hidden" id="cancelEdit">Cancel edit</button>
+        </div>
+        <div class="muted" style="font-size:.78rem;margin-top:10px">Points fill in from placement + bonuses. Change the points box to override.</div>
+      </div>
+
+      <h2>Scoring &amp; Season</h2>
+      <div class="box">
+        <div class="grid2">
+          <div><label class="lbl">Current season name</label><input type="text" id="sName"></div>
+          <div><label class="lbl">Placement points (1st, 2nd, 3rd…)</label><input type="text" id="sPlace" placeholder="10,7,5,3"></div>
+          <div><label class="lbl">Participation points</label><input type="number" id="sPart" min="0"></div>
+        </div>
+        <label class="lbl">Bonuses (one per line: Label, points)</label>
+        <textarea id="sBonus" rows="4" style="width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font:400 .9rem 'DM Sans',sans-serif"></textarea>
+        <div style="margin-top:12px"><button class="btn solid" id="saveSettings">Save scoring</button></div>
+        <div class="muted" style="font-size:.78rem;margin-top:8px">Changing scoring only affects nights posted afterward; past nights keep the points they were posted with.</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+/* ===== Firebase config — paste the same one your other apps use (belladonna-hq) ===== */
+const FIREBASE_CONFIG = {
+  apiKey: "",            // <- paste
+  authDomain: "belladonna-hq.firebaseapp.com",
+  projectId: "belladonna-hq",
+  appId: ""              // <- paste
+};
+const LIVE = !!FIREBASE_CONFIG.apiKey;
+const DEFAULT_SETTINGS = {
+  season: "Fall 2026",
+  placement: [10,7,5,3],
+  participation: 1,
+  bonuses: [{id:"perfect",label:"Perfect round",points:2},{id:"streak",label:"Attendance streak",points:1},{id:"bonusq",label:"Bonus question",points:1}]
+};
+
+let db=null, auth=null, nights=[], settings={...DEFAULT_SETTINGS}, isAdmin=false, editId=null;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const tkey=s=>String(s).trim().toLowerCase().replace(/\s+/g," ");
+const toast=m=>{const t=document.createElement("div");t.className="toast";t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2400)};
+const fmtDate=d=>{try{return new Date(d+"T12:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}catch(e){return d}};
+let game="trivia";
+
+/* ---------- data ---------- */
+function sample(){
+  const mk=(v,g,d,s,rows)=>({id:v+g+d,venue:v,game:g,date:d,season:s,status:"posted",results:rows});
+  nights=[
+    mk("Sample Tavern","trivia","2026-09-08","Fall 2026",[{team:"Quiz Khalifa",place:1,points:12,bonuses:["perfect"]},{team:"Les Quizerables",place:2,points:7,bonuses:[]},{team:"Trivia Newton John",place:3,points:5,bonuses:[]}]),
+    mk("Sample Tavern","trivia","2026-09-15","Fall 2026",[{team:"Les Quizerables",place:1,points:10,bonuses:[]},{team:"Quiz Khalifa",place:2,points:8,bonuses:["streak"]},{team:"Trivia Newton John",place:3,points:5,bonuses:[]}]),
+    mk("Sample Tavern","bingo","2026-09-10","Fall 2026",[{team:"Lucky Lou",place:1,points:10,bonuses:[]},{team:"Quiz Khalifa",place:2,points:7,bonuses:[]}])
+  ];
+}
+function subscribe(){
+  db.collection("leaderboardNights").onSnapshot(s=>{nights=s.docs.map(d=>({id:d.id,...d.data()}));render()},e=>{console.error(e);toast("Could not load nights")});
+  db.collection("leaderboardSettings").doc("config").onSnapshot(d=>{if(d.exists)settings={...DEFAULT_SETTINGS,...d.data()};fillSettings();render()});
+}
+
+/* ---------- scoring ---------- */
+function calcPoints(place,bonusIds){
+  let p=settings.placement[place-1]; if(p==null)p=settings.participation||0;
+  (bonusIds||[]).forEach(id=>{const b=settings.bonuses.find(x=>x.id===id);if(b)p+=+b.points||0});
+  return p;
+}
+
+/* ---------- public render ---------- */
+function posted(){return nights.filter(n=>n.status!=="draft")}
+function render(){
+  const venues=[...new Set(posted().map(n=>n.venue))].sort();
+  const seasons=[...new Set(posted().map(n=>n.season).concat([settings.season]))].sort().reverse();
+  const vSel=$("fVenue").value||"__all", sSel=$("fSeason").value||settings.season;
+  $("fVenue").innerHTML=`<option value="__all">All venues</option>`+venues.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  $("fVenue").value=venues.includes(vSel)?vSel:"__all";
+  $("fSeason").innerHTML=seasons.map(s=>`<option>${esc(s)}</option>`).join("");
+  $("fSeason").value=seasons.includes(sSel)?sSel:settings.season;
+  $("venueList").innerHTML=venues.map(v=>`<option value="${esc(v)}">`).join("");
+
+  const v=$("fVenue").value, s=$("fSeason").value, q=tkey($("fSearch").value);
+  const list=posted().filter(n=>n.season===s&&(v==="__all"||n.venue===v)&&(game==="all"||n.game===game));
+  const agg={};
+  list.forEach(n=>n.results.forEach(r=>{
+    const k=tkey(r.team); const a=agg[k]||(agg[k]={team:r.team,pts:0,nights:0,wins:0,last:""});
+    a.pts+=+r.points||0;a.nights++;if(+r.place===1)a.wins++; if(n.date>a.last){a.last=n.date;a.team=r.team}
+  }));
+  let rows=Object.values(agg).sort((a,b)=>b.pts-a.pts||b.wins-a.wins||b.nights-a.nights||a.team.localeCompare(b.team));
+  let rank=0,prev=null; rows.forEach((r,i)=>{if(r.pts!==prev){rank=i+1;prev=r.pts}r.rank=rank});
+  const shown=q?rows.filter(r=>tkey(r.team).includes(q)):rows;
+
+  $("podium").innerHTML=rows.slice(0,3).map((r,i)=>`<div class="box pod ${i===0?"first":""}"><div class="n">${r.rank}</div><div class="t">${esc(r.team)}</div><div class="p">${r.pts} pts · ${r.nights} night${r.nights===1?"":"s"}</div></div>`).join("");
+  $("standings").innerHTML=shown.length?`<table><thead><tr><th>#</th><th>Team</th><th class="r hide-sm">Nights</th><th class="r hide-sm">Wins</th><th class="r">Points</th></tr></thead><tbody>${
+    shown.map(r=>`<tr><td class="rank">${r.rank}</td><td class="team">${esc(r.team)}</td><td class="r hide-sm">${r.nights}</td><td class="r hide-sm">${r.wins}</td><td class="pts">${r.pts}</td></tr>`).join("")}</tbody></table>`
+    :`<div class="empty">No nights posted yet for this season.</div>`;
+
+  const bn=id=>(settings.bonuses.find(b=>b.id===id)||{label:id}).label;
+  $("nights").innerHTML=list.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(n=>`
+    <details class="box night"><summary><span>${fmtDate(n.date)} · ${esc(n.venue)}<span class="tag">${n.game==="bingo"?"Bingo":"Trivia"}</span></span>
+    <span class="muted">${n.results.length} teams</span></summary>
+    <table style="margin-top:10px"><tbody>${n.results.slice().sort((a,b)=>a.place-b.place).map(r=>`<tr><td class="rank">${r.place}</td><td class="team">${esc(r.team)}${(r.bonuses||[]).map(b=>`<span class="bonus">+ ${esc(bn(b))}</span>`).join("")}</td><td class="pts">${r.points}</td></tr>`).join("")}</tbody></table>
+    ${isAdmin?`<div style="margin-top:10px;display:flex;gap:8px"><button class="btn sm" onclick="editNight('${n.id}')">Edit</button><button class="btn sm danger" onclick="delNight('${n.id}')">Delete</button></div>`:""}
+    </details>`).join("")||`<div class="empty">Nothing here yet.</div>`;
+
+  renderDrafts();
+}
+
+/* ---------- admin ---------- */
+function rowHTML(r={}){
+  const chk=settings.bonuses.map(b=>`<label><input type="checkbox" value="${esc(b.id)}" ${(r.bonuses||[]).includes(b.id)?"checked":""}>${esc(b.label)}</label>`).join("");
+  return `<div class="row"><input type="text" class="rTeam" placeholder="Team" value="${esc(r.team||"")}">
+    <input type="number" class="rPlace" min="1" placeholder="Place" value="${r.place||""}">
+    <input type="number" class="rScore" placeholder="Game score" value="${r.score??""}">
+    <div class="chk">${chk}</div>
+    <input type="number" class="rPts" placeholder="Pts" value="${r.points??""}" data-manual="${r.manual?1:0}">
+    <button class="btn sm danger" onclick="this.parentElement.remove()">✕</button></div>`;
+}
+function addRow(r){$("rows").insertAdjacentHTML("beforeend",rowHTML(r))}
+$("rows").addEventListener("input",e=>{
+  const row=e.target.closest(".row"); if(!row)return;
+  const pts=row.querySelector(".rPts");
+  if(e.target===pts){pts.dataset.manual="1";return}
+  if(pts.dataset.manual==="1")return;
+  const place=+row.querySelector(".rPlace").value; if(!place)return;
+  pts.value=calcPoints(place,[...row.querySelectorAll(".chk input:checked")].map(i=>i.value));
+});
+function readForm(){
+  const results=[...$("rows").querySelectorAll(".row")].map(r=>{
+    const team=r.querySelector(".rTeam").value.trim(), place=+r.querySelector(".rPlace").value;
+    if(!team||!place)return null;
+    const bonuses=[...r.querySelectorAll(".chk input:checked")].map(i=>i.value);
+    const ptsEl=r.querySelector(".rPts"); const manual=ptsEl.dataset.manual==="1";
+    const points=ptsEl.value!==""?+ptsEl.value:calcPoints(place,bonuses);
+    const sc=r.querySelector(".rScore").value;
+    return {team,place,points,bonuses,manual,...(sc!==""?{score:+sc}:{})};
+  }).filter(Boolean);
+  return {venue:$("nVenue").value.trim(),game:$("nGame").value,date:$("nDate").value,results};
+}
+function resetForm(){editId=null;$("nVenue").value="";$("nDate").value=new Date().toISOString().slice(0,10);$("rows").innerHTML="";for(let i=0;i<3;i++)addRow();$("cancelEdit").classList.add("hidden");$("saveNight").textContent="Post night"}
+window.editNight=id=>{
+  const n=nights.find(x=>x.id===id); if(!n)return;
+  editId=id;$("nVenue").value=n.venue;$("nGame").value=n.game;$("nDate").value=n.date;$("rows").innerHTML="";
+  n.results.slice().sort((a,b)=>a.place-b.place).forEach(r=>addRow({...r,manual:true}));
+  $("cancelEdit").classList.remove("hidden");$("saveNight").textContent=n.status==="draft"?"Approve & post":"Save changes";
+  $("admin").scrollIntoView({behavior:"smooth"});
+};
+window.delNight=async id=>{
+  if(!confirm("Delete this night? Its points come off the leaderboard."))return;
+  if(!LIVE){nights=nights.filter(n=>n.id!==id);render();return}
+  await db.collection("leaderboardNights").doc(id).delete();toast("Deleted");
+};
+function renderDrafts(){
+  const d=nights.filter(n=>n.status==="draft");
+  $("draftsBox").classList.toggle("hidden",!(isAdmin&&d.length));
+  $("drafts").innerHTML=d.map(n=>`<div class="box night" style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span>${fmtDate(n.date)} · ${esc(n.venue)}<span class="tag draft">Draft</span><span class="tag">${n.game==="bingo"?"Bingo":"Trivia"}</span></span><span><button class="btn sm" onclick="editNight('${n.id}')">Review</button> <button class="btn sm danger" onclick="delNight('${n.id}')">Discard</button></span></div>`).join("");
+}
+$("saveNight").onclick=async()=>{
+  const f=readForm();
+  if(!f.venue||!f.date||!f.results.length){toast("Need venue, date and at least one team");return}
+  const doc={...f,season:settings.season,status:"posted",locationId:"wa-southsound",updatedAt:Date.now()};
+  if(!LIVE){if(editId)nights=nights.filter(n=>n.id!==editId);nights.push({id:"x"+Date.now(),...doc});render();resetForm();toast("Posted (preview only)");return}
+  try{
+    if(editId){const old=nights.find(n=>n.id===editId);doc.season=old.season||settings.season;await db.collection("leaderboardNights").doc(editId).set(doc,{merge:true})}
+    else await db.collection("leaderboardNights").add(doc);
+    toast("Posted");resetForm();
+  }catch(e){console.error(e);toast("Save failed — are you signed in as admin?")}
+};
+$("cancelEdit").onclick=resetForm;
+$("addRow").onclick=()=>addRow();
+
+function fillSettings(){
+  $("sName").value=settings.season;$("sPlace").value=settings.placement.join(",");$("sPart").value=settings.participation;
+  $("sBonus").value=settings.bonuses.map(b=>`${b.label}, ${b.points}`).join("\n");
+}
+$("saveSettings").onclick=async()=>{
+  const bonuses=$("sBonus").value.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{
+    const i=l.lastIndexOf(",");const label=(i>0?l.slice(0,i):l).trim();const points=i>0?+l.slice(i+1):1;
+    return {id:label.toLowerCase().replace(/[^a-z0-9]+/g,"-"),label,points:isNaN(points)?1:points};
+  });
+  const s={season:$("sName").value.trim()||settings.season,placement:$("sPlace").value.split(",").map(x=>+x.trim()).filter(x=>!isNaN(x)),participation:+$("sPart").value||0,bonuses};
+  settings=s;
+  if(LIVE){try{await db.collection("leaderboardSettings").doc("config").set(s)}catch(e){toast("Save failed");return}}
+  toast("Scoring saved");render();resetForm();
+};
+
+/* ---------- auth + wiring ---------- */
+$("adminToggle").onclick=()=>$("admin").classList.toggle("hidden");
+function setAdmin(on,email){
+  isAdmin=on;$("authBox").classList.toggle("hidden",on);$("adminTools").classList.toggle("hidden",!on);
+  $("who").textContent=email||"";render();
+}
+$("signIn").onclick=async()=>{
+  if(!LIVE){setAdmin(true,"preview");return}
+  try{await auth.signInWithEmailAndPassword($("aEmail").value,$("aPass").value)}catch(e){toast("Sign-in failed")}
+};
+$("signOut").onclick=()=>LIVE?auth.signOut():setAdmin(false);
+$("fVenue").onchange=$("fSeason").onchange=render;$("fSearch").oninput=render;
+$("fGame").addEventListener("click",e=>{
+  const b=e.target.closest("button");if(!b)return;game=b.dataset.g;
+  [...$("fGame").children].forEach(x=>x.classList.toggle("on",x===b));render();
+});
+
+(function init(){
+  if(LIVE){
+    firebase.initializeApp(FIREBASE_CONFIG);db=firebase.firestore();auth=firebase.auth();
+    auth.onAuthStateChanged(async u=>{
+      if(!u){setAdmin(false);return}
+      // admin = Firestore doc admins/<uid>; matches Gateway-style role gating
+      try{const a=await db.collection("admins").doc(u.uid).get();setAdmin(a.exists,u.email)}catch(e){setAdmin(false)}
+    });
+    subscribe();
+  }else{$("demoBanner").classList.remove("hidden");sample()}
+  fillSettings();resetForm();render();
+})();
+</script>
+</body>
+</html>
