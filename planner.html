@@ -844,6 +844,11 @@ a{color:inherit}
       <label class="form-label">Description <span style="opacity:.6;font-weight:normal">(what this category is about — shown to venues on the Venue Menu and in the Trivia &amp; Bingo admins)</span></label>
       <textarea class="form-textarea" id="t-desc" rows="3" placeholder="e.g. Teen supernatural shows — vampires, witches, monsters and melodrama. Think Buffy, Vampire Diaries, Charmed…"></textarea>
     </div>
+    <div id="t-banner-wrap">
+      <label class="form-label">Banner image URL <span style="opacity:.6;font-weight:normal">(shown on the Venue Menu and anywhere else this category appears)</span></label>
+      <input type="text" class="form-input" id="t-banner" placeholder="https://…/banner.jpg" oninput="previewThemeBanner()" style="margin-bottom:6px">
+      <div id="t-banner-preview" style="display:none;margin-bottom:12px;border:1px solid var(--border2);border-radius:10px;overflow:hidden;max-height:130px"><img id="t-banner-img" alt="" style="display:block;width:100%;max-height:130px;object-fit:cover" onerror="this.parentNode.style.display='none'"></div>
+    </div>
     <div id="t-movies-wrap" style="display:none"><label class="form-label">Movies paired with this theme night</label><div id="t-movies-list" style="margin-bottom:12px"></div></div>
     <label class="form-label">Tags</label>
     <div id="t-tag-chips"></div>
@@ -1628,6 +1633,7 @@ function libRecord(source, id, c){
     name: c.name || c.title || '',
     altName: c.altName || '',
     description: (c.venueMenu && c.venueMenu.description) || c.description || '',
+    bannerUrl: (c.venueMenu && c.venueMenu.bannerUrl) || c.bannerUrl || '',
     tier,
     typeLabel: source==='vm' ? (c.type||'') : '',
     tags: normalizeVmTags(c.tags),
@@ -3774,6 +3780,8 @@ function openThemeModal(key){
   // its own Type field in the Venue Menu, so the tier selector is read-only there.
   document.getElementById('t-tier').disabled = (editingThemeSource==='bingo');
   document.getElementById('t-desc').value = rec.description||'';
+  document.getElementById('t-banner').value = rec.bannerUrl||'';
+  previewThemeBanner();
   { const pm = (key && editingThemeSource==='trivia') ? Object.values(moviesRaw||{}).filter(m=>(m.pairs||[]).some(p=>p.id===editingThemeId)) : [];
     document.getElementById('t-movies-wrap').style.display = pm.length ? '' : 'none';
     document.getElementById('t-movies-list').innerHTML = pm.map(m=>`<span class="tag-chip" style="margin:1px">🎬 ${escapeHtml(m.title||'')}${m.year?' ('+escapeHtml(m.year)+')':''}</span>`).join(''); }
@@ -3863,6 +3871,10 @@ function addPairChip(ref){
   if(!editingThemePairs.includes(ref)) editingThemePairs.push(ref);
   renderPairsWithSection();
 }
+function previewThemeBanner(){
+  const u = (document.getElementById('t-banner').value||'').trim(), box = document.getElementById('t-banner-preview'), img = document.getElementById('t-banner-img');
+  if(/^https?:\/\//i.test(u)){ img.src = u; box.style.display = 'block'; } else { box.style.display = 'none'; }
+}
 function saveTheme(){
   // Source-aware: edits the record in whichever store owns it (Trivia RTDB,
   // Bingo RTDB, or Venue Menu Firestore) — one record, one id, no copies.
@@ -3887,6 +3899,8 @@ function saveTheme(){
     lastUsedVenueId: existing.lastUsedVenueId || null
   };
   const descVal = (document.getElementById('t-desc').value||'').trim();
+  const bannerVal = (document.getElementById('t-banner').value||'').trim();
+  if(bannerVal && !/^https?:\/\//i.test(bannerVal)) return toast('Banner URL must start with https://', true);
   const commonFields = {
     name,
     altName: (source==='trivia') ? (document.getElementById('t-alt').value.trim() || null) : undefined,
@@ -3904,10 +3918,11 @@ function saveTheme(){
   if(source==='trivia'){
     if(isNew){
       rtdbUpdates[libPath+'/'+themeId] = { ...commonFields, type: 'trivia', createdAt: Date.now(), unified: true,
-        notes: 'Created from the Planner — add sheets/images/music in Trivia Admin.', ...(descVal ? {venueMenu:{description:descVal}} : {}) };
+        notes: 'Created from the Planner — add sheets/images/music in Trivia Admin.', ...((descVal||bannerVal) ? {venueMenu:{...(descVal?{description:descVal}:{}), ...(bannerVal?{bannerUrl:bannerVal}:{})}} : {}) };
     } else {
       ['name','altName','tags','plannerTier','pairsWith','karaokeSongs','plannerUsage'].forEach(f=>{ rtdbUpdates[libPath+'/'+themeId+'/'+f] = commonFields[f]; });
       rtdbUpdates[libPath+'/'+themeId+'/venueMenu/description'] = descVal || null;
+      rtdbUpdates[libPath+'/'+themeId+'/venueMenu/bannerUrl'] = bannerVal || null;
     }
   } else if(source==='bingo'){
     rtdbUpdates[bPath+'/'+themeId+'/title'] = name;
@@ -3916,9 +3931,10 @@ function saveTheme(){
     rtdbUpdates[bPath+'/'+themeId+'/pairsWith'] = commonFields.pairsWith;
     rtdbUpdates[bPath+'/'+themeId+'/plannerUsage'] = commonFields.plannerUsage;
     rtdbUpdates[bPath+'/'+themeId+'/venueMenu/description'] = descVal || null;
+    rtdbUpdates[bPath+'/'+themeId+'/venueMenu/bannerUrl'] = bannerVal || null;
   } else {
     const vmType = {karaoke:'Karaoke','sing-along':'Sing-Along','mini-games':'Mini Games'}[tier];
-    const vmData = { name, tags: editingThemeTags.join(', '), pairsWith: commonFields.pairsWith || [], plannerTier: tier || null, updatedAt: Date.now() };
+    const vmData = { name, tags: editingThemeTags.join(', '), pairsWith: commonFields.pairsWith || [], plannerTier: tier || null, bannerUrl: bannerVal || null, updatedAt: Date.now() };
     if(vmType) vmData.type = vmType;
     fsUpdates.push({ id: themeId, data: vmData });
   }
