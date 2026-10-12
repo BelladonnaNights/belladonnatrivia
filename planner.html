@@ -174,7 +174,7 @@ a{color:inherit}
 /* VENUE DETAIL */
 .vd-toolbar{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
 .vd-view-toggle{display:flex;gap:4px}
-.tl-row{display:grid;grid-template-columns:112px 1fr 1fr 110px;gap:8px;align-items:center;padding:7px 10px;
+.tl-row{display:grid;grid-template-columns:176px 1fr 1fr 104px 30px;gap:8px;align-items:center;padding:7px 10px;
   background:var(--surface3);border-radius:var(--radius);margin-bottom:5px}
 .tl-row.tl-today{border:1px solid var(--gold-glow2)}
 .tl-row.tl-past{opacity:.6}
@@ -182,7 +182,19 @@ a{color:inherit}
 .tl-grip:hover{color:var(--gold)}
 .tl-row.tl-dragging{opacity:.4}
 .tl-row.tl-drop{outline:2px dashed var(--gold);outline-offset:-2px}
-.tl-date{font-family:var(--cinzel);font-size:10px;letter-spacing:.04em;color:var(--text3)}
+.tl-date{font-family:var(--cinzel);font-size:10px;letter-spacing:.04em;color:var(--text3);white-space:nowrap}
+.tl-row{padding-top:4px!important;padding-bottom:4px!important}
+.tl-input,.tl-select{padding-top:3px!important;padding-bottom:3px!important;font-size:12.5px!important}
+.tl-lock{display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;user-select:none;opacity:.35;transition:.15s}
+.tl-lock:hover{opacity:.8}
+.tl-lock input{display:none}
+.tl-row.tl-locked{border:1px solid var(--gold-glow2);background:rgba(201,168,76,.07)}
+.tl-row.tl-locked .tl-lock{opacity:1}
+.tl-row.tl-venueset .tl-lock{opacity:1;cursor:help}
+/* wider pop-ups wherever the day-by-day category list shows */
+#quick-schedule-overlay .modal.wide,#gig-modal-overlay .modal.wide{max-width:1240px}
+/* the Liked categories pop-up opens ON TOP of the Plan / Assign pop-ups */
+#bingo-liked-overlay{z-index:650}
 .tl-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 9px;
   color:var(--text);font-size:12.5px;font-family:var(--font)}
 .tl-input:focus{outline:none;border-color:var(--gold-glow2)}
@@ -1886,6 +1898,7 @@ function rebuildGigsState(){
         note: e.notes||'',
         host: e.host||null,
         _bingoEntryId: e.id,
+        locked: !!e.locked, venueSet: !!(e.venueSet||e.setByVenue||e.fromVenue||e.setBy==='venue'),
         _bingoRounds: roundIds
       };
     });
@@ -2842,7 +2855,8 @@ function scheduleRowHtml(dk, gig){
     ph1 = 'Bingo category 1'; ph2 = 'Bingo category 2';
   }
   const statusVal = gig.status==='cancelled' ? 'cancelled' : (isBingo ? (val1||val2) : (gig.themeName||gig.round3Name)) ? 'planned' : 'unplanned';
-  return `<div class="tl-row ${isPast?'tl-past':''} ${isToday?'tl-today':''}" data-dk="${dk}" data-vid="${currentVenueDetailId||''}">
+  const ownLock = !!gig.locked, venueSet = isVenueSetGig(gig), lockedNow = ownLock || venueSet;
+  return `<div class="tl-row ${isPast?'tl-past':''} ${isToday?'tl-today':''} ${lockedNow?'tl-locked':''} ${venueSet?'tl-venueset':''}" data-dk="${dk}" data-vid="${currentVenueDetailId||''}">
     <div class="tl-date"><span class="tl-grip" draggable="true" title="Drag these categories onto another day">⠿</span>${fmtDisplay(fromKey(dk))}</div>
     <input class="tl-input" value="${escapeHtml(val1)}" placeholder="${ph1}"
       onfocus="showInlineSuggest(this,'${dk}','trivia')" oninput="showInlineSuggest(this,'${dk}','trivia')"
@@ -2855,7 +2869,37 @@ function scheduleRowHtml(dk, gig){
       <option value="planned" ${statusVal==='planned'?'selected':''}>Planned</option>
       <option value="cancelled" ${statusVal==='cancelled'?'selected':''}>Cancelled</option>
     </select>
+    <label class="tl-lock" title="${venueSet?'Set by the venue — locked, randomize will not change it':ownLock?'Locked — randomize will not change this day (click to unlock)':'Click to lock this day so randomize leaves it alone'}">
+      <input type="checkbox" ${lockedNow?'checked':''} ${venueSet?'disabled':''} onchange="toggleDayLock(this.closest('.tl-row'),'${dk}',this.checked)">${lockedNow?'🔒':'🔓'}</label>
   </div>`;
+}
+// A day is locked if Bella ticked its lock, or the venue chose its categories itself.
+// (Venue-set days are detected from any of these flags on the gig record.)
+function isVenueSetGig(g){ return !!(g && (g.venueSet || g.setByVenue || g.fromVenue || g.setBy==='venue' || g.source==='venue' || g.enteredBy==='venue')); }
+function isLockedGig(g){ return !!(g && (g.locked || isVenueSetGig(g))); }
+function lockOf(venueId, dk){ const g=((state.gigs[venueId]||{})[dk])||{}; return g.locked ? true : null; }
+function toggleDayLock(row, dk, on){
+  const vid = row.dataset.vid || currentVenueDetailId;
+  const g = (state.gigs[vid]||{})[dk];
+  const hasPlan = g && (g.themeName||g.round3Name||(g._bingoRounds&&g._bingoRounds.length)||g.status==='cancelled');
+  if(!hasPlan){ toast('Plan a category on that day first, then lock it.', true); row.querySelector('.tl-lock input').checked=false; return; }
+  let ref;
+  if(plannerMode==='bingo'){
+    if(!g._bingoEntryId) return;
+    ref = db.ref(MODE_PATHS.bingo.gigs+'/'+g._bingoEntryId+'/locked');
+  } else ref = db.ref(MODE_PATHS[plannerMode].gigs+'/'+vid+'/'+dk+'/locked');
+  (on ? ref.set(true) : ref.remove()).then(()=>{ toast(on?'Day locked.':'Day unlocked.'); setTimeout(refreshPlanViews,150); });
+}
+// Re-draws whichever day-by-day list is on screen (Plan pop-up, venue page, Assign pop-up) so changes show up without closing/reopening.
+function refreshPlanViews(){
+  try{
+    const q = document.getElementById('quick-schedule-overlay');
+    if(q && q.classList.contains('open')){ const box=document.getElementById('qs-rows'), st=box?box.scrollTop:0; renderQuickScheduleRows(); setTimeout(()=>{ if(box) box.scrollTop=st; },50); }
+    const vd = document.getElementById('panel-venue-detail');
+    if(vd && vd.classList.contains('active')){ const box=document.getElementById('vd-timeline'), st=box?box.scrollTop:0; renderVdTimeline(); setTimeout(()=>{ if(box) box.scrollTop=st; },50); }
+    const g = document.getElementById('gig-modal-overlay');
+    if(g && g.classList.contains('open') && typeof renderGigSchedulePreview==='function'){ const box=document.getElementById('gig-schedule-preview'), st=box?box.scrollTop:0; renderGigSchedulePreview(); setTimeout(()=>{ if(box) box.scrollTop=st; },150); }
+  }catch(e){ console.warn('refreshPlanViews', e); }
 }
 // -- Shared floating suggestion box for inline schedule rows (Venue Detail,
 //    Quick Schedule, the Assign modal's embedded preview) — same ranked
@@ -2972,7 +3016,7 @@ function vdInlineSaveBingo(row, dk){
     rounds = [c1,c2].filter(Boolean);
   }
   const eid = entryId || ('sched_'+Date.now()+'_'+Math.random().toString(36).slice(2,5));
-  db.ref(path+eid).set({id:eid, date:dk, venueId:id, rounds, categoryIds:rounds, notes:ex.note||'', host:ex.host||null, locationId:selectedLocationId});
+  db.ref(path+eid).set({id:eid, date:dk, venueId:id, rounds, categoryIds:rounds, notes:ex.note||'', host:ex.host||null, locationId:selectedLocationId, locked:ex.locked||null});
   flashSaved(row);
 }
 function vdInlineSave(row, dk){
@@ -2990,7 +3034,7 @@ function vdInlineSave(row, dk){
     return;
   }
   if(status==='cancelled'){
-    db.ref((MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, status:'cancelled', note:existing.note||'', host:existing.host||null});
+    db.ref((MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, status:'cancelled', note:existing.note||'', host:existing.host||null, locked:existing.locked||null});
     flashSaved(row);
     return;
   }
@@ -3008,7 +3052,7 @@ function vdInlineSave(row, dk){
         round3Id = newId;
       }
     }
-    await db.ref((MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk).set({themeId, themeName:triviaName||null, round3ThemeId:round3Id, round3Name:musicName||null, status:'planned', note:existing.note||'', host:existing.host||null});
+    await db.ref((MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk).set({themeId, themeName:triviaName||null, round3ThemeId:round3Id, round3Name:musicName||null, status:'planned', note:existing.note||'', host:existing.host||null, locked:existing.locked||null});
     if(themeId) bumpThemeUsage(themeId, dk);
     if(round3Id) bumpThemeUsage(round3Id, dk);
     flashSaved(row);
@@ -3044,6 +3088,7 @@ function endDrag(){ dragDay = null; document.querySelectorAll('.tl-dragging,.tl-
 async function moveDayCategories(vid, srcDk, dstDk){
   const gigs = state.gigs[vid]||{};
   const s = gigs[srcDk]||{}, t = gigs[dstDk]||{};
+  if(isLockedGig(s)||isLockedGig(t)) return toast('A locked day can\'t be moved or swapped — unlock it first.', true);
   const base = MODE_PATHS[plannerMode].gigs;
   const updates = {};
   if(plannerMode==='bingo'){
@@ -4494,7 +4539,7 @@ function saveGig(){
     return;
   }
   if(status==='cancelled'){
-    db.ref((MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, extraCategories:null, status:'cancelled', note, host, locationId:selectedLocationId}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+    db.ref((MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, extraCategories:null, status:'cancelled', note, host, locationId:selectedLocationId, locked:lockOf(venueId,dateKey)}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
   // Rounds resolve independently, in order — round 0 saves as themeId/themeName,
@@ -4518,7 +4563,7 @@ function saveGig(){
     const extraCategories = rounds.slice(2).map((r,i)=>({id:resolvedIds[i+2]||null, name:r.name.trim()}));
     await db.ref((MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dateKey).set({
       themeId, themeName, round3ThemeId: round3Id, round3Name,
-      extraCategories: extraCategories.length?extraCategories:null, status:'planned', note, host, locationId:selectedLocationId
+      extraCategories: extraCategories.length?extraCategories:null, status:'planned', note, host, locationId:selectedLocationId, locked:lockOf(venueId,dateKey)
     });
     if(themeId) bumpThemeUsageForVenue(themeId, dateKey, venueId);
     if(round3Id) bumpThemeUsageForVenue(round3Id, dateKey, venueId);
@@ -4621,9 +4666,11 @@ async function randomizeBingo(overwrite){
   let todo;
   if(overwrite){
     if(!confirm(`Re-randomize all ${dates.length} bingo nights at ${v.name} from ${fmtMDY(toKey(today))} through ${fmtMDY(toKey(end))}? This replaces what's planned there now.`)) return;
-    todo = dates; dates.forEach(dk=>{ delete assigned[dk]; });
+    todo = dates.filter(dk=>!isLockedGig(gigs[dk]));
+    if(!todo.length) return toast('Every night in that range is locked.');
+    todo.forEach(dk=>{ delete assigned[dk]; });
   } else {
-    todo = dates.filter(dk=>!assigned[dk]);
+    todo = dates.filter(dk=>!assigned[dk] && !isLockedGig(gigs[dk]));
     if(!todo.length) return toast('Every night from '+fmtMDY(toKey(today))+' on is already planned. Use Re-randomize to redo them.');
   }
   setSyncStatus('syncing');
@@ -4637,10 +4684,14 @@ async function randomizeBingo(overwrite){
   });
   await db.ref().update(updates);
   toast(`Planned ${todo.length} night${todo.length===1?'':'s'}, ${fmtMDY(toKey(today))} – ${fmtMDY(toKey(end))}.`+(pool.length<2?' (Only 1 liked category — round 2 left empty.)':''));
+  setTimeout(refreshPlanViews,200);
 }
 async function randomizeTrivia(overwrite){
   const id = currentVenueDetailId, v = state.venues[id]; if(!v) return;
-  const pool = likedPoolFor(v);
+  let pool = likedPoolFor(v);
+  const isMusic = cid=>(state.themes[cid]||{}).tier==='coordinating-music';
+  const triviaPool = pool.filter(c=>!isMusic(c));
+  if(triviaPool.length) pool = triviaPool;
   if(!pool.length){ toast('Pick the categories this venue likes first.', true); openLikedCats(); return; }
   const todayD = new Date(); todayD.setHours(0,0,0,0);
   let start = randStartKey ? fromKey(randStartKey) : todayD;
@@ -4651,25 +4702,56 @@ async function randomizeTrivia(overwrite){
   const gigs = state.gigs[id]||{};
   const assigned = {};
   Object.entries(gigs).forEach(([dk,g])=>{ if(g.themeId && g.status!=='cancelled') assigned[dk]=[g.themeId]; });
-  let todo = dates.filter(dk=>!(gigs[dk]&&gigs[dk].status==='cancelled'));
+  // Locked days (ticked in the planner, or set by the venue) are never touched.
+  let todo = dates.filter(dk=>!(gigs[dk]&&gigs[dk].status==='cancelled') && !isLockedGig(gigs[dk]));
+  const lockedCount = dates.filter(dk=>isLockedGig(gigs[dk])).length;
   if(overwrite){
-    if(!confirm(`Re-randomize all ${todo.length} trivia nights at ${v.name} from ${fmtMDY(toKey(start))} through ${fmtMDY(toKey(end))}? This replaces the categories planned there now.`)) return;
+    if(!todo.length) return toast('Every night in that range is locked or cancelled.');
+    if(!confirm(`Re-randomize ${todo.length} trivia night${todo.length===1?'':'s'} at ${v.name} from ${fmtMDY(toKey(start))} through ${fmtMDY(toKey(end))}? This replaces the categories planned there now.`+(lockedCount?`\n\n${lockedCount} locked night${lockedCount===1?'':'s'} will be left alone.`:''))) return;
     todo.forEach(dk=>{ delete assigned[dk]; });
   } else {
     todo = todo.filter(dk=>!(gigs[dk]&&(gigs[dk].themeId||gigs[dk].themeName)));
     if(!todo.length) return toast('Every night from '+fmtMDY(toKey(start))+' on is already planned. Use Re-randomize to redo them.');
   }
+  // ── Music pairing ──
+  // Each night's music category is a random one paired with that night's trivia category.
+  // Every 4th time a trivia category is used at this venue, the music category is a NON-paired one instead.
+  const musicIds = Object.keys(state.themes).filter(isMusic);
+  const lastMusic = {};                       // music id -> latest date used at this venue (for variety)
+  const useCount = {};                        // trivia id -> times used at this venue so far
+  Object.entries(gigs).forEach(([dk,g])=>{
+    if(todo.includes(dk) && overwrite) return;   // those are about to be replaced
+    if(g.status==='cancelled') return;
+    if(g.themeId) useCount[g.themeId] = (useCount[g.themeId]||0)+1;
+    if(g.round3ThemeId && (!lastMusic[g.round3ThemeId]||dk>lastMusic[g.round3ThemeId])) lastMusic[g.round3ThemeId]=dk;
+  });
+  const leastRecent = (arr, dk)=>{ const sh = arr.slice().sort(()=>Math.random()-0.5); sh.sort((x,y)=>(lastMusic[x]||'').localeCompare(lastMusic[y]||'')); return sh[0]||null; };
+  let unpairedNights = 0, noPairs = 0;
   setSyncStatus('syncing');
   const updates = {};
   todo.sort().forEach(dk=>{
     const pick = bingoPickPair(pool, assigned, dk).slice(0,1);
     if(!pick.length) return;
     assigned[dk] = pick;
+    const tid = pick[0];
+    useCount[tid] = (useCount[tid]||0)+1;
+    const paired = ((state.themes[tid]||{}).pairsWith||[]).filter(pid=>state.themes[pid] && isMusic(pid));
+    const unpaired = musicIds.filter(m=>!paired.includes(m));
+    let musicId = null;
+    if(useCount[tid] % 4 === 0 && unpaired.length){ musicId = leastRecent(unpaired, dk); unpairedNights++; }
+    else if(paired.length) musicId = leastRecent(paired, dk);
+    else { noPairs++; musicId = null; }
+    if(musicId) lastMusic[musicId] = dk;
     const ex = gigs[dk]||{};
-    updates[MODE_PATHS.trivia.gigs+'/'+id+'/'+dk] = Object.assign({}, ex, {themeId:pick[0], themeName:state.themes[pick[0]].name, status:'planned', note:ex.note||'', host:ex.host||null, locationId:selectedLocationId});
+    updates[MODE_PATHS.trivia.gigs+'/'+id+'/'+dk] = Object.assign({}, ex, {themeId:tid, themeName:state.themes[tid].name, round3ThemeId:musicId, round3Name:musicId?state.themes[musicId].name:null, status:'planned', note:ex.note||'', host:ex.host||null, locationId:selectedLocationId});
   });
   await db.ref().update(updates);
-  toast(`Planned ${Object.keys(updates).length} night${Object.keys(updates).length===1?'':'s'}, ${fmtMDY(toKey(start))} – ${fmtMDY(toKey(end))}.`);
+  const n = Object.keys(updates).length;
+  toast(`Planned ${n} night${n===1?'':'s'}, ${fmtMDY(toKey(start))} – ${fmtMDY(toKey(end))}.`
+    + (unpairedNights?` ${unpairedNights} got an unpaired music category (every 4th use).`:'')
+    + (lockedCount?` ${lockedCount} locked night${lockedCount===1?'':'s'} skipped.`:'')
+    + (noPairs?` ${noPairs} had no paired music category to pick from.`:''));
+  setTimeout(refreshPlanViews,200);
 }
 function saveBingoGig(venueId,dateKey,status,note,typedName1,typedName2,host){
   const cancelled = status==='cancelled';
@@ -4690,7 +4772,7 @@ function saveBingoGig(venueId,dateKey,status,note,typedName1,typedName2,host){
     }
     rounds = [c1, c2].filter(Boolean);
   }
-  db.ref('bingo/landing/schedule/'+id).set({id, date:dateKey, venueId, rounds, categoryIds:rounds, notes:note, host:host||null, locationId:selectedLocationId}).then(()=>{
+  db.ref('bingo/landing/schedule/'+id).set({id, date:dateKey, venueId, rounds, categoryIds:rounds, notes:note, host:host||null, locationId:selectedLocationId, locked:lockOf(venueId,dateKey)}).then(()=>{
     toast('Saved.'); closeModal('gig-modal-overlay');
   });
 }
