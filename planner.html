@@ -432,6 +432,7 @@ a{color:inherit}
       <button class="pill" data-vf="finished" onclick="setVenueFilter('finished')">Finished</button>
       <span style="flex:1"></span>
       <button class="btn btn-ghost btn-sm" onclick="sortVenuesAZ()">A–Z</button>
+      <button class="btn btn-ghost btn-sm" onclick="openCleanupModal()">Clean Up Imports</button>
       <button class="btn btn-primary btn-sm" onclick="openVenueModal()">+ Add Venue</button>
     </div>
     <table class="gtable" id="venues-table">
@@ -865,6 +866,26 @@ a{color:inherit}
       <span style="flex:1"></span>
       <button class="btn btn-ghost" onclick="closeModal('theme-modal-overlay')">Cancel</button>
       <button class="btn btn-primary" onclick="saveTheme()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="cleanup-overlay">
+  <div class="modal" style="max-width:760px;width:96vw">
+    <h3>Clean Up Imported Venues &amp; Schedule</h3>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Venues that look like they came from a CSV / spreadsheet import (or are marked Trivia Time) are pre-checked. Venues you added by hand are left unchecked. Tick whatever you want gone — it removes the venue and every scheduled night under it, in one go.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <button class="btn btn-ghost btn-sm" onclick="cleanupSelect('imported')">Select likely imports</button>
+      <button class="btn btn-ghost btn-sm" onclick="cleanupSelect('none')">Select none</button>
+      <button class="btn btn-ghost btn-sm" onclick="cleanupSelect('all')">Select all</button>
+      <span style="flex:1"></span><span id="cleanup-count" style="font-size:12px;color:var(--text2)"></span>
+    </div>
+    <div style="max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:8px"><table class="gtable" style="margin:0"><thead><tr><th style="width:28px"></th><th>Venue</th><th>Day</th><th>Source</th><th>Nights</th><th></th></tr></thead><tbody id="cleanup-rows"></tbody></table></div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:12px;margin-top:10px"><input type="checkbox" id="cleanup-keep-venue"> Keep the venues themselves — only clear their scheduled nights</label>
+    <div class="modal-actions">
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('cleanup-overlay')">Cancel</button>
+      <button class="btn btn-danger" id="cleanup-go" onclick="runCleanup()">Delete selected</button>
     </div>
   </div>
 </div>
@@ -3431,6 +3452,54 @@ function saveVenue(){
     closeModal('venue-modal-overlay');
     Object.keys(updates).forEach(k=>{const id=k.split('/').pop();vmxPushLegacy(VMX_KIND_OF_MODE[_mode2],id,updates[k]);});
   });
+}
+// ── Clean Up Imports: bulk-remove venues (and their scheduled nights) that came in from a CSV/spreadsheet import ──
+function looksImportedVenue(id, v){
+  return !!(v && (v.source==='trivia-time' || v.cadenceRaw || /^v_.+_(x|mon|tue|wed|thu|fri|sat|sun)_\d+$/i.test(id)));
+}
+function cleanupRows(){
+  return Object.entries(state.venues||{}).map(([id,v])=>({id, v, imp:looksImportedVenue(id,v), n:Object.keys(state.gigs[id]||{}).length}))
+    .sort((a,b)=>(b.imp-a.imp)||(a.v.name||'').localeCompare(b.v.name||''));
+}
+function openCleanupModal(){
+  const rows = cleanupRows();
+  document.getElementById('cleanup-rows').innerHTML = rows.length ? rows.map(r=>`
+    <tr><td><input type="checkbox" class="cleanup-cb" data-id="${escapeHtml(r.id)}" data-imp="${r.imp?1:0}" ${r.imp?'checked':''} onchange="updateCleanupCount()"></td>
+    <td>${escapeHtml(r.v.name||'(unnamed)')}</td><td>${escapeHtml(r.v.day||'')}</td>
+    <td>${r.v.source==='trivia-time'?'Trivia Time':'Belladonna'}</td><td>${r.n}</td>
+    <td>${r.imp?'<span class="badge" style="font-size:10px">looks imported</span>':'<span style="font-size:10px;color:var(--text3)">added by hand</span>'}</td></tr>`).join('')
+    : '<tr><td colspan="6" style="padding:14px;color:var(--text2)">No venues in this mode.</td></tr>';
+  updateCleanupCount(); openModal('cleanup-overlay');
+}
+function cleanupSelect(how){
+  document.querySelectorAll('.cleanup-cb').forEach(cb=>{ cb.checked = how==='all' ? true : how==='none' ? false : cb.dataset.imp==='1'; });
+  updateCleanupCount();
+}
+function updateCleanupCount(){
+  const sel = Array.from(document.querySelectorAll('.cleanup-cb:checked')).map(cb=>cb.dataset.id);
+  const nights = sel.reduce((n,id)=>n+Object.keys(state.gigs[id]||{}).length,0);
+  document.getElementById('cleanup-count').textContent = sel.length+' venue'+(sel.length===1?'':'s')+' · '+nights+' scheduled night'+(nights===1?'':'s');
+}
+async function runCleanup(){
+  const ids = Array.from(document.querySelectorAll('.cleanup-cb:checked')).map(cb=>cb.dataset.id);
+  if(!ids.length) return toast('Nothing selected.', true);
+  const keepVenue = document.getElementById('cleanup-keep-venue').checked;
+  const nights = ids.reduce((n,id)=>n+Object.keys(state.gigs[id]||{}).length,0);
+  if(!confirm(`${keepVenue?'Clear the scheduled nights of':'Delete'} ${ids.length} venue${ids.length===1?'':'s'}${keepVenue?'':' and all their nights'} (${nights} scheduled night${nights===1?'':'s'})?\n\nThis can't be undone.`)) return;
+  const p = MODE_PATHS[plannerMode], updates = {};
+  const btn = document.getElementById('cleanup-go'); btn.disabled = true; btn.textContent = 'Deleting…';
+  setSyncStatus('syncing');
+  for(const id of ids){
+    if(!keepVenue){ try{ await vmxRemoveLegacy(VMX_KIND_OF_MODE[plannerMode], id, state.venues[id]); }catch(e){} updates[p.venues+'/'+id] = null; }
+    if(plannerMode==='bingo') Object.values(state.gigs[id]||{}).forEach(g=>{ if(g._bingoEntryId) updates[p.gigs+'/'+g._bingoEntryId] = null; });
+    else updates[p.gigs+'/'+id] = null;
+  }
+  try{
+    await db.ref().update(updates);
+    toast('Cleaned up '+ids.length+' venue'+(ids.length===1?'':'s')+'.');
+    closeModal('cleanup-overlay'); renderActiveTab();
+  }catch(err){ toast('Clean-up failed: '+(err.code||err.message), true); setSyncStatus('synced'); }
+  btn.disabled = false; btn.textContent = 'Delete selected';
 }
 function deleteVenue(){
   if(!editingVenueId) return;
