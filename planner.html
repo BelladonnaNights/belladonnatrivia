@@ -330,6 +330,7 @@ a{color:inherit}
   <select id="plannerLocationSelect" onchange="setPlannerLocation(this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:999px;color:var(--gold);padding:8px 18px;font-size:12px;font-weight:600;margin:0 0 10px 0;min-width:190px;max-width:260px"><option>Loading locations…</option></select>
 </div>
 
+<div class="tabs" id="all-filter" style="display:none;padding-top:0.3rem"></div>
 <div class="tabs" id="main-tabs">
   <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
   <button class="tab-btn" data-tab="planning" onclick="switchTab('planning')">Planning <span class="tab-badge" id="needs-count" style="display:none">0</span></button>
@@ -449,9 +450,6 @@ a{color:inherit}
     </table>
     <div id="venues-empty" class="empty-state" style="display:none">No venues match that filter.</div>
   </div>
-
-  <!-- ALL: one combined view across Trivia, Bingo, Karaoke and Events -->
-  <div class="panel" id="panel-all"></div>
 
   <div class="panel" id="panel-movies">
     <div class="section-title">Public-Domain Movies</div>
@@ -1723,17 +1721,20 @@ function resolveCrossPairTheme(id){
   return { name: r.name||'(untitled)', tier: r.tier, _crossLibrary: r.source==='trivia' ? null : r.source, _vmType: r.typeLabel };
 }
 // ═══════════════════════════════════════════════
-//  ALL — one combined schedule + venue list across Trivia, Bingo, Karaoke and Events.
-//  Read-at-a-glance; click anything and it opens in its own mode with every control.
+//  ALL — Trivia, Bingo, Karaoke and Events merged into the SAME Dashboard / Venues screens as every other mode.
+//  Each venue is tagged with its mode; clicking anything opens it in its own mode with every control.
+//  (Nothing is ever written from ALL itself — edits happen after the jump, in the real mode.)
 // ═══════════════════════════════════════════════
 const ALL_MODES = ['trivia','bingo','karaoke','events'];
-const ALL_MODE_COLORS = {trivia:'#c9a24b', bingo:'#4aa3df', karaoke:'#d46a9f', events:'#7bc47f'};
-let allData = {venues:{}, gigs:{}, bingoLib:{}};
-let allView = 'week', allWeekStart = startOfWeek(new Date()), allModesOn = new Set(ALL_MODES), allVenueStatus = 'active', _allTimer = null;
+const ALL_MODE_LABEL = {trivia:'Trivia', bingo:'Bingo', karaoke:'Karaoke', events:'Events'};
+let allData = {venues:{}, gigs:{}, bingoLib:{}}, allModesOn = new Set(ALL_MODES), _allTimer = null;
+const isAllId = id => typeof id==='string' && /^(trivia|bingo|karaoke|events)~/.test(id);
+function blockInAll(){ if(plannerMode!=='all') return false; toast('Open it in its own mode (click it) to edit — ALL is a combined view.', true); return true; }
 function attachAllListeners(){
   allData = {venues:{}, gigs:{}, bingoLib:{}};
   armSyncWatchdog();
-  const later = ()=>{ clearTimeout(_allTimer); _allTimer = setTimeout(()=>{ clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner(); if(plannerMode==='all') renderAll(); }, 120); };
+  renderAllFilter();
+  const later = ()=>{ clearTimeout(_allTimer); _allTimer = setTimeout(()=>{ if(plannerMode==='all') rebuildAllState(); }, 120); };
   ALL_MODES.forEach(m=>{
     const p = MODE_PATHS[m];
     const vr = db.ref(p.venues); vr.on('value', snap=>{ allData.venues[m] = snap.val()||{}; later(); }, onListenerError('venues')); modeListenerRefs.push(vr);
@@ -1741,77 +1742,52 @@ function attachAllListeners(){
   });
   const br = db.ref(MODE_PATHS.bingo.library); br.on('value', snap=>{ allData.bingoLib = snap.val()||{}; later(); }, onListenerError('bingo library')); modeListenerRefs.push(br);
 }
-function allGigFor(m, vid, dk){
-  if(m==='bingo'){
-    const e = Object.values(allData.gigs.bingo||{}).find(x=>x && x.venueId===vid && x.date===dk);
-    if(!e) return null;
-    const ids = e.rounds || e.categoryIds || [];
-    const names = ids.map(id=>{ const c=(allData.bingoLib||{})[id]; return c ? (c.title||c.name||'') : ''; }).filter(Boolean);
-    return {themeName:names.join(' + '), status:'planned', note:e.notes||'', host:e.host||null};
-  }
-  return ((allData.gigs[m]||{})[vid]||{})[dk] || null;
-}
-function allVenueList(){
-  const out = [];
-  ALL_MODES.forEach(m=>{ if(!allModesOn.has(m)) return;
-    Object.entries(allData.venues[m]||{}).forEach(([id,v])=>{ if(v && locationMatches(v.locationId)) out.push({m,id,v}); });
+function rebuildAllState(){
+  const V = {}, G = {};
+  ALL_MODES.forEach(m=>{
+    if(!allModesOn.has(m)) return;
+    Object.entries(allData.venues[m]||{}).forEach(([id,v])=>{
+      if(!v || !locationMatches(v.locationId)) return;
+      V[m+'~'+id] = Object.assign({}, v, {name:(v.name||'')+' · '+ALL_MODE_LABEL[m], _mode:m, _realId:id});
+    });
+    if(m==='bingo'){
+      Object.values(allData.gigs.bingo||{}).forEach(e=>{
+        if(!e || !e.venueId || !e.date || !V['bingo~'+e.venueId]) return;
+        const ids = e.rounds || e.categoryIds || [];
+        const names = ids.map(id=>{ const c=(allData.bingoLib||{})[id]; return c ? (c.title||c.name||'') : ''; }).filter(Boolean);
+        (G['bingo~'+e.venueId] = G['bingo~'+e.venueId] || {})[e.date] = {themeId:ids[0]||null, themeName:names.join(' + '), status:'planned', note:e.notes||'', host:e.host||null, locked:!!e.locked};
+      });
+    } else {
+      Object.entries(allData.gigs[m]||{}).forEach(([vid,byDate])=>{ if(V[m+'~'+vid]) G[m+'~'+vid] = byDate; });
+    }
   });
-  return out;
+  state.venues = V; state.gigs = G; state.themes = {}; state.sequences = {};
+  clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner();
+  renderActiveTab();
 }
-function setAllView(v){ allView=v; renderAll(); }
-function toggleAllMode(m){ if(allModesOn.has(m)){ if(allModesOn.size>1) allModesOn.delete(m); } else allModesOn.add(m); renderAll(); }
-function shiftAllWeek(n){ allWeekStart = addDays(allWeekStart, n*7); renderAll(); }
-function jumpAllToday(){ allWeekStart = startOfWeek(new Date()); renderAll(); }
-function allModeBadge(m){ return `<span style="display:inline-block;font-size:9px;letter-spacing:.1em;font-weight:700;padding:3px 8px;border-radius:99px;border:1px solid ${ALL_MODE_COLORS[m]};color:${ALL_MODE_COLORS[m]}">${m.toUpperCase()}</span>`; }
+function renderAllFilter(){
+  const el = document.getElementById('all-filter'); if(!el) return;
+  el.innerHTML = '<span style="font-size:11px;color:var(--text3);align-self:center;margin-right:6px;letter-spacing:.08em">SHOW</span>' + ALL_MODES.map(m=>`<button class="pill ${allModesOn.has(m)?'active':''}" onclick="toggleAllMode('${m}')">${ALL_MODE_LABEL[m]}</button>`).join('');
+}
+function toggleAllMode(m){ if(allModesOn.has(m)){ if(allModesOn.size>1) allModesOn.delete(m); } else allModesOn.add(m); renderAllFilter(); rebuildAllState(); }
 // Switches to the item's own mode (full controls), then opens it once that mode's data has loaded.
 function jumpToMode(m, vid, dk, what){
   const pill = Array.from(document.querySelectorAll('.mode-pill')).find(p=>p.textContent.trim().toLowerCase()===m);
   setPlannerMode(m, pill);
   let tries = 0;
   const go = ()=>{
-    if(state.venues && state.venues[vid]){ if(what==='venue') openVenueDetail(vid); else openGigModal(vid, dk||undefined); return; }
+    if(state.venues && state.venues[vid]){ if(what==='venue') openVenueDetail(vid); else if(what==='edit') openVenueModal(vid); else if(what==='plan') openQuickSchedule(vid); else openGigModal(vid, dk||undefined); return; }
     if(++tries < 60) setTimeout(go, 100);
   };
   go();
 }
-function renderAll(){
-  const el = document.getElementById('panel-all'); if(!el) return;
-  const pills = ALL_MODES.map(m=>`<button class="pill ${allModesOn.has(m)?'active':''}" onclick="toggleAllMode('${m}')">${m[0].toUpperCase()+m.slice(1)}</button>`).join('');
-  const viewPills = `<button class="pill ${allView==='week'?'active':''}" onclick="setAllView('week')">This Week</button><button class="pill ${allView==='venues'?'active':''}" onclick="setAllView('venues')">All Venues</button>`;
-  let body = '';
-  if(allView==='week'){
-    const days = Array.from({length:7},(_,i)=>addDays(allWeekStart,i));
-    const rows = [];
-    const vl = allVenueList();
-    days.forEach(d=>{
-      const dk = toKey(d);
-      vl.forEach(({m,id,v})=>{
-        const gig = allGigFor(m,id,dk);
-        if(!gig && !venueRunsOn(v,dk)) return;
-        rows.push({d,dk,m,id,v,gig});
-      });
-    });
-    rows.sort((a,b)=>a.dk.localeCompare(b.dk) || ALL_MODES.indexOf(a.m)-ALL_MODES.indexOf(b.m) || (a.v.name||'').localeCompare(b.v.name||''));
-    body = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0"><button class="btn btn-ghost btn-sm" onclick="shiftAllWeek(-1)">‹ Prev</button><div class="week-label">${fmtRange(allWeekStart, addDays(allWeekStart,6))}</div><button class="btn btn-ghost btn-sm" onclick="shiftAllWeek(1)">Next ›</button><button class="btn btn-ghost btn-sm" onclick="jumpAllToday()">Today</button></div>
-    <table class="gtable"><thead><tr><th>Date</th><th>Mode</th><th>Venue</th><th>Category</th><th>Status</th><th></th></tr></thead><tbody>${rows.map(r=>{
-      const g = r.gig, cancelled = g && g.status==='cancelled', planned = g && g.themeName;
-      const cat = planned ? escapeHtml(g.themeName)+(g.round3Name?`<br><span style="color:var(--text3);font-size:11px">♪ ${escapeHtml(g.round3Name)}</span>`:'') : cancelled ? `<span class="empty-cell">cancelled${g.note?' — '+escapeHtml(g.note):''}</span>` : `<span class="empty-cell">${r.m==='karaoke'?'regular karaoke':r.m==='events'?'—':'unplanned'}</span>`;
-      const badge = cancelled ? 'cancelled' : (planned || r.m==='events') ? (g&&g.status)||'planned' : 'empty';
-      return `<tr style="cursor:pointer" onclick="jumpToMode('${r.m}','${jsq(r.id)}','${r.dk}')"><td>${fmtDisplay(r.d)}</td><td>${allModeBadge(r.m)}</td><td><div class="venue-name">${escapeHtml(r.v.name||'')}</div><div class="venue-meta">${escapeHtml(r.v.time||'')}</div></td><td>${cat}</td><td><span class="badge badge-${badge}">${badge==='empty'?'unplanned':badge}</span></td><td style="text-align:right"><button class="btn btn-ghost btn-sm">${planned?'Edit':'Assign'}</button></td></tr>`;
-    }).join('')}</tbody></table>${rows.length?'':'<div class="empty-state">Nothing scheduled this week.</div>'}`;
-  } else {
-    const q = (document.getElementById('all-venue-search')?.value||'').toLowerCase();
-    let list = allVenueList();
-    if(allVenueStatus!=='all') list = list.filter(x=>(x.v.status||'active')===allVenueStatus);
-    if(q) list = list.filter(x=>(x.v.name||'').toLowerCase().includes(q));
-    list.sort((a,b)=>(a.v.name||'').localeCompare(b.v.name||'') || ALL_MODES.indexOf(a.m)-ALL_MODES.indexOf(b.m));
-    const sp = ['active','seasonal','paused','finished','one-time','all'].map(f=>`<button class="pill ${allVenueStatus===f?'active':''}" onclick="allVenueStatus='${f}';renderAll()">${f==='one-time'?'One-time':f[0].toUpperCase()+f.slice(1)}</button>`).join('');
-    body = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:10px 0">${sp}<span style="flex:1"></span><input class="search-input" id="all-venue-search" placeholder="Search venues…" value="${escapeHtml(q)}" oninput="renderAll();const i=document.getElementById('all-venue-search');i.focus();i.setSelectionRange(i.value.length,i.value.length)" style="max-width:240px"></div>
-    <table class="gtable"><thead><tr><th>Venue</th><th>Mode</th><th>When</th><th>Status</th><th>Host</th><th></th></tr></thead><tbody>${list.map(({m,id,v})=>`<tr style="cursor:pointer" onclick="jumpToMode('${m}','${jsq(id)}',null,'venue')"><td class="venue-name">${escapeHtml(v.name||'')}</td><td>${allModeBadge(m)}</td><td>${v.day||''} ${escapeHtml(v.time||'')}${cadenceTag(v)?` <span style="font-size:10px;opacity:.7;border:1px solid currentColor;border-radius:8px;padding:0 5px;">${cadenceTag(v)}</span>`:''}</td><td><span class="badge badge-${v.status||'active'}">${(v.status||'active').replace('-',' ')}</span></td><td>${escapeHtml(v.host||'—')}</td><td style="text-align:right"><button class="btn btn-ghost btn-sm">Open</button></td></tr>`).join('')}</tbody></table>${list.length?'':'<div class="empty-state">No venues match.</div>'}`;
-  }
-  el.innerHTML = `<div class="section-title">All</div><div class="section-sub">Trivia, Bingo, Karaoke and Events together. Click any row to open it with every control.</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${viewPills}<span style="width:14px"></span>${pills}</div>${body}`;
-}
+function allJump(id, dk, what){ const m = id.split('~')[0]; jumpToMode(m, id.slice(m.length+1), dk, what); }
+// In ALL, any click that would open a gig/venue editor hops into that item's own mode instead.
+['openGigModal','openVenueDetail','openVenueModal','openQuickSchedule'].forEach(fn=>{
+  const orig = window[fn]; if(typeof orig!=='function') return;
+  const what = {openGigModal:'gig', openVenueDetail:'venue', openVenueModal:'edit', openQuickSchedule:'plan'}[fn];
+  window[fn] = function(id){ if(isAllId(id)) return allJump(id, arguments[1], what); if(plannerMode==='all' && fn==='openVenueModal' && !id) return blockInAll(); return orig.apply(this, arguments); };
+});
 function onDataChange(){ clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner(); renderActiveTab(); }
 function updateThemeDatalist(){
   document.getElementById('theme-name-list').innerHTML = Object.values(state.themes||{})
@@ -2136,16 +2112,14 @@ function setPlannerMode(mode, el){
   document.querySelectorAll('.mode-pill').forEach(p=>p.classList.remove('active'));
   if(el) el.classList.add('active');
   // Trivia-only power features — hide rather than half-support in Bingo mode
-  document.querySelectorAll('.trivia-only-tab').forEach(t=>{ t.style.display = mode==='trivia' ? '' : 'none'; });
+  // ALL shows the same Dashboard + Venues as every other mode; the tabs that only make sense inside one mode are hidden.
+  document.querySelectorAll('.tab-btn').forEach(b=>{ if(['planning','themes','movies'].includes(b.dataset.tab)) b.style.display = mode==='all' ? 'none' : ''; });
+  const af = document.getElementById('all-filter'); if(af) af.style.display = mode==='all' ? 'flex' : 'none';
+  document.querySelectorAll('.trivia-only-tab').forEach(t=>{ if(mode!=='all') t.style.display = mode==='trivia' ? '' : 'none'; });
   document.getElementById('theme-tab-label').textContent = 'Theme Library';
   state.venues={}; state.themes={}; state.gigs={}; state.sequences={}; libraryRaw={};
-  const mt = document.getElementById('main-tabs'); if(mt) mt.style.display = mode==='all' ? 'none' : '';
   attachModeListeners();
-  if(mode==='all'){
-    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-    document.getElementById('panel-all').classList.add('active');
-    renderAll();
-  } else switchTab('dashboard');
+  switchTab('dashboard');
 }
 
 
@@ -2297,7 +2271,6 @@ function switchTab(tab){
   renderActiveTab();
 }
 function renderActiveTab(){
-  if(plannerMode==='all'){ renderAll(); return; }
   if(activeTab==='dashboard') { renderDayBoxes(); renderMonthCalendar(); renderSpreadsheetView(); }
   else if(activeTab==='planning') renderPlanning();
   else if(activeTab==='venues') renderVenues();
@@ -2727,8 +2700,10 @@ function gridCopy(){
   updateSelectionHighlight();
   toast('Copied.');
 }
-function gridCut(){ gridCopy(); if(clipboard) clipboard.mode='cut'; updateSelectionHighlight(); toast('Cut — paste somewhere to move it.'); }
+function gridCut(){
+  if(blockInAll()) return; gridCopy(); if(clipboard) clipboard.mode='cut'; updateSelectionHighlight(); toast('Cut — paste somewhere to move it.'); }
 async function gridPaste(){
+  if(blockInAll()) return;
   if(blockIfBingoMode('Paste')) return;
   if(!clipboard){ return; }
   const rect = selRect();
@@ -2759,6 +2734,7 @@ async function gridPaste(){
   if(clipboard.mode==='cut') clipboard = null;
 }
 async function gridClearSelected(){
+  if(blockInAll()) return;
   if(blockIfBingoMode('Bulk clear')) return;
   const rect = selRect(); if(!rect) return;
   setSyncStatus('syncing');
@@ -3597,6 +3573,7 @@ function cleanupRows(){
     .sort((a,b)=>(b.imp-a.imp)||(a.v.name||'').localeCompare(b.v.name||''));
 }
 function openCleanupModal(){
+  if(blockInAll()) return;
   const rows = cleanupRows();
   document.getElementById('cleanup-rows').innerHTML = rows.length ? rows.map(r=>`
     <tr><td><input type="checkbox" class="cleanup-cb" data-id="${escapeHtml(r.id)}" data-imp="${r.imp?1:0}" ${r.imp?'checked':''} onchange="updateCleanupCount()"></td>
