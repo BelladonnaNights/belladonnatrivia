@@ -169,6 +169,8 @@ a{color:inherit}
 .theme-opt small{display:block;color:var(--text3);font-size:10px;margin-top:2px}
 .theme-opt .alt2{display:block;color:var(--text3);font-size:10px;font-style:italic;margin-top:1px;line-height:1.2}
 .lib-alt{font-weight:600}
+.alt-top{display:block;font-weight:600;color:var(--text)}
+.theme-opt .alt2.sub{font-style:normal}
 .lib-main-indent{padding-left:16px;font-size:12px;color:var(--text2)}
 
 /* VENUE DETAIL */
@@ -537,6 +539,7 @@ a{color:inherit}
         </span>
         <button class="pill" id="dup-toggle" onclick="toggleDupView()">Possible Duplicates</button>
         <span style="flex:1"></span>
+        <button class="btn btn-ghost btn-sm" id="alt-toggle-btn" onclick="toggleAltOnTop()" title="Switch which title leads in the lists">Top title: Secondary ⇅</button>
         <button class="btn btn-ghost btn-sm" onclick="sortThemesAZ()">A–Z</button>
         <button class="btn btn-ghost btn-sm" onclick="exportThemeNamesList()">Export List</button>
         <button class="btn btn-primary btn-sm" onclick="openThemeModal()">+ Add Theme</button>
@@ -1705,6 +1708,21 @@ function resolveRefAny(r){ return getLibRecord(refToKey(r)); }
 // category itself carries a different public name. Internal only. Searchable alongside the name.
 function altOf(t){ return (t && t.altName) ? String(t.altName).trim() : ''; }
 function altLine(t){ const a = altOf(t); return a ? `<span class="alt2">${escapeHtml(a)}</span>` : ''; }
+// Which title leads in lists: the Secondary Name (bold, on top) or the primary name. One switch, remembered per browser.
+let altOnTop = (function(){ try{ return localStorage.getItem('plannerAltOnTop')!=='0'; }catch(e){ return true; } })();
+function toggleAltOnTop(){
+  altOnTop = !altOnTop;
+  try{ localStorage.setItem('plannerAltOnTop', altOnTop?'1':'0'); }catch(e){}
+  updateAltToggleBtn();
+  try{ renderActiveTab(); }catch(e){}
+}
+function updateAltToggleBtn(){ const b=document.getElementById('alt-toggle-btn'); if(b) b.textContent = altOnTop ? 'Top title: Secondary ⇅' : 'Top title: Primary ⇅'; }
+// One title block for any list row. `tail` (tier label etc.) always rides with the primary name.
+function titleBlock(t, tail){
+  const a = altOf(t), name = escapeHtml(t.name||''), tl = tail||'';
+  if(!a) return name+tl;
+  return altOnTop ? `<b class="alt-top">${escapeHtml(a)}</b><span class="alt2 sub">${name}${tl}</span>` : `${name}${tl}<span class="alt2">${escapeHtml(a)}</span>`;
+}
 function nameOrAltHas(t, q){ return (t.name||'').toLowerCase().includes(q) || altOf(t).toLowerCase().includes(q); }
 function jsq(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 // Resolves a Pairs With id that may point into any of three libraries.
@@ -3094,7 +3112,7 @@ function showInlineSuggest(inputEl, dk, which){
   const box = document.getElementById('inline-suggest-box');
   box.innerHTML = list.length ? list.map(([id,t])=>{
     const suggested = pairIds.has(id);
-    return `<div class="theme-opt" onmousedown="event.preventDefault();pickInlineSuggest('${id}')">${suggested?(bingoSuggest?'♥ ':'★ '):''}${escapeHtml(t.name)}${bingoSuggest?'':` <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span>`}${altLine(t)}</div>`;
+    return `<div class="theme-opt" onmousedown="event.preventDefault();pickInlineSuggest('${id}')">${suggested?(bingoSuggest?'♥ ':'★ '):''}${titleBlock(t, bingoSuggest?'':` <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span>`)}</div>`;
   }).join('') : '<div class="theme-opt" style="color:var(--text3)">No match — will save as typed.</div>';
   const rect = inputEl.getBoundingClientRect();
   box.style.left = rect.left+'px';
@@ -3798,7 +3816,7 @@ function renderThemes(){
       : (t.typeLabel ? `<span class="badge badge-empty">${escapeHtml(t.typeLabel)}</span>` : '');
     return `<tr>
       <td><input type="checkbox" class="theme-row-check" data-id="${escapeHtml(id)}" ${selectedThemeIds.has(id)?'checked':''} onchange="toggleThemeSelection('${jsq(id)}', this.checked)"></td>
-      <td>${altOf(t) ? `<div class="lib-alt">${escapeHtml(altOf(t))}</div><div class="lib-main-indent">${escapeHtml(t.name||'')} ${tierBadge}</div>` : `${escapeHtml(t.name||'')} ${tierBadge}`}</td>
+      <td>${altOf(t) ? (altOnTop ? `<div class="lib-alt">${escapeHtml(altOf(t))}</div><div class="lib-main-indent">${escapeHtml(t.name||'')} ${tierBadge}</div>` : `<div class="lib-alt">${escapeHtml(t.name||'')} ${tierBadge}</div><div class="lib-main-indent">${escapeHtml(altOf(t))}</div>`) : `${escapeHtml(t.name||'')} ${tierBadge}`}</td>
       <td>${safeTags(t).map(tag=>`<span class="tag-chip">${escapeHtml(tag)}</span>`).join('')||'<span style="color:var(--text3)">—</span>'}</td>
       <td>${t.timesUsed||0}</td>
       <td>${fmtMDY(t.lastUsedDate)}</td>
@@ -4045,7 +4063,7 @@ function renderPairsSuggest(){
     const nameHit = (r.name||'').toLowerCase().includes(q);
     const hitTag = !nameHit ? (r.tags||[]).find(tag=>(tag||'').toLowerCase().includes(q)) : null;
     const typeTxt = r.source==='bingo' ? 'Bingo' : r.source==='vm' ? (r.typeLabel||'Venue Menu') : (TIER_LABELS[normTier(r.tier)]||'');
-    return `<div class="theme-opt" onclick="addPairChip('${jsq(refOf(r.source, r.id))}')">${escapeHtml(r.name)}${altLine(r)}<small>${escapeHtml(typeTxt)}${hitTag?' · tag: '+escapeHtml(hitTag):''}</small></div>`;
+    return `<div class="theme-opt" onclick="addPairChip('${jsq(refOf(r.source, r.id))}')">${titleBlock(r,'')}<small>${escapeHtml(typeTxt)}${hitTag?' · tag: '+escapeHtml(hitTag):''}</small></div>`;
   }).join('') || '<div class="theme-opt" style="color:var(--text3)">No match — tag the other category\'s type first.</div>';
 }
 function addPairChip(ref){
@@ -4553,7 +4571,7 @@ function renderBingoCatSuggest(slot){
     .sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''))
     .slice(0,25);
   box.innerHTML = matches.length ? matches.map(([id,t])=>
-    `<div class="theme-opt" onclick="pickBingoCat(${slot},'${id}')">${escapeHtml(t.name)}${altLine(t)}</div>`
+    `<div class="theme-opt" onclick="pickBingoCat(${slot},'${id}')">${titleBlock(t,'')}</div>`
   ).join('') : '<div class="theme-opt" style="color:var(--text3)">No match — new categories are added in the Bingo app itself.</div>';
 }
 function pickBingoCat(slot, id){
@@ -4616,7 +4634,7 @@ function regularPairsHtml(i){
   ids.delete(r.themeId);
   const cur = gigCtx.rounds[2] && gigCtx.rounds[2].themeId;
   const rows = [...ids].map(id=>{ const p=state.themes[id];
-    return `<div class="theme-opt${cur===id?' active-pick':''}" onclick="pickRegularPair('${jsq(id)}')">${escapeHtml(p.name)} <span style="color:var(--text3)">· ${TIER_LABELS[p.tier]||'untagged'}</span>${altLine(p)}</div>`; }).join('');
+    return `<div class="theme-opt${cur===id?' active-pick':''}" onclick="pickRegularPair('${jsq(id)}')">${titleBlock(p, ` <span style="color:var(--text3)">· ${TIER_LABELS[p.tier]||'untagged'}</span>`)}</div>`; }).join('');
   return `<div style="margin:-2px 0 10px 66px;"><div class="section-sub" style="margin-bottom:4px;font-size:11px;">Paired with this category — click one to use it for Round 3, or type your own:</div>${rows||'<div class="theme-opt" style="color:var(--text3)">No saved pairings for this category yet.</div>'}</div>`;
 }
 function pickRegularPair(id){
@@ -4691,7 +4709,7 @@ function renderRoundInputSuggest(i){
     .sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||''))
     .slice(0,25);
   box.innerHTML = list.length ? list.map(([id,t])=>
-    `<div class="theme-opt" onclick="pickRoundOption(${i},'${id}')">${escapeHtml(t.name)} <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span>${altLine(t)}</div>`
+    `<div class="theme-opt" onclick="pickRoundOption(${i},'${id}')">${titleBlock(t, ` <span style="color:var(--text3)">· ${TIER_LABELS[t.tier]||'untagged'}</span>`)}</div>`
   ).join('') : (gigCtx.regularTrivia ? '<div class="theme-opt" style="color:var(--text3)">No match — this will be saved as a new category.</div>' : '<div class="theme-opt" style="color:var(--text3)">No match — this will be saved as a new category.</div>');
 }
 function pickRoundOption(i,id){
@@ -4738,7 +4756,7 @@ function renderRoundSuggestPanel(){
   const pairs = (t.pairsWith||[]).map(id=>[id,state.themes[id]]).filter(([id,p])=>p && id!==r0.themeId);
   const usedIds = new Set(gigCtx.rounds.map(r=>r.themeId).filter(Boolean));
   document.getElementById('gig-round-suggest-list').innerHTML = pairs.length ? pairs.map(([id,p])=>
-    `<div class="theme-opt${usedIds.has(id)?' active-pick':''}" onclick="pickRoundSuggestion('${id}')">${escapeHtml(p.name)} <span style="color:var(--text3)">· ${TIER_LABELS[p.tier]||''}</span>${altLine(p)}</div>`
+    `<div class="theme-opt${usedIds.has(id)?' active-pick':''}" onclick="pickRoundSuggestion('${id}')">${titleBlock(p, ` <span style="color:var(--text3)">· ${TIER_LABELS[p.tier]||''}</span>`)}</div>`
   ).join('') : '<div class="theme-opt" style="color:var(--text3)">No saved pairings yet.</div>';
 }
 function pickRoundSuggestion(id){
@@ -5364,6 +5382,7 @@ document.querySelectorAll('.tab-btn').forEach(b=>{ if(['planning','themes','movi
 { const af=document.getElementById('all-filter'); if(af) af.style.display='flex'; }
 document.querySelectorAll('.trivia-only-tab').forEach(t=>{ t.style.display='none'; });
 renderAllFilter();
+updateAltToggleBtn();
 renderActiveTab();
 if(spreadsheetFormat==='classic') setTimeout(scrollSpreadsheetToToday, 50);
 </script>
