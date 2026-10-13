@@ -2686,7 +2686,18 @@ async function deleteCategory() {
   if(!confirm('Delete this category? This cannot be undone.')) return;
   setSyncStatus('syncing');
   try {
+    const gone = categories.find(c => c.id === editingId) || {};
     await db.ref(`trivia/categories/${editingId}`).remove();
+    // Remove every other copy too so nothing is left to reappear: Venue Menu entry + Question Vault sheet (archived if it still has questions)
+    try {
+      const vmIds = new Set([gone.vmCatId].filter(Boolean));
+      vmCats.forEach(v => { if(v.triviaCatId === editingId) vmIds.add(v.id); });
+      await Promise.all([...vmIds].map(k => dbFs.collection('venueMenuCategories').doc(k).delete().catch(() => {})));
+      if(gone.vaultCatId) {
+        const vr = dbFs.collection('triviaCategories').doc(gone.vaultCatId), vs = await vr.get();
+        if(vs.exists) { if((Number((vs.data()||{}).questionCount)||0) > 0) await vr.update({ archived:true }); else await vr.delete(); }
+      }
+    } catch(e) { console.warn('Linked copies not fully removed', e); }
     // Also remove from lineup if present
     lineup = lineup.map(id => id === editingId ? null : id);
     saveLineup();
