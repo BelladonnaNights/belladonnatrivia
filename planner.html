@@ -3468,7 +3468,7 @@ function exportThemeNamesList(){
     if(!t || !t.name) return;
     const tier = normTier(t.tier) || '';
     const label = TIER_LABELS[tier] || t.typeLabel || 'Untagged';
-    (groups[label] = groups[label] || []).push(t.name);
+    (groups[label] = groups[label] || []).push((tier==='feature-trivia' && altOf(t)) ? `${altOf(t)} - ${t.name}` : t.name);
   });
   if(!Object.keys(groups).length){ toast('No categories to export yet.', true); return; }
   const orderedLabels = Object.values(TIER_LABELS);
