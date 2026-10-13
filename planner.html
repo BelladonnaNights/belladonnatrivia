@@ -4094,7 +4094,7 @@ async function removeVaultSheet(vaultId){
     const n = Number((snap.data()||{}).questionCount)||0;
     if(n>0) await ref.update({ archived:true, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     else await ref.delete();
-  }catch(e){ console.warn('Could not remove the Question Vault sheet', e && e.message); }
+  }catch(e){ console.error('Vault delete failed', e); toast('Could not remove the Question Vault sheet: '+((e&&e.code)||(e&&e.message)), true); }
 }
 async function deleteLinkedCopies(name, ids){
   const nm = normLibName(name);
@@ -4104,7 +4104,7 @@ async function deleteLinkedCopies(name, ids){
     if((ids.trivia && (d.triviaCatId===ids.trivia || d._migratedTo===ids.trivia)) || (ids.bingo && d._migratedTo===ids.bingo)) vmIds.add(k);
     else if(nm && normLibName(d.name)===nm && /^(trivia|bingo)$/i.test(d.type||'') && (ids.bingo ? /bingo/i.test(d.type) : /trivia/i.test(d.type))) vmIds.add(k);
   });
-  await Promise.all([...vmIds].map(k=>dbFs.collection('venueMenuCategories').doc(k).delete().catch(()=>{})));
+  await Promise.all([...vmIds].map(k=>dbFs.collection('venueMenuCategories').doc(k).delete().catch(e=>{ console.error('Venue Menu delete failed', k, e); toast('Could not remove the Venue Menu copy: '+(e.code||e.message), true); })));
   let vaultId = ids.vault;
   if(!vaultId && nm && ids.trivia){
     try{ const vs = await dbFs.collection('triviaCategories').get(); vs.forEach(d=>{ const c=d.data(); if(!c.archived && normLibName(c.name)===nm) vaultId = vaultId || d.id; }); }catch(e){}
