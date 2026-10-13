@@ -1785,7 +1785,7 @@ function renderCatTypeDropdown() {
 db.ref('trivia/categories').on('value', snap => {
   const data = snap.val() || {};
   // A banner link set in the Planner's theme library lives at venueMenu.bannerUrl — use it whenever no admin banner (bgImage) is set.
-  categories = Object.entries(data).map(([id, v]) => ({id, ...v, bgImage: v.bgImage || (v.venueMenu && v.venueMenu.bannerUrl) || ''}));
+  categories = Object.entries(data).map(([id, v]) => ({id, ...v, bgImage: (v.venueMenu && v.venueMenu.bannerUrl) || v.bgImage || '', miniGameImage: (v.venueMenu && v.venueMenu.miniGameImage) || v.miniGameImage || ''}));
   migrateMiniGamesTag();
   autoLinkVault();
   renderLibrary();
@@ -1873,10 +1873,24 @@ dbFs.collection('triviaCategories').onSnapshot(snap => {
 //  Trivia categories missing a Vault sheet or Venue Menu entry get them automatically. Ones that
 //  exist only in the Vault / Venue Menu are offered in a banner (one click adds them).
 // ═══════════════════════════════════════════════
+const vmBannerOf = v => ['bannerData','image'].map(k=>v[k]).find(u=>typeof u==='string' && /^https?:/i.test(u)) || '';
+// Any linked category that has a Venue Menu banner but no banner here picks it up automatically.
+function fillBannersFromVm(){
+  try{
+    const ups = {};
+    (categories||[]).forEach(c=>{
+      const vm = vmCats.find(v => v.id===c.vmCatId || v.triviaCatId===c.id); if(!vm) return;
+      if(!c.bgImage && vm.banner){ ups['trivia/categories/'+c.id+'/bgImage']=vm.banner; ups['trivia/categories/'+c.id+'/venueMenu/bannerUrl']=vm.banner; }
+      if(!c.miniGameImage && vm.mini){ ups['trivia/categories/'+c.id+'/venueMenu/miniGameImage']=vm.mini; }
+    });
+    if(Object.keys(ups).length) db.ref().update(ups);
+  }catch(e){ console.warn('banner pull skipped', e); }
+}
 let vmCats = [], _catSyncTimer = null; const _catSyncBusy = new Set();
 dbFs.collection('venueMenuCategories').onSnapshot(snap => {
   vmCats = [];
-  snap.forEach(d => { const v = d.data(); vmCats.push({ id:d.id, name:v.name||'', type:v.type||'', triviaCatId:v.triviaCatId||null, mirror:!!v._plannerMirror, archived:!!v.archived, tags:v.tags||'', image:v.image||'' }); });
+  snap.forEach(d => { const v = d.data(); vmCats.push({ id:d.id, name:v.name||'', type:v.type||'', triviaCatId:v.triviaCatId||null, mirror:!!v._plannerMirror, archived:!!v.archived, tags:v.tags||'', image:v.image||'', banner: vmBannerOf(v), mini: (typeof v.miniGameImage==='string' && /^https?:/i.test(v.miniGameImage)) ? v.miniGameImage : '' }); });
+  fillBannersFromVm();
   scheduleCategorySync();
 }, err => console.warn('Venue Menu categories unavailable', err));
 function scheduleCategorySync() { clearTimeout(_catSyncTimer); _catSyncTimer = setTimeout(runCategorySync, 2500); }
@@ -1957,7 +1971,7 @@ async function addMissingCategories() {
     try {
       const vref = await dbFs.collection('triviaCategories').add({ name:v.name, type:'Evergreen', questionCount:0, archived:false, createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
       const ref = db.ref('trivia/categories').push();
-      await ref.set({ name:v.name, genre:v.tags||'', type:'trivia', vaultCatId:vref.id, vmCatId:v.id, bgImage:v.image||'', unified:true, notes:'Created from the Venue Menu', createdAt:Date.now(), updatedAt:Date.now() });
+      await ref.set({ name:v.name, genre:v.tags||'', type:'trivia', vaultCatId:vref.id, vmCatId:v.id, bgImage:v.banner||v.image||'', ...((v.banner||v.image)?{venueMenu:{bannerUrl:v.banner||v.image}}:{}), unified:true, notes:'Created from the Venue Menu', createdAt:Date.now(), updatedAt:Date.now() });
       await dbFs.collection('venueMenuCategories').doc(v.id).update({ triviaCatId: ref.key, linked:true });
       made++;
     } catch(e) { console.warn('Could not add Venue Menu category', v.name, e && e.message); }
@@ -2646,12 +2660,12 @@ async function syncCategoryToVm(catId, data) {
     const vmCatId = local && local.vmCatId ? local.vmCatId : null;
     if(vmCatId) {
       await dbFs.collection('venueMenuCategories').doc(vmCatId).update({
-        name: data.name, tags: data.genre || '', image: data.bgImage || ''
+        name: data.name, tags: data.genre || '', image: data.bgImage || '', bannerData: data.bgImage || null
       });
     } else {
       const newDoc = dbFs.collection('venueMenuCategories').doc();
       await newDoc.set({
-        name: data.name, type: 'Trivia', tags: data.genre || '', image: data.bgImage || '',
+        name: data.name, type: 'Trivia', tags: data.genre || '', image: data.bgImage || '', bannerData: data.bgImage || null,
         plannerTier: null, linked: true, triviaCatId: catId,
         createdAt: Date.now(), updatedAt: Date.now()
       });
