@@ -1784,7 +1784,8 @@ function renderCatTypeDropdown() {
 
 db.ref('trivia/categories').on('value', snap => {
   const data = snap.val() || {};
-  categories = Object.entries(data).map(([id, v]) => ({id, ...v}));
+  // A banner link set in the Planner's theme library lives at venueMenu.bannerUrl — use it whenever no admin banner (bgImage) is set.
+  categories = Object.entries(data).map(([id, v]) => ({id, ...v, bgImage: v.bgImage || (v.venueMenu && v.venueMenu.bannerUrl) || ''}));
   migrateMiniGamesTag();
   autoLinkVault();
   renderLibrary();
@@ -2609,12 +2610,12 @@ async function saveCategory() {
   try {
     let catId = editingId;
     if(editingId) {
-      await db.ref(`trivia/categories/${editingId}`).update(Object.assign({}, data, {'venueMenu/description': descVal || null}));
+      await db.ref(`trivia/categories/${editingId}`).update(Object.assign({}, data, {'venueMenu/description': descVal || null, 'venueMenu/bannerUrl': data.bgImage || null}));
       toast('Category updated!');
     } else {
       const newRef = db.ref('trivia/categories').push();
       catId = newRef.key;
-      await newRef.set({...data, createdAt: Date.now(), ...(descVal ? {venueMenu:{description:descVal}} : {})});
+      await newRef.set({...data, createdAt: Date.now(), ...((descVal||data.bgImage) ? {venueMenu:{...(descVal?{description:descVal}:{}), ...(data.bgImage?{bannerUrl:data.bgImage}:{})}} : {})});
       toast('Category added!');
     }
     syncCategoryToVm(catId, data); // fire-and-forget — mirror into Venue Menu/Planner
