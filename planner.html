@@ -323,11 +323,6 @@ a{color:inherit}
 
 <div class="tabs" style="padding-top:0.6rem;justify-content:space-between;">
   <div>
-    <button class="mode-pill active" onclick="setPlannerMode('all',this)">ALL</button>
-    <button class="mode-pill" onclick="setPlannerMode('trivia',this)">TRIVIA</button>
-    <button class="mode-pill" onclick="setPlannerMode('bingo',this)">BINGO</button>
-    <button class="mode-pill" onclick="setPlannerMode('karaoke',this)">KARAOKE</button>
-    <button class="mode-pill" onclick="setPlannerMode('events',this)">EVENTS</button>
   </div>
   <select id="plannerLocationSelect" onchange="setPlannerLocation(this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:999px;color:var(--gold);padding:8px 18px;font-size:12px;font-weight:600;margin:0 0 10px 0;min-width:190px;max-width:260px"><option>Loading locations…</option></select>
 </div>
@@ -615,6 +610,8 @@ a{color:inherit}
 <div class="modal-overlay" id="gig-modal-overlay">
   <div class="modal wide">
     <h3>Assign Category</h3>
+    <div id="gig-mode-row" style="display:none"><label class="form-label">What kind of night</label>
+      <select class="form-select" onchange="switchCtxMode(this.value,'gig')"><option value="trivia">Trivia</option><option value="bingo">Bingo</option><option value="karaoke">Karaoke</option><option value="events">Events</option></select></div>
     <label class="form-label">Venue</label>
     <select class="form-select" id="gig-venue" onchange="onGigVenueChange()"></select>
     <label class="form-label">Date</label>
@@ -681,6 +678,8 @@ a{color:inherit}
 <div class="modal-overlay" id="venue-modal-overlay">
   <div class="modal">
     <h3 id="venue-modal-title">Add Venue</h3>
+    <div id="v-mode-row" style="display:none"><label class="form-label">What kind of night</label>
+      <select class="form-select" onchange="switchCtxMode(this.value,'venue')"><option value="trivia">Trivia</option><option value="bingo">Bingo</option><option value="karaoke">Karaoke</option><option value="events">Events</option></select></div>
     <label class="form-label">Name</label>
     <input type="text" class="form-input" id="v-name">
     <input type="hidden" id="v-group">
@@ -1176,17 +1175,16 @@ function insertKaraokeHeading(){
   ta.value=v.slice(0,at)+ins+v.slice(at);
   const c=at+ins.length; ta.focus(); ta.setSelectionRange(c,c);
 }
-function rebuildThemesState(){
+function computeThemes(mode, raw){
   const out = {};
-  Object.entries(libraryRaw||{}).forEach(([id,c])=>{
-    // Keep every field the real record already has (Bingo's image/order/
-    // classicBingo, Trivia's sheets/notes/etc.) — the Planner just overlays
-    // its own fields on top, it never drops what the admin apps put there.
+  Object.entries(raw||{}).forEach(([id,c])=>{
+    // Keep every field the real record already has (Bingo's image/order/classicBingo, Trivia's sheets/notes/etc.) —
+    // the Planner just overlays its own fields on top, it never drops what the admin apps put there.
     const usage = c.plannerUsage || {};
     out[id] = {
       ...c,
       name: c.name || c.title || '',
-      tier: c.plannerTier || (plannerMode==='bingo' ? 'music-bingo' : null),
+      tier: c.plannerTier || (mode==='bingo' ? 'music-bingo' : null),
       tags: normalizeVmTags(c.tags),
       pairsWith: c.pairsWith || [],
       timesUsed: usage.timesUsed || c.timesUsed || 0,
@@ -1194,12 +1192,15 @@ function rebuildThemesState(){
       lastUsedVenueId: usage.lastUsedVenueId || c.lastUsedVenueId || null
     };
   });
-  if(plannerMode==='trivia'||plannerMode==='karaoke') mirrorPublicKaraoke(out);
-  if(plannerMode==='events') Object.keys(out).forEach(id=>delete out[id]);
-  if(plannerMode==='karaoke'){
+  if(mode==='trivia'||mode==='karaoke') mirrorPublicKaraoke(out);
+  if(mode==='events') Object.keys(out).forEach(id=>delete out[id]);
+  if(mode==='karaoke'){
     Object.keys(out).forEach(id=>{ if(out[id].tier!=='karaoke') delete out[id]; });
   }
-  state.themes = out;
+  return out;
+}
+function rebuildThemesState(){
+  state.themes = computeThemes(plannerMode==='all' ? 'trivia' : plannerMode, libraryRaw);
   onDataChange();
   updateThemeDatalist();
 }
@@ -1739,26 +1740,48 @@ function resolveCrossPairTheme(id){
   return { name: r.name||'(untitled)', tier: r.tier, _crossLibrary: r.source==='trivia' ? null : r.source, _vmType: r.typeLabel };
 }
 // ═══════════════════════════════════════════════
-//  ALL — Trivia, Bingo, Karaoke and Events merged into the SAME Dashboard / Venues screens as every other mode.
-//  Each venue is tagged with its mode; clicking anything opens it in its own mode with every control.
-//  (Nothing is ever written from ALL itself — edits happen after the jump, in the real mode.)
+//  EVERYTHING COMBINED. There are no separate Trivia / Bingo / Karaoke / Events planners any more: every tab shows all of them
+//  together (the Dashboard calendar alone has a Show-filter). Under the hood each venue/category still lives in its own store,
+//  so when you open or edit one, the Planner briefly works "inside" that item's store (a context), then returns to the combined view.
 // ═══════════════════════════════════════════════
 const ALL_MODES = ['trivia','bingo','karaoke','events'];
 const ALL_MODE_LABEL = {trivia:'Trivia', bingo:'Bingo', karaoke:'Karaoke', events:'Events'};
-let allData = {venues:{}, gigs:{}, bingoLib:{}}, allModesOn = new Set(ALL_MODES), _allTimer = null;
+let allData = {venues:{}, gigs:{}, lib:{}, seq:{}}, allModesOn = new Set(ALL_MODES), _allTimer = null, _ctxTimer = null, _ctxNew = false;
+let _allPrevG = {}, _allPrevV = {};
 const isAllId = id => typeof id==='string' && /^(trivia|bingo|karaoke|events)~/.test(id);
-function blockInAll(){ if(plannerMode!=='all') return false; toast('Open it in its own mode (click it) to edit — ALL is a combined view.', true); return true; }
+const modeOfVenue = id => ((state.venues||{})[id]||{})._mode || plannerMode;
+function blockInAll(){ if(plannerMode!=='all') return false; toast('The spreadsheet is view-only here — double-click a night to edit it.', true); return true; }
+function allLater(){
+  clearTimeout(_allTimer);
+  _allTimer = setTimeout(()=>{ clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner(); if(plannerMode==='all') rebuildAllState(); else loadContextState(plannerMode); }, 120);
+}
 function attachAllListeners(){
-  allData = {venues:{}, gigs:{}, bingoLib:{}};
+  allData = {venues:{}, gigs:{}, lib:{}, seq:{}}; _allPrevG = {}; _allPrevV = {};
   armSyncWatchdog();
   renderAllFilter();
-  const later = ()=>{ clearTimeout(_allTimer); _allTimer = setTimeout(()=>{ if(plannerMode==='all') rebuildAllState(); }, 120); };
   ALL_MODES.forEach(m=>{
     const p = MODE_PATHS[m];
-    const vr = db.ref(p.venues); vr.on('value', snap=>{ allData.venues[m] = snap.val()||{}; later(); }, onListenerError('venues')); modeListenerRefs.push(vr);
-    const gr = db.ref(p.gigs); gr.on('value', snap=>{ allData.gigs[m] = snap.val()||{}; later(); }, onListenerError('gigs')); modeListenerRefs.push(gr);
+    const vr = db.ref(p.venues);
+    vr.on('value', snap=>{ const raw = snap.val()||{}; if(_allPrevV[m]) noteVenueChanges(m, _allPrevV[m], raw); _allPrevV[m] = raw; allData.venues[m] = raw; allLater(); }, onListenerError('venues'));
+    modeListenerRefs.push(vr);
+    const gr = db.ref(p.gigs);
+    gr.on('value', snap=>{
+      const raw = snap.val()||{}, cur = gigKeySet(m, raw);
+      if(_allPrevG[m]){ const gone = [..._allPrevG[m]].filter(k=>!cur.has(k)); if(gone.length) noteRemovedGigs(m, gone, _allPrevV[m]||{}); }
+      _allPrevG[m] = cur; allData.gigs[m] = raw; allLater();
+      clearTimeout(_hqMirrorTimer); _hqMirrorTimer = setTimeout(()=>mirrorHqGigsToPlanner().catch(()=>{}), 1500);
+    }, onListenerError('gigs'));
+    modeListenerRefs.push(gr);
   });
-  const br = db.ref(MODE_PATHS.bingo.library); br.on('value', snap=>{ allData.bingoLib = snap.val()||{}; later(); }, onListenerError('bingo library')); modeListenerRefs.push(br);
+  [['trivia',MODE_PATHS.trivia.library],['bingo',MODE_PATHS.bingo.library]].forEach(([k,path])=>{
+    const r = db.ref(path); r.on('value', snap=>{ allData.lib[k] = snap.val()||{}; allLater(); }, onListenerError('categories')); modeListenerRefs.push(r);
+  });
+  const sr = db.ref(MODE_PATHS.trivia.sequences); sr.on('value', snap=>{ allData.seq = snap.val()||{}; allLater(); }, onListenerError('sequences')); modeListenerRefs.push(sr);
+}
+function bingoGigObj(e){
+  const ids = e.rounds || e.categoryIds || [];
+  const names = ids.map(id=>{ const c=(allData.lib.bingo||{})[id]; return c ? (c.title||c.name||'') : ''; }).filter(Boolean);
+  return {themeId:ids[0]||null, themeName:names.join(' + '), status:'planned', note:e.notes||'', host:e.host||null, locked:!!e.locked, _bingoRounds:ids};
 }
 function rebuildAllState(){
   const V = {}, G = {};
@@ -1771,15 +1794,17 @@ function rebuildAllState(){
     if(m==='bingo'){
       Object.values(allData.gigs.bingo||{}).forEach(e=>{
         if(!e || !e.venueId || !e.date || !V['bingo~'+e.venueId]) return;
-        const ids = e.rounds || e.categoryIds || [];
-        const names = ids.map(id=>{ const c=(allData.bingoLib||{})[id]; return c ? (c.title||c.name||'') : ''; }).filter(Boolean);
-        (G['bingo~'+e.venueId] = G['bingo~'+e.venueId] || {})[e.date] = {themeId:ids[0]||null, themeName:names.join(' + '), status:'planned', note:e.notes||'', host:e.host||null, locked:!!e.locked};
+        (G['bingo~'+e.venueId] = G['bingo~'+e.venueId] || {})[e.date] = bingoGigObj(e);
       });
     } else {
       Object.entries(allData.gigs[m]||{}).forEach(([vid,byDate])=>{ if(V[m+'~'+vid]) G[m+'~'+vid] = byDate; });
     }
   });
-  state.venues = V; state.gigs = G; state.themes = {}; state.sequences = {};
+  state.venues = V; state.gigs = G;
+  state.themes = Object.assign({}, computeThemes('trivia', allData.lib.trivia), computeThemes('bingo', allData.lib.bingo));
+  state.sequences = allData.seq || {};
+  libraryRaw = {};
+  updateThemeDatalist();
   clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner();
   renderActiveTab();
 }
@@ -1787,25 +1812,59 @@ function renderAllFilter(){
   const el = document.getElementById('all-filter'); if(!el) return;
   el.innerHTML = '<span style="font-size:11px;color:var(--text3);align-self:center;margin-right:6px;letter-spacing:.08em">SHOW</span>' + ALL_MODES.map(m=>`<button class="pill ${allModesOn.has(m)?'active':''}" onclick="toggleAllMode('${m}')">${ALL_MODE_LABEL[m]}</button>`).join('');
 }
-function toggleAllMode(m){ if(allModesOn.has(m)){ if(allModesOn.size>1) allModesOn.delete(m); } else allModesOn.add(m); renderAllFilter(); rebuildAllState(); }
-// Switches to the item's own mode (full controls), then opens it once that mode's data has loaded.
-function jumpToMode(m, vid, dk, what){
-  const pill = Array.from(document.querySelectorAll('.mode-pill')).find(p=>p.textContent.trim().toLowerCase()===m);
-  setPlannerMode(m, pill);
-  let tries = 0;
-  const go = ()=>{
-    if(state.venues && state.venues[vid]){ if(what==='venue') openVenueDetail(vid); else if(what==='edit') openVenueModal(vid); else if(what==='plan') openQuickSchedule(vid); else openGigModal(vid, dk||undefined); return; }
-    if(++tries < 60) setTimeout(go, 100);
-  };
-  go();
+function toggleAllMode(m){ if(allModesOn.has(m)){ if(allModesOn.size>1) allModesOn.delete(m); } else allModesOn.add(m); renderAllFilter(); if(plannerMode==='all') rebuildAllState(); }
+// ── context: work "inside" one store (real ids, that store's categories) for the item being opened ──
+function loadContextState(m){
+  const vraw = allData.venues[m]||{}, f = {};
+  Object.entries(vraw).forEach(([id,v])=>{ if(v && locationMatches(v.locationId)) f[id] = v; });
+  state.venues = f;
+  libraryRaw = (m==='bingo' ? allData.lib.bingo : allData.lib.trivia) || {};
+  state.themes = computeThemes(m, libraryRaw);
+  state.sequences = m==='trivia' ? (allData.seq||{}) : {};
+  gigsRaw = allData.gigs[m] || {};
+  rebuildGigsState();
+  updateThemeDatalist();
 }
-function allJump(id, dk, what){ const m = id.split('~')[0]; jumpToMode(m, id.slice(m.length+1), dk, what); }
-// In ALL, any click that would open a gig/venue editor hops into that item's own mode instead.
+function enterContext(m){
+  clearTimeout(_ctxTimer);
+  if(plannerMode===m){ ctxIdleCheck(); return; }
+  plannerMode = m;
+  loadContextState(m);
+  ctxIdleCheck();   // safety net: if nothing ends up open, return to the combined view
+}
+function leaveContext(){
+  if(plannerMode==='all') return;
+  plannerMode = 'all'; _ctxNew = false;
+  rebuildAllState();
+}
+// Back to the combined view as soon as nothing that needs the context is open (no popup, no venue page).
+function ctxIdleCheck(){
+  clearTimeout(_ctxTimer);
+  _ctxTimer = setTimeout(()=>{
+    if(plannerMode==='all') return;
+    if(document.querySelector('.modal-overlay.open')) return;
+    const vd = document.getElementById('panel-venue-detail'); if(vd && vd.classList.contains('active')) return;
+    leaveContext();
+  }, 120);
+}
+// Any click that opens a gig / venue editor, using a combined-view id ("trivia~abc"), works inside that item's own store.
 ['openGigModal','openVenueDetail','openVenueModal','openQuickSchedule'].forEach(fn=>{
   const orig = window[fn]; if(typeof orig!=='function') return;
-  const what = {openGigModal:'gig', openVenueDetail:'venue', openVenueModal:'edit', openQuickSchedule:'plan'}[fn];
-  window[fn] = function(id){ if(isAllId(id)) return allJump(id, arguments[1], what); if(plannerMode==='all' && fn==='openVenueModal' && !id) return blockInAll(); return orig.apply(this, arguments); };
+  window[fn] = function(id){
+    const a = Array.prototype.slice.call(arguments);
+    if(isAllId(id)){ const m = id.split('~')[0]; enterContext(m); _ctxNew = false; a[0] = id.slice(m.length+1); }
+    else if(plannerMode==='all' && !id && (fn==='openGigModal' || fn==='openVenueModal')){ enterContext('trivia'); _ctxNew = true; }
+    const r = orig.apply(this, a);
+    if(fn==='openGigModal' || fn==='openVenueModal'){
+      const row = document.getElementById(fn==='openGigModal' ? 'gig-mode-row' : 'v-mode-row');
+      if(row){ const show = _ctxNew && !a[0]; row.style.display = show ? '' : 'none'; const sel = row.querySelector('select'); if(sel) sel.value = plannerMode; }
+    }
+    return r;
+  };
 });
+function switchCtxMode(m, which){ enterContext(m); _ctxNew = true; if(which==='gig') openGigModal(null); else openVenueModal(); }
+// Library actions that only make sense inside one store.
+['openApplySequence'].forEach(fn=>{ const orig = window[fn]; if(typeof orig!=='function') return; window[fn] = function(){ if(plannerMode==='all') enterContext('trivia'); return orig.apply(this, arguments); }; });
 function onDataChange(){ clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner(); renderActiveTab(); }
 function updateThemeDatalist(){
   document.getElementById('theme-name-list').innerHTML = Object.values(state.themes||{})
@@ -1863,6 +1922,8 @@ const MODE_PATHS = {
   events: { venues:'trivia/planner/eventVenues', gigs:'trivia/planner/eventGigs', library:'trivia/categories', sequences:null },
   bingo:  { venues:'bingo/landing/venues',  gigs:'bingo/landing/schedule', library:'bingo/landing/categories', sequences:null }
 };
+MODE_PATHS.all = MODE_PATHS.trivia; // safety net: new library items from All go to Trivia
+
 // ── LOCATIONS ── same shared list HQ manages. Venues and gigs get filtered
 // to the selected location on read (untagged legacy records still show, so
 // nothing already in the database silently vanishes) and tagged with it on
@@ -2072,72 +2133,12 @@ function rebuildGigsState(){
   onDataChange();
 }
 function attachModeListeners(){
-  if(plannerMode==='all'){ startHqGigMirror(); detachModeListeners(); _prevGigKeys=null; _prevVenueRaw=null; attachAllListeners(); return; }
   startHqGigMirror();
   detachModeListeners();
   _prevGigKeys = null; _prevVenueRaw = null;
-  const p = MODE_PATHS[plannerMode];
-  armSyncWatchdog();
-
-  const venuesRef = db.ref(p.venues);
-  venuesRef.on('value', snap=>{
-    const raw = snap.val()||{};
-    const filtered={};
-    Object.entries(raw).forEach(([id,v])=>{ if(locationMatches(v.locationId))filtered[id]=v; });
-    if(_prevVenueRaw) noteVenueChanges(plannerMode, _prevVenueRaw, raw);
-    _prevVenueRaw = raw;
-    state.venues = filtered;
-    rebuildGigsState();
-  }, onListenerError('venues'));
-  modeListenerRefs.push(venuesRef);
-
-  // The category library — trivia/categories or bingo/landing/categories,
-  // whichever mode is active. This is the SAME record Trivia Admin / Bingo
-  // Admin edit, read directly by ID. No separate Planner-only store, no
-  // Venue Menu copy — one category, one place in Firebase, every app reads
-  // and writes it directly.
-  const libraryRef = db.ref(p.library);
-  libraryRef.on('value', snap=>{
-    libraryRaw = snap.val()||{};
-    rebuildThemesState();
-    if(plannerMode==='bingo') rebuildGigsState();
-  }, onListenerError('theme/category library'));
-  modeListenerRefs.push(libraryRef);
-
-  const gigsRef = db.ref(p.gigs);
-  gigsRef.on('value', snap=>{
-    gigsRaw = snap.val()||{};
-    { const cur = gigKeySet(plannerMode, gigsRaw);
-      if(_prevGigKeys){ const gone = [..._prevGigKeys].filter(k=>!cur.has(k)); if(gone.length) noteRemovedGigs(plannerMode, gone, _prevVenueRaw||{}); }
-      _prevGigKeys = cur; }
-    rebuildGigsState();
-    clearTimeout(_hqMirrorTimer);
-    _hqMirrorTimer=setTimeout(()=>mirrorHqGigsToPlanner().catch(()=>{}),1500);
-  }, onListenerError('gigs/schedule'));
-  modeListenerRefs.push(gigsRef);
-
-  if(p.sequences){
-    const seqRef = db.ref(p.sequences);
-    seqRef.on('value', snap=>{ state.sequences = snap.val()||{}; onDataChange(); }, onListenerError('sequences'));
-    modeListenerRefs.push(seqRef);
-  } else {
-    state.sequences = {};
-  }
-}
-function setPlannerMode(mode, el){
-  if(mode===plannerMode) return;
-  plannerMode = mode;
-  document.querySelectorAll('.mode-pill').forEach(p=>p.classList.remove('active'));
-  if(el) el.classList.add('active');
-  // Trivia-only power features — hide rather than half-support in Bingo mode
-  // ALL shows the same Dashboard + Venues as every other mode; the tabs that only make sense inside one mode are hidden.
-  document.querySelectorAll('.tab-btn').forEach(b=>{ if(['planning','themes','movies'].includes(b.dataset.tab)) b.style.display = mode==='all' ? 'none' : ''; });
-  const af = document.getElementById('all-filter'); if(af) af.style.display = mode==='all' ? 'flex' : 'none';
-  document.querySelectorAll('.trivia-only-tab').forEach(t=>{ if(mode!=='all') t.style.display = mode==='trivia' ? '' : 'none'; });
-  document.getElementById('theme-tab-label').textContent = 'Theme Library';
-  state.venues={}; state.themes={}; state.gigs={}; state.sequences={}; libraryRaw={};
-  attachModeListeners();
-  switchTab('dashboard');
+  if(plannerMode!=='all'){ plannerMode = 'all'; _ctxNew = false; }
+  state.venues={}; state.themes={}; state.gigs={}; state.sequences={}; libraryRaw={}; gigsRaw={};
+  attachAllListeners();
 }
 
 
@@ -2285,9 +2286,11 @@ function switchTab(tab){
   activeTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  { const af = document.getElementById('all-filter'); if(af) af.style.display = tab==='dashboard' ? 'flex' : 'none'; }
   const map = {dashboard:'panel-dashboard', planning:'panel-planning', venues:'panel-venues', themes:'panel-themes', movies:'panel-movies'};
   if(map[tab]) document.getElementById(map[tab]).classList.add('active');
   renderActiveTab();
+  ctxIdleCheck();
 }
 function renderActiveTab(){
   if(activeTab==='dashboard') { renderDayBoxes(); renderMonthCalendar(); renderSpreadsheetView(); }
@@ -2379,7 +2382,7 @@ function renderPlanning(){
     const d = v.day ? nextDateForDay(v.day, weekStart) : null;
     const dk = d ? toKey(d) : null;
     const gig = dk ? (state.gigs[id]||{})[dk] : null;
-    const isUnassigned = plannerMode==='events' ? false : (!gig || (!gig.themeName && gig.status!=='cancelled'));
+    const isUnassigned = modeOfVenue(id)==='events' ? false : (!gig || (!gig.themeName && gig.status!=='cancelled'));
     if(isUnassigned && dk) unassigned.push({id, name:v.name, dk});
     const themeCell = gig && gig.themeName
       ? `<span class="theme-link" onclick="openGigModal('${id}','${dk}')">${escapeHtml(gig.themeName)}</span>${gig.round3Name?`<br><span style="color:var(--text3);font-size:11px">♪ ${escapeHtml(gig.round3Name)}</span>`:''}`
@@ -2875,14 +2878,14 @@ function gigsForDate(dk){
   });
   // the same venue listed twice for the same night (duplicate venue records) shows once — keep the one with a plan / host
   const best = {};
-  out.forEach(it=>{
+  out.filter(it=>modeOfVenue(it.venueId)!=='events').forEach(it=>{
     const k = vmxKey(it.venueName||'');
     const sc = (it.gig&&it.gig.themeName?4:0) + (it.gig?2:0) + (((it.gig&&it.gig.host)||(state.venues[it.venueId]||{}).host)?1:0);
     if(!best[k] || sc>best[k].sc) best[k] = { it, sc };
   });
-  return plannerMode==='events' ? out : Object.values(best).map(b=>b.it);
+  return out.filter(it=>modeOfVenue(it.venueId)==='events').concat(Object.values(best).map(b=>b.it).filter(it=>modeOfVenue(it.venueId)!=='events'));
 }
-function unplannedLabel(){ return plannerMode==='karaoke' ? 'regular karaoke' : 'unplanned'; }
+function unplannedLabel(vid){ return (vid?modeOfVenue(vid):plannerMode)==='karaoke' ? 'regular karaoke' : 'unplanned'; }
 function dispTime(t){ const x = vmxT24(t||''); if(!x) return ''; const [h,m] = x.split(':').map(Number); return ((h+11)%12+1) + (m?':'+String(m).padStart(2,'0'):'') + ' ' + (h>=12?'PM':'AM'); }
 function renderMonthCalendar(){
   if(activeTab!=='dashboard') return;
@@ -2897,7 +2900,7 @@ function renderMonthCalendar(){
     const inMonth = d.getMonth()===monthCalDate.getMonth();
     const items = gigsForDate(dk);
     const dots = items.slice(0,8).map(it=>{
-      const cls = !it.gig ? 'dot-empty' : it.gig.status==='cancelled' ? 'dot-cancelled' : (it.gig.themeName||plannerMode==='events') ? 'dot-planned' : 'dot-empty';
+      const cls = !it.gig ? 'dot-empty' : it.gig.status==='cancelled' ? 'dot-cancelled' : (it.gig.themeName||modeOfVenue(it.venueId)==='events') ? 'dot-planned' : 'dot-empty';
       return `<span class="monthcal-dot ${cls}"></span>`;
     }).join('');
     const more = items.length>8 ? `<span class="monthcal-more">+${items.length-8}</span>` : '';
@@ -2914,7 +2917,7 @@ function openDayAgenda(dk){
   document.getElementById('agenda-title').textContent = fromKey(dk).toLocaleDateString('en-US',{weekday:'long', month:'long', day:'numeric', year:'numeric'});
   document.getElementById('agenda-body').innerHTML = items.length ? items.map(it=>{
     const g = it.gig;
-    const label = g && g.themeName ? escapeHtml(g.themeName) : g && g.status==='cancelled' ? 'Cancelled' : (plannerMode==='karaoke' ? 'Regular karaoke' : 'Unplanned');
+    const label = g && g.themeName ? escapeHtml(g.themeName) : g && g.status==='cancelled' ? 'Cancelled' : (modeOfVenue(it.venueId)==='karaoke' ? 'Regular karaoke' : 'Unplanned');
     const round3 = g && g.round3Name ? ` · ♪ ${escapeHtml(g.round3Name)}` : '';
     return `<div class="tl-row" style="grid-template-columns:1fr 90px 64px">
       <div style="font-size:12.5px">${escapeHtml(it.venueName)}<br><span class="empty-cell" style="font-style:normal;color:var(--text2)">${label}${round3}</span></div>
@@ -2942,7 +2945,7 @@ function renderDayBoxes(){
       ${items.length ? items.map(it=>{
         const v = state.venues[it.venueId]||{};
         const gig = it.gig;
-        const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? 'cancelled' : unplannedLabel();
+        const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? 'cancelled' : unplannedLabel(it.venueId);
         const round3 = gig && gig.round3Name ? ` · ♪ ${escapeHtml(gig.round3Name)}` : '';
         const hostName = (gig && gig.host) || v.host || '';
         // A one-off fill-in: the regular host struck through, the fill-in in purple beneath.
@@ -3268,6 +3271,7 @@ document.addEventListener('drop', e=>{
 document.addEventListener('dragend', endDrag);
 function endDrag(){ dragDay = null; document.querySelectorAll('.tl-dragging,.tl-drop').forEach(r=>r.classList.remove('tl-dragging','tl-drop')); }
 async function moveDayCategories(vid, srcDk, dstDk){
+  if(plannerMode==='all') return toast('Open the night first, then move it.', true);
   const gigs = state.gigs[vid]||{};
   const s = gigs[srcDk]||{}, t = gigs[dstDk]||{};
   if(isLockedGig(s)||isLockedGig(t)) return toast('A locked day can\'t be moved or swapped — unlock it first.', true);
@@ -3588,47 +3592,53 @@ function looksImportedVenue(id, v){
   return !!(v && (v.source==='trivia-time' || v.source==='hq' || v.cadenceRaw || /created from hq/i.test(v.notes||'') || /^v_.+_(x|mon|tue|wed|thu|fri|sat|sun)_\d+$/i.test(id)));
 }
 function cleanupRows(){
-  return Object.entries(state.venues||{}).map(([id,v])=>({id, v, imp:looksImportedVenue(id,v), n:Object.keys(state.gigs[id]||{}).length}))
-    .sort((a,b)=>(b.imp-a.imp)||(a.v.name||'').localeCompare(b.v.name||''));
+  const out = [];
+  ALL_MODES.forEach(m=>Object.entries(allData.venues[m]||{}).forEach(([id,v])=>{
+    if(!v) return;
+    const n = m==='bingo' ? Object.values(allData.gigs.bingo||{}).filter(e=>e&&e.venueId===id).length : Object.keys((allData.gigs[m]||{})[id]||{}).length;
+    out.push({cid:m+'~'+id, m, id, v, imp:looksImportedVenue(id,v), n});
+  }));
+  return out.sort((a,b)=>(b.imp-a.imp)||(a.v.name||'').localeCompare(b.v.name||''));
 }
 function openCleanupModal(){
-  if(blockInAll()) return;
   const rows = cleanupRows();
   document.getElementById('cleanup-rows').innerHTML = rows.length ? rows.map(r=>`
-    <tr><td><input type="checkbox" class="cleanup-cb" data-id="${escapeHtml(r.id)}" data-imp="${r.imp?1:0}" ${r.imp?'checked':''} onchange="updateCleanupCount()"></td>
-    <td>${escapeHtml(r.v.name||'(unnamed)')}</td><td>${escapeHtml(r.v.day||'')}</td>
-    <td>${r.v.source==='trivia-time'?'Trivia Time':'Belladonna'}</td><td>${r.n}</td>
+    <tr><td><input type="checkbox" class="cleanup-cb" data-id="${escapeHtml(r.cid)}" data-imp="${r.imp?1:0}" ${r.imp?'checked':''} onchange="updateCleanupCount()"></td>
+    <td>${escapeHtml(r.v.name||'(unnamed)')} <span style="font-size:10px;color:var(--text3)">· ${ALL_MODE_LABEL[r.m]}</span></td><td>${escapeHtml(r.v.day||'')}</td>
+    <td>${r.v.source==='trivia-time'?'Trivia Time':r.v.source==='hq'?'HQ':'Belladonna'}</td><td>${r.n}</td>
     <td>${r.imp?'<span class="badge" style="font-size:10px">looks imported</span>':'<span style="font-size:10px;color:var(--text3)">added by hand</span>'}</td></tr>`).join('')
-    : '<tr><td colspan="6" style="padding:14px;color:var(--text2)">No venues in this mode.</td></tr>';
+    : '<tr><td colspan="6" style="padding:14px;color:var(--text2)">No venues.</td></tr>';
   updateCleanupCount(); openModal('cleanup-overlay');
 }
 function cleanupSelect(how){
   document.querySelectorAll('.cleanup-cb').forEach(cb=>{ cb.checked = how==='all' ? true : how==='none' ? false : cb.dataset.imp==='1'; });
   updateCleanupCount();
 }
+function cleanupNights(cid){ const rows = cleanupRows(); const r = rows.find(x=>x.cid===cid); return r ? r.n : 0; }
 function updateCleanupCount(){
   const sel = Array.from(document.querySelectorAll('.cleanup-cb:checked')).map(cb=>cb.dataset.id);
-  const nights = sel.reduce((n,id)=>n+Object.keys(state.gigs[id]||{}).length,0);
+  const nights = sel.reduce((n,id)=>n+cleanupNights(id),0);
   document.getElementById('cleanup-count').textContent = sel.length+' venue'+(sel.length===1?'':'s')+' · '+nights+' scheduled night'+(nights===1?'':'s');
 }
 async function runCleanup(){
   const ids = Array.from(document.querySelectorAll('.cleanup-cb:checked')).map(cb=>cb.dataset.id);
   if(!ids.length) return toast('Nothing selected.', true);
   const keepVenue = document.getElementById('cleanup-keep-venue').checked;
-  const nights = ids.reduce((n,id)=>n+Object.keys(state.gigs[id]||{}).length,0);
+  const nights = ids.reduce((n,id)=>n+cleanupNights(id),0);
   if(!confirm(`${keepVenue?'Clear the scheduled nights of':'Delete'} ${ids.length} venue${ids.length===1?'':'s'}${keepVenue?'':' and all their nights'} (${nights} scheduled night${nights===1?'':'s'})?\n\nThis can't be undone.`)) return;
-  const p = MODE_PATHS[plannerMode], updates = {};
+  const updates = {};
   const btn = document.getElementById('cleanup-go'); btn.disabled = true; btn.textContent = 'Deleting…';
   setSyncStatus('syncing');
-  for(const id of ids){
-    if(!keepVenue){ try{ await vmxRemoveLegacy(VMX_KIND_OF_MODE[plannerMode], id, state.venues[id]); }catch(e){} updates[p.venues+'/'+id] = null; }
-    if(plannerMode==='bingo') Object.values(state.gigs[id]||{}).forEach(g=>{ if(g._bingoEntryId) updates[p.gigs+'/'+g._bingoEntryId] = null; });
+  for(const cid of ids){
+    const m = cid.split('~')[0], id = cid.slice(m.length+1), p = MODE_PATHS[m];
+    if(!keepVenue){ try{ await vmxRemoveLegacy(VMX_KIND_OF_MODE[m], id, (allData.venues[m]||{})[id]); }catch(e){} updates[p.venues+'/'+id] = null; }
+    if(m==='bingo') Object.values(allData.gigs.bingo||{}).forEach(e=>{ if(e && e.venueId===id && e.id) updates[p.gigs+'/'+e.id] = null; });
     else updates[p.gigs+'/'+id] = null;
   }
   try{
     await db.ref().update(updates);
     toast('Cleaned up '+ids.length+' venue'+(ids.length===1?'':'s')+'.');
-    closeModal('cleanup-overlay'); renderActiveTab();
+    closeModal('cleanup-overlay');
   }catch(err){ toast('Clean-up failed: '+(err.code||err.message), true); setSyncStatus('synced'); }
   btn.disabled = false; btn.textContent = 'Delete selected';
 }
@@ -3766,7 +3776,7 @@ function buildRanIndex(){
   return idx;
 }
 function withRealUsage(t, idx){
-  if(t.source!==plannerMode) return Object.assign({}, t, {timesUsed:0, lastUsedDate:null, lastUsedVenueId:null});   // this mode's schedule is the only history loaded
+  if(plannerMode!=='all' && t.source!==plannerMode) return Object.assign({}, t, {timesUsed:0, lastUsedDate:null, lastUsedVenueId:null});   // this mode's schedule is the only history loaded
   const r = idx[t.id];
   return Object.assign({}, t, r ? {timesUsed:r.n, lastUsedDate:r.last, lastUsedVenueId:r.venue} : {timesUsed:0, lastUsedDate:null, lastUsedVenueId:null});
 }
@@ -3866,18 +3876,8 @@ function assignThemeFromLibrary(key){
       if(statusEl.value==='unplanned') statusEl.value = 'planned';
     }
   };
-  if(plannerMode!==targetMode){
-    const pill = Array.from(document.querySelectorAll('.mode-pill')).find(p=>p.textContent.trim().toLowerCase()===targetMode);
-    setPlannerMode(targetMode, pill);
-    let tries=0;
-    (function waitForVenues(){
-      tries++;
-      if(Object.keys(state.venues||{}).length || tries>40) doOpen();
-      else setTimeout(waitForVenues,100);
-    })();
-  } else {
-    doOpen();
-  }
+  enterContext(targetMode); _ctxNew = true;   // work inside the store this category belongs to (no tab switching)
+  doOpen();
 }
 function setTagFilter(tag){
   const key = tag.toLowerCase();
@@ -3942,7 +3942,7 @@ function openHistoryModal(key){
   const rows = [];
   // Gigs/venues are loaded per mode, so history is only available for
   // categories belonging to the mode currently open.
-  if(t.source === plannerMode){
+  if(plannerMode==='all' || t.source === plannerMode){
     Object.entries(state.gigs||{}).forEach(([vid,dates])=>{
       Object.entries(dates||{}).forEach(([dk,g])=>{ if((g.themeId===themeId || g.round3ThemeId===themeId || (g._bingoRounds||[]).includes(themeId)) && dk<=toKey(new Date()) && g.status!=='cancelled') rows.push({dk, venueName:(state.venues[vid]||{}).name||'?'}); });
     });
@@ -5137,7 +5137,7 @@ function clearGig(){
 //  MODAL HELPERS
 // ═══════════════════════════════════════════════
 function openModal(id){ document.getElementById(id).classList.add('open'); }
-function closeModal(id){ document.getElementById(id).classList.remove('open'); if(id==='gig-modal-overlay' && gigPrevVD.set){ currentVenueDetailId = gigPrevVD.id; gigPrevVD = {set:false,id:null}; } renderActiveTab(); if(activeTab==='venues'&&currentVenueDetailId) {} }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); if(id==='gig-modal-overlay' && gigPrevVD.set){ currentVenueDetailId = gigPrevVD.id; gigPrevVD = {set:false,id:null}; } renderActiveTab(); ctxIdleCheck(); }
 
 // ═══════════════════════════════════════════════
 //  IMPORT — XLSX PARSING (dates read as UTC — see toKeyUTC above)
@@ -5377,10 +5377,8 @@ async function commitImport(){
   btn.disabled=false; btn.textContent='Import Selected to Planner';
 }
 
-// Opening state = ALL: hide the single-mode tabs, show the mode filter row.
-document.querySelectorAll('.tab-btn').forEach(b=>{ if(['planning','themes','movies'].includes(b.dataset.tab)) b.style.display='none'; });
+// Everything is combined; only the Dashboard calendar carries the Show filter.
 { const af=document.getElementById('all-filter'); if(af) af.style.display='flex'; }
-document.querySelectorAll('.trivia-only-tab').forEach(t=>{ t.style.display='none'; });
 renderAllFilter();
 updateAltToggleBtn();
 renderActiveTab();
