@@ -2138,6 +2138,7 @@ const CADENCE_LABELS = {weekly:'Weekly', biweekly:'Bi-weekly', monthly:'Monthly'
 function cadenceTag(v){ const c=(v&&v.cadence)||'weekly'; return c==='weekly'?'':(CADENCE_LABELS[c]||''); }
 function venueRunsOn(v, dk, ignoreStatus){
   if(!v) return false;
+  if(v.endsOn && dk>=v.endsOn) return false;   // series ended from HQ ("this & future" delete)
   const cad = v.cadence||'weekly';
   const st = v.status||'active';
   const d = fromKey(dk);
