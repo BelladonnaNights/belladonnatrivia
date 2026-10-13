@@ -321,8 +321,8 @@ a{color:inherit}
 
 <div class="tabs" style="padding-top:0.6rem;justify-content:space-between;">
   <div>
-    <button class="mode-pill" onclick="setPlannerMode('all',this)">ALL</button>
-    <button class="mode-pill active" onclick="setPlannerMode('trivia',this)">TRIVIA</button>
+    <button class="mode-pill active" onclick="setPlannerMode('all',this)">ALL</button>
+    <button class="mode-pill" onclick="setPlannerMode('trivia',this)">TRIVIA</button>
     <button class="mode-pill" onclick="setPlannerMode('bingo',this)">BINGO</button>
     <button class="mode-pill" onclick="setPlannerMode('karaoke',this)">KARAOKE</button>
     <button class="mode-pill" onclick="setPlannerMode('events',this)">EVENTS</button>
@@ -1802,7 +1802,7 @@ function updateThemeDatalist(){
 //  calendar code just works unmodified) and routed through saveGig/clearGig
 //  on write, which branch by mode into each app's real, native format.
 // ═══════════════════════════════════════════════
-let plannerMode = 'trivia';
+let plannerMode = 'all';   // opens on ALL (every mode combined); pick a mode pill to work inside one
 // Host roster — mirrored from HQ's own Firestore roster into this same
 // Realtime DB project (HQ writes it; this Planner only ever reads it). Not
 // mode-dependent, so it's attached once, not detached/reattached on toggle.
@@ -2054,7 +2054,7 @@ function rebuildGigsState(){
   onDataChange();
 }
 function attachModeListeners(){
-  if(plannerMode==='all'){ detachModeListeners(); attachAllListeners(); return; }
+  if(plannerMode==='all'){ startHqGigMirror(); detachModeListeners(); _prevGigKeys=null; _prevVenueRaw=null; attachAllListeners(); return; }
   startHqGigMirror();
   detachModeListeners();
   _prevGigKeys = null; _prevVenueRaw = null;
@@ -5359,6 +5359,11 @@ async function commitImport(){
   btn.disabled=false; btn.textContent='Import Selected to Planner';
 }
 
+// Opening state = ALL: hide the single-mode tabs, show the mode filter row.
+document.querySelectorAll('.tab-btn').forEach(b=>{ if(['planning','themes','movies'].includes(b.dataset.tab)) b.style.display='none'; });
+{ const af=document.getElementById('all-filter'); if(af) af.style.display='flex'; }
+document.querySelectorAll('.trivia-only-tab').forEach(t=>{ t.style.display='none'; });
+renderAllFilter();
 renderActiveTab();
 if(spreadsheetFormat==='classic') setTimeout(scrollSpreadsheetToToday, 50);
 </script>
