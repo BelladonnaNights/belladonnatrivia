@@ -1633,7 +1633,7 @@ function libRecord(source, id, c){
     name: c.name || c.title || '',
     altName: c.altName || '',
     description: (c.venueMenu && c.venueMenu.description) || c.description || '',
-    bannerUrl: (c.venueMenu && c.venueMenu.bannerUrl) || c.bannerUrl || '',
+    bannerUrl: source==='vm' ? (['bannerData','image'].map(k=>c[k]).find(u=>typeof u==='string' && /^https?:/i.test(u)) || '') : ((c.venueMenu && c.venueMenu.bannerUrl) || (typeof c.bgImage==='string' && /^https?:/i.test(c.bgImage) ? c.bgImage : '') || c.bannerUrl || ''),
     tier,
     typeLabel: source==='vm' ? (c.type||'') : '',
     tags: normalizeVmTags(c.tags),
@@ -3918,11 +3918,12 @@ function saveTheme(){
   if(source==='trivia'){
     if(isNew){
       rtdbUpdates[libPath+'/'+themeId] = { ...commonFields, type: 'trivia', createdAt: Date.now(), unified: true,
-        notes: 'Created from the Planner — add sheets/images/music in Trivia Admin.', ...((descVal||bannerVal) ? {venueMenu:{...(descVal?{description:descVal}:{}), ...(bannerVal?{bannerUrl:bannerVal}:{})}} : {}) };
+        notes: 'Created from the Planner — add sheets/images/music in Trivia Admin.', ...((descVal||bannerVal) ? {venueMenu:{...(descVal?{description:descVal}:{}), ...(bannerVal?{bannerUrl:bannerVal}:{})}} : {}), ...(bannerVal ? {bgImage:bannerVal} : {}) };
     } else {
       ['name','altName','tags','plannerTier','pairsWith','karaokeSongs','plannerUsage'].forEach(f=>{ rtdbUpdates[libPath+'/'+themeId+'/'+f] = commonFields[f]; });
       rtdbUpdates[libPath+'/'+themeId+'/venueMenu/description'] = descVal || null;
       rtdbUpdates[libPath+'/'+themeId+'/venueMenu/bannerUrl'] = bannerVal || null;
+      rtdbUpdates[libPath+'/'+themeId+'/bgImage'] = bannerVal || null;   // the Trivia app's own banner field — kept identical
     }
   } else if(source==='bingo'){
     rtdbUpdates[bPath+'/'+themeId+'/title'] = name;
@@ -3934,11 +3935,28 @@ function saveTheme(){
     rtdbUpdates[bPath+'/'+themeId+'/venueMenu/bannerUrl'] = bannerVal || null;
   } else {
     const vmType = {karaoke:'Karaoke','sing-along':'Sing-Along','mini-games':'Mini Games'}[tier];
-    const vmData = { name, tags: editingThemeTags.join(', '), pairsWith: commonFields.pairsWith || [], plannerTier: tier || null, bannerUrl: bannerVal || null, updatedAt: Date.now() };
+    const vmData = { name, tags: editingThemeTags.join(', '), pairsWith: commonFields.pairsWith || [], plannerTier: tier || null, updatedAt: Date.now() };
     if(vmType) vmData.type = vmType;
     fsUpdates.push({ id: themeId, data: vmData });
   }
 
+  // ── Banner link: one URL, written to every place that shows it (Trivia app, Venue Menu record, planner) ──
+  { const hadUrl = !!existing.bannerUrl, changed = bannerVal !== (existing.bannerUrl||'');
+    if(changed || isNew){
+      const fsBanner = bannerVal ? {bannerData:bannerVal, image:bannerVal} : (hadUrl ? {bannerData:null, image:''} : null);
+      const nm = normLibName((existing && existing.name) || (document.getElementById('t-name')||{}).value || '');
+      const vmByName = () => nm ? (Object.entries(vmAllRaw||{}).find(([k,d])=>d && normLibName(d.name)===nm)||[])[0] : null;
+      const triByName = () => nm ? (Object.entries(triviaLibMirrorRaw||{}).find(([k,c])=>c && normLibName(c.name||c.title)===nm)||[])[0] : null;
+      if((source==='trivia' || source==='bingo') && fsBanner){
+        const raw = (source==='trivia' ? triviaLibMirrorRaw[themeId] : bingoPairLibraryRaw[themeId]) || {};
+        const linked = raw.vmCatId || (Object.entries(vmAllRaw||{}).find(([k,d])=>d && d.triviaCatId===themeId)||[])[0] || vmByName();
+        if(linked) fsUpdates.push({ id: linked, data: fsBanner });
+      } else if(source==='vm'){
+        if(fsBanner) fsUpdates.push({ id: themeId, data: fsBanner });
+        const tid = (vmAllRaw[themeId]||{}).triviaCatId || triByName();
+        if(tid){ rtdbUpdates[libPath+'/'+tid+'/bgImage'] = bannerVal || null; rtdbUpdates[libPath+'/'+tid+'/venueMenu/bannerUrl'] = bannerVal || null; }
+      }
+    } }
   // Reciprocal pairing — both sides of a Pairs With link stay in sync, writing
   // to whichever store owns the other record (refs stored in that store's format).
   function writeOtherPairs(otherRef, arr){
@@ -3970,7 +3988,7 @@ function saveTheme(){
     .then(()=>{ if(!isNew && existing.name && existing.name!==name) return propagateThemeRename(source, themeId, name); })
     .then(()=>{
       if(source!=='trivia') return;
-      if(tier==='theme-night') return syncOrCreateLinkedNight(themeId, existing, commonFields);
+      if(tier==='theme-night') return syncOrCreateLinkedNight(themeId, existing, Object.assign({}, commonFields, {bannerUrl: bannerVal}));
       if(tier==='karaoke') return syncKaraokeThemeToVenueMenu(name, karaokeSongs||[], isNew);
     })
     .then(()=>{ if(source==='trivia' && isNew && tier!=='karaoke') return mirrorNewThemeEverywhere(themeId, name, tier); })
@@ -4038,7 +4056,7 @@ async function syncOrCreateLinkedNight(themeId, existing, fields){
         name: fields.name,
         categoryIds: uniqueBundle, enhancements: [], filterTags: [], nightTagsList: [],
         genre:'', tone:'', era:'', audience:'',
-        bannerData: null, bannerColor: '',
+        bannerData: fields.bannerUrl || null, bannerColor: '',
         published: false, description: '', adminNotes: '',
         linkedCategoryId: themeId
       });
@@ -4055,7 +4073,7 @@ async function syncOrCreateLinkedNight(themeId, existing, fields){
       const prevBundle = Array.isArray(existing.linkedBundleNames) ? existing.linkedBundleNames : [];
       const kept = existingIds.filter(n => !prevBundle.includes(n) || uniqueBundle.includes(n));
       const merged = [...new Set([...kept, ...uniqueBundle])];
-      await dbFs.collection('venueMenuNights').doc(nightId).set({ name: fields.name, categoryIds: merged }, {merge:true});
+      await dbFs.collection('venueMenuNights').doc(nightId).set(Object.assign({ name: fields.name, categoryIds: merged }, fields.bannerUrl ? {bannerData: fields.bannerUrl} : {}), {merge:true});
     }
     // Remember exactly what Planner contributed this save, so next time we
     // can tell "Planner removed this pairing" apart from "admin added this
