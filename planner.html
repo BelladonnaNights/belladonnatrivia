@@ -654,6 +654,7 @@ a{color:inherit}
     </select>
     <label class="form-label">Note (optional)</label>
     <input type="text" class="form-input" id="gig-note" placeholder="e.g. cancelled — Mariners game">
+    <div id="gig-venue-note" style="display:none;margin-top:8px;padding:8px 10px;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-size:12.5px"></div>
     <div class="modal-actions">
       <button class="btn btn-danger btn-sm" id="gig-clear-btn" onclick="clearGig()" style="display:none">Clear (reset to unplanned)</button>
       <span style="flex:1"></span>
@@ -2905,10 +2906,11 @@ function renderMonthCalendar(){
       const cls = !it.gig ? 'dot-empty' : it.gig.status==='cancelled' ? 'dot-cancelled' : (it.gig.themeName||modeOfVenue(it.venueId)==='events') ? 'dot-planned' : 'dot-empty';
       return `<span class="monthcal-dot ${cls}"></span>`;
     }).join('');
+    const hasNote = items.some(it=>it.gig&&it.gig.venueNote);
     const more = items.length>8 ? `<span class="monthcal-more">+${items.length-8}</span>` : '';
     html += `<div class="monthcal-cell ${inMonth?'':'monthcal-outside'} ${dk===today?'monthcal-today':''}" ${items.length?`onclick="openDayAgenda('${dk}')"`:''}>
       <div class="monthcal-daynum">${d.getDate()}</div>
-      <div class="monthcal-dots">${dots}${more}</div>
+      <div class="monthcal-dots">${dots}${more}${hasNote?'<span title="Venue left a note" style="color:var(--gold);font-size:11px;margin-left:3px">★</span>':''}</div>
     </div>`;
   }
   html += '</div>';
@@ -2922,7 +2924,7 @@ function openDayAgenda(dk){
     const label = g && g.themeName ? escapeHtml(g.themeName) : g && g.status==='cancelled' ? 'Cancelled' : (modeOfVenue(it.venueId)==='karaoke' ? 'Regular karaoke' : 'Unplanned');
     const round3 = g && g.round3Name ? ` · ♪ ${escapeHtml(g.round3Name)}` : '';
     return `<div class="tl-row" style="grid-template-columns:1fr 90px 64px">
-      <div style="font-size:12.5px">${escapeHtml(it.venueName)}<br><span class="empty-cell" style="font-style:normal;color:var(--text2)">${label}${round3}</span></div>
+      <div style="font-size:12.5px">${escapeHtml(it.venueName)}<br><span class="empty-cell" style="font-style:normal;color:var(--text2)">${label}${round3}</span>${g&&g.venueNote?`<br><span style="color:var(--gold);font-size:11.5px">★ Venue note: ${escapeHtml(g.venueNote)}</span>`:''}</div>
       <span class="badge badge-${(g&&(g.status==='cancelled'||g.themeName||modeOfVenue(it.venueId)==='events'))?(g.status||'planned'):'empty'}">${(g&&(g.status==='cancelled'||g.themeName||modeOfVenue(it.venueId)==='events'))?(g.status||'planned'):'unplanned'}</span>
       <button class="btn btn-ghost btn-sm" onclick="closeModal('day-agenda-overlay');openGigModal('${it.venueId}','${dk}')">Edit</button>
     </div>`;
@@ -2955,7 +2957,7 @@ function renderDayBoxes(){
         const hostHtml = !hostName ? '<span style="color:var(--text3)">no host</span>'
           : fillIn ? `<span style="text-decoration:line-through;color:var(--text3)">${escapeHtml(v.host)}</span><br><span style="color:#c9a0dc;margin-left:12px">${escapeHtml(gig.host)}</span>`
           : escapeHtml(hostName);
-        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${it.venueId}','${dk}')">${escapeHtml(v.name||it.venueName)}<small>${dispTime((gig&&gig.time)||v.time)} — ${label}${round3}</small><small style="color:var(--text2)">${hostHtml}</small></div>`;
+        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${it.venueId}','${dk}')">${escapeHtml(v.name||it.venueName)}<small>${dispTime((gig&&gig.time)||v.time)} — ${label}${round3}${gig&&gig.venueNote?' <span style="color:var(--gold)" title="'+escapeHtml(gig.venueNote)+'">★</span>':''}</small><small style="color:var(--text2)">${hostHtml}</small></div>`;
       }).join('') : '<div class="daybox-item" style="color:var(--text3)">Nothing scheduled</div>'}
     </div>`;
   }).join('');
@@ -3221,7 +3223,7 @@ function vdInlineSave(row, dk){
     return;
   }
   if(status==='cancelled'){
-    db.ref((MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, status:'cancelled', note:existing.note||'', host:existing.host||null, locked:existing.locked||null});
+    db.ref((MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, status:'cancelled', note:existing.note||'', host:existing.host||null, locked:existing.locked||null, venueNote:(((state.gigs[id]||{})[dk])||{}).venueNote||null});
     flashSaved(row);
     return;
   }
@@ -3239,7 +3241,7 @@ function vdInlineSave(row, dk){
         round3Id = newId;
       }
     }
-    await db.ref((MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk).set({themeId, themeName:triviaName||null, round3ThemeId:round3Id, round3Name:musicName||null, status:'planned', note:existing.note||'', host:existing.host||null, locked:true});   // done by hand => locked, so Randomize never overwrites it
+    await db.ref((MODE_PATHS[plannerMode].gigs+'/')+id+'/'+dk).set({themeId, themeName:triviaName||null, round3ThemeId:round3Id, round3Name:musicName||null, status:'planned', note:existing.note||'', host:existing.host||null, locked:true, venueNote:(((state.gigs[id]||{})[dk])||{}).venueNote||null});   // done by hand => locked, so Randomize never overwrites it
     if(themeId) bumpThemeUsage(themeId, dk);
     if(round3Id) bumpThemeUsage(round3Id, dk);
     flashSaved(row);
@@ -4476,6 +4478,7 @@ function openGigModal(venueId, dateKey){
     .map(([id,v])=>`<option value="${id}" ${id===venueId?'selected':''}>${escapeHtml(v.name||'')}</option>`).join('');
   document.getElementById('gig-date').value = dateKey || toKey(new Date());
   const existing = (dateKey && state.gigs[venueId]) ? state.gigs[venueId][dateKey] : null;
+  { const vn=document.getElementById('gig-venue-note'); if(vn){ if(existing&&existing.venueNote){ vn.style.display=''; vn.textContent='★ Note from the venue: '+existing.venueNote; } else vn.style.display='none'; } }
   const v = state.venues[venueId];
   // Default to the venue's usual host when this specific date has never had
   // one set — but a host already set on this date always wins, since that's
@@ -4873,7 +4876,7 @@ function saveGig(){
     return;
   }
   if(status==='cancelled'){
-    db.ref((MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, extraCategories:null, status:'cancelled', note, host, locationId:selectedLocationId, locked:lockOf(venueId,dateKey)}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+    db.ref((MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dateKey).set({themeId:null, themeName:null, round3ThemeId:null, round3Name:null, extraCategories:null, status:'cancelled', note, host, locationId:selectedLocationId, locked:lockOf(venueId,dateKey), venueNote:(((state.gigs[venueId]||{})[dateKey])||{}).venueNote||null}).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
   // Rounds resolve independently, in order — round 0 saves as themeId/themeName,
@@ -4897,7 +4900,7 @@ function saveGig(){
     const extraCategories = rounds.slice(2).map((r,i)=>({id:resolvedIds[i+2]||null, name:r.name.trim()}));
     await db.ref((MODE_PATHS[plannerMode].gigs+'/')+venueId+'/'+dateKey).set({
       themeId, themeName, round3ThemeId: round3Id, round3Name,
-      extraCategories: extraCategories.length?extraCategories:null, status:'planned', note, host, locationId:selectedLocationId, locked:(themeName||round3Name)?true:lockOf(venueId,dateKey)
+      extraCategories: extraCategories.length?extraCategories:null, status:'planned', note, host, locationId:selectedLocationId, locked:(themeName||round3Name)?true:lockOf(venueId,dateKey), venueNote:(((state.gigs[venueId]||{})[dateKey])||{}).venueNote||null
     });
     if(themeId) bumpThemeUsageForVenue(themeId, dateKey, venueId);
     if(round3Id) bumpThemeUsageForVenue(round3Id, dateKey, venueId);
