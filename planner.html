@@ -4972,12 +4972,20 @@ function bingoPickPair(pool, assigned, dk){
   shuffled.sort((a,b)=>(last[a]||'').localeCompare(last[b]||''));
   return shuffled.slice(0,2);
 }
+// Randomize never picks Theme Sets / featured trivia / theme nights, or any holiday category — those are placed by hand.
+function isNoRandomCat(cid){
+  const t = state.themes[cid]; if(!t) return true;
+  if(['featured','feature-trivia','theme-night'].includes(normTier(t.tier))) return true;
+  if(safeTags(t).map(x=>String(x).toLowerCase()).includes('holiday')) return true;
+  return /(christmas|halloween|thanksgiving|valentine|st\.?\s?patrick|easter|4th of july|fourth of july|new year|holiday|xmas)/i.test(t.name||'');
+}
+function randPoolFor(v){ return likedPoolFor(v).filter(c=>!isNoRandomCat(c)); }
 function likedPoolFor(v){ return (v.likedCategoryIds||[]).filter(c=>state.themes[c]&&!(plannerMode==='trivia'&&state.themes[c].tier==='karaoke')); }
 function randomizeBingoModal(){
   const venueId = document.getElementById('gig-venue').value;
   const dk = document.getElementById('gig-date').value;
   const v = state.venues[venueId]; if(!v||!dk) return toast('Pick a venue and date.', true);
-  const pool = likedPoolFor(v);
+  const pool = randPoolFor(v);
   if(!pool.length) return toast("Set this venue's liked categories first (open the venue → ♥ Liked categories).", true);
   const assigned = {};
   Object.entries(state.gigs[venueId]||{}).forEach(([d,g])=>{ if(d!==dk && g._bingoRounds&&g._bingoRounds.length) assigned[d]=g._bingoRounds; });
@@ -4990,7 +4998,7 @@ async function randomizeBingo(overwrite){
   if(plannerMode==='trivia'||plannerMode==='karaoke') return randomizeTrivia(overwrite);
   if(plannerMode!=='bingo') return toast('Randomize is for trivia, karaoke and bingo nights.', true);
   const id = currentVenueDetailId, v = state.venues[id]; if(!v) return;
-  const pool = likedPoolFor(v);
+  const pool = randPoolFor(v);
   if(!pool.length){ toast('Pick the categories this venue likes first.', true); openLikedCats(); return; }
   const todayD = new Date(); todayD.setHours(0,0,0,0);
   let today = randStartKey ? fromKey(randStartKey) : todayD;
@@ -5026,7 +5034,7 @@ async function randomizeBingo(overwrite){
 }
 async function randomizeTrivia(overwrite){
   const id = currentVenueDetailId, v = state.venues[id]; if(!v) return;
-  let pool = likedPoolFor(v);
+  let pool = randPoolFor(v);
   const isMusic = cid=>plannerMode==='trivia' && (state.themes[cid]||{}).tier==='coordinating-music';
   const triviaPool = pool.filter(c=>!isMusic(c));
   if(triviaPool.length) pool = triviaPool;
@@ -5388,6 +5396,148 @@ renderAllFilter();
 updateAltToggleBtn();
 renderActiveTab();
 if(spreadsheetFormat==='classic') setTimeout(scrollSpreadsheetToToday, 50);
+</script>
+<script>
+/* Venue Requests panel — shared by Admin (Venue Menu), Planner and HQ. All three read and write the SAME
+   Firestore collection (venueMenuBookingRequests), so a status change in one shows up in the others live.
+   Approving a dated request adds it to the schedule and cancels what it replaces, from whichever app. */
+(function(){
+  var COL='venueMenuBookingRequests';
+  var EVENT_LABEL={party:'Private Party',holiday:'Holiday Party',ticketed:'Ticketed Event',night:'Themed Night',singalong:'Sing-Along',battle:'Belladonna Battles'};
+  var cfg=null, reqs=[], filter='new', started=false, retries=0, unsub=null;
+  function esc(t){return String(t==null?'':t).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];});}
+  function norm(v){return (v||'').toString().toLowerCase().trim();}
+  function say(m,bad){try{cfg.toast?cfg.toast(m,bad):alert(m);}catch(e){}}
+  function fs(){return cfg.fs();} function rt(){return cfg.rtdb();}
+  function css(){
+    if(document.getElementById('vrq-css'))return;
+    var s=document.createElement('style');s.id='vrq-css';
+    s.textContent='#vrq-btn{position:fixed;left:18px;bottom:18px;z-index:9000;background:#141414;color:#c9a96e;border:1px solid #c9a96e;border-radius:999px;padding:10px 18px;font:600 12px/1 inherit;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.5)}'
+    +'#vrq-btn:hover{background:#1d1a14}#vrq-badge{display:none;margin-left:8px;background:#c9a96e;color:#1a1408;border-radius:10px;padding:2px 8px;font-size:11px}'
+    +'#vrq-ov{display:none;position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.82);overflow-y:auto;padding:4vh 12px}#vrq-ov.open{display:block}'
+    +'#vrq-box{max-width:820px;margin:0 auto;background:#0d0d0d;border:1px solid rgba(201,169,110,.45);border-radius:14px;padding:20px;color:#f0ece0;font-family:inherit}'
+    +'#vrq-box h2{margin:0 0 4px;color:#c9a96e;font-size:16px;letter-spacing:.14em;text-transform:uppercase}'
+    +'.vrq-sub{color:#8a8272;font-size:12px;margin-bottom:12px}.vrq-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}'
+    +'.vrq-tab{background:transparent;border:1px solid rgba(201,169,110,.35);color:#b0a890;border-radius:999px;padding:6px 12px;font-size:12px;cursor:pointer}.vrq-tab.on{background:#c9a96e;color:#1a1408;border-color:#c9a96e;font-weight:700}'
+    +'.vrq-card{border:1px solid rgba(201,169,110,.25);border-left:3px solid #c9a96e;border-radius:10px;padding:12px 14px;margin-bottom:10px;background:#141414}'
+    +'.vrq-card.confirmed{border-left-color:#5AC47A;opacity:.85}.vrq-card.declined{border-left-color:#C0654F;opacity:.75}'
+    +'.vrq-top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}.vrq-venue{font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:13px}.vrq-meta{color:#8a8272;font-size:12px;margin-top:2px}'
+    +'.vrq-item{padding:6px 0;border-bottom:1px solid rgba(201,169,110,.15);font-size:13px;color:#b0a890}.vrq-item b{color:#f0ece0}'
+    +'.vrq-pill{display:inline-block;background:#c9a96e;color:#1a1408;border-radius:9px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:6px}'
+    +'.vrq-warn{margin-top:4px;border:1px solid #C0654F;color:#E69A87;border-radius:6px;padding:4px 8px;font-size:12px}'
+    +'.vrq-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.vrq-b{background:transparent;border:1px solid rgba(201,169,110,.45);color:#c9a96e;border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer}'
+    +'.vrq-b.go{background:#c9a96e;color:#1a1408;font-weight:700}.vrq-b.no{color:#E69A87;border-color:#C0654F}.vrq-x{float:right;background:none;border:none;color:#8a8272;font-size:22px;cursor:pointer}';
+    document.head.appendChild(s);
+  }
+  function build(){
+    if(document.getElementById('vrq-btn'))return;
+    css();
+    var b=document.createElement('button');b.id='vrq-btn';b.type='button';b.innerHTML='Venue Requests<span id="vrq-badge">0</span>';b.onclick=function(){open();};
+    document.body.appendChild(b);
+    var o=document.createElement('div');o.id='vrq-ov';o.innerHTML='<div id="vrq-box"></div>';
+    o.addEventListener('click',function(e){if(e.target===o)close();});document.body.appendChild(o);
+  }
+  function open(){document.getElementById('vrq-ov').classList.add('open');render();}
+  function close(){document.getElementById('vrq-ov').classList.remove('open');}
+  function badge(){var n=reqs.filter(function(r){return (r.status||'new')==='new';}).length,e=document.getElementById('vrq-badge');if(e){e.textContent=n;e.style.display=n?'':'none';}}
+  function status(r){var s=r.status||'new';return s;}
+  function render(){
+    var box=document.getElementById('vrq-box');if(!box||!document.getElementById('vrq-ov').classList.contains('open'))return;
+    var tabs=[['new','New'],['in-progress','In progress'],['confirmed','Approved'],['declined','Declined'],['all','All']];
+    var list=reqs.filter(function(r){return filter==='all'||status(r)===filter;});
+    box.innerHTML='<button class="vrq-x" onclick="VRQ.close()" aria-label="Close">×</button><h2>Venue Requests</h2><div class="vrq-sub">Shared with the Venue Menu admin, Planner and HQ — anything you do here shows up in all three.</div>'
+      +'<div class="vrq-tabs">'+tabs.map(function(t){var n=t[0]==='all'?reqs.length:reqs.filter(function(r){return status(r)===t[0];}).length;return '<button class="vrq-tab'+(filter===t[0]?' on':'')+'" onclick="VRQ.setFilter(\''+t[0]+'\')">'+t[1]+' '+n+'</button>';}).join('')+'</div>'
+      +(list.length?list.map(card).join(''):'<div class="vrq-sub">Nothing here.</div>');
+  }
+  function card(r){
+    var st=status(r),ts=r.submittedAt&&r.submittedAt.toDate?r.submittedAt.toDate().toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+    var items=(r.items||[]).map(function(i){
+      return '<div class="vrq-item"><b>'+esc(i.name)+'</b>'+(i.premium?'<span class="vrq-pill">$ COSTS EXTRA</span>':'')+' — '+esc(i.scheduling||'')
+       +(i.details?'<div style="font-size:12px;color:#8a8272">'+esc(i.details)+'</div>':'')
+       +(i.conflicts&&i.conflicts.length?'<div class="vrq-warn">Scheduled at this venue that night: '+i.conflicts.map(function(c){return esc(c.kind)+(c.time?' '+esc(c.time):'');}).join(', ')+'. Approving will most likely replace it.</div>':'')+'</div>';
+    }).join('');
+    return '<div class="vrq-card '+st+'"><div class="vrq-top"><div><div class="vrq-venue">'+esc(r.venue||'—')+'</div><div class="vrq-meta">'+esc(r.contactName||'')+(r.email?' · '+esc(r.email):'')+(r.phone?' · '+esc(r.phone):'')+'</div></div><div class="vrq-meta">'+esc(ts)+' · <b style="color:#c9a96e">'+({confirmed:'Approved',declined:'Declined','in-progress':'In progress',history:'History'}[st]||'New')+'</b></div></div>'
+      +items+(r.notes?'<div class="vrq-meta" style="margin-top:6px;font-style:italic">'+esc(r.notes)+'</div>':'')
+      +'<div class="vrq-acts">'+(st!=='confirmed'?'<button class="vrq-b go" onclick="VRQ.approve(\''+r._id+'\')">Approve</button>':'')
+      +(st!=='in-progress'&&st!=='confirmed'?'<button class="vrq-b" onclick="VRQ.setStatus(\''+r._id+'\',\'in-progress\')">In progress</button>':'')
+      +(st!=='declined'?'<button class="vrq-b no" onclick="VRQ.setStatus(\''+r._id+'\',\'declined\')">Decline</button>':'')
+      +(st!=='new'?'<button class="vrq-b" onclick="VRQ.setStatus(\''+r._id+'\',\'new\')">Mark new</button>':'')
+      +(r.email?'<a class="vrq-b" style="text-decoration:none" href="mailto:'+esc(r.email)+'">Reply</a>':'')+'</div></div>';
+  }
+  function setStatus(id,s){return fs().collection(COL).doc(id).update({status:s}).then(function(){say('Updated');}).catch(function(e){say('Could not update: '+(e.message||e),true);});}
+  function datesFor(it){
+    if(!it.date)return [];
+    if(it.kind==='battle')return [0,1,2,3].map(function(w){var d=new Date(it.date+'T12:00:00');d.setDate(d.getDate()+7*w);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');});
+    return [it.date];
+  }
+  function conflicts(venue,date){
+    var out=[],v=norm(venue),DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    return fs().collection('gig_schedule').where('date','==',date).get().then(function(sn){
+      sn.docs.forEach(function(d){var g=d.data();if(norm(g.venue)===v&&g.status!=='cancelled')out.push({src:'hq',id:d.id,kind:g.kind||'Gig',loc:g.locationId||null});});
+    }).catch(function(){}).then(function(){
+      return rt().ref('trivia/planner/venues').once('value').then(function(sn){
+        var pv=sn.val()||{},m=Object.keys(pv).filter(function(k){return norm(pv[k].name)===v;})[0];
+        if(m&&(pv[m].status==='active'||pv[m].status==='seasonal')&&DAYS[new Date(date+'T12:00:00').getDay()]===pv[m].day){
+          return rt().ref('trivia/planner/gigs/'+m+'/'+date).once('value').then(function(g){var x=g.val();
+            if(!(x&&x.status==='cancelled')&&!out.some(function(c){return norm(c.kind)==='trivia';}))out.push({src:'trivia',pid:m,kind:'Trivia'});});
+        }
+      }).catch(function(){});
+    }).then(function(){
+      return rt().ref('bingo/landing/venues').once('value').then(function(sn){
+        var bv=sn.val()||{},bm=Object.keys(bv).filter(function(k){return norm(bv[k].name)===v;})[0];
+        if(!bm)return;
+        return rt().ref('bingo/landing/schedule').once('value').then(function(s2){var sc=s2.val()||{};
+          Object.keys(sc).forEach(function(k){var e=sc[k];if(e.venueId===bm&&e.date===date&&!e.cancelled&&!out.some(function(c){return norm(c.kind)==='bingo';}))out.push({src:'bingo',key:k,kind:'Bingo'});});});
+      }).catch(function(){});
+    }).then(function(){return out;});
+  }
+  function approve(id){
+    var r=reqs.filter(function(x){return x._id===id;})[0];if(!r)return;
+    var dated=(r.items||[]).filter(function(i){return i.premium&&i.date&&EVENT_LABEL[i.kind];});
+    var undated=(r.items||[]).filter(function(i){return i.premium&&!i.date;});
+    if(!dated.length){if(undated.length&&!confirm('Nothing here has a date yet, so nothing will be added to the schedule. Mark it approved anyway?'))return;return setStatus(id,'confirmed');}
+    var plan=[];
+    var chain=Promise.resolve();
+    dated.forEach(function(it){datesFor(it).forEach(function(d){chain=chain.then(function(){return conflicts(r.venue,d).then(function(c){plan.push({it:it,date:d,conflicts:c});});});});});
+    chain.then(function(){
+      var lines=plan.map(function(p){return '• '+EVENT_LABEL[p.it.kind]+' on '+p.date+(p.conflicts.length?' — REPLACES '+p.conflicts.map(function(c){return c.kind;}).join(' + '):' — no gig that night');});
+      if(!confirm('Approve this request for '+(r.venue||'this venue')+'?\n\n'+lines.join('\n')+'\n\nThis adds it to the schedule and cancels anything it replaces.'+(undated.length?'\n(Items without a date are not scheduled.)':'')))return;
+      var w=Promise.resolve();
+      plan.forEach(function(p){w=w.then(function(){
+        var label=EVENT_LABEL[p.it.kind],note='Replaced by '+label+' (approved)',loc=null,ops=[];
+        p.conflicts.forEach(function(c){
+          if(c.loc)loc=c.loc;
+          if(c.src==='hq')ops.push(fs().collection('gig_schedule').doc(c.id).update({status:'cancelled',notes:note}).then(function(){if(cfg.onGigCancelled)cfg.onGigCancelled(c.id,note);}));
+          else if(c.src==='trivia')ops.push(rt().ref('trivia/planner/gigs/'+c.pid+'/'+p.date).update({status:'cancelled',note:note}));
+          else if(c.src==='bingo')ops.push(rt().ref('bingo/landing/schedule/'+c.key).update({cancelled:true,notes:note}));
+        });
+        return Promise.all(ops).then(function(){
+          var gig={date:p.date,time:'',endTime:'',kind:label,venue:r.venue,host:'Unassigned',status:'scheduled',notes:[p.it.details,'Approved request'].filter(Boolean).join(' — '),seriesId:null,timeLocked:false,cadence:null,cadenceAnchor:null};
+          if(loc)gig.locationId=loc;
+          return fs().collection('gig_schedule').add(gig).then(function(ref){if(cfg.onGigAdded)cfg.onGigAdded(Object.assign({id:ref.id},gig));});
+        });
+      });});
+      return w.then(function(){return fs().collection(COL).doc(id).update({status:'confirmed',approvedAt:firebase.firestore.FieldValue.serverTimestamp()});}).then(function(){say('Approved — added to the schedule');});
+    }).catch(function(e){console.error(e);say('Approve failed: '+(e.message||e),true);});
+  }
+  function listen(){
+    if(started)return;
+    var f;try{f=fs();}catch(e){f=null;}
+    if(!f){setTimeout(listen,1500);return;}
+    started=true;
+    try{
+      unsub=f.collection(COL).orderBy('submittedAt','desc').onSnapshot(function(sn){retries=0;reqs=sn.docs.map(function(d){return Object.assign({_id:d.id},d.data());});badge();render();},function(err){
+        started=false;if(unsub)unsub=null;
+        if(retries++<8)setTimeout(listen,6000);   // usually "not signed in yet" — try again shortly
+      });
+    }catch(e){started=false;if(retries++<8)setTimeout(listen,6000);}
+  }
+  window.VRQ={init:function(c){cfg=c;var go=function(){build();listen();};if(document.body)go();else document.addEventListener('DOMContentLoaded',go);},open:open,close:close,setFilter:function(f){filter=f;render();},setStatus:setStatus,approve:approve};
+})();
+
+</script>
+<script>
+VRQ.init({fs:function(){return dbFs;},rtdb:function(){return db;},toast:function(m,b){toast(m,b);}});
 </script>
 </body>
 </html>
