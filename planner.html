@@ -4982,8 +4982,8 @@ function randomizeBingoModal(){
   const st = document.getElementById('gig-status'); if(st.value==='unplanned') st.value='planned';
 }
 async function randomizeBingo(overwrite){
-  if(plannerMode==='trivia') return randomizeTrivia(overwrite);
-  if(plannerMode!=='bingo') return;
+  if(plannerMode==='trivia'||plannerMode==='karaoke') return randomizeTrivia(overwrite);
+  if(plannerMode!=='bingo') return toast('Randomize is for trivia, karaoke and bingo nights.', true);
   const id = currentVenueDetailId, v = state.venues[id]; if(!v) return;
   const pool = likedPoolFor(v);
   if(!pool.length){ toast('Pick the categories this venue likes first.', true); openLikedCats(); return; }
@@ -5022,7 +5022,7 @@ async function randomizeBingo(overwrite){
 async function randomizeTrivia(overwrite){
   const id = currentVenueDetailId, v = state.venues[id]; if(!v) return;
   let pool = likedPoolFor(v);
-  const isMusic = cid=>(state.themes[cid]||{}).tier==='coordinating-music';
+  const isMusic = cid=>plannerMode==='trivia' && (state.themes[cid]||{}).tier==='coordinating-music';
   const triviaPool = pool.filter(c=>!isMusic(c));
   if(triviaPool.length) pool = triviaPool;
   if(!pool.length){ toast('Pick the categories this venue likes first.', true); openLikedCats(); return; }
@@ -5076,7 +5076,7 @@ async function randomizeTrivia(overwrite){
     else if(musicIds.length){ noPairs++; musicId = leastRecent(musicIds, dk); }   // no paired category: pick any music category at random
     if(musicId) lastMusic[musicId] = dk;
     const ex = gigs[dk]||{};
-    updates[MODE_PATHS.trivia.gigs+'/'+id+'/'+dk] = Object.assign({}, ex, {themeId:tid, themeName:state.themes[tid].name, round3ThemeId:musicId, round3Name:musicId?state.themes[musicId].name:null, status:'planned', note:ex.note||'', host:ex.host||null, locationId:selectedLocationId});
+    updates[MODE_PATHS[plannerMode].gigs+'/'+id+'/'+dk] = Object.assign({}, ex, {themeId:tid, themeName:state.themes[tid].name, round3ThemeId:musicId, round3Name:musicId?state.themes[musicId].name:null, status:'planned', note:ex.note||'', host:ex.host||null, locationId:selectedLocationId});
   });
   await db.ref().update(updates);
   const n = Object.keys(updates).length;
