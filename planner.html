@@ -855,6 +855,12 @@ a{color:inherit}
       <input type="text" class="form-input" id="t-banner" placeholder="https://…/banner.jpg" oninput="previewThemeBanner()" style="margin-bottom:6px">
       <div id="t-banner-preview" style="display:none;margin-bottom:12px;border:1px solid var(--border2);border-radius:10px;overflow:hidden;max-height:130px"><img id="t-banner-img" alt="" style="display:block;width:100%;max-height:130px;object-fit:cover" onerror="this.parentNode.style.display='none'"></div>
     </div>
+    <div id="t-images-wrap" style="margin-bottom:12px">
+      <label class="form-label">Other image shapes <span style="opacity:.6;font-weight:normal">(optional — all four shapes save under this category's ID)</span></label>
+      <input type="text" class="form-input" id="t-p45" placeholder="4:5 portrait image URL" style="margin-bottom:6px">
+      <input type="text" class="form-input" id="t-l54" placeholder="5:4 landscape image URL" style="margin-bottom:6px">
+      <input type="text" class="form-input" id="t-square" placeholder="Square (1:1) image URL">
+    </div>
     <div id="t-movies-wrap" style="display:none"><label class="form-label">Movies paired with this theme night</label><div id="t-movies-list" style="margin-bottom:12px"></div></div>
     <label class="form-label">Tags</label>
     <div id="t-tag-chips"></div>
@@ -1662,6 +1668,7 @@ function libRecord(source, id, c){
     altName: c.altName || '',
     description: (c.venueMenu && c.venueMenu.description) || c.description || '',
     bannerUrl: source==='vm' ? (['bannerData','image'].map(k=>c[k]).find(u=>typeof u==='string' && /^https?:/i.test(u)) || '') : ((c.venueMenu && c.venueMenu.bannerUrl) || (typeof c.bgImage==='string' && /^https?:/i.test(c.bgImage) ? c.bgImage : '') || c.bannerUrl || ''),
+    images: (()=>{ const im=c.images||{}, vm=c.venueMenu||{}; return { p45: im.p45 || c.miniGameImage || vm.miniGameImage || '', l54: im.l54 || c.l54Image || '', square: im.square || c.squareImage || '' }; })(),
     tier,
     typeLabel: source==='vm' ? (c.type||'') : '',
     tags: normalizeVmTags(c.tags),
@@ -3985,6 +3992,7 @@ function openThemeModal(key){
   document.getElementById('t-tier').disabled = (editingThemeSource==='bingo');
   document.getElementById('t-desc').value = rec.description||'';
   document.getElementById('t-banner').value = rec.bannerUrl||'';
+  { const im = rec.images||{}; document.getElementById('t-p45').value = im.p45||''; document.getElementById('t-l54').value = im.l54||''; document.getElementById('t-square').value = im.square||''; }
   previewThemeBanner();
   { const pm = (key && editingThemeSource==='trivia') ? Object.values(moviesRaw||{}).filter(m=>(m.pairs||[]).some(p=>p.id===editingThemeId)) : [];
     document.getElementById('t-movies-wrap').style.display = pm.length ? '' : 'none';
@@ -4160,6 +4168,32 @@ function saveTheme(){
         const tid = (vmAllRaw[themeId]||{}).triviaCatId || triByName();
         if(tid){ rtdbUpdates[libPath+'/'+tid+'/bgImage'] = bannerVal || null; rtdbUpdates[libPath+'/'+tid+'/venueMenu/bannerUrl'] = bannerVal || null; }
       }
+    } }
+  // ── All four image shapes: banner / 4:5 / 5:4 / square, saved under the category's ID in every store that holds it ──
+  { const g = id => (document.getElementById(id).value||'').trim();
+    const imgs = { banner: bannerVal||null, p45: g('t-p45')||null, l54: g('t-l54')||null, square: g('t-square')||null };
+    if(Object.values(imgs).some(u=>u && !/^https?:\/\//i.test(u))) return toast('Image URLs must start with https://', true);
+    const nm2 = normLibName((existing && existing.name) || (document.getElementById('t-name')||{}).value || '');
+    const fsImg = { images: imgs, miniGameImage: imgs.p45, squareImage: imgs.square, l54Image: imgs.l54 };
+    const putRt = (base, id) => {
+      const whole = rtdbUpdates[base+'/'+id];
+      if(whole && typeof whole==='object'){ whole.images = imgs; whole.squareImage = imgs.square; if(imgs.p45){ whole.venueMenu = Object.assign({}, whole.venueMenu||{}, {miniGameImage: imgs.p45}); } return; }
+      rtdbUpdates[base+'/'+id+'/images'] = imgs; rtdbUpdates[base+'/'+id+'/squareImage'] = imgs.square; rtdbUpdates[base+'/'+id+'/venueMenu/miniGameImage'] = imgs.p45;
+    };
+    if(source==='trivia'){
+      putRt(libPath, themeId);
+      const raw = triviaLibMirrorRaw[themeId] || {};
+      const linked = raw.vmCatId || (Object.entries(vmAllRaw||{}).find(([k,d])=>d && d.triviaCatId===themeId)||[])[0] || (nm2 ? (Object.entries(vmAllRaw||{}).find(([k,d])=>d && normLibName(d.name)===nm2)||[])[0] : null);
+      if(linked) fsUpdates.push({ id: linked, data: fsImg });
+    } else if(source==='bingo'){
+      putRt(bPath, themeId);
+      const raw = bingoPairLibraryRaw[themeId] || {};
+      const linked = raw.vmCatId || (Object.entries(vmAllRaw||{}).find(([k,d])=>d && d.triviaCatId===themeId)||[])[0] || (nm2 ? (Object.entries(vmAllRaw||{}).find(([k,d])=>d && normLibName(d.name)===nm2)||[])[0] : null);
+      if(linked) fsUpdates.push({ id: linked, data: fsImg });
+    } else {
+      fsUpdates.push({ id: themeId, data: fsImg });
+      const tid = (vmAllRaw[themeId]||{}).triviaCatId || (nm2 ? (Object.entries(triviaLibMirrorRaw||{}).find(([k,c])=>c && normLibName(c.name||c.title)===nm2)||[])[0] : null);
+      if(tid) putRt(libPath, tid);
     } }
   // Reciprocal pairing — both sides of a Pairs With link stay in sync, writing
   // to whichever store owns the other record (refs stored in that store's format).
