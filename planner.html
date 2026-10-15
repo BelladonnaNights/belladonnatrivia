@@ -11,6 +11,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 <style>
+input[type=checkbox],input[type=radio]{accent-color:var(--gold,#d4af37)}
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#080808;--surface:#111111;--surface2:#181818;--surface3:#222222;
@@ -4738,6 +4740,12 @@ function rollRound(i){
     pool = Object.keys(state.themes||{});
   }
   pool = pool.filter(id=>state.themes[id] && !taken.has(id) && !isDiceExcluded(id));
+  // Regular Trivia Night: Round 2 is always a plain (non-music) trivia category, Round 3 always a music trivia category.
+  if(gigCtx.regularTrivia && (i===1||i===2)){
+    const want = i===1 ? 'evergreen-topic' : 'coordinating-music';
+    pool = pool.filter(id=>normTier(state.themes[id].tier)===want);
+    if(!pool.length) return toast(i===1 ? 'No eligible (non-music) trivia categories to pick from'+(DICE_PAIRED[i]?' among the paired ones — turn off the gold link to roll from all.':'.') : 'No eligible music trivia categories to pick from'+(DICE_PAIRED[i]?' among the paired ones — turn off the gold link to roll from all.':'.'), true);
+  }
   if(!pool.length) return toast('No eligible categories to pick from.', true);
   // prefer ones this venue hasn't run in the last 12 weeks
   if(venueId && dk){
