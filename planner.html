@@ -1357,6 +1357,19 @@ auth.onAuthStateChanged(function(user){
     window.location.href='https://belladonnanights.github.io/belladonna-gateway/accounts.html?return='+encodeURIComponent(window.location.href)+'&app='+GATEWAY_APP_KEY;
     return;
   }
+  // Venue accounts never get into the Planner: check the account type BEFORE anything loads.
+  dbFs.collection('users').doc(user.uid).get().then(function(snap){
+    const p=snap.exists?snap.data():{};
+    if(p.accountType==='venue'){
+      try{localStorage.removeItem('gatewaySession_'+GATEWAY_APP_KEY);}catch(e){}
+      document.body.innerHTML='<div style="font-family:sans-serif;color:#d8c27a;background:#0a0a0a;min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem"><div><h2 style="letter-spacing:.1em">NO ACCESS</h2><p style="color:#aaa">This is a staff tool. Venue accounts use the Venue Menu.</p></div></div>';
+      auth.signOut().catch(function(){}).then(function(){ setTimeout(function(){ window.location.href='https://belladonnanights.github.io/belladonna-gateway/accounts.html'; },2500); });
+      return;
+    }
+    plannerStart(user);
+  }).catch(function(){ plannerStart(user); });
+});
+function plannerStart(user){
   const label=document.getElementById('gateway-user-label');
   if(label)label.textContent=user.email||'account';
   // Force a fresh ID token before touching the Realtime Database. There's a
@@ -1390,7 +1403,7 @@ auth.onAuthStateChanged(function(user){
   attachVenueMenuPairLibraryListener();
   attachMoviesListeners();
   vmxListen();
-});
+}
 // A read-only, always-on mirror of the real Bingo category library, kept
 // separate from state.themes (which only ever holds the CURRENT mode's
 // library) so that while editing a Trivia category, "Pairs With" can also
