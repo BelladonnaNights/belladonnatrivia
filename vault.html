@@ -2462,12 +2462,66 @@ function exportBingoCSV(rows, name){
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = name.replace(/[^\w\- ]+/g, '') + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 $('#bExportMissing').addEventListener('click', () => B.curId === CATALOG ? exportBingoCSV(catalogRows(), 'My catalog') : exportBingoCSV(missingSongs(), 'Songs I am missing'));
+/* ── edit a whole list as text ── */
+function songsToText(songs, order){
+  return songs.map(s => {
+    const t = s.t || '', a = s.a || '', m = s.m || '';
+    if (order === 'show') return m ? `${t} - ${m}` : (a ? `${t} - ${a}` : t);
+    if (order === 'movie') return m ? [m, t, a].filter(Boolean).join(' - ') : (a ? `${t} - ${a}` : t);
+    if (order === 'artist') return a ? `${a} - ${t}` : t;
+    return a ? `${t} - ${a}` : t;
+  }).join('\n');
+}
+function openEditAsText(listId){
+  const l = B.lists.get(listId); if (!l) return;
+  const withM = l.songs.filter(s => s.m);
+  // pick the format that can hold what this list has
+  let order = 'song';
+  if (withM.length) order = withM.every(s => !s.a) ? 'show' : 'movie';
+  const body = document.createElement('div'); body.className = 'bImp';
+  body.innerHTML = `<label class="fld">Each line looks like<select id="etOrder"><option value="song">Song – Artist</option><option value="artist">Artist – Song</option><option value="movie">Movie – Song – Category</option><option value="show">Song – Movie / Show</option></select></label>
+    <label class="fld" style="margin-bottom:.4rem">One song per line — edit, delete, reorder or add lines freely<textarea id="etText" spellcheck="false" style="min-height:360px;white-space:pre"></textarea></label>
+    <p class="hint" id="etInfo" style="margin:0"></p>`;
+  const carry = new Map(); l.songs.forEach(s => { if (s.m) carry.set(songKey(s.t, s.a), s.m); });
+  const parse = () => {
+    const out = parseSongLines($('#etText').value, $('#etOrder').value).filter(x => x.t);
+    return out.map(x => (!x.m && carry.has(songKey(x.t, x.a))) ? { ...x, m: carry.get(songKey(x.t, x.a)) } : x);   // keep a movie/show the chosen format can't show
+  };
+  const diff = () => {
+    const songs = parse(), seen = new Set(), uniq = [];
+    for (const x of songs){ const k = songKey(x.t, x.a); if (seen.has(k)) continue; seen.add(k); uniq.push(x); }
+    const old = new Set(l.songs.map(x => x._k));
+    const added = uniq.filter(x => !old.has(songKey(x.t, x.a))).length;
+    const kept = new Set(uniq.map(x => songKey(x.t, x.a)));
+    const removed = l.songs.filter(x => !kept.has(x._k)).length;
+    return { uniq, added, removed, dups: songs.length - uniq.length };
+  };
+  const info = () => { const d = diff(); $('#etInfo').innerHTML = `<b>${d.uniq.length}</b> songs · <b>${d.added}</b> new · <b>${d.removed}</b> removed` + (d.dups ? ` · ${d.dups} repeat${d.dups === 1 ? '' : 's'} will be skipped` : '') + '. Songs you leave as they are keep their catalog ticks.'; };
+  const save = async () => {
+    const d = diff(); if (!d.uniq.length){ toast('The list can’t be empty — use Delete list instead.'); return; }
+    if (d.removed >= 5 && !(await confirmBox({ title: 'Remove ' + d.removed + ' songs?', message: 'Saving will take ' + d.removed + ' songs off “' + l.name + '”.', ok: 'Save changes', danger: true }))) return;
+    closeModal(); await saveSongs(l.id, d.uniq);
+    toast('Saved “' + l.name + '” — ' + d.uniq.length + ' songs.');
+  };
+  openModal({ title: 'Edit “' + l.name + '” as text', body, wide: true, actions: [{ label: 'Cancel', onClick: closeModal }, { label: 'Save changes', primary: true, onClick: save }] });
+  $('#etOrder').value = order;
+  const fill = () => { $('#etText').value = songsToText(l.songs, $('#etOrder').value); info(); };
+  fill();
+  let prev = order;
+  $('#etOrder').addEventListener('change', () => {
+    // re-render the current text in the new format (parse with the old format first)
+    const cur = parseSongLines($('#etText').value, prev).filter(x => x.t).map(x => (!x.m && carry.has(songKey(x.t, x.a))) ? { ...x, m: carry.get(songKey(x.t, x.a)) } : x);
+    $('#etText').value = songsToText(cur, $('#etOrder').value); prev = $('#etOrder').value; info();
+  });
+  $('#etText').addEventListener('input', info);
+}
 $('#bMore').addEventListener('click', () => {
   const l = B.lists.get(B.curId); if (!l) return;
   const all = [...B.lists.values()].sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0) || String(a.name).localeCompare(String(b.name)));
   const pos = all.findIndex(x => x.id === l.id);
   const body = document.createElement('div'); body.className = 'menuList';
   body.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px">
+    <button class="btn ghost" data-a="text">✎ Edit as text (whole list in one box)</button>
     <button class="btn ghost" data-a="all">✓ Mark every song on this list as in my catalog</button>
     <button class="btn ghost" data-a="none">Clear every tick on this list</button>
     <button class="btn ghost" data-a="csv">Export this list as CSV</button>
@@ -2477,7 +2531,8 @@ $('#bMore').addEventListener('click', () => {
   body.addEventListener('click', async e => {
     const b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
     const a = b.dataset.a;
-    if (false){    } else if (a === 'all'){ closeModal(); setOwned(l.songs.map(s => s._k), true); toast('Marked ' + l.songs.length + ' songs as in your catalog — they’re ticked on every list.'); }
+    if (a === 'text'){ closeModal(); openEditAsText(l.id); }
+    else if (a === 'all'){ closeModal(); setOwned(l.songs.map(s => s._k), true); toast('Marked ' + l.songs.length + ' songs as in your catalog — they’re ticked on every list.'); }
     else if (a === 'none'){
       if (!(await confirmBox({ title: 'Clear ticks?', message: 'This un-ticks every song on “' + l.name + '” — and, because ticks are shared, on every other list that has the same songs.', ok: 'Clear ticks', danger: true }))) return;
       closeModal(); setOwned(l.songs.map(s => s._k), false);
