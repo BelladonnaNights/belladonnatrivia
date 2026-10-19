@@ -138,6 +138,7 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .aboutRow.open textarea{height:130px;overflow:auto}
 .aboutRow .btn{padding:4px 9px}
 .aboutHint{font-size:11px;color:var(--text3);margin:0 0 4px 0}
+.catTitle2{font-size:22px;color:var(--text2)}
 .catTitle:hover{border-color:var(--border2)}
 .catTitle:focus{border-color:var(--gold-glow2);background:var(--surface)}
 #catType{font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold2);background:transparent;border:1px solid var(--gold-glow);border-radius:99px;padding:5px 12px;outline:none;cursor:pointer}
@@ -391,11 +392,10 @@ table#bGrid{border-collapse:separate;border-spacing:0;width:100%;min-width:560px
         <div class="top">
           <div class="titleBlock">
             <input id="catName" class="catTitle" spellcheck="false" autocomplete="off" title="Click to rename — it renames everywhere">
+            <input id="catName2" class="catTitle catTitle2 hidden" spellcheck="false" autocomplete="off" placeholder="Secondary name…" title="Secondary name — this is the title shown in the sidebar for Featured categories">
             <select id="catType" title="Category type"></select>
             <span id="catCount"></span>
             <span id="catArchTag" class="tag hidden">Archived</span>
-            <button class="btn ghost sm" id="catEditBtn" title="See every song on this sheet as one list — edit it, or delete it all and paste a new one">Edit list</button>
-            <button class="btn ghost sm" id="catCopyBtn" title="Copy every song on this sheet as Song - Artist, one per line">Copy all</button>
             <button class="btn ghost sm" id="catMenuBtn">More ⋯</button>
           </div>
           <div class="aboutRow" id="aboutRow">
@@ -451,8 +451,6 @@ table#bGrid{border-collapse:separate;border-spacing:0;width:100%;min-width:560px
           <div class="tools">
             <input id="bQ" placeholder="Search songs…" autocomplete="off" style="width:200px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 13px;color:var(--text);font:14px var(--font);outline:none">
             <div class="chips" id="bFilter"><button class="pill on" data-f="all">All</button><button class="pill" data-f="have">In catalog</button><button class="pill" data-f="missing">Missing</button><button class="pill" data-f="tosearch" title="Not in your catalog and not searched for yet">To search</button><button class="pill" data-f="searched" title="Not in your catalog but already searched for on BPM Supreme">Searched</button></div>
-            <button class="btn ghost hidden" id="bEditAll" title="See every song on this list as text — edit it, or delete it all and paste a new one">Edit list</button>
-            <button class="btn ghost" id="bCopyAll" title="Copy every song shown here as Song - Artist, one per line">Copy all</button>
             <button class="btn ghost hidden" id="bExportMissing">Export CSV</button>
             <button class="btn ghost" id="bMore">More ⋯</button>
             <button class="btn ghost" id="bImport">Import songs</button>
@@ -883,12 +881,15 @@ async function addType(name){
 }
 function catByNorm(name){ const k = normName(name); for (const c of S.cats.values()) if (normName(c.name) === k) return c; return null; }
 
+const isFeatType = t => /^feature/i.test(String(t || '').trim());
+const secName = c => String(c.secondaryName || '').trim();
+const sideName = c => (isFeatType(c.type) && secName(c)) || c.name;
 function renderSide(){
   const q = $('#catSearch').value.trim().toLowerCase(), showArch = $('#showArchCats').checked;
   const groups = new Map(typeList().map(t => [t, []]));
   for (const c of S.cats.values()){
     if (c.archived && !showArch) continue;
-    if (q && !String(c.name).toLowerCase().includes(q)) continue;
+    if (q && !(String(c.name).toLowerCase().includes(q) || secName(c).toLowerCase().includes(q))) continue;
     const t = c.type || 'Uncategorized'; if (!groups.has(t)) groups.set(t, []);
     groups.get(t).push(c);
   }
@@ -896,10 +897,10 @@ function renderSide(){
   for (const [t, list] of groups){
     if (!list.length && q) continue;
     const byCount = S.sortCount.has(t);
-    list.sort((a, b) => (byCount ? (Number(b.questionCount) || 0) - (Number(a.questionCount) || 0) : 0) || String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: 'base' }));
+    list.sort((a, b) => (byCount ? (Number(b.questionCount) || 0) - (Number(a.questionCount) || 0) : 0) || String(sideName(a)).localeCompare(String(sideName(b)), undefined, { numeric: true, sensitivity: 'base' }));
     const closed = !q && S.collapsed.has(t);
     html += `<div class="grp ${closed ? 'closed' : ''}"><button class="grpHead" data-type="${esc(t)}"><span class="chev">▾</span><span class="sortBtn ${byCount ? 'on' : ''}" role="button" data-sort="${esc(t)}" title="${byCount ? 'Sorted by most questions — click for A–Z' : 'Sort by most questions'}">⇅ ${byCount ? '#' : ''}</span>${esc(t)}<em>${list.length}</em></button><div class="grpBody">` +
-      list.map(c => `<button class="cat ${c.id === S.curId ? 'active' : ''} ${c.archived ? 'arch' : ''}" data-id="${c.id}"><span class="nm">${esc(c.name)}</span><span class="ct">${c.questionCount ?? ''}</span></button>`).join('') +
+      list.map(c => `<button class="cat ${c.id === S.curId ? 'active' : ''} ${c.archived ? 'arch' : ''}" data-id="${c.id}"><span class="nm" ${isFeatType(c.type) && secName(c) ? `title="${esc(c.name)}"` : ''}>${esc(sideName(c))}</span><span class="ct">${c.questionCount ?? ''}</span></button>`).join('') +
       `</div></div>`;
   }
   $('#catList').innerHTML = html || '<p class="hint" style="padding:12px">No categories yet — create one or import your CSVs.</p>';
@@ -918,6 +919,7 @@ function renderHead(){
   const c = S.cats.get(S.curId);
   if (!c){ if (S.curId){ S.curId = null; showEditor(false); } return; }
   const nm = $('#catName'); if (document.activeElement !== nm) nm.value = c.name;
+  const n2 = $('#catName2'); n2.classList.toggle('hidden', !isFeatType(c.type)); if (document.activeElement !== n2) n2.value = secName(c);
   const sel = $('#catType');
   sel.innerHTML = typeList().map(t => `<option ${t === c.type ? 'selected' : ''}>${esc(t)}</option>`).join('') + (c.type && !typeList().includes(c.type) ? `<option selected>${esc(c.type)}</option>` : '') + `<option value="__new">＋ New type…</option>`;
   $('#catArchTag').classList.toggle('hidden', !c.archived);
@@ -956,6 +958,13 @@ async function renameLinkedCategory(vaultId, oldName, newName){
     toast('Renamed everywhere (Trivia, Planner, Venue Menu).');
   } catch (e) { console.warn('Could not rename the linked Trivia / Planner category:', e && e.message); toast('Renamed here, but the linked Trivia category could not be renamed: ' + (e && e.message || e)); }
 }
+$('#catName2').addEventListener('change', async e => {
+  const c = S.cats.get(S.curId); if (!c) return;
+  const v = e.target.value.trim();
+  if (v === secName(c)) return;
+  await run(() => updateDoc(catRef(c.id), { secondaryName: v || null, updatedAt: serverTimestamp() }));
+});
+$('#catName2').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape'){ const c = S.cats.get(S.curId); if (c) e.target.value = secName(c); e.target.blur(); } });
 $('#catName').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape'){ const c = S.cats.get(S.curId); if (c) e.target.value = c.name; e.target.blur(); } });
 $('#catType').addEventListener('change', async e => {
   const c = S.cats.get(S.curId); if (!c) return;
@@ -1643,9 +1652,7 @@ $('#newCatBtn').addEventListener('click', () => {
 $('#catMenuBtn').addEventListener('click', () => {
   const c = S.cats.get(S.curId); if (!c) return;
   const body = document.createElement('div'); body.className = 'menuList';
-  body.innerHTML = `<button class="btn" data-a="edit">Edit list as text\u2026</button>
-    <button class="btn" data-a="copy">Copy all songs (Song - Artist)</button>
-    <button class="btn" data-a="export">Export this category as CSV</button>
+  body.innerHTML = `<button class="btn" data-a="export">Export this category as CSV</button>
     <button class="btn" data-a="recount">Recount questions</button>
     <button class="btn" data-a="archive">${c.archived ? 'Restore this category' : 'Archive this category'}</button>
     <p class="hint" style="margin:0 0 6px">Archiving hides the category from the list. Its questions are kept.</p>
@@ -1653,8 +1660,6 @@ $('#catMenuBtn').addEventListener('click', () => {
   openModal({ title: c.name, body, actions: [{ label: 'Close', onClick: closeModal }] });
   body.addEventListener('click', async e => {
     const b = e.target.closest('[data-a]'); if (!b) return;
-    if (b.dataset.a === 'edit'){ closeModal(); editCategoryList(); }
-    if (b.dataset.a === 'copy'){ closeModal(); copyCategorySongs(); }
     if (b.dataset.a === 'export'){ closeModal(); exportCSV(); }
     if (b.dataset.a === 'recount'){ closeModal(); await run(async () => { const snap = await getCountFromServer(query(qColl(), where('categoryId', '==', c.id), where('archived', '==', false))); await updateDoc(catRef(c.id), { questionCount: snap.data().count }); toast(`Recounted: ${snap.data().count} questions`); }); }
     if (b.dataset.a === 'archive'){ closeModal(); await run(() => updateDoc(catRef(c.id), { archived: !c.archived, updatedAt: serverTimestamp() })); }
@@ -1715,95 +1720,6 @@ function exportCSV(){
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
-/* Copy every song as "Song - Artist", one per line */
-function songLines(pairs){
-  const one = v => String(v == null ? '' : v).replace(/\s*[\r\n]+\s*/g, ' ').trim();
-  return pairs.map(([t, a]) => { t = one(t); a = one(a); return t ? (a ? t + ' - ' + a : t) : ''; }).filter(Boolean).join('\n');
-}
-async function copyLines(text, n){
-  if (!text){ toast('There are no songs to copy yet.'); return; }
-  let ok = false;
-  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {}
-  if (!ok){ try { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); ta.remove(); } catch (e) {} }
-  toast(ok ? 'Copied ' + n.toLocaleString() + ' song' + (n === 1 ? '' : 's') + ' — paste anywhere, one per line.' : 'Couldn’t copy — your browser blocked it.');
-}
-function copyCategorySongs(){
-  const items = [...S.rows.values()].filter(r => r.persisted && !r.data.archived).sort((a, b) => (Number(a.data.order) || 0) - (Number(b.data.order) || 0)).map(r => r.data);
-  const pairs = items.map(d => [d.question, d.answer]).filter(p => String(p[0] || '').trim());
-  copyLines(songLines(pairs), pairs.length);
-}
-$('#catCopyBtn').addEventListener('click', copyCategorySongs);
-
-/* Edit a whole list as text: every song shows as "Song - Artist" — change it, or clear it and paste a new list */
-function splitSongLine(line){
-  line = line.trim(); if (!line) return null;
-  if (line.includes('\t')){ const [a, ...b] = line.split('\t'); return { t: a.trim(), a: b.join(' ').trim() }; }
-  const i = Math.max(line.lastIndexOf(' - '), line.lastIndexOf(' \u2013 '), line.lastIndexOf(' \u2014 '));
-  return i > 0 ? { t: line.slice(0, i).trim(), a: line.slice(i + 3).trim() } : { t: line, a: '' };
-}
-function parseEditedList(text){
-  const out = [], seen = new Set();
-  for (const raw of String(text || '').split(/\r?\n/)){
-    const x = splitSongLine(raw); if (!x || !x.t) continue;
-    const k = (x.t + '|' + x.a).toLowerCase().replace(/\s+/g, ' ');
-    if (seen.has(k)) continue; seen.add(k); out.push(x);
-  }
-  return out;
-}
-function openListEditor({ title, initial, saveLabel, onSave, extraHint }){
-  const body = document.createElement('div');
-  body.innerHTML = `<p class="hint" style="margin:0 0 8px">One song per line as <b style="color:var(--gold)">Song - Artist</b>. Change anything, or select it all, delete, and paste a brand-new list. Whatever is in this box becomes the list when you save.${extraHint || ''}</p>
-    <textarea id="leText" spellcheck="false" style="width:100%;min-height:340px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:10px 12px;font:inherit;font-size:13px;line-height:1.55;resize:vertical;white-space:pre"></textarea>
-    <p class="hint" id="leInfo" style="margin:8px 0 0"></p>`;
-  const was = parseEditedList(initial).length;
-  const actions = [{ label: 'Cancel', onClick: closeModal }, { label: saveLabel || 'Save list', primary: true, onClick: async () => {
-    const songs = parseEditedList($('#leText').value); if (!songs.length){ toast('The list is empty — paste at least one song, or use Delete to remove the list.'); return; }
-    actions[1].el.disabled = true; try { await onSave(songs); } finally { if (actions[1].el) actions[1].el.disabled = false; }
-  } }];
-  openModal({ title, body, wide: true, actions });
-  const ta = $('#leText'); ta.value = initial;
-  const upd = () => { const n = parseEditedList(ta.value).length; $('#leInfo').textContent = n + ' song' + (n === 1 ? '' : 's') + (n === was ? '' : ' (was ' + was + ')'); };
-  ta.addEventListener('input', upd); upd(); ta.focus();
-}
-async function editCategoryList(){
-  const c = S.cats.get(S.curId); if (!c) return;
-  const rows = [...S.rows.values()].filter(r => r.persisted && !r.data.archived).sort((a, b) => (Number(a.data.order) || 0) - (Number(b.data.order) || 0));
-  const initial = songLines(rows.map(r => [r.data.question, r.data.answer]).filter(p => String(p[0] || '').trim()));
-  const catId = c.id;
-  const show = init => openListEditor({ title: 'Edit list \u2014 ' + c.name, initial: init, saveLabel: 'Save list', extraHint: ' Songs you keep stay exactly as they are (audio links, start/end times and other columns are kept). Songs you remove are deleted from this sheet.',
-    onSave: async songs => {
-      const lk = (t, a) => (String(t || '') + '|' + String(a || '')).toLowerCase().replace(/\s+/g, ' ').trim();
-      const have = new Map(); for (const r of rows){ const k = lk(r.data.question, r.data.answer); if (!have.has(k)) have.set(k, r); }
-      const keep = new Set(), ops = []; let adds = 0, order = 0;
-      for (const x of songs){ const k = lk(x.t, x.a); order++; const r = have.get(k);
-        if (r){ keep.add(r); if (Number(r.data.order) !== order) ops.push(b => b.update(r.ref, { order, updatedAt: serverTimestamp() })); }
-        else { adds++; ops.push(b => b.set(doc(qColl()), { question: x.t, answer: x.a, categoryId: catId, order, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })); } }
-      const dels = rows.filter(r => !keep.has(r) ); dels.forEach(r => ops.push(b => b.delete(r.ref)));
-      if (dels.length && !(await confirmBox({ title: 'Replace this list?', message: 'This removes ' + dels.length + ' song' + (dels.length === 1 ? '' : 's') + ' from \u201c' + c.name + '\u201d and adds ' + adds + ' new one' + (adds === 1 ? '' : 's') + '.', ok: 'Replace list', danger: true }))){ show(songLines(songs.map(x => [x.t, x.a]))); return; }
-      closeModal();
-      await run(async () => {
-        for (let i = 0; i < ops.length; i += 400){ const b = writeBatch(db); ops.slice(i, i + 400).forEach(f => f(b)); await b.commit(); }
-        await updateDoc(catRef(catId), { questionCount: songs.length, updatedAt: serverTimestamp() });
-        if (S.curId === catId) S.maxOrder = songs.length;
-      });
-      toast('List saved \u2014 ' + songs.length + ' song' + (songs.length === 1 ? '' : 's') + ' (' + adds + ' new, ' + dels.length + ' removed).');
-    } });
-  show(initial);
-}
-$('#catEditBtn').addEventListener('click', editCategoryList);
-function editBingoList(){
-  const l = B.lists.get(B.curId); if (!l) return;
-  const id = l.id, old = l.songs;
-  openListEditor({ title: 'Edit list \u2014 ' + l.name, initial: songLines(old.map(s => [s.t, s.a])), saveLabel: 'Save list',
-    extraHint: ' Your catalog ticks follow the songs, so kept songs stay ticked.',
-    onSave: async songs => {
-      const byKey = new Map(old.map(s => [songKey(s.t, s.a), s]));
-      const next = songs.map(x => { const o = byKey.get(songKey(x.t, x.a)); return o && o.m ? { t: x.t, a: x.a, m: o.m } : { t: x.t, a: x.a }; });
-      closeModal(); await saveSongs(id, next);
-      toast('List saved \u2014 ' + next.length + ' song' + (next.length === 1 ? '' : 's') + '.');
-    } });
-}
-$('#bEditAll').addEventListener('click', editBingoList);
 async function saveCustom(list){ await setDoc(doc(db, 'triviaConfig', 'columns'), { custom: list, updatedAt: serverTimestamp() }, { merge: true }); }
 async function saveOrder(keys){ S.order = keys; await setDoc(doc(db, 'triviaConfig', 'columns'), { order: keys, updatedAt: serverTimestamp() }, { merge: true }); }
 
@@ -2233,7 +2149,7 @@ function renderBingoAll(){
   if (!show) return;
   const nm = $('#bName');
   $('#bAdd').classList.toggle('hidden', special); $('#bImport').classList.toggle('hidden', special);
-  $('#bMore').classList.toggle('hidden', special); $('#bEditAll').classList.toggle('hidden', special); $('#bExportMissing').classList.toggle('hidden', !special);
+  $('#bMore').classList.toggle('hidden', special); $('#bExportMissing').classList.toggle('hidden', !special);
   nm.readOnly = special;
   if (special){ nm.value = isCat ? 'My whole catalog' : 'Everything I’m missing'; $('#bArch').classList.add('hidden'); }
   else { if (document.activeElement !== nm) nm.value = l.name; $('#bArch').classList.toggle('hidden', !l.archived); }
@@ -2375,6 +2291,12 @@ function parseSongLines(text, order){
     line = line.replace(/^\s*\d+\s*[.)\-:]\s+/, '').trim();
     if (!line) continue;
     const unq = x => (x || '').trim().replace(/^["“]|["”]$/g, '');
+    if (order === 'show'){   // Song – Movie/Show   (e.g. I'll Be There for You - Friends)
+      const parts = (line.includes('\t') ? line.split('\t') : line.split(/\s+[\-–—]\s+/)).map(unq).filter(Boolean);
+      if (parts.length >= 2) out.push({ t: parts.slice(0, -1).join(' - '), a: '', m: parts[parts.length - 1] });
+      else if (parts.length === 1) out.push({ t: parts[0], a: '' });
+      continue;
+    }
     if (order === 'movie'){   // Movie – Song – Category   (e.g. Aladdin - A Whole New World - Disney)
       const parts = (line.includes('\t') ? line.split('\t') : line.split(/\s+[\-–—]\s+/)).map(unq).filter(Boolean);
       if (parts.length >= 3) out.push({ t: parts.slice(1, -1).join(' - '), a: parts[parts.length - 1], m: parts[0] });
@@ -2408,7 +2330,7 @@ function openBingoImport(addTo){
   const l = addTo ? B.lists.get(addTo) : null;
   const body = document.createElement('div'); body.className = 'bImp';
   body.innerHTML = (l ? '' : `<label class="fld">List name<input type="text" id="biName" placeholder="e.g. 90s Pop, Halloween Bingo…" autocomplete="off"></label>`) +
-    `<div class="two"><label class="fld">Each line looks like<select id="biOrder"><option value="song">Song – Artist</option><option value="artist">Artist – Song</option><option value="movie">Movie – Song – Category (e.g. Aladdin – A Whole New World – Disney)</option></select></label>
+    `<div class="two"><label class="fld">Each line looks like<select id="biOrder"><option value="song">Song – Artist</option><option value="artist">Artist – Song</option><option value="movie">Movie – Song – Category (e.g. Aladdin – A Whole New World – Disney)</option><option value="show">Song – Movie / Show (e.g. I’ll Be There for You – Friends)</option></select></label>
      <label class="fld">…or choose a CSV / text file<input type="file" id="biFile" accept=".csv,.txt,.tsv,text/*"></label></div>
      <label class="fld" style="margin-bottom:.4rem">Paste your songs — one per line (numbering at the start of a line is ignored)<textarea id="biText" placeholder="Don't Stop Believin' - Journey\nBohemian Rhapsody - Queen"></textarea></label>
      <p class="hint" id="biInfo" style="margin:0">Nothing pasted yet.</p>`;
@@ -2539,7 +2461,6 @@ function exportBingoCSV(rows, name){
   const csv = ['Song,Artist,In catalog', ...rows.map(r => [csvEscape(r.t), csvEscape(r.a), isOwned(r) ? 'Yes' : 'No'].join(','))].join('\r\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = name.replace(/[^\w\- ]+/g, '') + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
-$('#bCopyAll').addEventListener('click', () => { const rows = currentRows(); const pairs = rows.map(r => [r.t, r.a]).filter(p => String(p[0] || '').trim()); copyLines(songLines(pairs), pairs.length); });
 $('#bExportMissing').addEventListener('click', () => B.curId === CATALOG ? exportBingoCSV(catalogRows(), 'My catalog') : exportBingoCSV(missingSongs(), 'Songs I am missing'));
 $('#bMore').addEventListener('click', () => {
   const l = B.lists.get(B.curId); if (!l) return;
