@@ -453,6 +453,7 @@ table#bGrid{border-collapse:separate;border-spacing:0;width:100%;min-width:560px
             <input id="bQ" placeholder="Search songs…" autocomplete="off" style="width:200px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 13px;color:var(--text);font:14px var(--font);outline:none">
             <div class="chips" id="bFilter"><button class="pill on" data-f="all">All</button><button class="pill" data-f="have">In catalog</button><button class="pill" data-f="missing">Missing</button><button class="pill" data-f="tosearch" title="Not in your catalog and not searched for yet">To search</button><button class="pill" data-f="searched" title="Not in your catalog but already searched for on BPM Supreme">Searched</button></div>
             <button class="btn ghost hidden" id="bExportMissing">Export CSV</button>
+            <button class="btn ghost" id="bIndexLink" title="Link this list to a category in the Bingo index — or create one">Bingo index</button>
             <button class="btn ghost" id="bExtras" title="Extra songs for this list — ones that didn’t make the cut, saved here to use later">Extras</button>
             <button class="btn ghost" id="bEditText" title="Edit this text list" aria-label="Edit this text list">✎</button>
             <button class="btn ghost" id="bMore">More ⋯</button>
@@ -1982,6 +1983,7 @@ function prepList(id, d){
 }
 
 /* ── keep the Media Player's copy of every bingo list in step (Realtime Database: bingo/vaultLists) ── */
+const IDX = { cats: new Map(), loaded: false, synced: false, err: null };
 const PUB = { sig: null, busy: false, warned: false, again: false };
 const pubSongs = l => (l.songs || []).map(x => ({ t: x.t, a: x.a || '', ...(x.m ? { m: x.m } : {}) }));
 const pubSig = l => hash53(JSON.stringify([l.name, !!l.archived, pubSongs(l)]));
@@ -1989,6 +1991,7 @@ async function mirrorToPlayer(){
   if (!B.canBingo || !B.loaded) return;
   if (PUB.busy){ PUB.again = true; return; }
   PUB.busy = true;
+  let changedIds = [];
   try {
     rtdb = rtdb || getDatabase(app);
     if (!PUB.sig){
@@ -2003,7 +2006,7 @@ async function mirrorToPlayer(){
       if (PUB.sig.get(l.id) !== sg) ups[l.id] = { name: l.name, archived: !!l.archived, songs: pubSongs(l), sig: sg, updatedAt: Date.now() };
     }
     for (const id of [...PUB.sig.keys()]) if (!B.lists.has(id)) ups[id] = null;
-    const ids = Object.keys(ups);
+    const ids = Object.keys(ups); changedIds = ids;
     if (ids.length){
       await rupdate(rref(rtdb, 'bingo/vaultLists'), ups);
       for (const id of ids){ if (ups[id]) PUB.sig.set(id, ups[id].sig); else PUB.sig.delete(id); }
@@ -2013,6 +2016,7 @@ async function mirrorToPlayer(){
     PUB.sig = null;
     if (!PUB.warned){ PUB.warned = true; toast(/permission/i.test(e.message || '') ? 'Your lists are saved, but the Media Player copy couldn\u2019t update \u2014 the Realtime Database rules need the vaultLists rule.' : 'Your lists are saved, but the Media Player copy couldn\u2019t update: ' + e.message); }
   }
+  try { if (changedIds.length || !IDX.synced) await syncLinkedCats(); } catch (e){ console.warn('Bingo index sync failed', e); }
   PUB.busy = false;
   if (PUB.again){ PUB.again = false; mirrorToPlayer(); }
 }
@@ -2024,6 +2028,7 @@ function startBingo(){
     B.lists = new Map(snap.docs.map(d => [d.id, prepList(d.id, d.data())]));
     B.loaded = true;
     mirrorToPlayer();
+    if (!IDX.loaded) loadIndexCats();
     if (B.mode === 'bingo') renderBingoAll();
     if (!B.curId){ const last = LS.get('bLast', null); if (last && (last === MISSING || last === CATALOG || B.lists.has(last))) { B.curId = last; if (B.mode === 'bingo') renderBingoAll(); } }
   }, err => {
@@ -2152,7 +2157,8 @@ function renderBingoAll(){
   if (!show) return;
   const nm = $('#bName');
   $('#bAdd').classList.toggle('hidden', special); $('#bImport').classList.toggle('hidden', special);
-  $('#bMore').classList.toggle('hidden', special); $('#bEditText').classList.toggle('hidden', special); $('#bExtras').classList.toggle('hidden', special);
+  $('#bIndexLink').classList.toggle('hidden', special); $('#bMore').classList.toggle('hidden', special); $('#bEditText').classList.toggle('hidden', special); $('#bExtras').classList.toggle('hidden', special);
+  if (!special) updateIndexBtn();
   if (!special) $('#bExtras').textContent = 'Extras' + ((l.extras || []).length ? ' (' + l.extras.length + ')' : '');
   $('#bExportMissing').classList.toggle('hidden', !special);
   nm.readOnly = special;
@@ -2467,6 +2473,91 @@ function exportBingoCSV(rows, name){
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = name.replace(/[^\w\- ]+/g, '') + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 $('#bExportMissing').addEventListener('click', () => B.curId === CATALOG ? exportBingoCSV(catalogRows(), 'My catalog') : exportBingoCSV(missingSongs(), 'Songs I am missing'));
+
+/* ── Link bingo lists to categories in the Bingo index (bingo/landing/categories) ──
+   A category carries vaultListId; the song text the game reads (category.songs) is rebuilt from the Vault list. */
+function vaultSongsToText(songs){
+  return (songs || []).map(x => {
+    const t = String(x.t || '').replace(/\s[–—-]\s/g, ', ').trim();
+    const b = String(x.m || x.a || '').trim();
+    return t ? (b ? t + ' – ' + b : t) : '';
+  }).filter(Boolean).join('\n');
+}
+async function loadIndexCats(){
+  try {
+    rtdb = rtdb || getDatabase(app);
+    const v = (await rget(rref(rtdb, 'bingo/landing/categories'))).val() || {};
+    IDX.cats = new Map(Object.entries(v).map(([id, c]) => [id, { id, ...c }]));
+    IDX.loaded = true; IDX.err = null;
+  } catch (e){ IDX.err = e; console.warn('Could not read the Bingo index', e); }
+  if (B.curId && B.lists.has(B.curId)) updateIndexBtn();
+}
+const linkedCatsOf = listId => [...IDX.cats.values()].filter(c => c.vaultListId === listId);
+function updateIndexBtn(){
+  const btn = $('#bIndexLink'); if (!btn) return;
+  const l = B.lists.get(B.curId); if (!l){ btn.textContent = 'Bingo index'; return; }
+  const lk = linkedCatsOf(l.id);
+  btn.textContent = lk.length ? '🔗 ' + (lk[0].title || 'Linked') + (lk.length > 1 ? ' +' + (lk.length - 1) : '') : (IDX.loaded ? 'Link to Bingo index' : 'Bingo index');
+  btn.classList.toggle('primary', false);
+}
+async function syncLinkedCats(){
+  await loadIndexCats(); if (!IDX.loaded) return;
+  const ups = {};
+  for (const c of IDX.cats.values()){
+    if (!c.vaultListId || c.classicBingo) continue;
+    const l = B.lists.get(c.vaultListId); if (!l) continue;
+    const text = vaultSongsToText(l.songs);
+    if ((c.songs || '') !== text) ups['bingo/landing/categories/' + c.id + '/songs'] = text;
+  }
+  IDX.synced = true;
+  if (Object.keys(ups).length){ await rupdate(rref(rtdb), ups); await loadIndexCats(); }
+}
+function openIndexLink(listId){
+  const l = B.lists.get(listId); if (!l) return;
+  const body = document.createElement('div'); body.className = 'bImp';
+  const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const render = () => {
+    const cats = [...IDX.cats.values()].filter(c => !c.classicBingo).sort((a, b) => String(a.title).localeCompare(String(b.title)));
+    const lk = linkedCatsOf(l.id);
+    const sameName = cats.find(c => norm(c.title) === norm(l.name));
+    const free = cats.filter(c => !c.vaultListId || c.vaultListId === l.id);
+    body.innerHTML = (IDX.err ? `<p class="hint" style="color:var(--red)">Couldn’t read the Bingo index (${esc(IDX.err.message || 'blocked')}).</p>` : '') +
+      `<p class="hint" style="margin-top:0">The Bingo index reads this list’s songs from here. Extras are never sent.</p>
+       <div class="fld"><span style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Linked categories</span>
+       ${lk.length ? lk.map(c => `<div style="display:flex;align-items:center;gap:10px;margin-top:6px"><b style="flex:1">${esc(c.title)}</b><button class="btn ghost sm" data-unlink="${esc(c.id)}">Unlink</button></div>`).join('') : '<div class="hint" style="margin-top:6px">Not linked to any category yet.</div>'}</div>
+       <label class="fld" style="margin-top:14px">Link to an existing category
+         <select id="ixSel"><option value="">— choose a Bingo index category —</option>${free.filter(c => c.vaultListId !== l.id).map(c => `<option value="${esc(c.id)}" ${sameName && sameName.id === c.id ? 'selected' : ''}>${esc(c.title)}${(c.songs && !c.vaultListId) ? '' : ''}</option>`).join('')}</select></label>
+       <div style="margin:6px 0 0"><button class="btn primary sm" id="ixLink">Link</button></div>
+       <div style="border-top:1px solid var(--border);margin:16px 0 12px"></div>
+       ${sameName && !sameName.vaultListId ? `<p class="hint" style="margin:0 0 8px">A category called “${esc(sameName.title)}” already exists — link it above instead of creating a duplicate.</p>` : ''}
+       <button class="btn ghost" id="ixNew" ${sameName ? 'disabled' : ''}>➕ Create “${esc(l.name)}” in the Bingo index</button>
+       <p class="hint" style="margin:8px 0 0">Creates a live category with this list’s ${l.songs.length} songs. Add its banner image, genre tags and Spotify link in the Bingo index.</p>`;
+  };
+  const refresh = async () => { await loadIndexCats(); render(); updateIndexBtn(); };
+  const fail = e => { console.error(e); toast(/permission/i.test(e && e.message || '') ? 'The Bingo index blocked that — the Realtime Database rules need to allow this account to edit bingo/landing/categories.' : 'Something went wrong: ' + (e && e.message || e)); };
+  body.addEventListener('click', async e => {
+    try {
+      const un = e.target.closest('[data-unlink]');
+      if (un){ await rupdate(rref(rtdb, 'bingo/landing/categories/' + un.dataset.unlink), { vaultListId: null }); toast('Unlinked — the category keeps its current songs.'); await refresh(); return; }
+      if (e.target.id === 'ixLink'){
+        const id = $('#ixSel', body).value; if (!id){ toast('Pick a category first.'); return; }
+        await rupdate(rref(rtdb, 'bingo/landing/categories/' + id), { vaultListId: l.id, songs: vaultSongsToText(l.songs) });
+        toast('Linked — “' + (IDX.cats.get(id) || {}).title + '” now reads this list.'); await refresh(); return;
+      }
+      if (e.target.closest('#ixNew')){
+        const id = 'cat_' + Date.now();
+        const order = Math.max(-1, ...[...IDX.cats.values()].map(c => Number(c.order) || 0)) + 1;
+        await rset(rref(rtdb, 'bingo/landing/categories/' + id), { id, title: l.name, genres: [], genre: '', image: '', squareImage: '', songs: vaultSongsToText(l.songs), spotifyUrl: '', spotifyQrUrl: '', status: 'live', order, classicBingo: false, unified: true, venueMenu: { show: false, description: '', bannerUrl: '' }, vaultListId: l.id });
+        toast('Created “' + l.name + '” in the Bingo index' + (l.songs.length < 25 ? ' — it needs 25+ songs before it can be played.' : '.')); await refresh(); return;
+      }
+    } catch (err){ fail(err); }
+  });
+  render();
+  openModal({ title: 'Bingo index — ' + l.name, body, actions: [{ label: 'Close', onClick: closeModal }] });
+  loadIndexCats().then(render);
+}
+$('#bIndexLink').addEventListener('click', () => { if (B.curId && B.lists.has(B.curId)) openIndexLink(B.curId); });
+
 /* ── Extras: songs that didn't make the 65 — kept on the list's record, never counted or sent to the Media Player ── */
 const cleanExtras = arr => cleanSongs(arr);
 async function saveExtras(listId, extras){
