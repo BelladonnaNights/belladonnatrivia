@@ -2147,7 +2147,7 @@ function setMode(m){
   $('#triviaShell').classList.toggle('hidden', m !== 'trivia');
   $('#bingoShell').classList.toggle('hidden', m !== 'bingo');
   $$('.modeSw button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
-  $('#navSub').textContent = (m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank') + ' · build Oct 20 #9';
+  $('#navSub').textContent = (m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank') + ' · build Oct 20 #10';
   $('#notesBtn').classList.toggle('hidden', m !== 'trivia');
   document.title = 'The Vault · Belladonna';
   if (m === 'bingo') renderBingoAll();
@@ -2730,7 +2730,9 @@ function vaultSongsToText(songs, fmt){
   return (songs || []).map(x => {
     const t = String(x.t || '').replace(/\s[–—-]\s/g, ', ').trim();
     const a = String(x.a || '').trim(), m = String(x.m || '').trim();
-    const b = fmt === 'artist' ? (a || m) : (m || a);
+    let b = fmt === 'artist' ? (a || m) : (m || a);
+    const nz = z => String(z || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (b && b === m && nz(m) && nz(t).includes(nz(m))) b = '';   // the show/movie name is already in the song title — don't repeat it
     return t ? (b ? t + ' – ' + b : t) : '';
   }).filter(Boolean).join('\n');
 }
