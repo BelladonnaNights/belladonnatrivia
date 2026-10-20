@@ -2881,6 +2881,7 @@ function openEditAsText(listId){
   if (withM.length) order = withM.every(s => !s.a) ? 'show' : 'movie';
   // a list pasted before the 3-part format existed has "Song - Artist" jammed into the title and nothing in Artist: open it in the 3-part view so one Save splits it properly
   if (order === 'show' && withM.filter(s => /\s[\-–—]\s/.test(s.t || '')).length >= withM.length / 2) order = 'full';
+  if (['song', 'full', 'artist', 'movie', 'show'].includes(l.textOrder)) order = l.textOrder;   // the format you last saved this list in wins
   const body = document.createElement('div'); body.className = 'bImp';
   body.innerHTML = `<label class="fld">Each line looks like<select id="etOrder"><option value="song">Song – Artist</option><option value="full">Song – Artist – Movie / Show (e.g. Hakuna Matata – Disney – The Lion King)</option><option value="artist">Artist – Song</option><option value="movie">Movie – Song – Category</option><option value="show">Song – Movie / Show</option></select></label>
     <label class="fld" style="margin-bottom:.4rem">One song per line — edit, delete, reorder or add lines freely<textarea id="etText" spellcheck="false" style="min-height:360px;white-space:pre"></textarea></label>
@@ -2903,7 +2904,9 @@ function openEditAsText(listId){
   const save = async () => {
     const d = diff(); if (!d.uniq.length){ toast('The list can’t be empty — use Delete list instead.'); return; }
     if (d.removed >= 5 && !(await confirmBox({ title: 'Remove ' + d.removed + ' songs?', message: 'Saving will take ' + d.removed + ' songs off “' + l.name + '”.', ok: 'Save changes', danger: true }))) return;
+    const ord = $('#etOrder').value;
     closeModal(); await saveSongs(l.id, d.uniq);
+    l.textOrder = ord; await run(() => updateDoc(bListRef(l.id), { textOrder: ord }));   // remember the format for next time
     toast('Saved “' + l.name + '” — ' + d.uniq.length + ' songs.');
   };
   openModal({ title: 'Edit “' + l.name + '” as text', body, wide: true, actions: [{ label: 'Cancel', onClick: closeModal }, { label: 'Save changes', primary: true, onClick: save }] });
