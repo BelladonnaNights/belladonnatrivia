@@ -2316,9 +2316,10 @@ function renderBingoAll(){
 /* ── bingo grid: drag a column edge to resize (remembered); cut-off text shows on hover ── */
 const BCOL_DEF = { '#': 56, 'In catalog': 96, 'BPM': 110, 'Song': 300, 'Artist': 230, 'Movie / show': 210, 'On lists': 90, 'Not on': 90, 'Which lists': 320, 'Lists it’s on': 320, 'On other lists': 120, '': 84 };
 const bColName = th => th.textContent.replace(/[▼⇅]/g, '').trim();
+const BCOLW = {};   // widths you've dragged this session — kept in memory too, so a re-render (e.g. coming back to the tab) never resets them
 function setupBingoCols(){
   const tbl = $('#bGrid'), ths = [...tbl.querySelectorAll('thead th')]; if (!ths.length) return;
-  const saved = LS.get('bColW', {}) || {};
+  const saved = Object.assign({}, LS.get('bColW', {}) || {}, BCOLW);
   const old = tbl.querySelector('colgroup'); if (old) old.remove();
   const cg = document.createElement('colgroup'); let total = 0;
   ths.forEach((th, i) => {
@@ -2337,14 +2338,16 @@ $('#bGrid thead').addEventListener('mousedown', e => {
   const mv = ev => { const w = Math.max(40, Math.round(w0 + ev.clientX - x0)); col.style.width = w + 'px'; tbl.style.width = (t0 + w - w0) + 'px'; };
   const up = () => {
     document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); document.body.classList.remove('resizing');
-    const saved = LS.get('bColW', {}) || {}; saved[bColName(th)] = Math.round(col.getBoundingClientRect().width); LS.set('bColW', saved);
+    const w = parseInt(col.style.width, 10); if (!(w >= 40)) return;   // use the width we set while dragging (a <col>'s measured width can read 0 in some browsers)
+    BCOLW[bColName(th)] = w;
+    const saved = LS.get('bColW', {}) || {}; saved[bColName(th)] = w; LS.set('bColW', saved);
   };
   document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
 });
 $('#bGrid thead').addEventListener('click', e => { if (e.target.closest('.rz')) e.stopPropagation(); }, true);
 $('#bGrid thead').addEventListener('dblclick', e => {   // double-click an edge to reset that column
   const h = e.target.closest('.rz'); if (!h) return;
-  const saved = LS.get('bColW', {}) || {}; delete saved[bColName(h.parentElement)]; LS.set('bColW', saved); setupBingoCols();
+  const saved = LS.get('bColW', {}) || {}; delete saved[bColName(h.parentElement)]; delete BCOLW[bColName(h.parentElement)]; LS.set('bColW', saved); setupBingoCols();
 });
 /* a tooltip with the full text, only when something is actually cut off (bingo grid + trivia grid) */
 function hoverFull(e){
