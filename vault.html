@@ -2538,6 +2538,13 @@ function parseSongLinesRaw(text, order){
     line = line.replace(/^\s*\d+\s*[.)\-:]\s+/, '').trim();
     if (!line) continue;
     const unq = x => (x || '').trim().replace(/^["“]|["”]$/g, '');
+    if (order === 'full'){   // Song – Artist – Movie/Show   (e.g. Hakuna Matata - Disney - The Lion King)
+      const parts = (line.includes('\t') ? line.split('\t') : line.split(/\s+[\-–—]\s+/)).map(unq).filter(Boolean);
+      if (parts.length >= 3) out.push({ t: parts[0], a: parts[1], m: parts.slice(2).join(' - ') });
+      else if (parts.length === 2) out.push({ t: parts[0], a: parts[1] });
+      else if (parts.length === 1) out.push({ t: parts[0], a: '' });
+      continue;
+    }
     if (order === 'show'){   // Song – Movie/Show   (e.g. I'll Be There for You - Friends)
       const parts = (line.includes('\t') ? line.split('\t') : line.split(/\s+[\-–—]\s+/)).map(unq).filter(Boolean);
       if (parts.length >= 2) out.push({ t: parts.slice(0, -1).join(' - '), a: '', m: parts[parts.length - 1] });
@@ -2577,7 +2584,7 @@ function openBingoImport(addTo){
   const l = addTo ? B.lists.get(addTo) : null;
   const body = document.createElement('div'); body.className = 'bImp';
   body.innerHTML = (l ? '' : `<label class="fld">List name<input type="text" id="biName" placeholder="e.g. 90s Pop, Halloween Bingo…" autocomplete="off"></label>`) +
-    `<div class="two"><label class="fld">Each line looks like<select id="biOrder"><option value="song">Song – Artist</option><option value="artist">Artist – Song</option><option value="movie">Movie – Song – Category (e.g. Aladdin – A Whole New World – Disney)</option><option value="show">Song – Movie / Show (e.g. I’ll Be There for You – Friends)</option></select></label>
+    `<div class="two"><label class="fld">Each line looks like<select id="biOrder"><option value="song">Song – Artist</option><option value="full">Song – Artist – Movie / Show (e.g. Hakuna Matata – Disney – The Lion King)</option><option value="artist">Artist – Song</option><option value="movie">Movie – Song – Category (e.g. Aladdin – A Whole New World – Disney)</option><option value="show">Song – Movie / Show (e.g. I’ll Be There for You – Friends)</option></select></label>
      <label class="fld">…or choose a CSV / text file<input type="file" id="biFile" accept=".csv,.txt,.tsv,text/*"></label></div>
      <label class="fld" style="margin-bottom:.4rem">Paste your songs — one per line (numbering at the start of a line is ignored)<textarea id="biText" placeholder="Don't Stop Believin' - Journey\nBohemian Rhapsody - Queen"></textarea></label>
      <p class="hint" id="biInfo" style="margin:0">Nothing pasted yet.</p>`;
@@ -2712,10 +2719,12 @@ $('#bExportMissing').addEventListener('click', () => B.curId === CATALOG ? expor
 
 /* ── Link bingo lists to categories in the Bingo index (bingo/landing/categories) ──
    A category carries vaultListId; the song text the game reads (category.songs) is rebuilt from the Vault list. */
-function vaultSongsToText(songs){
+function vaultSongsToText(songs, fmt){
+  // fmt 'show' (default) = Song – Movie/Show (falls back to the artist); 'artist' = Song – Artist (falls back to the movie/show)
   return (songs || []).map(x => {
     const t = String(x.t || '').replace(/\s[–—-]\s/g, ', ').trim();
-    const b = String(x.m || x.a || '').trim();
+    const a = String(x.a || '').trim(), m = String(x.m || '').trim();
+    const b = fmt === 'artist' ? (a || m) : (m || a);
     return t ? (b ? t + ' – ' + b : t) : '';
   }).filter(Boolean).join('\n');
 }
@@ -2742,7 +2751,7 @@ async function syncLinkedCats(){
   for (const c of IDX.cats.values()){
     if (!c.vaultListId || c.classicBingo) continue;
     const l = B.lists.get(c.vaultListId); if (!l) continue;
-    const text = vaultSongsToText(l.songs);
+    const text = vaultSongsToText(l.songs, c.songFormat);
     if ((c.songs || '') !== text) ups['bingo/landing/categories/' + c.id + '/songs'] = text;
   }
   IDX.synced = true;
@@ -2760,7 +2769,7 @@ function openIndexLink(listId){
     body.innerHTML = (IDX.err ? `<p class="hint" style="color:var(--red)">Couldn’t read the Bingo index (${esc(IDX.err.message || 'blocked')}).</p>` : '') +
       `<p class="hint" style="margin-top:0">The Bingo index reads this list’s songs from here. Extras are never sent.</p>
        <div class="fld"><span style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Linked categories</span>
-       ${lk.length ? lk.map(c => `<div style="display:flex;align-items:center;gap:10px;margin-top:6px"><b style="flex:1">${esc(c.title)}</b><button class="btn ghost sm" data-unlink="${esc(c.id)}">Unlink</button></div>`).join('') : '<div class="hint" style="margin-top:6px">Not linked to any category yet.</div>'}</div>
+       ${lk.length ? lk.map(c => `<div style="display:flex;align-items:center;gap:10px;margin-top:6px"><b style="flex:1">${esc(c.title)}</b><select data-fmt="${esc(c.id)}" title="How this category shows its songs" style="max-width:190px"><option value="show" ${c.songFormat === 'artist' ? '' : 'selected'}>Song – Movie / Show</option><option value="artist" ${c.songFormat === 'artist' ? 'selected' : ''}>Song – Artist</option></select><button class="btn ghost sm" data-unlink="${esc(c.id)}">Unlink</button></div>`).join('') : '<div class="hint" style="margin-top:6px">Not linked to any category yet.</div>'}</div>
        <label class="fld" style="margin-top:14px">Link to an existing category
          <select id="ixSel"><option value="">— choose a Bingo index category —</option>${free.filter(c => c.vaultListId !== l.id).map(c => `<option value="${esc(c.id)}" ${sameName && sameName.id === c.id ? 'selected' : ''}>${esc(c.title)}${(c.songs && !c.vaultListId) ? '' : ''}</option>`).join('')}</select></label>
        <div style="margin:6px 0 0"><button class="btn primary sm" id="ixLink">Link</button></div>
@@ -2771,13 +2780,20 @@ function openIndexLink(listId){
   };
   const refresh = async () => { await loadIndexCats(); render(); updateIndexBtn(); };
   const fail = e => { console.error(e); toast(/permission/i.test(e && e.message || '') ? 'The Bingo index blocked that — the Realtime Database rules need to allow this account to edit bingo/landing/categories.' : 'Something went wrong: ' + (e && e.message || e)); };
+  body.addEventListener('change', async e => {
+    const f = e.target.closest('[data-fmt]'); if (!f) return;
+    try {
+      await rupdate(rref(rtdb, 'bingo/landing/categories/' + f.dataset.fmt), { songFormat: f.value, songs: vaultSongsToText(l.songs, f.value) });
+      toast('Now showing songs as ' + (f.value === 'artist' ? 'Song – Artist' : 'Song – Movie / Show') + '.'); await refresh();
+    } catch (err){ fail(err); }
+  });
   body.addEventListener('click', async e => {
     try {
       const un = e.target.closest('[data-unlink]');
       if (un){ await rupdate(rref(rtdb, 'bingo/landing/categories/' + un.dataset.unlink), { vaultListId: null }); toast('Unlinked — the category keeps its current songs.'); await refresh(); return; }
       if (e.target.id === 'ixLink'){
         const id = $('#ixSel', body).value; if (!id){ toast('Pick a category first.'); return; }
-        await rupdate(rref(rtdb, 'bingo/landing/categories/' + id), { vaultListId: l.id, songs: vaultSongsToText(l.songs) });
+        await rupdate(rref(rtdb, 'bingo/landing/categories/' + id), { vaultListId: l.id, songs: vaultSongsToText(l.songs, (IDX.cats.get(id) || {}).songFormat) });
         toast('Linked — “' + (IDX.cats.get(id) || {}).title + '” now reads this list.'); await refresh(); return;
       }
       if (e.target.closest('#ixNew')){
@@ -2819,7 +2835,7 @@ function openExtras(listId){
   const withM = ex.filter(s => s.m); if (withM.length) order = withM.every(s => !s.a) ? 'show' : 'movie';
   const body = document.createElement('div'); body.className = 'bImp';
   body.innerHTML = `<p class="hint" style="margin-top:0">Songs you came up with that didn’t make this list. They’re kept here for you — they don’t count toward the list, don’t show in your stats and aren’t sent to the Media Player. Use <b>⤓</b> on a row to move a song here, or <b>Move to list</b> below to bring them back.</p>
-    <label class="fld">Each line looks like<select id="exOrder"><option value="song">Song – Artist</option><option value="artist">Artist – Song</option><option value="movie">Movie – Song – Category</option><option value="show">Song – Movie / Show</option></select></label>
+    <label class="fld">Each line looks like<select id="exOrder"><option value="song">Song – Artist</option><option value="full">Song – Artist – Movie / Show (e.g. Hakuna Matata – Disney – The Lion King)</option><option value="artist">Artist – Song</option><option value="movie">Movie – Song – Category</option><option value="show">Song – Movie / Show</option></select></label>
     <label class="fld" style="margin-bottom:.4rem">Extra songs — one per line<textarea id="exText" spellcheck="false" style="min-height:300px;white-space:pre" placeholder="Paste or type extra songs here…"></textarea></label>
     <p class="hint" id="exInfo" style="margin:0"></p>`;
   const parse = () => parseSongLines($('#exText').value, $('#exOrder').value).filter(x => x.t);
@@ -2847,6 +2863,7 @@ $('#bEditText').addEventListener('click', () => { if (B.curId && B.curId !== MIS
 function songsToText(songs, order){
   return songs.map(s => {
     const t = s.t || '', a = s.a || '', m = s.m || '';
+    if (order === 'full') return [t, a, m].filter(Boolean).join(' - ');
     if (order === 'show') return m ? `${t} - ${m}` : (a ? `${t} - ${a}` : t);
     if (order === 'movie') return m ? [m, t, a].filter(Boolean).join(' - ') : (a ? `${t} - ${a}` : t);
     if (order === 'artist') return a ? `${a} - ${t}` : t;
@@ -2860,7 +2877,7 @@ function openEditAsText(listId){
   let order = 'song';
   if (withM.length) order = withM.every(s => !s.a) ? 'show' : 'movie';
   const body = document.createElement('div'); body.className = 'bImp';
-  body.innerHTML = `<label class="fld">Each line looks like<select id="etOrder"><option value="song">Song – Artist</option><option value="artist">Artist – Song</option><option value="movie">Movie – Song – Category</option><option value="show">Song – Movie / Show</option></select></label>
+  body.innerHTML = `<label class="fld">Each line looks like<select id="etOrder"><option value="song">Song – Artist</option><option value="full">Song – Artist – Movie / Show (e.g. Hakuna Matata – Disney – The Lion King)</option><option value="artist">Artist – Song</option><option value="movie">Movie – Song – Category</option><option value="show">Song – Movie / Show</option></select></label>
     <label class="fld" style="margin-bottom:.4rem">One song per line — edit, delete, reorder or add lines freely<textarea id="etText" spellcheck="false" style="min-height:360px;white-space:pre"></textarea></label>
     <p class="hint" id="etInfo" style="margin:0"></p>`;
   const carry = new Map(); l.songs.forEach(s => { if (s.m) carry.set(songKey(s.t, s.a), s.m); });
