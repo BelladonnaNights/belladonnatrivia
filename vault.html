@@ -1998,6 +1998,7 @@ function hash53(str, seed = 0){
 }
 function normSong(s){
   return String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[\(\[]\s*(e|explicit|clean|dirty|edited|uncensored|censored|amended|radio edit|radio version|album version|album edit|clean version|explicit version|dirty version|original|original version|single version|remaster(?:ed)?(?:\s*\d{4})?|\d{4}\s*remaster(?:ed)?)\s*[\)\]]/g, ' ')   /* (E) (Explicit) (Clean) (Radio Edit)… are tags, not part of the name */
     .replace(/[\(\[][^\)\]]*(feat|ft|with)\b[^\)\]]*[\)\]]/g, ' ')
     .replace(/\b(feat|ft|featuring)\b.*$/g, ' ')
     .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '').replace(/^the/, '');
