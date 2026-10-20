@@ -2147,7 +2147,7 @@ function setMode(m){
   $('#triviaShell').classList.toggle('hidden', m !== 'trivia');
   $('#bingoShell').classList.toggle('hidden', m !== 'bingo');
   $$('.modeSw button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
-  $('#navSub').textContent = m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank';
+  $('#navSub').textContent = (m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank') + ' · build Oct 20 #7';
   $('#notesBtn').classList.toggle('hidden', m !== 'trivia');
   document.title = 'The Vault · Belladonna';
   if (m === 'bingo') renderBingoAll();
