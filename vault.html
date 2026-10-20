@@ -2108,7 +2108,9 @@ function startBingo(){
     }
     B.catSongs = [];
     songChunks.sort((a, b) => a[0] - b[0]);
-    for (const [, txt] of songChunks) for (const line of txt.split('\n')){ if (!line) continue; const i = line.indexOf('\t'); const t = i < 0 ? line : line.slice(0, i), rest = i < 0 ? '' : line.slice(i + 1), j = rest.indexOf('\t'), a = j < 0 ? rest : rest.slice(0, j), m = j < 0 ? '' : rest.slice(j + 1); B.catSongs.push(withKeys(m ? { t, a, m } : { t, a })); }
+    for (const [, txt] of songChunks) for (const line of txt.split('\n')){ if (!line) continue; const f = line.split('\t'), t = f[0], a = f[1] || '', m = f[2] || ''; B.catSongs.push(withKeys({ t, a, ...(m ? { m } : {}), ...(f[3] === 'B' ? { bpm: true } : {}) })); }
+    B.bpmKeys = new Set(); B.bpmTitle = new Set();
+    for (const x of B.catSongs) if (x.bpm){ B.bpmKeys.add(x._k); B.bpmTitle.add(x._tk); }
     B.cat = new Set();
     for (const str of B.catChunks.values()) if (str) for (const k of str.split(',')) if (k) B.cat.add(k);
     for (const x of B.catSongs){ B.cat.add(B.catMode === 'title' ? x._tk : x._k); if (x.m && B.catMode !== 'title') B.cat.add(songKey(x.t, x.m)); }   // movie songs also match a list that names the movie as the artist
@@ -2256,9 +2258,9 @@ function renderBingoAll(){
   $('#bGrid thead').innerHTML = special
     ? `<tr><th>#</th>${isCat ? '' : '<th>In catalog</th>'}${isMissing ? BPM : ''}<th>Song</th><th>Artist</th><th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
     : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th class="on" data-rsort="1" style="cursor:pointer;color:var(--gold)" title="How many of your OTHER bingo lists also have this song \u2014 click to put the songs on the most lists first">On other lists${B.rowSort ? ' \u25bc' : ' \u21c5'}</th><th>Movie / show</th><th></th></tr>`;
-  const bpmMap = new Map();   // artist -> keys of their songs that carry the BPM mark
-  if (B.searched.size){ const add = x => { if (!x._k || !B.searched.has(x._k)) return; const a = normSong(x.a); if (!a) return; (bpmMap.get(a) || bpmMap.set(a, new Set()).get(a)).add(x._k); }; for (const l of B.lists.values()) l.songs.forEach(add); B.catSongs.forEach(add); }
-  const hasOtherBpm = r => { const set = bpmMap.get(normSong(r.a)); if (!set) return false; for (const k of set) if (k !== r._k) return true; return false; };
+  const bpmMap = new Map();   // artist -> their songs that carry a BPM mark (searched tick, or a BPM file in the imported catalog)
+  { const add = x => { const hit = B.searched.has(x._k) || isBpmFile(x) || x.bpm; if (!hit) return; const a = normSong(x.a); if (!a) return; (bpmMap.get(a) || bpmMap.set(a, []).get(a)).push({ k: x._k, tk: x._tk }); }; for (const l of B.lists.values()) l.songs.forEach(add); B.catSongs.forEach(add); }
+  const hasOtherBpm = r => { const arr = bpmMap.get(normSong(r.a)); return !!arr && arr.some(e => e.k !== r._k && e.tk !== r._tk); };
   $('#bGrid tbody').innerHTML = shown.map(r => {
     const own = isOwned(r);
     const ck = `<td class="ck"><input type="checkbox" data-k="${r._k}" ${own ? 'checked' : ''} title="${own ? 'In your catalog — uncheck to remove it from every list' : 'Tick when this song is in your catalog — it ticks on every list'}"></td>`;
@@ -2347,19 +2349,20 @@ $$('.shell').forEach(sh => {
 /* ── artist icons: ✓ = what I already have by this artist, 🔎 = what I still need (tick to put it in my catalog) ── */
 function artIcons(a, only){ a = String(a || '').trim(); if (!a) return ''; const n = esc(a); if (only === 'bpm') return `<button type="button" class="bpmIc" data-art="bpm" data-name="${n}" title="Songs by ${n} I\u2019ve already searched for on BPM Supreme">\uD83D\uDCCB</button>`; return `<span class="artIcons"><button type="button" data-art="have" data-name="${n}" title="Songs by ${n} I already have in my catalog">\u2705</button><button type="button" data-art="need" data-name="${n}" title="Songs by ${n} I still need \u2014 tick the ones I find">\uD83D\uDD0E</button></span>`; }
 const ART = { name: '', mode: '', checked: new Set(), anchor: null };
+function isBpmFile(x){ return !!((B.bpmKeys && B.bpmKeys.has(x._k)) || (B.catMode === 'title' && B.bpmTitle && B.bpmTitle.has(x._tk))); }
 function songsByArtist(name){
   const key = normSong(name); if (!key) return [];
   const out = new Map();
   for (const l of B.lists.values()){
     for (const s of l.songs){
       if (normSong(s.a) !== key) continue;
-      const k = s._k || songKey(s.t, s.a); const e = out.get(k) || { k, tk: s._tk || titleKey(s.t), t: s.t, lists: [] };
+      const k = s._k || songKey(s.t, s.a); const e = out.get(k) || { k, tk: s._tk || titleKey(s.t), t: s.t, lists: [], bpmFile: isBpmFile(s) };
       if (!e.lists.includes(l.name)) e.lists.push(l.name); out.set(k, e);
     }
   }
   for (const x of B.catSongs){
     if (normSong(x.a) !== key) continue;
-    const k = x._k || songKey(x.t, x.a); if (!out.has(k)) out.set(k, { k, tk: x._tk || titleKey(x.t), t: x.t, lists: [] });
+    const k = x._k || songKey(x.t, x.a); if (!out.has(k)) out.set(k, { k, tk: x._tk || titleKey(x.t), t: x.t, lists: [], bpmFile: !!x.bpm });
   }
   return [...out.values()].sort((a, b) => String(a.t).localeCompare(String(b.t)));
 }
@@ -2369,14 +2372,15 @@ function renderArtPop(){
   const all = songsByArtist(ART.name).map(x => ({ ...x, own: isOwned({ _k: x.k, _tk: x.tk }) }));
   const have = ART.mode === 'have';
   const bpm = ART.mode === 'bpm';
-  const list = bpm ? all.filter(x => B.searched.has(x.k) || ART.checked.has(x.k)) : have ? all.filter(x => x.own) : all.filter(x => !x.own || ART.checked.has(x.k));
+  const list = bpm ? all.filter(x => x.bpmFile || B.searched.has(x.k) || ART.checked.has(x.k)) : have ? all.filter(x => x.own) : all.filter(x => !x.own || ART.checked.has(x.k));
   const lists = x => x.lists.length ? esc(x.lists.slice(0, 3).join(' · ')) + (x.lists.length > 3 ? ' +' + (x.lists.length - 3) : '') : 'catalog only';
   p.innerHTML = `<div class="apHead"><h4>${esc(ART.name)} · ${bpm ? 'searched on BPM' : have ? 'in my catalog' : 'still needed'} · ${list.length}</h4><button class="apX" data-apx title="Close">✕</button></div>` +
     (list.length ? list.map(x => have
       ? `<div class="ap"><b>${esc(x.t)}</b><span>${lists(x)}</span></div>`
+      : bpm && x.bpmFile ? `<div class="ap"><b>${esc(x.t)}</b><span>BPM file${x.lists.length ? ' \u00B7 ' + lists(x) : ''}</span></div>`
       : bpm ? `<label class="ap need"><input type="checkbox" data-aps="${x.k}" ${B.searched.has(x.k) ? 'checked' : ''}><b>${esc(x.t)}</b><span>${x.own ? 'in catalog '+String.fromCharCode(183)+' ' : ''}${lists(x)}</span></label>`
       : `<label class="ap need"><input type="checkbox" data-apk="${x.k}" ${x.own ? 'checked' : ''}><b>${esc(x.t)}</b><span>${lists(x)}</span></label>`).join('')
-      : `<div class="more">${bpm ? 'None of this artist\u2019s songs have been searched for on BPM yet.' : have ? 'Nothing by this artist is in your catalog yet.' : 'Nothing left to find — you have them all. 🎉'}</div>`) +
+      : `<div class="more">${bpm ? 'None of this artist\u2019s songs are BPM files or have been searched for on BPM yet.' : have ? 'Nothing by this artist is in your catalog yet.' : 'Nothing left to find — you have them all. 🎉'}</div>`) +
     (bpm && list.length ? `<div class="more">Untick a song to clear its BPM search mark.</div>` : '') + (!have && !bpm && list.length ? `<div class="more">Tick a song when you find it — it goes into your catalog.</div>` : '');
 }
 function showArtPop(btn, mode){
@@ -2498,7 +2502,17 @@ $('#bAdd').addEventListener('click', () => {
 });
 
 /* ── import / paste songs (new list or add to the open one) ── */
+/* Lines from the Music Organizer can end with " [BPM]" = that file came from BPM Supreme. The marker is stripped and remembered as bpm:true. */
 function parseSongLines(text, order){
+  const out = [];
+  for (const raw of String(text || '').split(/\r?\n/)){
+    let bpm = false;
+    const line = raw.replace(/\s*\[BPM\]\s*$/i, () => { bpm = true; return ''; });
+    for (const x of parseSongLinesRaw(line, order)) out.push(bpm ? { ...x, bpm: true } : x);
+  }
+  return out;
+}
+function parseSongLinesRaw(text, order){
   const out = [];
   for (let line of String(text || '').split(/\r?\n/)){
     line = line.replace(/^\s*\d+\s*[.)\-:]\s+/, '').trim();
@@ -2601,7 +2615,7 @@ $('#bEmptyNew').addEventListener('click', () => openBingoImport(null));
 const CHUNK = 20000;
 function openCatalogImport(){
   const body = document.createElement('div'); body.className = 'bImp';
-  body.innerHTML = `<p class="hint">Paste your whole catalog (or load a CSV / text file). Every song on every bingo list that\u2019s in it gets ticked automatically \u2014 and lists you add later will tick themselves too.</p>
+  body.innerHTML = `<p class="hint">Paste your whole catalog (or load a CSV / text file). Every song on every bingo list that\u2019s in it gets ticked automatically \u2014 and lists you add later will tick themselves too. Lines ending in <b>[BPM]</b> (from the Music Organizer\u2019s Song List) are remembered as BPM files. Your ticks and BPM searches stay on their songs when you re-import.</p>
     <div class="two"><label class="fld">Each line looks like<select id="ciOrder"><option value="song">Song \u2013 Artist</option><option value="artist">Artist \u2013 Song</option><option value="movie">Movie \u2013 Song \u2013 Category (e.g. Aladdin \u2013 A Whole New World \u2013 Disney)</option></select></label>
     <label class="fld">Match songs by<select id="ciMode"><option value="exact">Title + artist (most accurate)</option><option value="title">Title only (use if artist names differ between your catalog and the lists)</option></select></label></div>
     <label class="fld">\u2026or choose a CSV / text file<input type="file" id="ciFile" accept=".csv,.txt,.tsv,text/*"></label>
@@ -2627,9 +2641,9 @@ function openCatalogImport(){
     const mode = $('#ciMode').value, replace = $('#ciReplace').checked || (B.catCount && B.catMode !== mode);
     const keyOf = x => mode === 'title' ? titleKey(x.t) : songKey(x.t, x.a);
     const merged = new Map();
-    if (!replace && B.catCount && B.catMode === mode) for (const x of B.catSongs) merged.set(mode === 'title' ? x._tk : x._k, { t: x.t, a: x.a, m: x.m });
+    if (!replace && B.catCount && B.catMode === mode) for (const x of B.catSongs) merged.set(mode === 'title' ? x._tk : x._k, { t: x.t, a: x.a, m: x.m, bpm: x.bpm });
     const legacyOnly = !replace && B.catCount && B.catMode === mode && !B.catSongs.length && B.cat.size;   // older import saved keys only
-    for (const x of songs) merged.set(keyOf(x), { t: x.t, a: x.a, m: x.m });
+    for (const x of songs){ const old = merged.get(keyOf(x)); merged.set(keyOf(x), { t: x.t, a: x.a, m: x.m, bpm: !!(x.bpm || (old && old.bpm)) }); }
     const arr = [...merged.values()], chunks = [];
     for (let i = 0; i < arr.length; i += 4000) chunks.push(arr.slice(i, i + 4000));
     btn.disabled = true; btn.textContent = 'Saving\u2026';
@@ -2637,7 +2651,7 @@ function openCatalogImport(){
     const ok = await run(async () => {
       for (let i = 0; i < chunks.length; i += 6){
         const b = writeBatch(db);
-        chunks.slice(i, i + 6).forEach((c, j) => b.set(doc(db, 'bingoConfig', 'songs_' + (i + j)), { txt: c.map(x => clean(x.t) + '\t' + clean(x.a) + (x.m ? '\t' + clean(x.m) : '')).join('\n'), n: c.length }));
+        chunks.slice(i, i + 6).forEach((c, j) => b.set(doc(db, 'bingoConfig', 'songs_' + (i + j)), { txt: c.map(x => clean(x.t) + '\t' + clean(x.a) + (x.m || x.bpm ? '\t' + clean(x.m) : '') + (x.bpm ? '\tB' : '')).join('\n'), n: c.length }));
         await b.commit();
       }
       const b = writeBatch(db);
