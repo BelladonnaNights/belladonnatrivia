@@ -2147,7 +2147,7 @@ function setMode(m){
   $('#triviaShell').classList.toggle('hidden', m !== 'trivia');
   $('#bingoShell').classList.toggle('hidden', m !== 'bingo');
   $$('.modeSw button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
-  $('#navSub').textContent = (m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank') + ' · build Oct 20 #8';
+  $('#navSub').textContent = (m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank') + ' · build Oct 20 #9';
   $('#notesBtn').classList.toggle('hidden', m !== 'trivia');
   document.title = 'The Vault · Belladonna';
   if (m === 'bingo') renderBingoAll();
@@ -2903,7 +2903,7 @@ function openEditAsText(listId){
     const removed = l.songs.filter(x => !kept.has(x._k)).length;
     return { uniq, added, removed, dups: songs.length - uniq.length };
   };
-  const info = () => { const d = diff(); $('#etInfo').innerHTML = `<b>${d.uniq.length}</b> songs · <b>${d.added}</b> new · <b>${d.removed}</b> removed` + (d.dups ? ` · ${d.dups} repeat${d.dups === 1 ? '' : 's'} will be skipped` : '') + '. Songs you leave as they are keep their catalog ticks.'; };
+  const info = () => { const d = diff(), f = d.uniq[0]; $('#etInfo').innerHTML = `<b>${d.uniq.length}</b> songs · <b>${d.added}</b> new · <b>${d.removed}</b> removed` + (d.dups ? ` · ${d.dups} repeat${d.dups === 1 ? '' : 's'} will be skipped` : '') + '. Songs you leave as they are keep their catalog ticks.' + (f ? `<br>First line will save as → Song: <b>${esc(f.t)}</b> · Artist: <b>${esc(f.a || '—')}</b> · Movie / Show: <b>${esc(f.m || '—')}</b>` : ''); };
   const save = async () => {
     const ord = $('#etOrder').value;   // read it now: the confirm window below replaces this one
     const d = diff(); if (!d.uniq.length){ toast('The list can’t be empty — use Delete list instead.'); return; }
@@ -2930,7 +2930,14 @@ function openEditAsText(listId){
     const cur = parseSongLines($('#etText').value, prev).filter(x => x.t).map(x => (!x.m && carry.has(songKey(x.t, x.a))) ? { ...x, m: carry.get(songKey(x.t, x.a)) } : x);
     $('#etText').value = songsToText(cur, $('#etOrder').value); prev = $('#etOrder').value; info();
   });
-  $('#etText').addEventListener('input', info);
+  $('#etText').addEventListener('input', () => {
+    // pasted lines with three parts while the format is "Song – Movie / Show" would jam the artist into the title — switch to the 3-part format
+    const lines = $('#etText').value.split(/\r?\n/).filter(x => x.trim());
+    if ($('#etOrder').value === 'show' && lines.length && lines.filter(x => x.split(/\s+[\-–—]\s+/).length === 3).length >= lines.length * 0.8){
+      $('#etOrder').value = 'full'; prev = 'full'; toast('Switched to Song – Artist – Movie / Show — your lines have three parts.');
+    }
+    info();
+  });
 }
 $('#bMore').addEventListener('click', () => {
   const l = B.lists.get(B.curId); if (!l) return;
