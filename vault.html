@@ -346,6 +346,14 @@ table#bGrid{table-layout:fixed;width:auto;min-width:0}
 .sideTgl:hover{background:var(--gold);color:#080808}
 .shell.side-collapsed>.sideTgl{left:6px}
 @media (max-width:820px){ .sideTgl{display:none} .shell.side-collapsed{grid-template-columns:1fr} }
+
+#artPop{position:fixed;z-index:9000;min-width:240px;max-width:min(440px,92vw);max-height:60vh;overflow:hidden;background:var(--surface);border:1px solid var(--gold-glow2,rgba(201,168,76,.45));border-radius:10px;padding:10px 12px;box-shadow:0 14px 40px rgba(0,0,0,.6);pointer-events:none;font-size:13px;color:var(--text)}
+#artPop h4{margin:0 0 6px;font:600 11px var(--cinzel);letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
+#artPop .ap{display:flex;gap:8px;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border)}
+#artPop .ap:last-child{border-bottom:0}
+#artPop .ap b{font-weight:500}
+#artPop .ap span{color:var(--text3);font-size:11px;text-align:right}
+#artPop .more{color:var(--text3);font-style:italic;padding-top:4px}
 </style>
 </head>
 <body>
@@ -468,6 +476,7 @@ table#bGrid{table-layout:fixed;width:auto;min-width:0}
             <input id="bQ" placeholder="Search songs…" autocomplete="off" style="width:200px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 13px;color:var(--text);font:14px var(--font);outline:none">
             <div class="chips" id="bFilter"><button class="pill on" data-f="all">All</button><button class="pill" data-f="have">In catalog</button><button class="pill" data-f="missing">Missing</button><button class="pill" data-f="tosearch" title="Not in your catalog and not searched for yet">To search</button><button class="pill" data-f="searched" title="Not in your catalog but already searched for on BPM Supreme">Searched</button></div>
             <button class="btn ghost hidden" id="bExportMissing">Export CSV</button>
+            <button class="btn ghost" id="bUndo" title="Nothing to undo" disabled style="opacity:.45">↶ Undo</button>
             <button class="btn ghost" id="bIndexLink" title="Link this list to a category in the Bingo index — or create one">Bingo index</button>
             <button class="btn ghost" id="bExtras" title="Extra songs for this list — ones that didn’t make the cut, saved here to use later">Extras</button>
             <button class="btn ghost" id="bEditText" title="Edit this text list" aria-label="Edit this text list">✎</button>
@@ -1999,6 +2008,28 @@ function prepList(id, d){
 
 /* ── keep the Media Player's copy of every bingo list in step (Realtime Database: bingo/vaultLists) ── */
 const IDX = { cats: new Map(), loaded: false, synced: false, err: null };
+
+/* ── Undo (bingo mode): the last things you did — ticks, song edits, extras, list changes — can be stepped back ── */
+const UNDO = { stack: [], replaying: false, lastAt: 0 };
+function pushUndo(label, fn){
+  if (UNDO.replaying) return;
+  const now = Date.now(), top = UNDO.stack[UNDO.stack.length - 1];
+  if (top && now - UNDO.lastAt < 700){ const prev = top.fn; top.fn = async () => { await fn(); await prev(); }; }   // one action that wrote several things = one undo
+  else { UNDO.stack.push({ label, fn }); if (UNDO.stack.length > 40) UNDO.stack.shift(); }
+  UNDO.lastAt = now; updateUndoBtn();
+}
+function updateUndoBtn(){
+  const b = document.getElementById('bUndo'); if (!b) return;
+  const top = UNDO.stack[UNDO.stack.length - 1];
+  b.disabled = !top; b.style.opacity = top ? '1' : '.45';
+  b.title = top ? 'Undo: ' + top.label + ' (Ctrl/⌘+Z)' : 'Nothing to undo';
+}
+async function doUndo(){
+  const top = UNDO.stack.pop(); if (!top){ toast('Nothing to undo.'); return; }
+  UNDO.replaying = true;
+  try { await top.fn(); toast('Undid: ' + top.label); } catch (e){ console.error(e); toast('Could not undo that: ' + e.message); }
+  UNDO.replaying = false; updateUndoBtn();
+}
 const PUB = { sig: null, busy: false, warned: false, again: false };
 const pubSongs = l => (l.songs || []).map(x => ({ t: x.t, a: x.a || '', ...(x.m ? { m: x.m } : {}) }));
 const pubSig = l => hash53(JSON.stringify([l.name, !!l.archived, pubSongs(l)]));
@@ -2215,7 +2246,7 @@ function renderBingoAll(){
     const bp = own ? `<td class="ck" style="color:var(--text3)">\u2014</td>` : `<td class="ck"><input type="checkbox" data-s="${r._k}" ${B.searched.has(r._k) ? 'checked' : ''} title="${B.searched.has(r._k) ? 'Already searched for on BPM Supreme \u2014 untick to undo' : 'Tick once you\u2019ve searched for this on BPM Supreme \u2014 it ticks on every list'}"></td>`;
     if (special){
       const n = r.lists.length;
-      return `<tr class="${own ? 'have' : ''}"><td class="n">${r.idx + 1}</td>${isCat ? '' : ck}${isMissing ? bp : ''}<td class="txt">${esc(r.t)}</td><td class="txt">${esc(r.a)}</td><td class="txt">${esc(r.m || '')}</td>` +
+      return `<tr class="${own ? 'have' : ''}"><td class="n">${r.idx + 1}</td>${isCat ? '' : ck}${isMissing ? bp : ''}<td class="txt">${esc(r.t)}</td><td class="txt art">${esc(r.a)}</td><td class="txt">${esc(r.m || '')}</td>` +
         `<td class="on" style="width:90px"><b style="color:var(--gold2)">${n}</b> of ${nLists}</td>` +
         (isMissing ? `<td class="on" style="width:90px">${Math.max(0, nLists - n)}</td>` : '') +
         `<td class="l">${n ? esc(r.lists.join(' · ')) : '<span style="opacity:.6">not on any list</span>'}</td></tr>`;
@@ -2235,7 +2266,7 @@ function renderBingoAll(){
     : 'No songs match.';
   const mr = $('#bMoreRows'); mr.classList.toggle('hidden', !capped);
   if (capped) mr.innerHTML = `Showing ${B.limit.toLocaleString()} of ${total.toLocaleString()} — <button class="btn ghost sm" id="bShowMore">Show 500 more</button> <button class="btn ghost sm" id="bShowAll">Show all</button>`;
-  setupBingoCols();
+  setupBingoCols(); updateUndoBtn();
   wrap.scrollTop = st;
 }
 
@@ -2292,9 +2323,65 @@ $$('.shell').forEach(sh => {
   sh.addEventListener('sidepaint', paint); paint();
 });
 
+
+/* ── hover an artist to see every song you have by them (lists + catalog); it goes away when the mouse leaves ── */
+function songsByArtist(name){
+  const key = normSong(name); if (!key) return [];
+  const out = new Map();
+  for (const l of B.lists.values()){
+    for (const s of l.songs){
+      if (normSong(s.a) !== key) continue;
+      const k = s._k || songKey(s.t, s.a); const e = out.get(k) || { t: s.t, lists: [] };
+      if (!e.lists.includes(l.name)) e.lists.push(l.name); out.set(k, e);
+    }
+  }
+  for (const x of B.catSongs){
+    if (normSong(x.a) !== key) continue;
+    const k = x._k || songKey(x.t, x.a); if (!out.has(k)) out.set(k, { t: x.t, lists: [], cat: true });
+  }
+  return [...out.values()].sort((a, b) => String(a.t).localeCompare(String(b.t)));
+}
+let artTimer = null;
+function hideArtPop(){ clearTimeout(artTimer); const p = $('#artPop'); if (p) p.remove(); }
+function showArtPop(cell){
+  const name = (cell.tagName === 'INPUT' ? cell.value : cell.textContent).trim(); if (!name) return;
+  const songs = songsByArtist(name); if (!songs.length) return;
+  hideArtPop();
+  const MAX = 30, p = document.createElement('div'); p.id = 'artPop';
+  p.innerHTML = `<h4>${esc(name)} · ${songs.length} song${songs.length === 1 ? '' : 's'}</h4>` +
+    songs.slice(0, MAX).map(x => `<div class="ap"><b>${esc(x.t)}</b><span>${x.lists.length ? esc(x.lists.slice(0, 3).join(' · ')) + (x.lists.length > 3 ? ' +' + (x.lists.length - 3) : '') : 'catalog only'}</span></div>`).join('') +
+    (songs.length > MAX ? `<div class="more">+ ${songs.length - MAX} more</div>` : '');
+  document.body.appendChild(p);
+  const r = cell.getBoundingClientRect();
+  let top = r.bottom + 6; if (top + p.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - p.offsetHeight - 6);
+  p.style.top = top + 'px'; p.style.left = Math.max(8, Math.min(r.left, window.innerWidth - p.offsetWidth - 8)) + 'px';
+}
+$('#bGrid').addEventListener('mouseout', e => { if (e.target.closest('input[data-f="a"],td.art')) hideArtPop(); });
+$('#bGrid').addEventListener('click', e => { const c = e.target.closest('input[data-f="a"],td.art'); if (c) showArtPop(c); });
+$('#bGridWrap').addEventListener('scroll', hideArtPop);
+
+
+$('#bUndo').addEventListener('click', doUndo);
+document.addEventListener('keydown', e => {
+  if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return;
+  if ($('#bingoShell').classList.contains('hidden') || $('#modal').classList.contains('open')) return;
+  const t = e.target; if (t && (t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && t.type === 'text'))) return;   // let normal text undo work inside fields
+  e.preventDefault(); doUndo();
+});
+
 /* ── catalog tick ── */
 async function setOwned(keys, on){
   keys = [...new Set(keys)]; if (!keys.length) return;
+  if (!UNDO.replaying){
+    const prev = keys.map(k => ({ k, o: B.owned.has(k), r: B.removed.has(k) }));
+    pushUndo((on ? 'Marked ' : 'Unmarked ') + (keys.length === 1 ? 'a song' : keys.length + ' songs') + (on ? ' in catalog' : ' (not in catalog)'), async () => {
+      prev.forEach(x => { x.o ? B.owned.add(x.k) : B.owned.delete(x.k); x.r ? B.removed.add(x.k) : B.removed.delete(x.k); });
+      renderBingoAll();
+      const owned = {}, removed = {};
+      prev.forEach(x => { owned[x.k] = x.o ? true : deleteField(); removed[x.k] = x.r ? true : deleteField(); });
+      await run(() => setDoc(bCatalogRef(), { owned, removed, updatedAt: serverTimestamp() }, { merge: true }));
+    });
+  }
   keys.forEach(k => { if (on){ B.owned.add(k); B.removed.delete(k); } else { B.owned.delete(k); B.removed.add(k); } });
   renderBingoAll();
   const owned = {}, removed = {};
@@ -2302,6 +2389,7 @@ async function setOwned(keys, on){
   await run(() => setDoc(bCatalogRef(), { owned, removed, updatedAt: serverTimestamp() }, { merge: true }));
 }
 async function setSearched(key, on){
+  if (!UNDO.replaying){ const was = B.searched.has(key); pushUndo('Searched tick', () => setSearched(key, was)); }
   on ? B.searched.add(key) : B.searched.delete(key);
   renderBingoAll();
   await run(() => setDoc(bCatalogRef(), { searched: { [key]: on ? true : deleteField() }, updatedAt: serverTimestamp() }, { merge: true }));
@@ -2315,6 +2403,7 @@ $('#bGrid').addEventListener('change', e => {
 /* ── song edits ── */
 async function saveSongs(listId, songs){
   const l = B.lists.get(listId); if (!l) return;
+  if (!UNDO.replaying){ const before = l.songs.map(x => ({ t: x.t, a: x.a, ...(x.m ? { m: x.m } : {}) })); pushUndo('Song change on “' + l.name + '”', () => saveSongs(listId, before)); }
   l.songs = songs.map(withKeys);   // optimistic
   renderBingoAll();
   await run(() => updateDoc(bListRef(listId), { songs: cleanSongs(songs), updatedAt: serverTimestamp() }));
@@ -2345,6 +2434,7 @@ $('#bName').addEventListener('change', async e => {
   const dupe = [...B.lists.values()].find(x => x.id !== l.id && normName(x.name) === normName(v));
   if (!v || dupe){ toast(!v ? 'A list needs a name.' : 'Another bingo list already has that name.'); e.target.value = l.name; return; }
   if (v === l.name) return;
+  const oldName = l.name; pushUndo('Renamed “' + oldName + '”', () => run(() => updateDoc(bListRef(l.id), { name: oldName, updatedAt: serverTimestamp() })));
   await run(() => updateDoc(bListRef(l.id), { name: v, updatedAt: serverTimestamp() }));
 });
 
@@ -2445,6 +2535,7 @@ function openBingoImport(addTo){
       const order = Math.max(0, ...[...B.lists.values()].map(x => Number(x.order) || 0)) + 1;
       const id = doc(collection(db, 'bingoLists')).id;
       await run(() => setDoc(bListRef(id), { name, songs: cleanSongs(uniq), order, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+      pushUndo('Created list \u201c' + name + '\u201d', async () => { await run(() => deleteDoc(bListRef(id))); if (B.curId === id){ B.curId = null; LS.set('bLast', null); } renderBingoAll(); });
       closeModal(); selectBingo(id);
       toast('Created “' + name + '” with ' + uniq.length + ' songs.');
     }
@@ -2631,6 +2722,7 @@ $('#bIndexLink').addEventListener('click', () => { if (B.curId && B.lists.has(B.
 const cleanExtras = arr => cleanSongs(arr);
 async function saveExtras(listId, extras){
   const l = B.lists.get(listId); if (!l) return;
+  if (!UNDO.replaying){ const before = cleanExtras(l.extras); pushUndo('Extras change on “' + l.name + '”', () => saveExtras(listId, before)); }
   l.extras = cleanExtras(extras);   // optimistic
   renderBingoAll();
   await run(() => updateDoc(bListRef(listId), { extras: cleanExtras(extras), updatedAt: serverTimestamp() }));
@@ -2749,10 +2841,12 @@ $('#bMore').addEventListener('click', () => {
       closeModal(); setOwned(l.songs.map(s => s._k), false);
     }
     else if (a === 'csv'){ closeModal(); exportBingoCSV(l.songs, l.name); }
-    else if (a === 'arch'){ closeModal(); await run(() => updateDoc(bListRef(l.id), { archived: !l.archived, updatedAt: serverTimestamp() })); }
+    else if (a === 'arch'){ closeModal(); const was = !!l.archived; pushUndo((was ? 'Un-archived' : 'Archived') + ' “' + l.name + '”', () => run(() => updateDoc(bListRef(l.id), { archived: was, updatedAt: serverTimestamp() }))); await run(() => updateDoc(bListRef(l.id), { archived: !l.archived, updatedAt: serverTimestamp() })); }
     else if (a === 'del'){
       closeModal();
       if (!(await confirmBox({ title: 'Delete “' + l.name + '”?', message: 'This removes the list and its ' + l.songs.length + ' songs. Your catalog ticks are kept (a song that’s on another list stays ticked there).', ok: 'Delete list', danger: true }))) return;
+      const snapL = { name: l.name, songs: cleanSongs(l.songs), extras: cleanExtras(l.extras), order: Number(l.order) || 0, archived: !!l.archived };
+      pushUndo('Deleted list “' + l.name + '”', async () => { await run(() => setDoc(bListRef(l.id), { ...snapL, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })); B.curId = l.id; });
       await run(() => deleteDoc(bListRef(l.id)));
       B.curId = null; LS.set('bLast', null); renderBingoAll();
     }
