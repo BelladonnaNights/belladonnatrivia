@@ -2476,8 +2476,11 @@ async function saveSongs(listId, songs){
   if (!UNDO.replaying){ const before = l.songs.map(x => ({ t: x.t, a: x.a, ...(x.m ? { m: x.m } : {}) })); pushUndo('Song change on “' + l.name + '”', () => saveSongs(listId, before)); }
   l.songs = songs.map(withKeys);   // optimistic
   renderBingoAll();
-  await run(() => updateDoc(bListRef(listId), { songs: cleanSongs(songs), updatedAt: serverTimestamp() }));
+  let ok = false; SAVEERR = '';
+  await run(async () => { try { await updateDoc(bListRef(listId), { songs: cleanSongs(songs), updatedAt: serverTimestamp() }); ok = true; } catch (e){ SAVEERR = e && e.message || String(e); throw e; } });
+  return ok;
 }
+let SAVEERR = '';
 $('#bGrid').addEventListener('change', e => {
   const inp = e.target.closest('input[type=text][data-f]'); if (!inp) return;
   const tr = inp.closest('tr'), i = Number(tr.dataset.i), l = B.lists.get(B.curId); if (!l) return;
@@ -2905,7 +2908,15 @@ function openEditAsText(listId){
     const d = diff(); if (!d.uniq.length){ toast('The list can’t be empty — use Delete list instead.'); return; }
     if (d.removed >= 5 && !(await confirmBox({ title: 'Remove ' + d.removed + ' songs?', message: 'Saving will take ' + d.removed + ' songs off “' + l.name + '”.', ok: 'Save changes', danger: true }))) return;
     const ord = $('#etOrder').value;
-    closeModal(); await saveSongs(l.id, d.uniq);
+    closeModal(); const saved = await saveSongs(l.id, d.uniq);
+    if (!saved){ openModal({ title: 'That save did not go through', body: `<p class="hint" style="margin:0">Your changes were not saved to the server, so the list will go back to how it was.<br><br><b>Reason:</b> ${esc(SAVEERR || 'unknown')}</p>`, actions: [{ label: 'Close', primary: true, onClick: closeModal }] }); return; }
+    // double-check a moment later that nothing else rewrote the list behind our back
+    setTimeout(async () => {
+      try {
+        const sv = await getDoc(bListRef(l.id)), n = ((sv.data() || {}).songs || []).length;
+        if (n !== d.uniq.length) openModal({ title: 'The list changed back by itself', body: `<p class="hint" style="margin:0">You saved <b>${d.uniq.length}</b> songs, but the server now has <b>${n}</b>. Something else is writing to this list — most likely another copy of the Vault or the Media Player that is still open. Close those and try again.</p>`, actions: [{ label: 'Close', primary: true, onClick: closeModal }] });
+      } catch (e){}
+    }, 2500);
     l.textOrder = ord; await run(() => updateDoc(bListRef(l.id), { textOrder: ord }));   // remember the format for next time
     toast('Saved “' + l.name + '” — ' + d.uniq.length + ' songs.');
   };
