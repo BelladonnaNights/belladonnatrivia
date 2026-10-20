@@ -2255,10 +2255,13 @@ function renderBingoAll(){
   $('#bGrid thead').innerHTML = special
     ? `<tr><th>#</th>${isCat ? '' : '<th>In catalog</th>'}${isMissing ? BPM : ''}<th>Song</th><th>Artist</th><th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
     : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th class="on" data-rsort="1" style="cursor:pointer;color:var(--gold)" title="How many of your OTHER bingo lists also have this song \u2014 click to put the songs on the most lists first">On other lists${B.rowSort ? ' \u25bc' : ' \u21c5'}</th><th>Movie / show</th><th></th></tr>`;
+  const bpmMap = new Map();   // artist -> keys of their songs that carry the BPM mark
+  if (B.searched.size){ const add = x => { if (!x._k || !B.searched.has(x._k)) return; const a = normSong(x.a); if (!a) return; (bpmMap.get(a) || bpmMap.set(a, new Set()).get(a)).add(x._k); }; for (const l of B.lists.values()) l.songs.forEach(add); B.catSongs.forEach(add); }
+  const hasOtherBpm = r => { const set = bpmMap.get(normSong(r.a)); if (!set) return false; for (const k of set) if (k !== r._k) return true; return false; };
   $('#bGrid tbody').innerHTML = shown.map(r => {
     const own = isOwned(r);
     const ck = `<td class="ck"><input type="checkbox" data-k="${r._k}" ${own ? 'checked' : ''} title="${own ? 'In your catalog — uncheck to remove it from every list' : 'Tick when this song is in your catalog — it ticks on every list'}"></td>`;
-    const bpmIc = artIcons(r.a, 'bpm');
+    const bpmIc = hasOtherBpm(r) ? artIcons(r.a, 'bpm') : '';
     const bp = own ? `<td class="ck" style="color:var(--text3)">\u2014${bpmIc}</td>` : `<td class="ck"><input type="checkbox" data-s="${r._k}" ${B.searched.has(r._k) ? 'checked' : ''} title="${B.searched.has(r._k) ? 'Already searched for on BPM Supreme \u2014 untick to undo' : 'Tick once you\u2019ve searched for this on BPM Supreme \u2014 it ticks on every list'}">${bpmIc}</td>`;
     if (special){
       const n = r.lists.length;
