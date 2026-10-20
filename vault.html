@@ -1984,7 +1984,15 @@ const B = {
   removed: new Set(), searched: new Set(), cat: new Set(), catMode: 'exact', catCount: 0, catChunks: new Map(), catSongs: [], catUpdated: null, limit: 500
 };
 // A song counts as "in my catalog" if it was ticked by hand OR is in the imported full catalog — unless it was un-ticked afterwards.
-const isOwned = s => !B.removed.has(s._k) && (B.owned.has(s._k) || B.cat.has(B.catMode === 'title' ? s._tk : s._k) || (s.m && B.catMode !== 'title' && B.cat.has(songKey(s.t, s.m))) || (B.catMode !== 'title' && s.a && s.t && artParts(s.a).some(p => B.cat.has(songKey(s.t, p)))));
+const isOwned = s => !B.removed.has(s._k) && (B.owned.has(s._k) || B.cat.has(B.catMode === 'title' ? s._tk : s._k) || (s.m && B.catMode !== 'title' && B.cat.has(songKey(s.t, s.m))) || looseHit(B.catLoose, s));
+/* looser match against the imported catalog: tags like (E)/(Clean), and multi-artist credits ("The Weeknd & Ariana Grande" matches "The Weeknd") */
+function looseHit(set, s){
+  if (!set || B.catMode === 'title') return false;
+  if (s._kl && set.has(s._kl)) return true;
+  if (s.t && s.a){ const tl = normLoose(s.t); return artParts(s.a).some(p => set.has(hash53(tl + '|' + p))); }
+  return false;
+}
+function looseKeysOf(x){ const out = [x._kl || looseKey(x.t, x.a)]; if (x.m) out.push(looseKey(x.t, x.m)); const tl = normLoose(x.t); for (const p of artParts(x.a)) out.push(hash53(tl + '|' + p)); return out; }
 /* "The Weeknd & Ariana Grande", "Drake, Future", "A x B" → each artist on their own, so a song matches whichever way the credit was written */
 function artParts(a){ const s = String(a || '').replace(/[\(\[][^\)\]]*[\)\]]/g, ' '); if (!/[,&;+\/]|\b(and|x|with|feat|ft|featuring|vs)\b/i.test(s)) return []; return [...new Set(s.split(/\s*(?:,|&|;|\+|\/|\band\b|\bx\b|\bwith\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bvs\.?)\s*/i).map(normSong).filter(p => p.length > 1))]; }
 const bListRef = id => doc(db, 'bingoLists', id);
@@ -1999,22 +2007,28 @@ function hash53(str, seed = 0){
   return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
 }
 function normSong(s){
-  return String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[\(\[]\s*(e|explicit|clean|dirty|edited|uncensored|censored|amended|radio edit|radio version|album version|album edit|clean version|explicit version|dirty version|original|original version|single version|remaster(?:ed)?(?:\s*\d{4})?|\d{4}\s*remaster(?:ed)?)\s*[\)\]]/g, ' ')   /* (E) (Explicit) (Clean) (Radio Edit)… are tags, not part of the name */
+  return String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[\(\[][^\)\]]*(feat|ft|with)\b[^\)\]]*[\)\]]/g, ' ')
     .replace(/\b(feat|ft|featuring)\b.*$/g, ' ')
-    .replace(/\s[-–]\s*(remaster(?:ed)?(?:\s*\d{4})?|\d{4}\s*remaster(?:ed)?|radio edit|single version|album version|explicit|clean)\s*$/g, ' ')
     .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '').replace(/^the/, '');
+}
+/* LOOSE matching only (never used for saved ticks): ignores (E) (Explicit) (Clean) (Radio Edit) (Remastered) tags and "- Remastered 2021" style endings */
+function normLoose(s){
+  return normSong(String(s ?? '')
+    .replace(/[\(\[]\s*(e|explicit|clean|dirty|edited|uncensored|censored|amended|radio edit|radio version|album version|album edit|clean version|explicit version|dirty version|original|original version|single version|remaster(?:ed)?(?:\s*\d{4})?|\d{4}\s*remaster(?:ed)?)\s*[\)\]]/gi, ' ')
+    .replace(/\s[-\u2013]\s*(remaster(?:ed)?(?:\s*\d{4})?|\d{4}\s*remaster(?:ed)?|radio edit|single version|album version|explicit|clean)\s*$/gi, ' ')
+    .replace(/\s+remaster(?:ed)?(?:\s*\d{4})?\s*$/gi, ' '));
 }
 const songKey = (t, a) => hash53(normSong(t) + '|' + normSong(a));
 const titleKey = t => hash53(normSong(t) + '|');
+const looseKey = (t, a) => hash53(normLoose(t) + '|' + normSong(a));
 /* "Movie - Song - Category" lines that were stored as title=Movie, artist="Song - Category" get repaired as they load */
 function fixMovie(s){
   if (!s || s.m || !s.a || /\s[\-–—]\s/.test(s.t || '')) return s;
   const m = String(s.a).match(/^(.+?)\s+[\-–—]\s+(.+)$/);
   return m ? { ...s, t: m[1].trim(), a: m[2].trim(), m: String(s.t || '').trim() } : s;
 }
-const withKeys = s0 => { const s = fixMovie(s0); return { ...s, _k: songKey(s.t, s.a), _tk: titleKey(s.t) }; };
+const withKeys = s0 => { const s = fixMovie(s0); return { ...s, _k: songKey(s.t, s.a), _tk: titleKey(s.t), _kl: looseKey(s.t, s.a) }; };
 function cleanSongs(arr){ return (arr || []).filter(s => s && (s.t || s.a)).map(s => ({ t: String(s.t || '').trim(), a: String(s.a || '').trim(), ...(s.m && String(s.m).trim() ? { m: String(s.m).trim() } : {}) })); }
 function listStats(l){
   const songs = l.songs || []; let have = 0;
@@ -2117,7 +2131,9 @@ function startBingo(){
     for (const x of B.catSongs) if (x.bpm){ B.bpmKeys.add(x._k); B.bpmTitle.add(x._tk); }
     B.cat = new Set();
     for (const str of B.catChunks.values()) if (str) for (const k of str.split(',')) if (k) B.cat.add(k);
-    for (const x of B.catSongs){ B.cat.add(B.catMode === 'title' ? x._tk : x._k); if (x.m && B.catMode !== 'title') B.cat.add(songKey(x.t, x.m)); if (B.catMode !== 'title') for (const p of artParts(x.a)) B.cat.add(songKey(x.t, p)); }   // movie songs also match a list that names the movie as the artist
+    for (const x of B.catSongs){ B.cat.add(B.catMode === 'title' ? x._tk : x._k); if (x.m && B.catMode !== 'title') B.cat.add(songKey(x.t, x.m)); }   // movie songs also match a list that names the movie as the artist
+    B.catLoose = new Set(); B.bpmLoose = new Set();
+    for (const x of B.catSongs){ const ks = looseKeysOf(x); ks.forEach(k => B.catLoose.add(k)); if (x.bpm) ks.forEach(k => B.bpmLoose.add(k)); }
     if (B.mode === 'bingo') renderBingoAll();
   }, () => {}));
 }
@@ -2180,7 +2196,7 @@ function allSongs(){
   for (const l of B.lists.values()){
     if (l.archived && !B.showArch) continue;
     for (const s of l.songs){
-      let e = m.get(s._k); if (!e){ e = { t: s.t, a: s.a, m: s.m || '', _k: s._k, _tk: s._tk, lists: [] }; m.set(s._k, e); }
+      let e = m.get(s._k); if (!e){ e = { t: s.t, a: s.a, m: s.m || '', _k: s._k, _tk: s._tk, _kl: s._kl, lists: [] }; m.set(s._k, e); }
       if (!e.m && s.m) e.m = s.m;
       if (!e.lists.includes(l.name)) e.lists.push(l.name);
     }
@@ -2353,27 +2369,27 @@ $$('.shell').forEach(sh => {
 /* ── artist icons: ✓ = what I already have by this artist, 🔎 = what I still need (tick to put it in my catalog) ── */
 function artIcons(a, only){ a = String(a || '').trim(); if (!a) return ''; const n = esc(a); if (only === 'bpm') return `<button type="button" class="bpmIc" data-art="bpm" data-name="${n}" title="Songs by ${n} I\u2019ve already searched for on BPM Supreme">\uD83D\uDCCB</button>`; return `<span class="artIcons"><button type="button" data-art="have" data-name="${n}" title="Songs by ${n} I already have in my catalog">\u2705</button><button type="button" data-art="need" data-name="${n}" title="Songs by ${n} I still need \u2014 tick the ones I find">\uD83D\uDD0E</button></span>`; }
 const ART = { name: '', mode: '', checked: new Set(), anchor: null };
-function isBpmFile(x){ return !!((B.bpmKeys && B.bpmKeys.has(x._k)) || (B.catMode === 'title' && B.bpmTitle && B.bpmTitle.has(x._tk))); }
+function isBpmFile(x){ return !!((B.bpmKeys && B.bpmKeys.has(x._k)) || (B.catMode === 'title' && B.bpmTitle && B.bpmTitle.has(x._tk)) || looseHit(B.bpmLoose, x)); }
 function songsByArtist(name){
   const key = normSong(name); if (!key) return [];
   const out = new Map();
   for (const l of B.lists.values()){
     for (const s of l.songs){
       if (normSong(s.a) !== key) continue;
-      const k = s._k || songKey(s.t, s.a); const e = out.get(k) || { k, tk: s._tk || titleKey(s.t), t: s.t, lists: [], bpmFile: isBpmFile(s) };
+      const k = s._k || songKey(s.t, s.a); const e = out.get(k) || { k, tk: s._tk || titleKey(s.t), kl: s._kl, t: s.t, a: s.a, lists: [], bpmFile: isBpmFile(s) };
       if (!e.lists.includes(l.name)) e.lists.push(l.name); out.set(k, e);
     }
   }
   for (const x of B.catSongs){
     if (normSong(x.a) !== key) continue;
-    const k = x._k || songKey(x.t, x.a); if (!out.has(k)) out.set(k, { k, tk: x._tk || titleKey(x.t), t: x.t, lists: [], bpmFile: !!x.bpm });
+    const k = x._k || songKey(x.t, x.a); if (!out.has(k)) out.set(k, { k, tk: x._tk || titleKey(x.t), kl: x._kl, t: x.t, a: x.a, lists: [], bpmFile: !!x.bpm });
   }
   return [...out.values()].sort((a, b) => String(a.t).localeCompare(String(b.t)));
 }
 function hideArtPop(){ const p = $('#artPop'); if (p) p.remove(); ART.anchor = null; }
 function renderArtPop(){
   const p = $('#artPop'); if (!p) return;
-  const all = songsByArtist(ART.name).map(x => ({ ...x, own: isOwned({ _k: x.k, _tk: x.tk }) }));
+  const all = songsByArtist(ART.name).map(x => ({ ...x, own: isOwned({ _k: x.k, _tk: x.tk, _kl: x.kl, t: x.t, a: x.a }) }));
   const have = ART.mode === 'have';
   const bpm = ART.mode === 'bpm';
   const list = bpm ? all.filter(x => x.bpmFile || B.searched.has(x.k) || ART.checked.has(x.k)) : have ? all.filter(x => x.own) : all.filter(x => !x.own || ART.checked.has(x.k));
@@ -2576,7 +2592,7 @@ function openBingoImport(addTo){
     const songs = parse(); let msg = songs.length ? `Found <b>${songs.length}</b> song${songs.length === 1 ? '' : 's'}.` : 'Nothing pasted yet.';
     if (songs.length){
       const seen = new Set(); let dup = 0, inCat = 0;
-      for (const s of songs){ const k = songKey(s.t, s.a); if (seen.has(k)) dup++; seen.add(k); if (isOwned({ _k: k, _tk: titleKey(s.t) })) inCat++; }
+      for (const s of songs){ const k = songKey(s.t, s.a); if (seen.has(k)) dup++; seen.add(k); if (isOwned({ _k: k, _tk: titleKey(s.t), _kl: looseKey(s.t, s.a), t: s.t, a: s.a })) inCat++; }
       msg += ` <b>${inCat}</b> already in your catalog and will come in ticked.`; if (dup) msg += ` ${dup} repeat${dup === 1 ? '' : 's'} will be skipped.`;
     }
     $('#biInfo').innerHTML = msg;
@@ -2661,7 +2677,7 @@ function openCatalogImport(){
       const b = writeBatch(db);
       for (const id of B.catChunks.keys()){ if (id.startsWith('full_') && !legacyOnly) b.delete(doc(db, 'bingoConfig', id)); else if (id.startsWith('songs_') && !(Number(id.slice(6)) < chunks.length)) b.delete(doc(db, 'bingoConfig', id)); }
       b.set(doc(db, 'bingoConfig', 'catalogMeta'), { mode, count: arr.length + (legacyOnly ? B.cat.size : 0), chunks: chunks.length, updatedAt: serverTimestamp(), updatedAtMs: Date.now() });
-      if (replace) b.set(bCatalogRef(), { removed: deleteField(), updatedAt: serverTimestamp() }, { merge: true });
+      /* hand ticks (in catalog, BPM searched, un-ticked) are never touched by an import */
       await b.commit();
       return true;
     });
@@ -2680,7 +2696,6 @@ function openCatalogImport(){
       const b = writeBatch(db);
       for (const id of B.catChunks.keys()) b.delete(doc(db, 'bingoConfig', id));
       b.delete(doc(db, 'bingoConfig', 'catalogMeta'));
-      b.set(bCatalogRef(), { removed: deleteField() }, { merge: true });
       await b.commit();
     });
   });
