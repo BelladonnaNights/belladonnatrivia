@@ -2147,7 +2147,7 @@ function setMode(m){
   $('#triviaShell').classList.toggle('hidden', m !== 'trivia');
   $('#bingoShell').classList.toggle('hidden', m !== 'bingo');
   $$('.modeSw button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
-  $('#navSub').textContent = (m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank') + ' · build Oct 20 #7';
+  $('#navSub').textContent = (m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank') + ' · build Oct 20 #8';
   $('#notesBtn').classList.toggle('hidden', m !== 'trivia');
   document.title = 'The Vault · Belladonna';
   if (m === 'bingo') renderBingoAll();
@@ -2905,9 +2905,9 @@ function openEditAsText(listId){
   };
   const info = () => { const d = diff(); $('#etInfo').innerHTML = `<b>${d.uniq.length}</b> songs · <b>${d.added}</b> new · <b>${d.removed}</b> removed` + (d.dups ? ` · ${d.dups} repeat${d.dups === 1 ? '' : 's'} will be skipped` : '') + '. Songs you leave as they are keep their catalog ticks.'; };
   const save = async () => {
+    const ord = $('#etOrder').value;   // read it now: the confirm window below replaces this one
     const d = diff(); if (!d.uniq.length){ toast('The list can’t be empty — use Delete list instead.'); return; }
     if (d.removed >= 5 && !(await confirmBox({ title: 'Remove ' + d.removed + ' songs?', message: 'Saving will take ' + d.removed + ' songs off “' + l.name + '”.', ok: 'Save changes', danger: true }))) return;
-    const ord = $('#etOrder').value;
     closeModal(); const saved = await saveSongs(l.id, d.uniq);
     if (!saved){ openModal({ title: 'That save did not go through', body: `<p class="hint" style="margin:0">Your changes were not saved to the server, so the list will go back to how it was.<br><br><b>Reason:</b> ${esc(SAVEERR || 'unknown')}</p>`, actions: [{ label: 'Close', primary: true, onClick: closeModal }] }); return; }
     // double-check a moment later that nothing else rewrote the list behind our back
