@@ -2876,6 +2876,8 @@ function openEditAsText(listId){
   // pick the format that can hold what this list has
   let order = 'song';
   if (withM.length) order = withM.every(s => !s.a) ? 'show' : 'movie';
+  // a list pasted before the 3-part format existed has "Song - Artist" jammed into the title and nothing in Artist: open it in the 3-part view so one Save splits it properly
+  if (order === 'show' && withM.filter(s => /\s[\-–—]\s/.test(s.t || '')).length >= withM.length / 2) order = 'full';
   const body = document.createElement('div'); body.className = 'bImp';
   body.innerHTML = `<label class="fld">Each line looks like<select id="etOrder"><option value="song">Song – Artist</option><option value="full">Song – Artist – Movie / Show (e.g. Hakuna Matata – Disney – The Lion King)</option><option value="artist">Artist – Song</option><option value="movie">Movie – Song – Category</option><option value="show">Song – Movie / Show</option></select></label>
     <label class="fld" style="margin-bottom:.4rem">One song per line — edit, delete, reorder or add lines freely<textarea id="etText" spellcheck="false" style="min-height:360px;white-space:pre"></textarea></label>
