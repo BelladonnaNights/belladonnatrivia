@@ -357,6 +357,8 @@ table#bGrid{table-layout:fixed;width:auto;min-width:0}
 #artPop .ap.need input{accent-color:var(--gold);width:16px;height:16px;cursor:pointer;flex:none}
 .artcell{position:relative}
 .artcell input[type=text]{padding-right:66px!important}
+.bpmIc{background:none;border:0;cursor:pointer;font-size:14px;line-height:1;padding:3px 4px;margin-left:6px;border-radius:6px;opacity:.55;vertical-align:middle}
+.bpmIc:hover{opacity:1;background:rgba(201,168,76,.18)}
 .artIcons{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex;gap:2px}
 .artIcons button{background:none;border:0;cursor:pointer;font-size:14px;line-height:1;padding:3px 4px;border-radius:6px;opacity:.55;filter:grayscale(.3)}
 .artIcons button:hover{opacity:1;background:rgba(201,168,76,.18)}
@@ -2249,14 +2251,15 @@ function renderBingoAll(){
   const total = shown.length, capped = special && total > B.limit;
   if (capped) shown = shown.slice(0, B.limit);
   const wrap = $('#bGridWrap'), st = wrap.scrollTop;
-  const BPM = '<th class="ck" title="Tick once you\u2019ve looked for this song on BPM Supreme \u2014 it ticks everywhere the song appears">Searched on BPM Supreme</th>';
+  const BPM = '<th class="ck" title="Tick once you\u2019ve searched for this song on BPM Supreme \u2014 it ticks everywhere the song appears">BPM</th>';
   $('#bGrid thead').innerHTML = special
     ? `<tr><th>#</th>${isCat ? '' : '<th>In catalog</th>'}${isMissing ? BPM : ''}<th>Song</th><th>Artist</th><th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
     : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th class="on" data-rsort="1" style="cursor:pointer;color:var(--gold)" title="How many of your OTHER bingo lists also have this song \u2014 click to put the songs on the most lists first">On other lists${B.rowSort ? ' \u25bc' : ' \u21c5'}</th><th>Movie / show</th><th></th></tr>`;
   $('#bGrid tbody').innerHTML = shown.map(r => {
     const own = isOwned(r);
     const ck = `<td class="ck"><input type="checkbox" data-k="${r._k}" ${own ? 'checked' : ''} title="${own ? 'In your catalog — uncheck to remove it from every list' : 'Tick when this song is in your catalog — it ticks on every list'}"></td>`;
-    const bp = own ? `<td class="ck" style="color:var(--text3)">\u2014</td>` : `<td class="ck"><input type="checkbox" data-s="${r._k}" ${B.searched.has(r._k) ? 'checked' : ''} title="${B.searched.has(r._k) ? 'Already searched for on BPM Supreme \u2014 untick to undo' : 'Tick once you\u2019ve searched for this on BPM Supreme \u2014 it ticks on every list'}"></td>`;
+    const bpmIc = artIcons(r.a, 'bpm');
+    const bp = own ? `<td class="ck" style="color:var(--text3)">\u2014${bpmIc}</td>` : `<td class="ck"><input type="checkbox" data-s="${r._k}" ${B.searched.has(r._k) ? 'checked' : ''} title="${B.searched.has(r._k) ? 'Already searched for on BPM Supreme \u2014 untick to undo' : 'Tick once you\u2019ve searched for this on BPM Supreme \u2014 it ticks on every list'}">${bpmIc}</td>`;
     if (special){
       const n = r.lists.length;
       return `<tr class="${own ? 'have' : ''}"><td class="n">${r.idx + 1}</td>${isCat ? '' : ck}${isMissing ? bp : ''}<td class="txt">${esc(r.t)}</td><td class="txt art artcell">${esc(r.a)}${artIcons(r.a)}</td><td class="txt">${esc(r.m || '')}</td>` +
@@ -2285,7 +2288,7 @@ function renderBingoAll(){
 
 
 /* ── bingo grid: drag a column edge to resize (remembered); cut-off text shows on hover ── */
-const BCOL_DEF = { '#': 56, 'In catalog': 96, 'Searched on BPM Supreme': 120, 'Song': 300, 'Artist': 230, 'Movie / show': 210, 'On lists': 90, 'Not on': 90, 'Which lists': 320, 'Lists it’s on': 320, 'On other lists': 120, '': 84 };
+const BCOL_DEF = { '#': 56, 'In catalog': 96, 'BPM': 110, 'Song': 300, 'Artist': 230, 'Movie / show': 210, 'On lists': 90, 'Not on': 90, 'Which lists': 320, 'Lists it’s on': 320, 'On other lists': 120, '': 84 };
 const bColName = th => th.textContent.replace(/[▼⇅]/g, '').trim();
 function setupBingoCols(){
   const tbl = $('#bGrid'), ths = [...tbl.querySelectorAll('thead th')]; if (!ths.length) return;
@@ -2338,7 +2341,7 @@ $$('.shell').forEach(sh => {
 
 
 /* ── artist icons: ✓ = what I already have by this artist, 🔎 = what I still need (tick to put it in my catalog) ── */
-function artIcons(a){ a = String(a || '').trim(); if (!a) return ''; const n = esc(a); return `<span class="artIcons"><button type="button" data-art="have" data-name="${n}" title="Songs by ${n} I already have in my catalog">\u2705</button><button type="button" data-art="need" data-name="${n}" title="Songs by ${n} I still need \u2014 tick the ones I find">\uD83D\uDD0E</button></span>`; }
+function artIcons(a, only){ a = String(a || '').trim(); if (!a) return ''; const n = esc(a); if (only === 'bpm') return `<button type="button" class="bpmIc" data-art="bpm" data-name="${n}" title="Songs by ${n} I\u2019ve already searched for on BPM Supreme">\uD83D\uDCCB</button>`; return `<span class="artIcons"><button type="button" data-art="have" data-name="${n}" title="Songs by ${n} I already have in my catalog">\u2705</button><button type="button" data-art="need" data-name="${n}" title="Songs by ${n} I still need \u2014 tick the ones I find">\uD83D\uDD0E</button></span>`; }
 const ART = { name: '', mode: '', checked: new Set(), anchor: null };
 function songsByArtist(name){
   const key = normSong(name); if (!key) return [];
@@ -2361,14 +2364,16 @@ function renderArtPop(){
   const p = $('#artPop'); if (!p) return;
   const all = songsByArtist(ART.name).map(x => ({ ...x, own: isOwned({ _k: x.k, _tk: x.tk }) }));
   const have = ART.mode === 'have';
-  const list = have ? all.filter(x => x.own) : all.filter(x => !x.own || ART.checked.has(x.k));
+  const bpm = ART.mode === 'bpm';
+  const list = bpm ? all.filter(x => B.searched.has(x.k) || ART.checked.has(x.k)) : have ? all.filter(x => x.own) : all.filter(x => !x.own || ART.checked.has(x.k));
   const lists = x => x.lists.length ? esc(x.lists.slice(0, 3).join(' · ')) + (x.lists.length > 3 ? ' +' + (x.lists.length - 3) : '') : 'catalog only';
-  p.innerHTML = `<div class="apHead"><h4>${esc(ART.name)} · ${have ? 'in my catalog' : 'still needed'} · ${list.length}</h4><button class="apX" data-apx title="Close">✕</button></div>` +
+  p.innerHTML = `<div class="apHead"><h4>${esc(ART.name)} · ${bpm ? 'searched on BPM' : have ? 'in my catalog' : 'still needed'} · ${list.length}</h4><button class="apX" data-apx title="Close">✕</button></div>` +
     (list.length ? list.map(x => have
       ? `<div class="ap"><b>${esc(x.t)}</b><span>${lists(x)}</span></div>`
+      : bpm ? `<label class="ap need"><input type="checkbox" data-aps="${x.k}" ${B.searched.has(x.k) ? 'checked' : ''}><b>${esc(x.t)}</b><span>${x.own ? 'in catalog '+String.fromCharCode(183)+' ' : ''}${lists(x)}</span></label>`
       : `<label class="ap need"><input type="checkbox" data-apk="${x.k}" ${x.own ? 'checked' : ''}><b>${esc(x.t)}</b><span>${lists(x)}</span></label>`).join('')
-      : `<div class="more">${have ? 'Nothing by this artist is in your catalog yet.' : 'Nothing left to find — you have them all. 🎉'}</div>`) +
-    (!have && list.length ? `<div class="more">Tick a song when you find it — it goes into your catalog.</div>` : '');
+      : `<div class="more">${bpm ? 'None of this artist\u2019s songs have been searched for on BPM yet.' : have ? 'Nothing by this artist is in your catalog yet.' : 'Nothing left to find — you have them all. 🎉'}</div>`) +
+    (bpm && list.length ? `<div class="more">Untick a song to clear its BPM search mark.</div>` : '') + (!have && !bpm && list.length ? `<div class="more">Tick a song when you find it — it goes into your catalog.</div>` : '');
 }
 function showArtPop(btn, mode){
   const name = btn.dataset.name || ''; if (!name.trim()) return;
@@ -2386,6 +2391,8 @@ document.addEventListener('mousedown', e => { if ($('#artPop') && !e.target.clos
 document.addEventListener('keydown', e => { if (e.key === 'Escape') hideArtPop(); });
 document.addEventListener('click', e => {
   if (e.target.closest('[data-apx]')){ hideArtPop(); return; }
+  const sb = e.target.closest('#artPop input[data-aps]');
+  if (sb){ ART.checked.add(sb.dataset.aps); setSearched(sb.dataset.aps, sb.checked).then(renderArtPop); renderArtPop(); return; }
   const cb = e.target.closest('#artPop input[data-apk]'); if (!cb) return;
   if (cb.checked) ART.checked.add(cb.dataset.apk);
   setOwned([cb.dataset.apk], cb.checked).then(renderArtPop); renderArtPop();
