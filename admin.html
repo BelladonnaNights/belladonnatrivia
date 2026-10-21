@@ -110,6 +110,15 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .cat-card.drag-over{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-glow)}
 .cat-card.reorder-target{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-glow);transform:translateY(-3px)}
 
+.txt-banner{width:100%;aspect-ratio:16/4;background:#fff;display:flex;align-items:center;justify-content:center;padding:0 6%;overflow:hidden;line-height:1}
+.txt-banner-t{display:inline-block;white-space:nowrap;font-family:'Bebas Neue',Impact,'Arial Narrow',sans-serif;font-weight:400;line-height:1;color:#000;letter-spacing:.02em;font-size:100px}
+.banner-menu{position:fixed;z-index:9999;min-width:230px;background:#141414;border:1px solid rgba(201,168,76,.45);border-radius:8px;padding:6px;box-shadow:0 12px 36px rgba(0,0,0,.6)}
+.banner-menu button{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;border-radius:6px;padding:8px 10px;color:#ddd;font:500 12px 'DM Sans',sans-serif;cursor:pointer;text-align:left}
+.banner-menu button:hover{background:rgba(201,168,76,.14)}
+.banner-menu button.sel{color:#c9a84c}
+.banner-menu button.sel::after{content:'✓';margin-left:auto}
+.banner-menu .sw{width:34px;height:18px;border-radius:4px;border:1px solid rgba(255,255,255,.25);display:inline-flex;align-items:center;justify-content:center;font:400 13px 'Bebas Neue',Impact,sans-serif;letter-spacing:.03em;flex:none}
+.nav-btn.banner-on{background:var(--gold-dim);border-color:var(--gold-glow);color:var(--gold2)}
 .cat-banner{
   width:100%;aspect-ratio:16/4;object-fit:cover;display:block;
   background:var(--surface2);
@@ -684,6 +693,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <button class="nav-btn nav-btn-ghost" onclick="openAdminLogin()" id="admin-gear-btn" title="Admin">
       ⚙ Admin
     </button>
+    <button class="nav-btn nav-btn-ghost banner-toggle-btn" onclick="openBannerMenu(this,event)" title="Switch between the category banner images and a plain text banner showing just the category name">Banners: Gold on black ▾</button>
     <button class="nav-btn nav-btn-ghost" onclick="openChangePassword()" id="admin-pw-btn" style="display:none;font-size:9px">
       Change Password
     </button>
@@ -1204,6 +1214,10 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
             <input class="field-input" id="s-logo" placeholder="https://… transparent PNG of your logo"/>
           </div>
           <div class="field" style="grid-column:1/-1">
+            <div class="field-label">Belladonna Text Logo URL (goes directly under the logo on category intro slides)</div>
+            <input class="field-input" id="s-logo-text" placeholder="https://… transparent PNG of the BELLADONNA text logo"/>
+          </div>
+          <div class="field" style="grid-column:1/-1">
             <div class="field-label">Under the QR — line 1</div>
             <input class="field-input" id="s-scan1" placeholder="Scan for shows, tickets &amp; more"/>
           </div>
@@ -1700,6 +1714,7 @@ function openSettings() {
   document.getElementById('s-plain-bg').value = appSettings.plainBg||'';
   document.getElementById('s-logo').value = appSettings.logo||'';
   document.getElementById('s-default-bg').value = appSettings.defaultBg||'';
+  document.getElementById('s-logo-text').value = appSettings.logoText||'';
   document.getElementById('s-scan1').value = appSettings.scan1||'';
   document.getElementById('s-scan2').value = appSettings.scan2||'';
   const htp = appSettings.howToPlay || {};
@@ -1721,6 +1736,7 @@ async function saveSettings() {
     plainBg: document.getElementById('s-plain-bg').value.trim(),
     logo: document.getElementById('s-logo').value.trim(),
     defaultBg: document.getElementById('s-default-bg').value.trim(),
+    logoText: document.getElementById('s-logo-text').value.trim(),
     scan1: document.getElementById('s-scan1').value.trim(),
     scan2: document.getElementById('s-scan2').value.trim(),
     howToPlay: {
@@ -1957,6 +1973,61 @@ function togglePairs(id) {
 // ═══════════════════════════════════════════════
 //  RENDER LIBRARY
 // ═══════════════════════════════════════════════
+
+// ── Banner mode: colour images, or a plain text banner with just the category name (Bebas Neue) — same as the Bingo app ──
+var TEXT_BANNERS = false;
+var BANNER_MODE = 'gb';   // default: gold on black (a saved choice, made after this default, wins)
+try { var _bm = localStorage.getItem('bella_trivia_banner_mode_v1'); if (_bm) BANNER_MODE = _bm; } catch (e) {}
+var BANNER_STYLES = { bw: { bg: '#fff', fg: '#000', label: 'Black on white' }, wb: { bg: 'var(--bg)', fg: '#fff', label: 'White on black' }, gb: { bg: 'var(--bg)', fg: '#c9a84c', shine: true, label: 'Gold on black' } };
+function bannerStyleAttr() { var st = BANNER_STYLES[BANNER_MODE]; return st ? 'background:' + st.bg + ';' : ''; }
+function bannerTextAttr() { var st = BANNER_STYLES[BANNER_MODE]; if (!st) return ''; return st.shine ? 'background:var(--gold-shine);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;' : 'color:' + st.fg + ';'; }
+function setBannerMode(m) {
+  BANNER_MODE = m; TEXT_BANNERS = m !== 'img';
+  try { localStorage.setItem('bella_trivia_banner_mode_v1', m); } catch (e) {}
+  syncBannerToggle(); renderLibrary();
+}
+function openBannerMenu(btn, ev) {
+  if (ev) ev.stopPropagation();
+  var old = document.querySelector('.banner-menu'); if (old) { old.remove(); return; }
+  var m = document.createElement('div'); m.className = 'banner-menu';
+  var items = [['img', 'Banner images', null]].concat(Object.keys(BANNER_STYLES).map(function(k) { return [k, BANNER_STYLES[k].label, BANNER_STYLES[k]]; }));
+  m.innerHTML = items.map(function(it) {
+    var sw = it[2] ? '<span class="sw" style="background:' + it[2].bg + ';color:' + it[2].fg + '">Aa</span>' : '<span class="sw" style="font:600 9px sans-serif;color:#aaa">IMG</span>';
+    return '<button data-m="' + it[0] + '" class="' + (BANNER_MODE === it[0] ? 'sel' : '') + '">' + sw + '<span>' + it[1] + '</span></button>';
+  }).join('');
+  document.body.appendChild(m);
+  var r = btn.getBoundingClientRect();
+  m.style.top = (r.bottom + 6) + 'px'; m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - m.offsetWidth - 8)) + 'px';
+  m.addEventListener('click', function(e) { var b = e.target.closest('[data-m]'); if (!b) return; m.remove(); setBannerMode(b.dataset.m); });
+  setTimeout(function() { document.addEventListener('click', function h() { var x = document.querySelector('.banner-menu'); if (x) x.remove(); document.removeEventListener('click', h); }); }, 0);
+}
+TEXT_BANNERS = BANNER_MODE !== 'img';
+function textBannerHTML(title, style) {
+  var t = String(title == null ? '' : title).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return '<div class="txt-banner" style="' + bannerStyleAttr() + (style || '') + '"><span class="txt-banner-t" style="' + bannerTextAttr() + '">' + t + '</span></div>';
+}
+function fitTextBanners() {
+  var groups = new Map();
+  document.querySelectorAll('.txt-banner').forEach(function(b) {
+    var t = b.querySelector('.txt-banner-t'); if (!t || !b.clientWidth) return;
+    var cs = getComputedStyle(b), aw = b.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), ah = b.clientHeight * 0.8;
+    t.style.fontSize = '100px'; var r = t.getBoundingClientRect(); if (!r.width) return;
+    var fs = Math.max(8, Math.min(100 * aw / r.width, 100 * ah / r.height, 150));
+    var key = b.closest('.cat-grid') || b.closest('.modal') || document.body;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ t: t, fs: fs });
+  });
+  // every title fits its own banner first; then they all drop to the smallest size so they match
+  groups.forEach(function(list) {
+    var min = Math.min.apply(null, list.map(function(x) { return x.fs; }));
+    list.forEach(function(x) { x.t.style.fontSize = min + 'px'; });
+  });
+}
+function syncBannerToggle() { document.querySelectorAll('.banner-toggle-btn').forEach(function(b) { b.classList.toggle('banner-on', TEXT_BANNERS); b.textContent = TEXT_BANNERS ? 'Banners: ' + BANNER_STYLES[BANNER_MODE].label + ' ▾' : 'Banners: Images ▾'; }); }
+window.addEventListener('resize', fitTextBanners);
+document.addEventListener('DOMContentLoaded', syncBannerToggle);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTextBanners);
+
 function renderLibrary() {
   const grid = document.getElementById('cat-grid');
   const searchVal = (document.getElementById('search-input')?.value||'').toLowerCase().trim();
@@ -1966,7 +2037,7 @@ function renderLibrary() {
   // Filter by tags (show categories that match ANY selected tag)
   if(activeGenres.size > 0) {
     filtered = filtered.filter(c => {
-      const tags = parseTags(c.genre);
+      const tags = catTags(c);
       return tags.some(t => activeGenres.has(t));
     });
   }
@@ -1994,7 +2065,7 @@ function renderLibrary() {
     .sort((a,b) => (a.sortOrder||0) - (b.sortOrder||0))
     .map(cat => {
     const tags = parseTags(cat.genre);
-    const bannerHtml = cat.bgImage
+    const bannerHtml = TEXT_BANNERS ? textBannerHTML(cat.name || 'UNTITLED') : cat.bgImage
       ? `<img class="cat-banner" src="${cat.bgImage}" onerror="this.outerHTML='<div class=cat-banner-placeholder><span>${cat.name}</span></div>'">`
       : `<div class="cat-banner-placeholder"><span>${cat.name||'UNTITLED'}</span></div>`;
     const tagPills = tags.map(t => '<span class="cat-genre">' + t + '</span>').join('');
@@ -2036,7 +2107,7 @@ function renderLibrary() {
       + '<div class="cat-body">'
       + (cat.altName ? '<div class="cat-alt">' + cat.altName + '</div><div class="cat-title cat-title-indent">' + (cat.name||'Untitled') + '</div>' : '<div class="cat-title">' + (cat.name||'Untitled') + '</div>')
       + aboutLine(cat)
-      + '<div class="cat-meta">' + themeSetBadge + musicBadge + vaultBadge + slideshowBadge + canvaBadge + tagPills + seePairsBtn + '</div>'
+      + '<div class="cat-meta">' + themeSetBadge + musicBadge + vaultBadge + slideshowBadge + canvaBadge + seePairsBtn + '</div>'
       + pairsDropdown
       + '</div>'
       + '<div class="cat-actions">' + editBtn + delBtn + '</div>'
@@ -2044,6 +2115,7 @@ function renderLibrary() {
       + '<div class="drag-hint">' + (adminMode ? 'drag to reorder or drop into round &rarr;' : 'drag to round &rarr;') + '</div>'
       + '</div>';
   }).join('');
+  syncBannerToggle(); fitTextBanners();
 }
 
 // First sentence of the category's description (edited in the Question Vault or in the edit box here).
@@ -2059,6 +2131,12 @@ function aboutLine(cat){
   return '<div class="cat-about" title="' + a.replace(/"/g,'&quot;').replace(/</g,'&lt;') + '">' + a.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
 }
 
+// Music categories always carry the Music Trivia pill, even if it was never typed into their tags
+function catTags(c) {
+  const t = parseTags(c && c.genre);
+  if(c && c.type === 'music' && !t.some(x => x.toLowerCase() === 'music trivia')) t.push('Music Trivia');
+  return t;
+}
 function parseTags(genreStr) {
   if(!genreStr) return [];
   return genreStr.split(',').map(t=>t.trim()).filter(Boolean);
@@ -2087,7 +2165,7 @@ function migrateMiniGamesTag() {
 }
 
 function renderFilterBar() {
-  const allTags = [...new Set(categories.filter(c => !hiddenFromTrivia(c)).flatMap(c => parseTags(c.genre)))].sort();
+  const allTags = [...new Set(categories.filter(c => !hiddenFromTrivia(c)).flatMap(c => catTags(c)))].sort();
   const pinned  = PINNED_GENRES.filter(t => allTags.includes(t));
   const more    = allTags.filter(t => !PINNED_GENRES.includes(t));
 
@@ -2547,8 +2625,9 @@ async function saveCategory() {
   const restore = () => { if(saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Category'; } };
   const name       = document.getElementById('f-name').value.trim() || 'Untitled Category';
   const altName    = document.getElementById('f-alt').value.trim();
-  const genre      = document.getElementById('f-genre').value.trim();
+  let genre        = document.getElementById('f-genre').value.trim();
   const type       = currentCatType;
+  if(type === 'music' && !parseTags(genre).some(x => x.toLowerCase() === 'music trivia')) genre = genre ? genre + ', Music Trivia' : 'Music Trivia';
   const sheetUrl   = type === 'music'
     ? document.getElementById('f-music-sheet').value.trim()
     : document.getElementById('f-sheet').value.trim();
@@ -2709,7 +2788,7 @@ function launchTrivia() {
     params.set(`r${i}_canvaId`, cat.canvaDesignId||'');
     if(cat.type==='canva') params.set(`r${i}_bgQuestion`, cat.canvaBgUrl||'');
     params.set(`r${i}_bg`, cat.bgImage||'');
-    params.set(`r${i}_bgIntro`, cat.bgIntro||cat.bgImage||'');
+    params.set(`r${i}_bgIntro`, cat.bgIntro||'');
     params.set(`r${i}_bgQuestion`, cat.bgQuestion||'');
     params.set(`r${i}_bgPlain`, cat.bgPlain||'');
     params.set(`r${i}_thankYou`, cat.thankYouUrl||'');
