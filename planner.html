@@ -662,6 +662,7 @@ a{color:inherit}
       <label class="form-label" id="gig-schedule-preview-label">This venue's schedule</label>
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px">
         <span class="section-sub" style="margin:0;font-size:11.5px">Scroll up for past weeks, down for upcoming.</span>
+        <button class="btn btn-ghost btn-sm" type="button" style="margin-left:auto" onclick="insertBlankDay()" title="Leave the date picked above blank and move everything after it down one night">＋ Blank day</button>
       </div>
       <div id="gig-bingo-tools"></div>
       <div class="tl-container" style="max-height:340px" id="gig-schedule-preview"></div>
@@ -2897,17 +2898,6 @@ function gigsForDate(dk){
   });
   return out.filter(it=>modeOfVenue(it.venueId)==='events').concat(Object.values(best).map(b=>b.it).filter(it=>modeOfVenue(it.venueId)!=='events'));
 }
-// Every round a night has, in order, as {name,id}. A General Knowledge Round 1 is left out (it is on every regular night).
-function gigRoundList(g){
-  if(!g) return [];
-  const out = [];
-  if(g.themeName) out.push({name:g.themeName, id:g.themeId||null});
-  if(g.round3Name) out.push({name:g.round3Name, id:g.round3ThemeId||null});
-  (g.extraCategories||[]).forEach(e=>{ if(e && e.name) out.push({name:e.name, id:e.id||null}); });
-  const isGK = r=>{ const t = r.id && state.themes[r.id]; return (t && t.tier==='general-knowledge') || /^general knowledge$/i.test(String(r.name).trim()); };
-  return (out.length>1 && isGK(out[0])) ? out.slice(1) : out;
-}
-function roundLinesHtml(g){ return gigRoundList(g).map(r=>`<small style="color:var(--text2)">${escapeHtml(r.name)}</small>`).join(''); }
 function unplannedLabel(vid){ return (vid?modeOfVenue(vid):plannerMode)==='karaoke' ? 'regular karaoke' : 'unplanned'; }
 function dispTime(t){ const x = vmxT24(t||''); if(!x) return ''; const [h,m] = x.split(':').map(Number); return ((h+11)%12+1) + (m?':'+String(m).padStart(2,'0'):'') + ' ' + (h>=12?'PM':'AM'); }
 function renderMonthCalendar(){
@@ -2942,9 +2932,9 @@ function openDayAgenda(dk){
   document.getElementById('agenda-body').innerHTML = items.length ? items.map(it=>{
     const g = it.gig;
     const label = g && g.themeName ? escapeHtml(g.themeName) : g && g.status==='cancelled' ? 'Cancelled' : (modeOfVenue(it.venueId)==='karaoke' ? 'Regular karaoke' : 'Unplanned');
-    const roundsHtml = (g && g.themeName) ? gigRoundList(g).map(r=>escapeHtml(r.name)).join('<br>') : label;
+    const round3 = g && g.round3Name ? ` · ♪ ${escapeHtml(g.round3Name)}` : '';
     return `<div class="tl-row" style="grid-template-columns:1fr 90px 64px">
-      <div style="font-size:12.5px">${escapeHtml(it.venueName)}<br><span class="empty-cell" style="font-style:normal;color:var(--text2)">${roundsHtml}</span>${g&&g.venueNote?`<br><span style="color:var(--gold);font-size:11.5px">★ Venue note: ${escapeHtml(g.venueNote)}</span>`:''}</div>
+      <div style="font-size:12.5px">${escapeHtml(it.venueName)}<br><span class="empty-cell" style="font-style:normal;color:var(--text2)">${label}${round3}</span>${g&&g.venueNote?`<br><span style="color:var(--gold);font-size:11.5px">★ Venue note: ${escapeHtml(g.venueNote)}</span>`:''}</div>
       <span class="badge badge-${(g&&(g.status==='cancelled'||g.themeName||modeOfVenue(it.venueId)==='events'))?(g.status||'planned'):'empty'}">${(g&&(g.status==='cancelled'||g.themeName||modeOfVenue(it.venueId)==='events'))?(g.status||'planned'):'unplanned'}</span>
       <button class="btn btn-ghost btn-sm" onclick="closeModal('day-agenda-overlay');openGigModal('${it.venueId}','${dk}')">Edit</button>
     </div>`;
@@ -2970,14 +2960,14 @@ function renderDayBoxes(){
         const v = state.venues[it.venueId]||{};
         const gig = it.gig;
         const label = gig && gig.themeName ? escapeHtml(gig.themeName) : gig && gig.status==='cancelled' ? 'cancelled' : unplannedLabel(it.venueId);
-        const roundLines = (gig && gig.themeName) ? roundLinesHtml(gig) : `<small style="color:var(--text2)">${label}</small>`;
+        const round3 = gig && gig.round3Name ? ` · ♪ ${escapeHtml(gig.round3Name)}` : '';
         const hostName = (gig && gig.host) || v.host || '';
         // A one-off fill-in: the regular host struck through, the fill-in in purple beneath.
         const fillIn = !!(gig && gig.host && v.host && gig.host !== v.host);
         const hostHtml = !hostName ? '<span style="color:var(--text3)">no host</span>'
           : fillIn ? `<span style="text-decoration:line-through;color:var(--text3)">${escapeHtml(v.host)}</span><br><span style="color:#c9a0dc;margin-left:12px">${escapeHtml(gig.host)}</span>`
           : escapeHtml(hostName);
-        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${it.venueId}','${dk}')">${escapeHtml(v.name||it.venueName)}<small>${dispTime((gig&&gig.time)||v.time)}${gig&&gig.venueNote?' <span style="color:var(--gold)" title="'+escapeHtml(gig.venueNote)+'">★</span>':''}</small>${roundLines}<small style="color:var(--text3)">${hostHtml}</small></div>`;
+        return `<div class="daybox-item" style="cursor:pointer" onclick="openGigModal('${it.venueId}','${dk}')">${escapeHtml(v.name||it.venueName)}<small>${dispTime((gig&&gig.time)||v.time)} — ${label}${round3}${gig&&gig.venueNote?' <span style="color:var(--gold)" title="'+escapeHtml(gig.venueNote)+'">★</span>':''}</small><small style="color:var(--text2)">${hostHtml}</small></div>`;
       }).join('') : '<div class="daybox-item" style="color:var(--text3)">Nothing scheduled</div>'}
     </div>`;
   }).join('');
@@ -4924,6 +4914,56 @@ function renderGigSchedulePreview(){
   currentVenueDetailId = venueId;
   renderBingoTools();
 }
+// ── Blank day: leave the picked date empty and push the categories from there on down one night ──
+// Only the categories (and their lock) move; each night keeps its own host, note and venue note.
+// Cancelled nights and nights the venue set itself stay put and are skipped over. The shift stops at the
+// first empty night, so nothing past a gap is touched.
+async function insertBlankDay(){
+  if(plannerMode!=='trivia' && plannerMode!=='karaoke') return toast("Blank day works in Trivia and Karaoke — not in "+plannerMode+" mode.", true);
+  const venueId = document.getElementById('gig-venue').value;
+  const dk = document.getElementById('gig-date').value;
+  const v = state.venues[venueId];
+  if(!venueId || !dk || !v) return toast('Pick a venue and date first.', true);
+  const gigs = state.gigs[venueId]||{};
+  const today = new Date(); today.setHours(0,0,0,0);
+  const set = new Set(venueDatesBetween(v, today<fromKey(dk)?today:fromKey(dk), addDays(today, 730)));
+  Object.keys(gigs).forEach(k=>set.add(k)); set.add(dk);
+  const fixed = k => { const g = gigs[k]; return !!g && (g.status==='cancelled' || isVenueSetGig(g)); };
+  const slots = [...set].sort().filter(k=>k>=dk && !fixed(k));
+  if(slots[0]!==dk) return toast("That night is cancelled or set by the venue — pick another night.", true);
+  const FIELDS = ['themeId','themeName','round3ThemeId','round3Name','extraCategories'];
+  const has = k => { const g = gigs[k]; return !!g && !!(g.themeName || g.round3Name || (g.extraCategories&&g.extraCategories.length)); };
+  const take = k => { const g = gigs[k]||{}; const o = {}; FIELDS.forEach(f=>o[f]=g[f]==null?null:g[f]); o.locked = g.locked?true:null; return o; };
+  if(!has(dk)) return toast('That night is already blank.');
+  const moves = [];            // [targetDate, content]
+  let carry = take(dk), i = 1, done = false;
+  while(i<slots.length){
+    const t = slots[i], old = has(t) ? take(t) : null;
+    moves.push([t, carry]);
+    if(!old){ done = true; break; }
+    carry = old; i++;
+  }
+  if(!done) return toast("Ran out of dates to shift into — nothing was changed.", true);
+  if(!confirm(`Leave ${fmtMDY(dk)} blank and move ${moves.length} night${moves.length===1?'':'s'} of categories down one?`)) return;
+  const base = MODE_PATHS[plannerMode].gigs+'/'+venueId+'/';
+  const updates = {};
+  moves.forEach(([t,c])=>{
+    const g = gigs[t];
+    FIELDS.forEach(f=>updates[base+t+'/'+f] = c[f]);
+    updates[base+t+'/locked'] = c.locked;
+    updates[base+t+'/status'] = 'planned';
+    if(!g) updates[base+t+'/locationId'] = selectedLocationId;
+  });
+  const first = gigs[dk]||{};
+  if(first.host || first.note || first.venueNote){
+    FIELDS.forEach(f=>updates[base+dk+'/'+f] = null);
+    updates[base+dk+'/locked'] = null;
+    updates[base+dk+'/status'] = 'unplanned';
+  } else updates[base+dk] = null;
+  setSyncStatus('syncing');
+  try { await db.ref().update(updates); toast(`${fmtMDY(dk)} is blank — ${moves.length} night${moves.length===1?'':'s'} moved down.`); }
+  catch(e){ toast('Couldn’t save: '+e.message, true); }
+}
 function renderGigWarnings(){
   const box = document.getElementById('gig-warnings');
   const venueId = document.getElementById('gig-venue').value;
@@ -5140,14 +5180,6 @@ async function randomizeTrivia(overwrite){
   const id = currentVenueDetailId, v = state.venues[id]; if(!v) return;
   let pool = randPoolFor(v);
   const isMusic = cid=>plannerMode==='trivia' && (state.themes[cid]||{}).tier==='coordinating-music';
-  // Regular trivia nights: Round 1 = General Knowledge, Round 2 = a trivia category, Round 3 = a music category.
-  const regular = plannerMode==='trivia';
-  const gk = regular ? gkTheme() : null;
-  const isGKid = cid=>{ const t = state.themes[cid]; return !!t && (t.tier==='general-knowledge' || /^general knowledge$/i.test(t.name||'')); };
-  const gkLayout = g=>!!(g && (isGKid(g.themeId) || /^general knowledge$/i.test(String(g.themeName||'').trim())));
-  const triviaOf = g=>regular && gkLayout(g) ? g.round3ThemeId : g.themeId;                         // the night's trivia category
-  const musicOf  = g=>regular && gkLayout(g) ? ((g.extraCategories&&g.extraCategories[0]&&g.extraCategories[0].id)||null) : g.round3ThemeId;
-  if(regular) pool = pool.filter(c=>!isDiceExcluded(c));
   const triviaPool = pool.filter(c=>!isMusic(c));
   if(triviaPool.length) pool = triviaPool;
   if(!pool.length){ toast('Pick the categories this venue likes first.', true); openLikedCats(); return; }
@@ -5159,7 +5191,7 @@ async function randomizeTrivia(overwrite){
   if(!dates.length) return toast('No trivia nights found for this venue — set its day (and frequency) in Edit Venue.', true);
   const gigs = state.gigs[id]||{};
   const assigned = {};
-  Object.entries(gigs).forEach(([dk,g])=>{ const t = triviaOf(g); if(t && g.status!=='cancelled') assigned[dk]=[t]; });
+  Object.entries(gigs).forEach(([dk,g])=>{ if(g.themeId && g.status!=='cancelled') assigned[dk]=[g.themeId]; });
   // Locked days (ticked in the planner, or set by the venue) are never touched.
   let todo = dates.filter(dk=>!(gigs[dk]&&gigs[dk].status==='cancelled') && !isLockedGig(gigs[dk]));
   const lockedCount = dates.filter(dk=>isLockedGig(gigs[dk])).length;
@@ -5168,7 +5200,7 @@ async function randomizeTrivia(overwrite){
     if(!confirm(`Re-randomize ${todo.length} trivia night${todo.length===1?'':'s'} at ${v.name} from ${fmtMDY(toKey(start))} through ${fmtMDY(toKey(end))}? This replaces the categories planned there now.`+(lockedCount?`\n\n${lockedCount} locked night${lockedCount===1?'':'s'} will be left alone.`:''))) return;
     todo.forEach(dk=>{ delete assigned[dk]; });
   } else {
-    todo = todo.filter(dk=>!(gigs[dk]&&(gigs[dk].themeId||gigs[dk].themeName)&&(!gkLayout(gigs[dk])||gigs[dk].round3Name)));   // a night with only General Knowledge in Round 1 still gets its Round 2 and 3
+    todo = todo.filter(dk=>!(gigs[dk]&&(gigs[dk].themeId||gigs[dk].themeName)));
     if(!todo.length) return toast('Every night from '+fmtMDY(toKey(start))+' on is already planned. Use Re-randomize to redo them.');
   }
   // ── Music pairing ──
@@ -5180,9 +5212,8 @@ async function randomizeTrivia(overwrite){
   Object.entries(gigs).forEach(([dk,g])=>{
     if(todo.includes(dk) && overwrite) return;   // those are about to be replaced
     if(g.status==='cancelled') return;
-    const tOf = triviaOf(g), mOf = musicOf(g);
-    if(tOf) useCount[tOf] = (useCount[tOf]||0)+1;
-    if(mOf && (!lastMusic[mOf]||dk>lastMusic[mOf])) lastMusic[mOf]=dk;
+    if(g.themeId) useCount[g.themeId] = (useCount[g.themeId]||0)+1;
+    if(g.round3ThemeId && (!lastMusic[g.round3ThemeId]||dk>lastMusic[g.round3ThemeId])) lastMusic[g.round3ThemeId]=dk;
   });
   const leastRecent = (arr, dk)=>{ const sh = arr.slice().sort(()=>Math.random()-0.5); sh.sort((x,y)=>(lastMusic[x]||'').localeCompare(lastMusic[y]||'')); return sh[0]||null; };
   let unpairedNights = 0, noPairs = 0;
@@ -5202,10 +5233,7 @@ async function randomizeTrivia(overwrite){
     else if(musicIds.length){ noPairs++; musicId = leastRecent(musicIds, dk); }   // no paired category: pick any music category at random
     if(musicId) lastMusic[musicId] = dk;
     const ex = gigs[dk]||{};
-    updates[MODE_PATHS[plannerMode].gigs+'/'+id+'/'+dk] = regular
-      ? Object.assign({}, ex, {themeId:gk.themeId||null, themeName:gk.name, round3ThemeId:tid, round3Name:state.themes[tid].name,
-          extraCategories: musicId ? [{id:musicId, name:state.themes[musicId].name}] : null, status:'planned', note:ex.note||'', host:ex.host||null, locationId:selectedLocationId})
-      : Object.assign({}, ex, {themeId:tid, themeName:state.themes[tid].name, round3ThemeId:musicId, round3Name:musicId?state.themes[musicId].name:null, status:'planned', note:ex.note||'', host:ex.host||null, locationId:selectedLocationId});
+    updates[MODE_PATHS[plannerMode].gigs+'/'+id+'/'+dk] = Object.assign({}, ex, {themeId:tid, themeName:state.themes[tid].name, round3ThemeId:musicId, round3Name:musicId?state.themes[musicId].name:null, status:'planned', note:ex.note||'', host:ex.host||null, locationId:selectedLocationId});
   });
   try{ await db.ref().update(updates); }catch(e){ setSyncStatus('synced'); return toast('Could not save the randomized nights: '+(e&&e.message||e), true); }
   const n = Object.keys(updates).length;
