@@ -451,6 +451,7 @@ td.art.artcell{padding-right:66px}
             <label class="chk"><input type="checkbox" id="showArch"> Archived</label>
             <button class="btn ghost hidden" id="resetOrderBtn" title="Put the columns back in their saved order">Reset column order</button>
             <button class="btn ghost" id="colsBtn">Columns</button>
+            <button class="btn ghost" id="qListBtn" title="A plain list of every question and answer, to paste into your AI so it doesn't repeat any">Question list</button>
             <button class="btn ghost" id="importBtn">Import CSVs</button>
             <button class="btn primary" id="addBtn">+ Add question</button>
           </div>
@@ -1873,6 +1874,8 @@ function openImport(){
   body.innerHTML = `
     <p class="hint">In Google Sheets, open a category tab → <strong>File → Download → Comma-separated values (.csv)</strong>. Download as many as you like, then drop them all here. The category name comes from the file name — fix any that look off. Duplicates of questions already in a category are skipped.</p>
     <div class="drop" id="impDrop"><input type="file" id="impFiles" multiple accept=".csv,text/csv"><div class="muted" style="margin-top:8px;font-size:12px">…or drag CSV files onto this box</div></div>
+    <label class="fld" style="max-width:420px">Where should these questions go?
+      <select id="impDest"><option value="">Each file becomes its own category (name from the file)</option>${[...S.cats.values()].filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => `<option value="${esc(c.id)}">Add to: ${esc(c.name)}</option>`).join('')}</select></label>
     <label class="fld" style="max-width:300px">Type for new categories
       <select id="impType">${typeList().map(t => `<option ${S.cats.get(S.curId)?.type === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
     <div id="impPv"></div><div id="impNote" class="hint"></div><div class="msg" id="impMsg"></div>`;
@@ -1885,7 +1888,7 @@ function openImport(){
       if (!/\.csv$/i.test(f.name) && f.type !== 'text/csv') continue;
       const text = await f.text();
       const parsed = recordsFromCSV(parseCSV(text), st.ctx);
-      st.entries.push({ file: f.name, name: nameFromFile(f.name), type: $('#impType').value, parsed });
+      st.entries.push({ file: f.name, name: nameFromFile(f.name), type: $('#impType').value, dest: $('#impDest').value, parsed });
     }
     recompute();
   }
@@ -1894,14 +1897,18 @@ function openImport(){
   ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
   ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
   drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
-  $('#impType').addEventListener('change', e => { st.entries.forEach(en => { if (!catByNorm(en.name)) en.type = e.target.value; }); recompute(); });
+  $('#impDest').addEventListener('change', e => { st.entries.forEach(en => { en.dest = e.target.value; }); recompute(); });
+  const badName = en => !en.dest && isGenericName(en.name);
+  $('#impType').addEventListener('change', e => { st.entries.forEach(en => { if (!en.dest && !catByNorm(en.name)) en.type = e.target.value; }); recompute(); });
 
   async function recompute(){
     const my = ++st.ver, seen = new Map();
     for (const en of st.entries){
       en.toAdd = []; en.dupCount = 0; en.status = '';
       if (en.parsed.error){ en.status = en.parsed.error; continue; }
-      const key = normName(en.name), cat = catByNorm(en.name);
+      const destCat = en.dest ? S.cats.get(en.dest) : null;
+      if (en.dest && !destCat){ en.status = 'That category no longer exists'; en.parsed = Object.assign({}, en.parsed, { error: en.status }); continue; }
+      const key = en.dest ? 'id:' + en.dest : normName(en.name), cat = destCat || catByNorm(en.name);
       if (!seen.has(key)){
         const set = new Set();
         if (cat){ const ex = await ensureExisting(cat.id); ex.forEach(q => set.add(normQ(q.question))); if (my !== st.ver) return; }
@@ -1909,7 +1916,7 @@ function openImport(){
       }
       const g = seen.get(key);
       for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)) en.dupCount++; else { g.set.add(k); en.toAdd.push(rec); } }
-      en.status = isGenericName(en.name) ? 'Needs a real category name' : cat ? `Adds to existing` : g.used ? 'Merges with file above' : 'New category';
+      en.status = badName(en) ? 'Needs a real category name' : destCat ? `Adds to “${destCat.name}”` : cat ? `Adds to existing` : g.used ? 'Merges with file above' : 'New category';
       if (en.parsed.layout) en.status += ' · ' + en.parsed.layout;
       g.used = true;
     }
@@ -1920,20 +1927,22 @@ function openImport(){
     const act = document.activeElement;
     const keep = act && act.dataset && act.dataset.f === 'name' ? { i: act.dataset.i, s: act.selectionStart, e: act.selectionEnd } : null;
     const types = typeList();
+    const destOpts = [...S.cats.values()].filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
     const ok = st.entries.filter(e => !e.parsed.error);
     const newQ = ok.reduce((n, e) => n + e.toAdd.length, 0), dups = ok.reduce((n, e) => n + e.dupCount, 0);
-    $('#impPv').innerHTML = st.entries.length ? `<table class="pv"><thead><tr><th>File</th><th>Category name</th><th style="width:140px">Type</th><th>New</th><th title="New questions with an IMG URL">Img</th><th title="New questions with a SOUND URL">Sound</th><th>Skipped</th><th>Status</th><th></th></tr></thead><tbody>` +
+    $('#impPv').innerHTML = st.entries.length ? `<table class="pv"><thead><tr><th>File</th><th>Category name</th><th style="width:200px">Add to</th><th style="width:140px">Type</th><th>New</th><th title="New questions with an IMG URL">Img</th><th title="New questions with a SOUND URL">Sound</th><th>Skipped</th><th>Status</th><th></th></tr></thead><tbody>` +
       st.entries.map((e, i) => `<tr><td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.file)}">${esc(e.file)}</td>
-        <td><input data-i="${i}" data-f="name" class="${isGenericName(e.name) ? 'bad' : ''}" value="${esc(e.name)}"></td>
-        <td><select data-i="${i}" data-f="type">${types.map(t => `<option ${t === e.type ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></td>
+        <td><input data-i="${i}" data-f="name" class="${badName(e) ? 'bad' : ''}" value="${esc(e.dest && S.cats.get(e.dest) ? S.cats.get(e.dest).name : e.name)}" ${e.dest ? 'disabled' : ''}></td>
+        <td><select data-i="${i}" data-f="dest"><option value="">New / by name</option>${destOpts.replace(`value="${esc(e.dest)}"`, `value="${esc(e.dest)}" selected`)}</select></td>
+        <td><select data-i="${i}" data-f="type" ${e.dest ? 'disabled' : ''}>${types.map(t => `<option ${t === e.type ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></td>
         <td class="${e.parsed.error ? 'bad' : 'good'}">${e.parsed.error ? '—' : e.toAdd.length}</td>
         <td>${e.parsed.error ? '' : e.toAdd.filter(r => r.imgUrl).length}</td>
         <td>${e.parsed.error ? '' : e.toAdd.filter(r => r.soundUrl).length}</td>
         <td class="muted" title="duplicates / blank rows / rows without a question">${e.parsed.error ? '' : (e.dupCount + e.parsed.blank + e.parsed.noQ)}</td>
-        <td class="${e.parsed.error || isGenericName(e.name) ? 'bad' : ''}">${esc(e.status)}</td>
+        <td class="${e.parsed.error || badName(e) ? 'bad' : ''}">${esc(e.status)}</td>
         <td><button class="linkbtn" data-rm="${i}">remove</button></td></tr>`).join('') + `</tbody></table>` : '';
     const newCols = [...new Map(ok.flatMap(e => e.parsed.newCols).map(c => [c.key, c])).values()];
-    const generic = ok.filter(e => isGenericName(e.name)).length;
+    const generic = ok.filter(badName).length;
     const merging = ok.filter(e => e.status === 'Merges with file above').length;
     $('#impNote').innerHTML = st.entries.length ? `<strong>${ok.length}</strong> file${ok.length === 1 ? '' : 's'} · <strong>${newQ.toLocaleString()}</strong> new questions · ${dups.toLocaleString()} duplicates skipped` +
       (newCols.length ? `<br>Extra columns found: ${newCols.map(c => `<strong>${esc(c.label)}</strong>`).join(', ')} — they'll be added as custom columns.` : '') +
@@ -1943,22 +1952,22 @@ function openImport(){
     if (keep){ const el = $(`#impPv input[data-f="name"][data-i="${keep.i}"]`); if (el){ el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} } }
   }
   $('#impPv').addEventListener('input', e => { const i = e.target.dataset.i; if (i === undefined) return; if (e.target.dataset.f === 'name') { st.entries[i].name = e.target.value; clearTimeout(st.t); st.t = setTimeout(recompute, 450); } });
-  $('#impPv').addEventListener('change', e => { const i = e.target.dataset.i; if (i !== undefined && e.target.dataset.f === 'type') st.entries[i].type = e.target.value; });
+  $('#impPv').addEventListener('change', e => { const i = e.target.dataset.i; if (i === undefined) return; if (e.target.dataset.f === 'type') st.entries[i].type = e.target.value; if (e.target.dataset.f === 'dest'){ st.entries[i].dest = e.target.value; recompute(); } });
   $('#impPv').addEventListener('click', e => { const i = e.target.dataset.rm; if (i === undefined) return; st.entries.splice(Number(i), 1); recompute(); });
 
   async function doImport(){
     if (st.busy) return; st.busy = true; importBtn.disabled = true;
     const msg = $('#impMsg'); msg.className = 'msg ok';
-    const ok = st.entries.filter(e => !e.parsed.error && e.name.trim());
+    const ok = st.entries.filter(e => !e.parsed.error && (e.dest || e.name.trim()));
     try {
       const newCols = [...new Map(ok.flatMap(e => e.parsed.newCols).map(c => [c.key, c])).values()].map(({ key, label, type }) => ({ key, label, type }));
       if (newCols.length) await saveCustom([...S.custom, ...newCols]);
       const groups = new Map();
-      ok.forEach(e => { const k = normName(e.name); if (!groups.has(k)) groups.set(k, { name: e.name.trim(), type: e.type, adds: [] }); groups.get(k).adds.push(...e.toAdd); });
+      ok.forEach(e => { const dc = e.dest ? S.cats.get(e.dest) : null; const k = e.dest ? 'id:' + e.dest : normName(e.name); if (!groups.has(k)) groups.set(k, { name: (dc ? dc.name : e.name).trim(), type: e.type, dest: e.dest || '', adds: [] }); groups.get(k).adds.push(...e.toAdd); });
       let done = 0, total = 0;
       for (const [k, g] of groups){
         msg.textContent = `Importing ${++done} of ${groups.size}: ${g.name}…`;
-        let cat = catByNorm(g.name), id, order = 1;
+        let cat = g.dest ? S.cats.get(g.dest) : catByNorm(g.name), id, order = 1;
         if (cat){ id = cat.id; const ex = await ensureExisting(id); order = ex.reduce((m, q) => Math.max(m, Number(q.order) || 0), 0) + 1; }
         else { const ref = await addDoc(collection(db, 'triviaCategories'), { name: g.name, type: g.type, questionCount: 0, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); id = ref.id; mirrorNewVaultCategory(id, g.name, g.type); }
         for (let i = 0; i < g.adds.length; i += 250){
@@ -1979,6 +1988,57 @@ function openImport(){
     } finally { st.busy = false; }
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   QUESTION LIST — plain "question — answer" lines to paste into an AI so it avoids repeats
+   ═══════════════════════════════════════════════════════════ */
+$('#qListBtn').addEventListener('click', () => {
+  const cats = [...S.cats.values()].filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const body = document.createElement('div');
+  body.innerHTML = `<p class="hint">A plain list of every question and its correct answer, one per line, to paste into the AI you write questions with so it doesn\u2019t repeat any. Archived questions are left out.</p>
+    <label class="fld" style="max-width:420px">Which questions?
+      <select id="qlCat"><option value="">All categories</option>${cats.map(c => `<option value="${esc(c.id)}"${c.id === S.curId ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
+    <label class="chk"><input type="checkbox" id="qlGroup"> Put category names above each group</label>
+    <label class="fld" style="margin-top:10px">List<textarea id="qlOut" rows="14" readonly style="width:100%;font-size:12px" placeholder="Loading…"></textarea></label>
+    <div id="qlCount" class="hint"></div>`;
+  const actions = [{ label: 'Close', onClick: closeModal }, { label: 'Download .txt', onClick: () => dl() }, { label: 'Copy list', primary: true, onClick: () => copy() }];
+  openModal({ title: 'Question list', body, wide: true, actions });
+  let items = [];
+  const one = v => String(v ?? '').replace(/\s+/g, ' ').trim();
+  async function load(){
+    $('#qlOut').value = ''; $('#qlOut').placeholder = 'Loading…';
+    const cid = $('#qlCat').value;
+    try {
+      const snap = await getDocs(cid ? query(qColl(), where('categoryId', '==', cid)) : query(qColl()));
+      items = snap.docs.map(d => d.data()).filter(q => !q.archived && one(q.question));
+      draw();
+    } catch (e) { $('#qlOut').placeholder = 'Couldn\u2019t load the questions: ' + e.message; }
+  }
+  function draw(){
+    const grp = $('#qlGroup').checked;
+    const name = id => (S.cats.get(id) || {}).name || 'Uncategorized';
+    const by = new Map();
+    items.slice().sort((a, b) => name(a.categoryId).localeCompare(name(b.categoryId)) || (Number(a.order) || 0) - (Number(b.order) || 0))
+      .forEach(q => { const k = q.categoryId; if (!by.has(k)) by.set(k, []); by.get(k).push(q); });
+    const line = q => one(q.question) + ' \u2014 ' + (one(q.answer) || '(no answer)');
+    const out = grp ? [...by].map(([k, qs]) => name(k) + '\n' + qs.map(line).join('\n')).join('\n\n') : [...by.values()].flat().map(line).join('\n');
+    $('#qlOut').value = out;
+    $('#qlCount').textContent = items.length.toLocaleString() + ' question' + (items.length === 1 ? '' : 's');
+  }
+  async function copy(){
+    const t = $('#qlOut').value; if (!t) return;
+    try { await navigator.clipboard.writeText(t); } catch (e) { $('#qlOut').select(); document.execCommand('copy'); }
+    toast('List copied');
+  }
+  function dl(){
+    const t = $('#qlOut').value; if (!t) return;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([t], { type: 'text/plain;charset=utf-8' }));
+    const cid = $('#qlCat').value; a.download = (cid ? (S.cats.get(cid) || {}).name || 'questions' : 'all-questions').replace(/[\/\\:*?"<>|]+/g, '-') + ' - question list.txt';
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  $('#qlCat').addEventListener('change', load); $('#qlGroup').addEventListener('change', draw);
+  load();
+});
 
 /* ═══════════════════════════════════════════════════════════
    10. SEARCH BY TAG ACROSS ALL CATEGORIES
@@ -2180,7 +2240,7 @@ function setMode(m){
   $('#triviaShell').classList.toggle('hidden', m !== 'trivia');
   $('#bingoShell').classList.toggle('hidden', m !== 'bingo');
   $$('.modeSw button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
-  $('#navSub').textContent = (m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank') + ' · build Oct 21 #12';
+  $('#navSub').textContent = (m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank') + ' · build Oct 21 #14';
   $('#notesBtn').classList.toggle('hidden', m !== 'trivia');
   document.title = 'The Vault · Belladonna';
   if (m === 'bingo') renderBingoAll();
