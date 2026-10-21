@@ -1851,7 +1851,7 @@ function renderCurrentSlide() {
   // Background
   const bg = document.getElementById('pres-bg');
   let bgUrl = '';
-  if(type === S_INTRO) bgUrl = round.bgIntro || round.bgImage || defBg();
+  if(type === S_INTRO) bgUrl = round.bgIntro || defBg();
   else if(type === S_INTERSTITIAL) bgUrl = round.bgQuestion || defBg();
   else if(type === S_THANKYOU) bgUrl = '';  // renderThankyou handles its own bg
   else if(type === S_SLIDE) bgUrl = '';
@@ -1970,7 +1970,7 @@ let ssQrVisible = true;   // Join QR shows on intro slides by default
 function startPreview() {
   // Collect all bgIntro images from pending rounds, fall back to bgQuestion
   ssImages = ((pendingRounds && pendingRounds.length) ? pendingRounds : (state.rounds || []))
-    .map(r => r.bgIntro || r.bgQuestion || r.bgImage || defBg())
+    .map(r => r.bgIntro || r.bgQuestion || defBg())
     .filter(Boolean);
 
   if(!ssImages.length) {
@@ -2281,8 +2281,8 @@ function renderPreShow() {
 }
 
 function renderIntro(container, round) {
-  // If there's a background image, show it fullscreen with no text overlay
-  const bgUrl = round.bgIntro || round.bgImage || defBg();
+  // The category's own intro image, if it has one — shown fullscreen with no text overlay
+  const bgUrl = round.bgIntro;
   if(bgUrl) {
     const bg = document.getElementById('pres-bg');
     bg.style.background = ''; bg.style.backgroundColor = '';
@@ -2294,20 +2294,42 @@ function renderIntro(container, round) {
     container.appendChild(el);
     return;
   }
-  // No image — show text intro
+  // No intro image: logo, then the Belladonna text logo, then the category name in gold Bebas Neue —
+  // on the default background from Settings (the main render already set it).
+  const s = appSettings || {};
+  const img = (u, h, mw) => u ? `<img src="${psEsc(String(u).trim())}" referrerpolicy="no-referrer" alt="" onerror="this.style.display='none'" style="display:block;height:${h};width:auto;max-width:${mw};object-fit:contain;margin:0 auto">` : '';
   const el = document.createElement('div');
   el.className = 'slide slide-intro active';
-  const isSlideshow = round.type === 'slideshow';
-  const countLabel = isSlideshow
-    ? `${(round.slides||[]).length} slides`
-    : `${round.questions.length} questions · difficulty sequenced`;
+  el.style.padding = '0';
   el.innerHTML = `
-    <div class="round-badge">Round ${state.roundIndex+1} of ${state.rounds.length}</div>
-    <div class="round-title"><span>${round.title || round.tabName}</span></div>
-    <div class="round-sub">${countLabel}</div>
-    <div class="start-hint">Press → or Space to begin</div>
-  `;
+    <div style="position:absolute;left:0;right:0;top:3vh;display:flex;flex-direction:column;align-items:center;gap:1.4vh">${img(s.logo,'17vh','50vw')}${img(s.logoText,'9vh','60vw')}</div>
+    <div class="intro-name-box" style="position:absolute;left:10vw;width:80vw;top:31vh;height:62vh;display:flex;align-items:center;justify-content:center">
+      <div class="intro-name" style="font-family:'Bebas Neue',var(--display),sans-serif;font-weight:400;text-align:center;line-height:.95;letter-spacing:.03em;text-transform:uppercase;word-break:normal;overflow-wrap:normal;background:var(--gold-shine);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;">${psEsc(round.title || round.tabName || '')}</div>
+    </div>`;
   container.appendChild(el);
+  const nameEl = el.querySelector('.intro-name');
+  const fit = () => {
+    if(!el.isConnected) { window.removeEventListener('resize', fit); return; }
+    const box = nameEl.parentElement, boxW = window.innerWidth * 0.8, boxH = box.clientHeight;
+    if(!boxH) return;
+    // 1) one line, as wide as 80% of the screen
+    nameEl.style.display = 'inline-block'; nameEl.style.width = 'auto'; nameEl.style.whiteSpace = 'nowrap'; nameEl.style.fontSize = '100px';
+    const w100 = nameEl.getBoundingClientRect().width || 1;
+    let fs = 100 * boxW / w100;
+    nameEl.style.fontSize = fs + 'px';
+    if(nameEl.getBoundingClientRect().height <= boxH) return;
+    // 2) too tall on one line: wrap between words only (never inside a word) at the biggest size that fits
+    nameEl.style.display = 'block'; nameEl.style.whiteSpace = 'normal'; nameEl.style.width = boxW + 'px';
+    let lo = 10, hi = Math.max(boxH, 40);
+    for(let i = 0; i < 16; i++) {
+      const mid = (lo + hi) / 2; nameEl.style.fontSize = mid + 'px';
+      if(nameEl.getBoundingClientRect().height <= boxH && nameEl.scrollWidth <= boxW + 1) lo = mid; else hi = mid;
+    }
+    nameEl.style.fontSize = lo + 'px';
+  };
+  fit();
+  window.addEventListener('resize', fit);
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
 }
 
 function renderFollowUs(container, round) {
@@ -3085,7 +3107,7 @@ function checkUrlParams() {
       folderUrl: p.get(`r${i}_folder`)||'',
       canvaDesignId: p.get(`r${i}_canvaId`)||'',
       bgImage:p.get(`r${i}_bg`)||'',
-      bgIntro:p.get(`r${i}_bgIntro`)||p.get(`r${i}_bg`)||'',
+      bgIntro:p.get(`r${i}_bgIntro`)||'',
       bgQuestion:p.get(`r${i}_bgQuestion`)||'',
       bgPlain:p.get(`r${i}_bgPlain`)||'',
       thankYouUrl:p.get(`r${i}_thankYou`)||'',
@@ -3383,7 +3405,7 @@ async function tryStandaloneAutoLoad(){
   pendingRounds = usable.map(({round,cat})=>({
     sheetUrl:cat.sheetUrl||'', tabName:cat.tabName||'', vaultCatId:cat.vaultCatId||'',
     type:cat.type||'trivia', folderUrl:cat.folderUrl||'', canvaDesignId:cat.canvaDesignId||'',
-    bgImage:cat.bgImage||'', bgIntro:cat.bgIntro||cat.bgImage||'',
+    bgImage:cat.bgImage||'', bgIntro:cat.bgIntro||'',
     bgQuestion:(cat.type==='canva'?cat.canvaBgUrl:null)||cat.bgQuestion||'',
     bgPlain:cat.bgPlain||'', thankYouUrl:cat.thankYouUrl||'', catType:cat.catType||'',
     title:cat.name||round.label||'Round', questionCount:20, showAnswers:false, twoPass:false, timed:false,
