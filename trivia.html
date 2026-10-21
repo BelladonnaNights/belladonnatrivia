@@ -643,6 +643,7 @@ const API_KEY = 'AIzaSyACMjXQCXjVo75hbMXtag_JctR4SoX70So';
 
 // Follow Us / Rules data — loaded from Firebase non-blocking
 var appSettings = {};
+function defBg(){ return (appSettings && String(appSettings.defaultBg||'').trim()) || ''; }  // default background for categories without their own
 var catTypes = [];
 var db; // global Firebase database reference
 var fsdb, fbAuth; // Firestore (Question Vault) + Auth
@@ -1848,12 +1849,12 @@ function renderCurrentSlide() {
   // Background
   const bg = document.getElementById('pres-bg');
   let bgUrl = '';
-  if(type === S_INTRO) bgUrl = round.bgIntro || round.bgImage || '';
-  else if(type === S_INTERSTITIAL) bgUrl = round.bgQuestion || round.bgImage || '';
+  if(type === S_INTRO) bgUrl = round.bgIntro || round.bgImage || defBg();
+  else if(type === S_INTERSTITIAL) bgUrl = round.bgQuestion || round.bgImage || defBg();
   else if(type === S_THANKYOU) bgUrl = '';  // renderThankyou handles its own bg
   else if(type === S_SLIDE) bgUrl = '';
   else if(type === S_END) bgUrl = round.bgQuestion || ''; // never fall back to bgImage (admin banner)
-  else bgUrl = round.bgQuestion || round.bgImage || '';
+  else bgUrl = round.bgQuestion || round.bgImage || defBg();
 
   if(bgUrl) {
     bg.style.backgroundImage = `url("${bgUrl}")`;
@@ -1967,7 +1968,7 @@ let ssQrVisible = true;   // Join QR shows on intro slides by default
 function startPreview() {
   // Collect all bgIntro images from pending rounds, fall back to bgQuestion
   ssImages = ((pendingRounds && pendingRounds.length) ? pendingRounds : (state.rounds || []))
-    .map(r => r.bgIntro || r.bgQuestion || r.bgImage || '')
+    .map(r => r.bgIntro || r.bgQuestion || r.bgImage || defBg())
     .filter(Boolean);
 
   if(!ssImages.length) {
@@ -2258,7 +2259,7 @@ function renderPreShow() {
 
   // Use first round's bgPlain for background
   const round0 = state.rounds[0];
-  const bgUrl = round0.bgPlain || round0.bgQuestion || round0.bgImage || '';
+  const bgUrl = round0.bgPlain || round0.bgQuestion || round0.bgImage || defBg();
   if(bgUrl) {
     bg.style.backgroundImage = `url("${bgUrl}")`;
     bg.classList.remove('no-img');
@@ -2279,7 +2280,7 @@ function renderPreShow() {
 
 function renderIntro(container, round) {
   // If there's a background image, show it fullscreen with no text overlay
-  const bgUrl = round.bgIntro || round.bgImage;
+  const bgUrl = round.bgIntro || round.bgImage || defBg();
   if(bgUrl) {
     const bg = document.getElementById('pres-bg');
     bg.style.background = ''; bg.style.backgroundColor = '';
@@ -3105,7 +3106,7 @@ function checkUrlParams() {
   // Render round cards
   const grid = document.getElementById('setup-rounds-grid');
   grid.innerHTML = rounds.map((r,i) => {
-    const thumb = r.bgIntro || r.bgImage;
+    const thumb = r.bgIntro || r.bgImage || defBg();
     const imgHtml = thumb
       ? `<img class="setup-round-card-thumb" src="${thumb}" onerror="this.outerHTML='<div class=setup-round-card-thumb-placeholder></div>'">`
       : `<div class="setup-round-card-thumb-placeholder"></div>`;
@@ -3208,7 +3209,7 @@ async function launchFromSetup() {
   const grid = document.getElementById('setup-rounds-grid');
   if(grid) {
     grid.innerHTML = state.rounds.map((r,i) => {
-      const thumb = r.bgIntro || r.bgImage;
+      const thumb = r.bgIntro || r.bgImage || defBg();
       const imgHtml = thumb
         ? `<img class="setup-round-card-thumb" src="${thumb}" onerror="this.style.display='none'">`
         : `<div class="setup-round-card-thumb-placeholder"></div>`;
@@ -3391,7 +3392,7 @@ async function tryStandaloneAutoLoad(){
   // Launch/Preview/Join buttons it already wires up.
   const grid = document.getElementById('setup-rounds-grid');
   grid.innerHTML = pendingRounds.map((r,i) => {
-    const thumb = r.bgIntro || r.bgImage;
+    const thumb = r.bgIntro || r.bgImage || defBg();
     const imgHtml = thumb
       ? `<img class="setup-round-card-thumb" src="${thumb}" onerror="this.outerHTML='<div class=setup-round-card-thumb-placeholder></div>'">`
       : `<div class="setup-round-card-thumb-placeholder"></div>`;
