@@ -1215,6 +1215,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
             <div class="field-label">Background URL (not used by the new pre-show slides)</div>
             <input class="field-input" id="s-plain-bg" placeholder="https://… image shown behind Follow Us and Rules slides"/>
           </div>
+          <div class="field" style="grid-column:1/-1">
+            <div class="field-label">Default Category Background URL</div>
+            <input class="field-input" id="s-default-bg" placeholder="https://… used for any category that doesn't have its own background"/>
+            <div class="field-hint">Shown on the trivia screen whenever a category has no custom background of its own.</div>
+          </div>
         </div>
       </div>
       <div style="height:1px;background:var(--border)"></div>
@@ -1235,14 +1240,6 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
           <div class="field"><div class="field-label">Bottom right — Heading</div><input class="field-input" id="s-imp-t" placeholder="Most Important Rule"/>
             <div class="field-label" style="margin-top:6px">Bottom right — Text</div><textarea class="field-input" id="s-imp-d" rows="2" style="resize:vertical" placeholder="Keep it fun, keep it honest, and may the best team win."></textarea></div>
         </div>
-      </div>
-      <div style="height:1px;background:var(--border)"></div>
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div class="field-label" style="font-size:11px;color:var(--gold)">Category Types & Rules</div>
-          <button class="btn btn-primary" onclick="addCategoryType()" style="font-size:9px;padding:5px 12px">+ Add Type</button>
-        </div>
-        <div id="cat-types-list" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1702,13 +1699,13 @@ function openSettings() {
   document.getElementById('s-tagline').value = appSettings.tagline||'';
   document.getElementById('s-plain-bg').value = appSettings.plainBg||'';
   document.getElementById('s-logo').value = appSettings.logo||'';
+  document.getElementById('s-default-bg').value = appSettings.defaultBg||'';
   document.getElementById('s-scan1').value = appSettings.scan1||'';
   document.getElementById('s-scan2').value = appSettings.scan2||'';
   const htp = appSettings.howToPlay || {};
   for(let i=1;i<=4;i++){ const st=(htp.steps||[])[i-1]||{}; document.getElementById('s-htp-t'+i).value = st.t||''; document.getElementById('s-htp-d'+i).value = st.d||''; }
   document.getElementById('s-ties-t').value = (htp.ties||{}).t||''; document.getElementById('s-ties-d').value = (htp.ties||{}).d||'';
   document.getElementById('s-imp-t').value = (htp.important||{}).t||''; document.getElementById('s-imp-d').value = (htp.important||{}).d||'';
-  renderCatTypesList();
   document.getElementById('settings-overlay').classList.add('show');
 }
 function closeSettings() {
@@ -1723,6 +1720,7 @@ async function saveSettings() {
     tagline: document.getElementById('s-tagline').value.trim(),
     plainBg: document.getElementById('s-plain-bg').value.trim(),
     logo: document.getElementById('s-logo').value.trim(),
+    defaultBg: document.getElementById('s-default-bg').value.trim(),
     scan1: document.getElementById('s-scan1').value.trim(),
     scan2: document.getElementById('s-scan2').value.trim(),
     howToPlay: {
@@ -1732,47 +1730,10 @@ async function saveSettings() {
     },
   };
   try {
-    await db.ref('trivia/appSettings').set(settings);
-    // Save edited category types
-    for(const t of categoryTypes) {
-      await db.ref(`trivia/categoryTypes/${t.id}`).set({
-        name: t.name||'', rules: t.rules||'', createdAt: t.createdAt||Date.now()
-      });
-    }
+    await db.ref('trivia/appSettings').update(settings);
     toast('Settings saved!');
     closeSettings();
   } catch(e) { toast('Save failed: '+e.message, true); }
-}
-function renderCatTypesList() {
-  const list = document.getElementById('cat-types-list');
-  if(!categoryTypes.length) {
-    list.innerHTML = `<div style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">No category types yet — add one above.</div>`;
-    return;
-  }
-  list.innerHTML = categoryTypes.map((t,idx) => `
-    <div style="background:rgba(255,255,255,.03);border:.5px solid var(--border2);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;gap:8px">
-      <div style="display:flex;gap:8px;align-items:center">
-        <input class="field-input" value="${t.name||''}" placeholder="Type name (e.g. Music Trivia)"
-          oninput="categoryTypes[${idx}].name=this.value" style="flex:1"/>
-        <button class="btn btn-danger" onclick="deleteCategoryType('${t.id}')" style="padding:6px 10px;font-size:10px">×</button>
-      </div>
-      <textarea class="field-input" placeholder="Rules for this category type…" rows="3"
-        style="resize:vertical;font-size:12px;line-height:1.5"
-        oninput="categoryTypes[${idx}].rules=this.value">${t.rules||''}</textarea>
-    </div>`).join('');
-}
-async function addCategoryType() {
-  const newType = {name:'New Type', rules:'', createdAt:Date.now()};
-  try {
-    const ref = await db.ref('trivia/categoryTypes').push(newType);
-    await db.ref(`trivia/categoryTypes/${ref.key}`).set(newType);
-  } catch(e) { toast('Failed: '+e.message, true); }
-}
-async function deleteCategoryType(id) {
-  if(!confirm('Delete this category type?')) return;
-  try {
-    await db.ref(`trivia/categoryTypes/${id}`).remove();
-  } catch(e) { toast('Failed: '+e.message, true); }
 }
 function renderCatTypeDropdown() {
   const sel = document.getElementById('f-cattype');
@@ -4034,71 +3995,6 @@ function toast(msg, isError) {
 }
 
 
-
-// ── SETTINGS ──────────────────────────────────
-function openSettings() {
-  document.getElementById('s-instagram').value = appSettings.instagram||'';
-  document.getElementById('s-tiktok').value = appSettings.tiktok||'';
-  document.getElementById('s-website').value = appSettings.website||'';
-  document.getElementById('s-qr').value = appSettings.qr||'';
-  document.getElementById('s-tagline').value = appSettings.tagline||'';
-  renderCatTypesList();
-  document.getElementById('settings-overlay').classList.add('show');
-}
-function closeSettings() {
-  document.getElementById('settings-overlay').classList.remove('show');
-}
-async function saveSettings() {
-  const settings = {
-    instagram: document.getElementById('s-instagram').value.trim(),
-    tiktok: document.getElementById('s-tiktok').value.trim(),
-    website: document.getElementById('s-website').value.trim(),
-    qr: document.getElementById('s-qr').value.trim(),
-    tagline: document.getElementById('s-tagline').value.trim(),
-  };
-  try {
-    await db.ref('trivia/appSettings').set(settings);
-    for(const t of categoryTypes) {
-      await db.ref('trivia/categoryTypes/'+t.id).set({name:t.name||'',rules:t.rules||'',createdAt:t.createdAt||Date.now()});
-    }
-    toast('Settings saved!');
-    closeSettings();
-  } catch(e) { toast('Save failed: '+e.message, true); }
-}
-function renderCatTypesList() {
-  const list = document.getElementById('cat-types-list');
-  if(!categoryTypes.length) {
-    list.innerHTML = '<div style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">No category types yet — add one above.</div>';
-    return;
-  }
-  list.innerHTML = categoryTypes.map((t,idx) => `
-    <div style="background:rgba(255,255,255,.03);border:.5px solid var(--border2);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;gap:8px">
-      <div style="display:flex;gap:8px;align-items:center">
-        <input class="field-input" value="${t.name||''}" placeholder="Type name" oninput="categoryTypes[${idx}].name=this.value" style="flex:1"/>
-        <button class="btn btn-danger" onclick="deleteCategoryType('${t.id}')" style="padding:6px 10px;font-size:10px">×</button>
-      </div>
-      <textarea class="field-input" placeholder="Rules for this category type…" rows="3" style="resize:vertical;font-size:12px;line-height:1.5" oninput="categoryTypes[${idx}].rules=this.value">${t.rules||''}</textarea>
-    </div>`).join('');
-}
-async function addCategoryType() {
-  const newType = {name:'New Type',rules:'',createdAt:Date.now()};
-  try {
-    const ref = await db.ref('trivia/categoryTypes').push(newType);
-    await db.ref('trivia/categoryTypes/'+ref.key).set(newType);
-  } catch(e) { toast('Failed: '+e.message, true); }
-}
-async function deleteCategoryType(id) {
-  if(!confirm('Delete this category type?')) return;
-  try { await db.ref('trivia/categoryTypes/'+id).remove(); }
-  catch(e) { toast('Failed: '+e.message, true); }
-}
-function renderCatTypeDropdown() {
-  const sel = document.getElementById('f-cattype');
-  if(!sel) return;
-  const current = sel.value;
-  sel.innerHTML = '<option value="">— None —</option>' +
-    categoryTypes.map(t=>`<option value="${t.id}" ${t.id===current?'selected':''}>${t.name}</option>`).join('');
-}
 
 // Keyboard
 document.addEventListener('keydown', e => {
