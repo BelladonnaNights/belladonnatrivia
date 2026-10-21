@@ -2710,7 +2710,7 @@ function launchTrivia() {
     if(cat.type==='canva') params.set(`r${i}_bgQuestion`, cat.canvaBgUrl||'');
     params.set(`r${i}_bg`, cat.bgImage||'');
     params.set(`r${i}_bgIntro`, cat.bgIntro||cat.bgImage||'');
-    params.set(`r${i}_bgQuestion`, cat.bgQuestion||cat.bgImage||'');
+    params.set(`r${i}_bgQuestion`, cat.bgQuestion||'');
     params.set(`r${i}_bgPlain`, cat.bgPlain||'');
     params.set(`r${i}_thankYou`, cat.thankYouUrl||'');
     params.set(`r${i}_catType`, cat.catType||'');
