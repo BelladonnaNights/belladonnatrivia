@@ -1850,11 +1850,11 @@ function renderCurrentSlide() {
   const bg = document.getElementById('pres-bg');
   let bgUrl = '';
   if(type === S_INTRO) bgUrl = round.bgIntro || round.bgImage || defBg();
-  else if(type === S_INTERSTITIAL) bgUrl = round.bgQuestion || round.bgImage || defBg();
+  else if(type === S_INTERSTITIAL) bgUrl = round.bgQuestion || defBg();
   else if(type === S_THANKYOU) bgUrl = '';  // renderThankyou handles its own bg
   else if(type === S_SLIDE) bgUrl = '';
   else if(type === S_END) bgUrl = round.bgQuestion || ''; // never fall back to bgImage (admin banner)
-  else bgUrl = round.bgQuestion || round.bgImage || defBg();
+  else bgUrl = round.bgQuestion || defBg();   // question slides: own background, else the default — never the category banner
 
   if(bgUrl) {
     bg.style.backgroundImage = `url("${bgUrl}")`;
@@ -3084,7 +3084,7 @@ function checkUrlParams() {
       canvaDesignId: p.get(`r${i}_canvaId`)||'',
       bgImage:p.get(`r${i}_bg`)||'',
       bgIntro:p.get(`r${i}_bgIntro`)||p.get(`r${i}_bg`)||'',
-      bgQuestion:p.get(`r${i}_bgQuestion`)||p.get(`r${i}_bg`)||'',
+      bgQuestion:p.get(`r${i}_bgQuestion`)||'',
       bgPlain:p.get(`r${i}_bgPlain`)||'',
       thankYouUrl:p.get(`r${i}_thankYou`)||'',
       catType:p.get(`r${i}_catType`)||'',
@@ -3382,7 +3382,7 @@ async function tryStandaloneAutoLoad(){
     sheetUrl:cat.sheetUrl||'', tabName:cat.tabName||'', vaultCatId:cat.vaultCatId||'',
     type:cat.type||'trivia', folderUrl:cat.folderUrl||'', canvaDesignId:cat.canvaDesignId||'',
     bgImage:cat.bgImage||'', bgIntro:cat.bgIntro||cat.bgImage||'',
-    bgQuestion:(cat.type==='canva'?cat.canvaBgUrl:null)||cat.bgQuestion||cat.bgImage||'',
+    bgQuestion:(cat.type==='canva'?cat.canvaBgUrl:null)||cat.bgQuestion||'',
     bgPlain:cat.bgPlain||'', thankYouUrl:cat.thankYouUrl||'', catType:cat.catType||'',
     title:cat.name||round.label||'Round', questionCount:20, showAnswers:false, twoPass:false, timed:false,
     isMainRound:false, segmentSize:5, segmentStart:0, slides:[]
