@@ -751,6 +751,28 @@ const S = {
   hidden: new Set(LS.get('hiddenCols', [])), collapsed: new Set(LS.get('collapsed', [])), sortCount: new Set(LS.get('sortCount', [])), colW: LS.get('colW', {}) || {},
   pending: 0, listening: false, unsubs: [], firstQ: true
 };
+/* What this signed-in person may do in the Vault. Everyone who already had access keeps FULL access; only accounts made as limited
+   staff (users/{uid}.staffPermissions, set on the Staff Accounts page) get the limits they were given. Firestore rules enforce the same limits. */
+const FULL_PERM = { full: true, deleteOwnQuestions: true, deleteAnyQuestion: true, createCategories: true, deleteCategories: true, archiveCategories: true, importCsv: true, bingoMode: true };
+let PERM = { ...FULL_PERM };
+function permFrom(p){
+  if (!p || p.role === 'admin' || !p.staffPermissions) return { ...FULL_PERM };
+  const v = p.staffPermissions.vault || {};
+  const o = { full: false };
+  for (const k of Object.keys(FULL_PERM)) if (k !== 'full') o[k] = v[k] === true;
+  return o;
+}
+const tsMs = t => !t ? 0 : t.toMillis ? t.toMillis() : (t.seconds ? t.seconds * 1000 : Number(t) || 0);
+// delete a question: anyone with delete-any; or the person who added it, within 24 hours
+function canDeleteQuestion(r){
+  if (PERM.deleteAnyQuestion) return true;
+  if (!PERM.deleteOwnQuestions || !S.user) return false;
+  const d = r.data || {};
+  if (d.createdBy !== S.user.uid) return false;
+  const at = tsMs(d.createdAt);
+  return !at || (Date.now() - at) < 24 * 60 * 60 * 1000;   // no timestamp yet = just created
+}
+const NO_DELETE_MSG = 'You can only delete a question you added yourself, within 24 hours. Use the ✕ to archive it instead — an admin can restore it.';
 const catRef = id => doc(db, 'triviaCategories', id);
 const qColl  = () => collection(db, 'triviaQuestions');
 
@@ -801,6 +823,12 @@ onAuthStateChanged(auth, async user => {
   await enter(user);
 });
 
+function applyPerm(){
+  $('#newCatBtn').classList.toggle('hidden', !PERM.createCategories);
+  $('#importBtn').classList.toggle('hidden', !PERM.importCsv);
+  $('#emptyImport').classList.toggle('hidden', !PERM.importCsv);
+  $('.modeSw').classList.toggle('hidden', !PERM.bingoMode);   // no Bingo side = nothing to switch between
+}
 async function enter(user){
   showGate('busy');
   let p = {};
@@ -812,10 +840,13 @@ async function enter(user){
     if (!(p.role === 'admin' || (p.adminAccess && p.adminAccess.trivia))){ showGate('denied', 'This account doesn\u2019t have Trivia Admin access, so it can\u2019t edit the question bank. Ask Belladonna to turn on Trivia under Admin Access in HQ\u2019s Accounts tab.'); return; }
   } catch (e) { showGate('denied', 'Couldn\u2019t verify your account right now. Check your connection and try again.'); return; }
   $('#userLabel').textContent = p.name || user.email || '';
-  B.canTrivia = true; B.canBingo = true;
+  S.userName = p.name || user.email || '';
+  PERM = permFrom(p);
+  B.canTrivia = true; B.canBingo = !!PERM.bingoMode;
+  applyPerm();
   showScreen('app');
   startListeners();
-  startBingo();
+  if (B.canBingo) startBingo();
   setMode((location.hash === '#bingo') ? 'bingo' : (LS.get('mode', 'trivia')));
 }
 
@@ -1391,7 +1422,7 @@ async function saveField(r, key, v){
   try {
     if (!r.persisted){
       r.persisted = true; r.tr.classList.remove('draft');
-      const data = { ...r.data, categoryId: S.curId, archived: false, order: ++S.maxOrder, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+      const data = { ...r.data, categoryId: S.curId, archived: false, order: ++S.maxOrder, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), createdBy: S.user ? S.user.uid : null, createdByName: S.userName || null };
       const batch = writeBatch(db);
       batch.set(r.ref, data);
       batch.update(catRef(S.curId), { questionCount: increment(1), updatedAt: serverTimestamp() });
@@ -1429,11 +1460,13 @@ tbody.addEventListener('click', async e => {
   if (b.dataset.act === 'rowedit'){ openQuestionEditor(r); return; }
   if (b.dataset.act === 'rowdelete'){
     if (!r.persisted){ r.tr.remove(); S.rows.delete(r.id); scheduleDupes(); updateCount(); return; }
+    if (!canDeleteQuestion(r)){ toast(NO_DELETE_MSG); return; }
     const preview = String(r.data.question || '').trim().slice(0, 140);
     if (await confirmBox({ title: 'Delete this question?', message: (preview ? '\u201c' + preview + (String(r.data.question).length > 140 ? '\u2026' : '') + '\u201d\n\n' : '') + 'It will be permanently deleted. This can\u2019t be undone.', ok: 'Delete', danger: true })) run(async () => { await deleteDoc(r.ref); });
     return;
   }
   if (b.dataset.act === 'delete'){
+    if (!canDeleteQuestion(r)){ toast(NO_DELETE_MSG); return; }
     if (await confirmBox({ title: 'Delete forever?', message: 'This question will be permanently deleted. This can\u2019t be undone.', ok: 'Delete forever', danger: true })) run(async () => { await deleteDoc(r.ref); });
   }
 });
@@ -1698,16 +1731,16 @@ $('#catMenuBtn').addEventListener('click', () => {
   const body = document.createElement('div'); body.className = 'menuList';
   body.innerHTML = `<button class="btn" data-a="export">Export this category as CSV</button>
     <button class="btn" data-a="recount">Recount questions</button>
-    <button class="btn" data-a="archive">${c.archived ? 'Restore this category' : 'Archive this category'}</button>
-    <p class="hint" style="margin:0 0 6px">Archiving hides the category from the list. Its questions are kept.</p>
-    <button class="btn danger" data-a="delete">Delete this sheet<br>and all its questions…</button>`;
+    ${PERM.archiveCategories ? `<button class="btn" data-a="archive">${c.archived ? 'Restore this category' : 'Archive this category'}</button>
+    <p class="hint" style="margin:0 0 6px">Archiving hides the category from the list. Its questions are kept.</p>` : ''}
+    ${PERM.deleteCategories ? `<button class="btn danger" data-a="delete">Delete this sheet<br>and all its questions…</button>` : ''}`;
   openModal({ title: c.name, body, actions: [{ label: 'Close', onClick: closeModal }] });
   body.addEventListener('click', async e => {
     const b = e.target.closest('[data-a]'); if (!b) return;
     if (b.dataset.a === 'export'){ closeModal(); exportCSV(); }
     if (b.dataset.a === 'recount'){ closeModal(); await run(async () => { const snap = await getCountFromServer(query(qColl(), where('categoryId', '==', c.id), where('archived', '==', false))); await updateDoc(catRef(c.id), { questionCount: snap.data().count }); toast(`Recounted: ${snap.data().count} questions`); }); }
-    if (b.dataset.a === 'archive'){ closeModal(); await run(() => updateDoc(catRef(c.id), { archived: !c.archived, updatedAt: serverTimestamp() })); }
-    if (b.dataset.a === 'delete'){ closeModal(); askDeleteCategory(c); }
+    if (b.dataset.a === 'archive' && PERM.archiveCategories){ closeModal(); await run(() => updateDoc(catRef(c.id), { archived: !c.archived, updatedAt: serverTimestamp() })); }
+    if (b.dataset.a === 'delete' && PERM.deleteCategories){ closeModal(); askDeleteCategory(c); }
   });
 });
 
@@ -2147,7 +2180,7 @@ function setMode(m){
   $('#triviaShell').classList.toggle('hidden', m !== 'trivia');
   $('#bingoShell').classList.toggle('hidden', m !== 'bingo');
   $$('.modeSw button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
-  $('#navSub').textContent = (m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank') + ' · build Oct 20 #10';
+  $('#navSub').textContent = (m === 'bingo' ? 'Bingo song lists' : 'Trivia question bank') + ' · build Oct 21 #12';
   $('#notesBtn').classList.toggle('hidden', m !== 'trivia');
   document.title = 'The Vault · Belladonna';
   if (m === 'bingo') renderBingoAll();
@@ -2213,7 +2246,9 @@ function catalogRows(){
   const lists = new Map();
   for (const e of allSongs()) lists.set(B.catMode === 'title' ? e._tk : e._k, e.lists);
   for (const x of B.catSongs){ const k = keyOf(x); if (!m.has(k)) m.set(k, { ...x, lists: lists.get(k) || (x.m && B.catMode !== 'title' ? lists.get(songKey(x.t, x.m)) : null) || [], _src: 'import' }); }
-  for (const e of allSongs()){ const k = B.catMode === 'title' ? e._tk : e._k; if (!m.has(k) && isOwned(e)) m.set(k, { ...e, lists: e.lists, _src: 'list' }); }
+  // songs you ticked by hand that the import doesn't already cover (a song the import matches — even loosely, e.g. an (E) tag or a duet credit — is the same song and counts once)
+  const inImport = e => B.cat.has(B.catMode === 'title' ? e._tk : e._k) || (e.m && B.catMode !== 'title' && B.cat.has(songKey(e.t, e.m))) || looseHit(B.catLoose, e);
+  for (const e of allSongs()){ const k = B.catMode === 'title' ? e._tk : e._k; if (!m.has(k) && isOwned(e) && !inImport(e)) m.set(k, { ...e, lists: e.lists, _src: 'list' }); }
   const out = [...m.values()].filter(r => !B.removed.has(r._k));
   return out.sort((a, b) => (a.t || '').localeCompare(b.t || '', undefined, { sensitivity: 'base', numeric: true })).map((r, i) => ({ ...r, idx: i, ro: true }));
 }
