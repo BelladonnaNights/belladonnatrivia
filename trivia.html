@@ -1856,11 +1856,14 @@ function renderCurrentSlide() {
   else if(type === S_THANKYOU) bgUrl = '';  // renderThankyou handles its own bg
   else if(type === S_SLIDE) bgUrl = '';
   else if(type === S_END) bgUrl = round.bgQuestion || ''; // never fall back to bgImage (admin banner)
+  else if(type === S_ANSWERKEY) bgUrl = '';  // answer key: plain black, no frame
   else bgUrl = round.bgQuestion || defBg();   // question slides: own background, else the default — never the category banner
 
   if(bgUrl) {
     bg.style.backgroundImage = `url("${bgUrl}")`;
     bg.classList.remove('no-img');
+  } else if(type === S_ANSWERKEY) {
+    bg.style.backgroundImage = 'none'; bg.style.backgroundColor = '#000'; bg.classList.remove('no-img');
   } else if(type !== S_SLIDE && type !== S_THANKYOU) {
     bg.style.backgroundImage = '';
     bg.classList.add('no-img');
@@ -2176,7 +2179,8 @@ function psStage(container, innerHtml) {
     let px = parseFloat(el.dataset.px) || 40, guard = 40;
     const inner = document.createElement('span'); inner.innerHTML = el.innerHTML; el.innerHTML = ''; el.appendChild(inner);
     el.style.display = 'block'; el.style.textAlign = 'center';
-    while(inner.getBoundingClientRect().width / (parseFloat(stage.style.transform.split('scale(')[1]) || 1) > 1100 && px > 18 && guard--) { px -= 2; el.style.fontSize = px + 'px'; }
+    const maxW = parseFloat(el.dataset.max) || 1100;
+    while(inner.getBoundingClientRect().width / (parseFloat(stage.style.transform.split('scale(')[1]) || 1) > maxW && px > 18 && guard--) { px -= 2; el.style.fontSize = px + 'px'; }
   });
 }
 
@@ -2191,26 +2195,26 @@ function renderNextWeek(container) {
   if(!n) {
     rows = `<div style="margin-top:150px;text-align:center;font-family:var(--cinzel);font-weight:600;font-size:54px;letter-spacing:.14em;text-transform:uppercase;color:#fff;line-height:1.5">Next week&rsquo;s schedule<br>is coming soon</div>`;
   } else {
-    const avail = 585;                                   // vertical room for the list
-    const rowH = Math.min(120, Math.floor(avail / n));
+    const avail = 610;                                   // vertical room for the list
+    const rowH = Math.min(196, Math.floor(avail / n));
     const k = rowH / 120;                                // shrink type with row height
-    const labelPx = Math.max(15, Math.round(30 * k)), namePx = Math.max(24, Math.round(58 * k));
+    const labelPx = Math.max(18, Math.round(30 * k)), namePx = Math.max(28, Math.round(58 * k));
     rows = items.map((it, i) => {
       const last = i === n - 1 && n > 1;
       let lead = n === 1 ? tag[it.kind] : (last ? 'Final Round' : 'Round ' + (i + 1));
       if(n > 1 && it.kind !== 'trivia') lead += ' · ' + tag[it.kind];
-      return `<div style="width:732px;margin:0 auto;height:${rowH}px;box-sizing:border-box;text-align:center;display:flex;flex-direction:column;justify-content:center;${i<n-1?`border-bottom:3px solid ${PS_GOLD_SOLID};`:''}">
+      return `<div style="width:1040px;margin:0 auto;height:${rowH}px;box-sizing:border-box;text-align:center;display:flex;flex-direction:column;justify-content:center;${i<n-1?`border-bottom:3px solid ${PS_GOLD_SOLID};`:''}">
         <div style="font-family:var(--cinzel);font-weight:600;font-size:${labelPx}px;letter-spacing:.3em;text-transform:uppercase;color:${PS_GOLD_SOLID};line-height:1.1;padding-left:.3em">${psEsc(lead)}</div>
-        <div class="ps-fit" data-px="${namePx}" style="width:1300px;margin-left:-284px;font-family:var(--cinzel);font-weight:600;font-size:${namePx}px;letter-spacing:.14em;text-transform:uppercase;color:#fff;line-height:1.1;white-space:nowrap;padding-left:.14em">${psEsc(it.label)}</div>
+        <div class="ps-fit" data-px="${namePx}" data-max="1460" style="width:1500px;margin-left:-230px;font-family:var(--cinzel);font-weight:600;font-size:${namePx}px;letter-spacing:.14em;text-transform:uppercase;color:#fff;line-height:1.1;white-space:nowrap;padding-left:.14em">${psEsc(it.label)}</div>
       </div>`;
     }).join('');
   }
   psStage(container, `
     <div style="position:absolute;left:0;right:0;top:8px;text-align:center">
-      <div style="font-family:'Oswald',var(--display),sans-serif;font-weight:700;font-size:102px;line-height:1.02;letter-spacing:.005em;text-transform:uppercase;${psGoldText()}">Next Week&rsquo;s Rounds</div>
+      <div style="font-family:'Oswald',var(--display),sans-serif;font-weight:700;font-size:122px;line-height:1.02;letter-spacing:.005em;text-transform:uppercase;${psGoldText()}">Next Week&rsquo;s Rounds</div>
       <div style="margin-top:10px">${psSubtitle(sub)}</div>
     </div>
-    <div style="position:absolute;left:0;right:0;top:196px">${rows}</div>
+    <div style="position:absolute;left:0;right:0;top:226px">${rows}</div>
   `);
 }
 
@@ -2294,41 +2298,45 @@ function renderIntro(container, round) {
     container.appendChild(el);
     return;
   }
-  // No intro image: logo, then the Belladonna text logo, then the category name in gold Bebas Neue —
-  // on the default background from Settings (the main render already set it).
+  // No intro image: logo, then the Belladonna text logo, then the category name in gold Bebas Neue,
+  // centered on the screen, on the default background from Settings (the main render already set it).
   const s = appSettings || {};
   const img = (u, h, mw) => u ? `<img src="${psEsc(String(u).trim())}" referrerpolicy="no-referrer" alt="" onerror="this.style.display='none'" style="display:block;height:${h};width:auto;max-width:${mw};object-fit:contain;margin:0 auto">` : '';
   const el = document.createElement('div');
   el.className = 'slide slide-intro active';
   el.style.padding = '0';
   el.innerHTML = `
-    <div style="position:absolute;left:0;right:0;top:3vh;display:flex;flex-direction:column;align-items:center;gap:1.4vh">${img(s.logo,'17vh','50vw')}${img(s.logoText,'9vh','60vw')}</div>
-    <div class="intro-name-box" style="position:absolute;left:10vw;width:80vw;top:31vh;height:62vh;display:flex;align-items:center;justify-content:center">
-      <div class="intro-name" style="font-family:'Bebas Neue',var(--display),sans-serif;font-weight:400;text-align:center;line-height:.95;letter-spacing:.03em;text-transform:uppercase;word-break:normal;overflow-wrap:normal;background:var(--gold-shine);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;">${psEsc(round.title || round.tabName || '')}</div>
+    <div class="intro-head" style="position:absolute;left:0;right:0;top:7vh;display:flex;flex-direction:column;align-items:center;gap:1.4vh">${img(s.logo,'15vh','50vw')}${img(s.logoText,'8vh','60vw')}</div>
+    <div class="intro-name-box" style="position:absolute;left:10vw;width:80vw;display:flex;align-items:center;justify-content:center">
+      <div class="intro-name" style="font-family:'Bebas Neue',var(--display),sans-serif;font-weight:400;text-align:center;line-height:.95;letter-spacing:.03em;text-transform:uppercase;word-break:normal;overflow-wrap:normal;background:var(--gold-shine);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;">${psEsc(round.introText || round.title || round.tabName || '')}</div>
     </div>`;
   container.appendChild(el);
-  const nameEl = el.querySelector('.intro-name');
+  const nameEl = el.querySelector('.intro-name'), boxEl = el.querySelector('.intro-name-box'), headEl = el.querySelector('.intro-head');
   const fit = () => {
     if(!el.isConnected) { window.removeEventListener('resize', fit); return; }
-    const box = nameEl.parentElement, boxW = window.innerWidth * 0.8, boxH = box.clientHeight;
-    if(!boxH) return;
+    const H = window.innerHeight, boxW = window.innerWidth * 0.8;
+    // the box is centered on the screen (above and below equally), kept clear of the logos at the top
+    const headBottom = headEl.getBoundingClientRect().bottom;
+    const half = Math.max(H * 0.12, H / 2 - headBottom - H * 0.02);
+    boxEl.style.top = (H / 2 - half) + 'px'; boxEl.style.height = (2 * half) + 'px';
+    const boxH = 2 * half;
     // 1) one line, as wide as 80% of the screen
-    nameEl.style.display = 'inline-block'; nameEl.style.width = 'auto'; nameEl.style.whiteSpace = 'nowrap'; nameEl.style.fontSize = '100px';
+    nameEl.style.display = 'inline-block'; nameEl.style.width = 'auto'; nameEl.style.whiteSpace = 'nowrap'; nameEl.style.textWrap = ''; nameEl.style.fontSize = '100px';
     const w100 = nameEl.getBoundingClientRect().width || 1;
-    let fs = 100 * boxW / w100;
-    nameEl.style.fontSize = fs + 'px';
+    nameEl.style.fontSize = (100 * boxW / w100) + 'px';
     if(nameEl.getBoundingClientRect().height <= boxH) return;
-    // 2) too tall on one line: wrap between words only (never inside a word) at the biggest size that fits
-    nameEl.style.display = 'block'; nameEl.style.whiteSpace = 'normal'; nameEl.style.width = boxW + 'px';
+    // 2) too tall: two lines (breaking between words only), at the biggest size that fits
+    nameEl.style.display = 'block'; nameEl.style.whiteSpace = 'normal'; nameEl.style.width = boxW + 'px'; nameEl.style.textWrap = 'balance';
     let lo = 10, hi = Math.max(boxH, 40);
     for(let i = 0; i < 16; i++) {
       const mid = (lo + hi) / 2; nameEl.style.fontSize = mid + 'px';
-      if(nameEl.getBoundingClientRect().height <= boxH && nameEl.scrollWidth <= boxW + 1) lo = mid; else hi = mid;
+      if(nameEl.getBoundingClientRect().height <= Math.min(boxH, mid * 2.05) && nameEl.scrollWidth <= boxW + 1) lo = mid; else hi = mid;
     }
     nameEl.style.fontSize = lo + 'px';
   };
   fit();
   window.addEventListener('resize', fit);
+  el.querySelectorAll('img').forEach(i => i.addEventListener('load', fit));
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
 }
 
@@ -3173,7 +3181,10 @@ async function launchFromSetup() {
     const round = state.rounds[i];
     setLoadingLabel(`Loading Round ${i+1}: ${round.title}…`);
     try {
-      if(round.type === 'canva') {
+      if(/^general\s+music(\s+trivia)?$/i.test(String(round.title||'').trim())) {
+        // General Music: just one slide saying Name This Song — the host plays the songs from a separate media player
+        round.type = 'slideshow'; round.slides = []; round.questions = []; round.nameThisSong = true; round.introText = 'Name This Song'; round.loadError = '';
+      } else if(round.type === 'canva') {
         // Fetch slides from Cloudflare Worker (cached or fresh export)
         const workerUrl = 'https://canva-slides.belladonnaaudioalchemies.workers.dev';
         const res = await fetch(`${workerUrl}/slides?designId=${round.canvaDesignId}`);
@@ -3223,6 +3234,7 @@ async function launchFromSetup() {
 
   // Only remove rounds that have absolutely nothing AND no error to report
   state.rounds = state.rounds.filter(r => {
+    if(r.nameThisSong) return true;
     if(r.type === 'slideshow' || r.type === 'canva') return (r.slides||[]).length > 0 || r.loadError;
     return r.questions.length > 0 || r.loadError;
   });
@@ -3288,6 +3300,14 @@ checkUrlParams();
 //  VENUE INTRO — pre-round screen pulling tonight's theme
 //  live from the Planner (planner.html), keyed off ?venue=
 // ═══════════════════════════════════════════════════════
+// A night's rounds in order: round 1 (themeName), round 2 (round3Name), then any extras. Round 1 is usually plain
+// General Knowledge, so the "what's on" screens show the themed rounds (2, 3 …) and leave General Knowledge out.
+function viRoundNames(g){
+  if(!g) return [];
+  const all = [g.themeName, g.round3Name].concat((g.extraCategories||[]).map(e => e && e.name)).map(n => String(n||'').trim()).filter(Boolean);
+  const themed = all.filter(n => !/^general knowledge$/i.test(n));
+  return themed.length ? themed : all;
+}
 function initVenueIntro(){
   const p = new URLSearchParams(window.location.search);
   const venueId = p.get('venue');
@@ -3310,8 +3330,9 @@ function initVenueIntro(){
 
   db.ref('trivia/planner/gigs/'+venueId+'/'+gigDate).once('value').then(snap=>{
     const gig = snap.val();
-    if(gig && gig.themeName){
-      document.getElementById('vi-theme-headline').textContent = gig.themeName.toUpperCase();
+    const viNames = viRoundNames(gig);
+    if(viNames.length){
+      document.getElementById('vi-theme-headline').innerHTML = viNames.map(n => psEsc(n.toUpperCase())).join('<br>');
       document.getElementById('vi-theme-sub').textContent = 'Scheduled for tonight in the Planner.';
     } else {
       document.getElementById('vi-theme-headline').textContent = 'NO THEME SET';
@@ -3324,13 +3345,13 @@ function initVenueIntro(){
   db.ref('trivia/planner/gigs/'+venueId).once('value').then(snap=>{
     const all = snap.val() || {};
     const upcoming = Object.entries(all)
-      .filter(([dk,g]) => dk > gigDate && g.themeName)
+      .filter(([dk,g]) => dk > gigDate && viRoundNames(g).length)
       .sort((a,b) => a[0].localeCompare(b[0]))
       .slice(0,3);
     if(upcoming.length){
       document.getElementById('vi-upcoming').innerHTML =
         '<div style="font-family:var(--cinzel);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Coming up at this venue</div>' +
-        upcoming.map(([dk,g]) => `<div style="display:flex;justify-content:space-between;padding:7px 12px;background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:8px;margin-bottom:6px;font-size:12px"><span style="color:var(--text3);font-family:var(--cinzel);letter-spacing:.05em">${dk}</span><span>${g.themeName}</span></div>`).join('');
+        upcoming.map(([dk,g]) => `<div style="display:flex;justify-content:space-between;padding:7px 12px;background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:8px;margin-bottom:6px;font-size:12px"><span style="color:var(--text3);font-family:var(--cinzel);letter-spacing:.05em">${dk}</span><span style="text-align:right">${psEsc(viRoundNames(g).join(' + '))}</span></div>`).join('');
     }
   });
 }
