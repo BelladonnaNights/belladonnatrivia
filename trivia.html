@@ -304,6 +304,8 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
 }
 #hud.show{display:flex}
+/* In fullscreen the bottom menu and the Fullscreen button aren't needed */
+:fullscreen #hud,:fullscreen #fullscreen-btn,:-webkit-full-screen #hud,:-webkit-full-screen #fullscreen-btn{display:none!important}
 .hud-item{color:var(--text3);display:flex;align-items:center;gap:5px}
 .hud-item span{color:var(--text)}
 .hud-sep{width:1px;height:12px;background:var(--border2)}
