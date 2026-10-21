@@ -2011,16 +2011,30 @@ function fitTextBanners() {
   document.querySelectorAll('.txt-banner').forEach(function(b) {
     var t = b.querySelector('.txt-banner-t'); if (!t || !b.clientWidth) return;
     var cs = getComputedStyle(b), aw = b.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), ah = b.clientHeight * 0.8;
-    t.style.fontSize = '100px'; var r = t.getBoundingClientRect(); if (!r.width) return;
-    var fs = Math.max(8, Math.min(100 * aw / r.width, 100 * ah / r.height, 150));
+    // one line: the biggest size that fits across and up
+    t.style.whiteSpace = 'nowrap'; t.style.width = ''; t.style.textWrap = ''; t.style.textAlign = ''; t.style.fontSize = '100px';
+    var r = t.getBoundingClientRect(); if (!r.width) return;
+    var one = Math.max(8, Math.min(100 * aw / r.width, 100 * ah / r.height, 150));
+    // two lines (long titles only break between words): the biggest size that fits in two lines
+    t.style.whiteSpace = 'normal'; t.style.width = aw + 'px'; t.style.textWrap = 'balance'; t.style.textAlign = 'center';
+    var lo = 8, hi = Math.min(150, ah);
+    for (var i = 0; i < 14; i++) {
+      var mid = (lo + hi) / 2; t.style.fontSize = mid + 'px';
+      if (t.getBoundingClientRect().height <= Math.min(ah, mid * 2.05) && t.scrollWidth <= aw + 1) lo = mid; else hi = mid;
+    }
+    var two = lo;
     var key = b.closest('.cat-grid') || b.closest('.modal') || document.body;
     if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push({ t: t, fs: fs });
+    groups.get(key).push({ t: t, one: one, fs: Math.max(one, two), aw: aw });
   });
-  // every title fits its own banner first; then they all drop to the smallest size so they match
+  // every title fits its own banner first (on two lines if that lets it be bigger); then they all use the smallest size so they match
   groups.forEach(function(list) {
     var min = Math.min.apply(null, list.map(function(x) { return x.fs; }));
-    list.forEach(function(x) { x.t.style.fontSize = min + 'px'; });
+    list.forEach(function(x) {
+      if (min <= x.one) { x.t.style.whiteSpace = 'nowrap'; x.t.style.width = ''; x.t.style.textWrap = ''; }
+      else { x.t.style.whiteSpace = 'normal'; x.t.style.width = x.aw + 'px'; x.t.style.textWrap = 'balance'; x.t.style.textAlign = 'center'; }
+      x.t.style.fontSize = min + 'px';
+    });
   });
 }
 function syncBannerToggle() { document.querySelectorAll('.banner-toggle-btn').forEach(function(b) { b.classList.toggle('banner-on', TEXT_BANNERS); b.textContent = TEXT_BANNERS ? 'Banners: ' + BANNER_STYLES[BANNER_MODE].label + ' ▾' : 'Banners: Images ▾'; }); }
@@ -2085,7 +2099,7 @@ function renderLibrary() {
         + (isPairsOpen ? 'Hide Pairs &#9652;' : 'See Pairs (' + pairedCats.length + ') &#9662;') + '</button>'
       : '';
     const pairsDropdown   = (isThemeSet && isPairsOpen)
-      ? '<div class="cat-pairs-dropdown">' + (pairedCats.length
+      ? '<div class="cat-pairs-dropdown" onclick="event.stopPropagation()">' + (pairedCats.length
           ? pairedCats.map(pc => {
               const thumb = pc.bgImage
                 ? '<img class="cat-pair-thumb" src="' + pc.bgImage + '" onerror="this.outerHTML=\'<div class=cat-pair-thumb-placeholder>' + (pc.name||'') + '</div>\'">'
@@ -2097,7 +2111,7 @@ function renderLibrary() {
       : '';
     const editBtn        = adminMode ? '<button class="cat-action-btn cat-action-edit" onclick="event.stopPropagation();openModal(\'' + cat.id + '\')">&#9998;</button>' : '';
     const delBtn          = adminMode ? '<button class="cat-action-btn cat-action-del" onclick="event.stopPropagation();confirmDelete(\'' + cat.id + '\')">&#215;</button>' : '';
-    return '<div class="cat-card" draggable="true" data-id="' + cat.id + '"'
+    return '<div class="cat-card" draggable="true" data-id="' + cat.id + '" onclick="openCatInfo(\'' + cat.id + '\')" style="cursor:pointer"'
       + ' ondragstart="onCardDragStart(event,\'' + cat.id + '\')"'
       + ' ondragend="onCardDragEnd(event)"'
       + ' ondragover="onCardDragOver(event,\'' + cat.id + '\')"'
@@ -2105,9 +2119,8 @@ function renderLibrary() {
       + ' ondrop="onCardDrop(event,\'' + cat.id + '\')">'
       + bannerHtml
       + '<div class="cat-body">'
-      + (cat.altName ? '<div class="cat-alt">' + cat.altName + '</div><div class="cat-title cat-title-indent">' + (cat.name||'Untitled') + '</div>' : '<div class="cat-title">' + (cat.name||'Untitled') + '</div>')
-      + aboutLine(cat)
-      + '<div class="cat-meta">' + themeSetBadge + musicBadge + vaultBadge + slideshowBadge + canvaBadge + seePairsBtn + '</div>'
+      + (cat.altName ? '<div class="cat-alt">' + cat.altName + '</div>' + (TEXT_BANNERS ? '' : '<div class="cat-title cat-title-indent">' + (cat.name||'Untitled') + '</div>') : (TEXT_BANNERS ? '' : '<div class="cat-title">' + (cat.name||'Untitled') + '</div>'))
+      + '<div class="cat-meta">' + themeSetBadge + musicBadge + slideshowBadge + canvaBadge + seePairsBtn + '</div>'
       + pairsDropdown
       + '</div>'
       + '<div class="cat-actions">' + editBtn + delBtn + '</div>'
@@ -2117,6 +2130,33 @@ function renderLibrary() {
   }).join('');
   syncBannerToggle(); fitTextBanners();
 }
+
+// Click a category card to see its description and whether it's linked to a Question Vault sheet
+function openCatInfo(id){
+  const cat = categories.find(c => c.id === id); if(!cat) return;
+  const esc2 = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const desc = String((cat.venueMenu && cat.venueMenu.description) || '').trim();
+  const _vOk = (cat.type === 'trivia' || cat.type === 'music' || !cat.type);
+  let vault;
+  if(!_vOk || noVaultTier(cat)) vault = '<span style="color:var(--text3)">This kind of category doesn\u2019t use a Vault sheet.</span>';
+  else {
+    const v = cat.vaultCatId ? vaultCats.find(x => x.id === cat.vaultCatId) : null;
+    vault = v ? '<span style="color:#2ecc71">\u2713 Linked to the Vault sheet \u201c' + esc2(v.name || v.title || '') + '\u201d</span>'
+              : '<span style="color:#e08a4a">\u26a0 Not linked to a Vault sheet \u2014 edit the category to link or create one</span>';
+  }
+  const old = document.getElementById('cat-info-overlay'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.className = 'overlay show'; ov.id = 'cat-info-overlay';
+  ov.onclick = e => { if(e.target === ov) ov.remove(); };
+  ov.innerHTML = '<div class="modal" style="max-width:460px"><div class="modal-header"><div class="modal-title">' + esc2(cat.name || 'Untitled') + '</div><button class="modal-close" onclick="document.getElementById(\'cat-info-overlay\').remove()">\u00d7</button></div>'
+    + '<div class="modal-body" style="gap:.9rem">'
+    + (cat.altName ? '<div style="font-family:var(--serif);font-style:italic;color:var(--text3)">' + esc2(cat.altName) + '</div>' : '')
+    + '<div><div class="field-label">Description</div><div style="font-size:14px;line-height:1.55;white-space:pre-wrap;color:' + (desc ? 'var(--text)' : 'var(--text3)') + '">' + (desc ? esc2(desc) : 'No description yet.') + '</div></div>'
+    + '<div><div class="field-label">Question Vault</div><div style="font-size:13px">' + vault + '</div></div>'
+    + '</div><div class="modal-footer"><button class="btn btn-ghost" onclick="document.getElementById(\'cat-info-overlay\').remove()">Close</button></div></div>';
+  document.body.appendChild(ov);
+}
+document.addEventListener('keydown', e => { if(e.key === 'Escape'){ const o = document.getElementById('cat-info-overlay'); if(o) o.remove(); } });
 
 // First sentence of the category's description (edited in the Question Vault or in the edit box here).
 function aboutFirstSentence(t){
