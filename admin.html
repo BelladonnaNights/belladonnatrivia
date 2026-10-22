@@ -719,6 +719,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <button class="nav-btn nav-btn-ghost" onclick="openAdminLogin()" id="admin-gear-btn" title="Admin">
       ⚙ Admin
     </button>
+    <button class="nav-btn nav-btn-ghost" id="fs-toggle-btn" onclick="toggleAdminFullscreen()" title="Fullscreen this page">⛶ Fullscreen</button>
     <button class="nav-btn nav-btn-ghost" id="theme-toggle-btn" onclick="toggleTheme()" title="Switch between dark and light mode">☀ Light</button>
     <button class="nav-btn nav-btn-ghost banner-toggle-btn" onclick="openBannerMenu(this,event)" title="Switch between the category banner images and a plain text banner showing just the category name">Banners: Gold on black ▾</button>
     <button class="nav-btn nav-btn-ghost" onclick="openChangePassword()" id="admin-pw-btn" style="display:none;font-size:9px">
@@ -873,6 +874,10 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     </div>
   </div>
   <!-- Answer ref banner -->
+  <div id="hb-grading-tabs" style="display:flex;gap:6px;padding:8px 18px;border-bottom:1px solid var(--border);flex-shrink:0">
+    <button class="hb-nav-btn" id="hb-gtab-all" onclick="setGradingTab('all')">All questions</button>
+    <button class="hb-nav-btn" id="hb-gtab-todo" onclick="setGradingTab('todo')">Needs grading <span id="hb-gtab-todo-n"></span></button>
+  </div>
   <div id="hb-grading-answer-ref" style="display:none;padding:10px 18px;border-bottom:1px solid var(--border);background:rgba(46,204,113,.06);flex-shrink:0">
     <div style="font-family:var(--cinzel);font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--green);margin-bottom:3px">Correct Answer</div>
     <div id="hb-grading-correct-text" style="font-family:var(--serif);font-size:15px;color:var(--text);font-style:italic"></div>
@@ -3124,6 +3129,9 @@ function normalizeForGrade(s) {
 // Per-question grading state
 let gradingQuestions = []; // array of {qId, qText, correctAnswer, answers: [{teamId, teamName, answer, elapsed, status}]}
 let gradingIndex = 0;      // current question index
+let gradingTab = 'all';    // 'all' | 'todo' (only questions with answers still waiting on a grade)
+function qSortKey(id) { const m = /^q_(\d+)_(\d+)/.exec(id || ''); return m ? [+m[1], +m[2]] : [9999, 0]; }
+function gradingNeedsWork(q) { return q.answers.some(a => !effectiveStatus(q.qId, a)); }
 let pendingScoresMap = {}; // teamId -> pts to add (held until Give Scores)
 
 function buildGradingQuestions() {
@@ -3143,12 +3151,30 @@ function buildGradingQuestions() {
       answers: ansEntries.map(([teamId, a]) => ({teamId, ...a})),
     });
   }
+  gradingQuestions.sort((a, b) => { const x = qSortKey(a.qId), y = qSortKey(b.qId); return x[0] - y[0] || x[1] - y[1]; });
+  const todoN = gradingQuestions.filter(gradingNeedsWork).length;
+  const nEl = document.getElementById('hb-gtab-todo-n'); if(nEl) nEl.textContent = todoN ? '(' + todoN + ')' : '';
+  const tA = document.getElementById('hb-gtab-all'), tT = document.getElementById('hb-gtab-todo');
+  if(tA) tA.style.borderColor = gradingTab === 'all' ? 'var(--gold-glow)' : '';
+  if(tT) tT.style.borderColor = gradingTab === 'todo' ? 'var(--gold-glow)' : '';
+  if(tA) tA.style.color = gradingTab === 'all' ? 'var(--gold)' : '';
+  if(tT) tT.style.color = gradingTab === 'todo' ? 'var(--gold)' : '';
+  if(gradingTab === 'todo') gradingQuestions = gradingQuestions.filter(gradingNeedsWork);
+}
+function setGradingTab(t) {
+  gradingTab = t; gradingIndex = 0;
+  if(t === 'todo') { buildGradingQuestions(); }
+  renderGradingQuestion();
 }
 
 function openGradingPanel() {
+  gradingTab = 'all';
   buildGradingQuestions();
   if(!gradingQuestions.length) { toast('No open answers to grade yet'); return; }
-  gradingIndex = 0;
+  // open on the question we're on right now
+  gradingTab = 'all'; buildGradingQuestions();
+  const at = gradingQuestions.findIndex(q => q.qId === currentQId);
+  gradingIndex = at >= 0 ? at : 0;
   document.getElementById('hb-grading-popup').classList.add('show');
   renderGradingQuestion();
 }
@@ -3173,7 +3199,7 @@ function renderGradingQuestion() {
 
   buildGradingQuestions(); // refresh
   if(!gradingQuestions.length) {
-    body.innerHTML = '<div style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);text-align:center;padding:2rem">No open answers to grade.</div>';
+    body.innerHTML = '<div style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);text-align:center;padding:2rem">' + (gradingTab === 'todo' ? 'Nothing left to grade ✓' : 'No open answers to grade.') + '</div>';
     if(answerRef) answerRef.style.display = 'none';
     if(footer) footer.style.display = 'none';
     return;
@@ -3408,6 +3434,18 @@ function renderScreenMirror() {
   fitScreenFrame();
 }
 
+// ── Fullscreen (host board while playing) ──
+function toggleAdminFullscreen() {
+  try {
+    if(document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen();
+  } catch(e) { toast('Fullscreen not available here — try F11', true); }
+}
+document.addEventListener('fullscreenchange', () => {
+  const b = document.getElementById('fs-toggle-btn');
+  if(b) b.textContent = document.fullscreenElement ? '⛶ Exit Fullscreen' : '⛶ Fullscreen';
+});
+
 // ── Dark / light mode ──
 function syncThemeBtn() {
   const b = document.getElementById('theme-toggle-btn');
@@ -3540,7 +3578,9 @@ async function adjustPoints(teamId, delta) {
 
 function getAdjDelta(teamId) {
   const input = document.getElementById('adj-input-' + teamId);
-  return input ? parseInt(input.value) || 0 : 0;
+  if(!input || input.value === '') return 1;   // default: 1 point
+  const v = parseInt(input.value);
+  return isNaN(v) ? 1 : v;
 }
 
 // ── Firebase listeners ───────────────────────────────────────────────
@@ -3712,6 +3752,7 @@ function attachHbListeners() {
   updateSubmitCount();
   const el = document.getElementById('hb-scores');
   if(!el) return;
+  const keepAdj = {}; el.querySelectorAll('.hb-adj-input').forEach(i => { keepAdj[i.id] = i.value; });
   el.innerHTML = sorted.length
     ? sorted.map((t,i) =>
         '<div class="hb-score-row" style="flex-direction:column;align-items:stretch;gap:4px">'
@@ -3721,7 +3762,7 @@ function attachHbListeners() {
         + '<div class="hb-score-pts">' + t.score + '</div>'
         + '</div>'
         + '<div class="hb-adj-row">'
-        + '<input class="hb-adj-input" id="adj-input-' + t.id + '" type="number" placeholder="pts" title="Points to add or subtract"/>'
+        + '<input class="hb-adj-input" id="adj-input-' + t.id + '" type="number" value="' + (keepAdj['adj-input-' + t.id] != null ? keepAdj['adj-input-' + t.id] : 1) + '" placeholder="pts" title="Points to add or subtract (default 1)"/>'
         + '<button class="hb-adj-btn" onclick="adjustPoints(\'' + t.id + '\', getAdjDelta(\'' + t.id + '\'))">Give</button>'
         + '<button class="hb-adj-btn hb-adj-take" onclick="adjustPoints(\'' + t.id + '\', -getAdjDelta(\'' + t.id + '\'))">Take</button>'
         + '</div>'
