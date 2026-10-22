@@ -262,6 +262,14 @@ html,body{
   flex-shrink:0;
 }
 
+.my-ans-btn{background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.35);color:var(--gold);font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:7px 10px;border-radius:8px;cursor:pointer;margin-right:8px}
+.wait-score-delta{font-size:12px;color:var(--green);margin-top:4px;min-height:14px}
+.myq-card{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.myq-card .q-text{font-size:15px}
+.myq-opt{padding:10px;border:1px solid var(--border2);border-radius:10px;background:rgba(255,255,255,.05);color:var(--text);font-family:var(--font);font-size:14px;cursor:pointer;text-align:left}
+.myq-opt.sel{background:var(--gold);color:#111;border-color:var(--gold)}
+.myq-opt:disabled{opacity:.5}
+.myq-note{font-size:11px;color:var(--text3);font-family:var(--serif);font-style:italic}
 /* ── LEADERBOARD SCREEN ── */
 #lb-screen{
   background:var(--bg);gap:1rem;
@@ -314,14 +322,16 @@ html,body{
   <div class="wait-score-wrap">
     <div class="wait-score-label">Your Score</div>
     <div class="wait-score-val" id="wait-score">0</div>
+    <div class="wait-score-delta" id="wait-score-delta"></div>
   </div>
+  <button class="my-ans-btn" style="margin:1.25rem 0 0" onclick="openMyQ()">My Answers</button>
 </div>
 
 <!-- ── QUESTION ── -->
 <div class="screen hidden" id="q-screen">
   <div class="q-top">
     <div class="q-team-name" id="q-team-name"></div>
-    <div class="q-score-badge" id="q-score-badge">0 pts</div>
+    <div style="display:flex;align-items:center"><button class="my-ans-btn" onclick="openMyQ()">My Answers</button><div class="q-score-badge" id="q-score-badge">0 pts</div></div>
   </div>
   <div class="q-progress-bar-wrap">
     <div class="q-progress-bar" id="q-progress-bar" style="width:100%"></div>
@@ -331,6 +341,15 @@ html,body{
   </div>
   <div class="q-body" id="q-body"></div>
   <div class="locked-bar" id="locked-bar" style="display:none">Answers closed</div>
+</div>
+
+<!-- ── MY ANSWERS (view / edit) ── -->
+<div class="screen hidden" id="myq-screen" style="justify-content:flex-start;padding-top:1.25rem;overflow-y:auto">
+  <div style="width:100%;max-width:480px;display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+    <div style="font-family:var(--display);font-size:30px;letter-spacing:.06em;color:var(--gold)">MY ANSWERS</div>
+    <button class="reg-btn" style="width:auto;padding:10px 16px;font-size:11px" onclick="closeMyQ()">← Back to game</button>
+  </div>
+  <div id="myq-list" style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:10px;padding-bottom:3rem"></div>
 </div>
 
 <!-- ── LEADERBOARD ── -->
@@ -377,9 +396,117 @@ let inTwoPass = false; // track if current round is two-pass
 // ═══════════════════════════════════════════════
 //  SCREENS
 // ═══════════════════════════════════════════════
+let myqOpen = false, _afterMyq = null, _beforeMyq = 'q-screen';
 function showScreen(id) {
+  if(myqOpen && id !== 'myq-screen') { _afterMyq = id; return; }   // don't yank them out of the editor
   document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
+}
+
+// ═══════════════════════════════════════════════
+//  SCORE — only revealed when a new round starts (never live)
+// ═══════════════════════════════════════════════
+let shownScore = 0, prevShown = 0;
+function scoreKey() { return 'bella_score_' + (GID || '') + '_' + (mySessionId || ''); }
+function trackRoundScore(game) {
+  let st = null;
+  try { st = JSON.parse(localStorage.getItem(scoreKey()) || 'null'); } catch(e) {}
+  const q = game.status === 'question' ? game.currentQuestion : null;
+  if(q && typeof q.roundIndex === 'number') {
+    if(!st || q.roundIndex > st.round) {          // a new round just started: reveal the total so far
+      st = { round: q.roundIndex, shown: myScore, prev: st ? st.shown : 0 };
+      try { localStorage.setItem(scoreKey(), JSON.stringify(st)); } catch(e) {}
+    }
+  }
+  if(st) { shownScore = st.shown; prevShown = st.prev; }
+}
+function renderScore() {
+  const w = document.getElementById('wait-score'); if(w) w.textContent = shownScore;
+  const b = document.getElementById('q-score-badge'); if(b) b.textContent = shownScore + ' pts';
+  const d = document.getElementById('wait-score-delta');
+  if(d) d.textContent = (shownScore - prevShown) > 0 ? '+' + (shownScore - prevShown) + ' last round' : '';
+}
+
+// ═══════════════════════════════════════════════
+//  MY ANSWERS — see and edit every question this game
+// ═══════════════════════════════════════════════
+let seenQs = {};
+function seenKey() { return 'bella_seenq_' + (GID || '') + '_' + (mySessionId || ''); }
+try { seenQs = JSON.parse(localStorage.getItem(seenKey()) || '{}') || {}; } catch(e) { seenQs = {}; }
+function rememberQuestion(q) {
+  if(!q || !q.id) return;
+  seenQs[q.id] = { id:q.id, index:q.index, text:q.text, type:q.type, choices:q.choices||null, timed:!!q.timed, roundIndex:q.roundIndex||0 };
+  try { localStorage.setItem(seenKey(), JSON.stringify(seenQs)); } catch(e) {}
+}
+function openMyQ() {
+  _beforeMyq = Array.from(document.querySelectorAll('.screen')).find(s => !s.classList.contains('hidden'))?.id || 'q-screen';
+  myqOpen = true; _afterMyq = null;
+  document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+  document.getElementById('myq-screen').classList.remove('hidden');
+  renderMyQ();
+}
+function closeMyQ() {
+  myqOpen = false;
+  showScreen(_afterMyq || _beforeMyq || 'q-screen');
+}
+async function renderMyQ() {
+  const list = document.getElementById('myq-list');
+  const qs = Object.values(seenQs).sort((a,b) => (a.roundIndex-b.roundIndex) || (a.index-b.index));
+  if(!qs.length) { list.innerHTML = '<div class="myq-note" style="text-align:center;padding:2rem">No questions yet.</div>'; return; }
+  // pull what we've actually saved (and whether the host already graded it)
+  const saved = {};
+  await Promise.all(qs.map(async q => {
+    try { saved[q.id] = (await gref('answers/' + q.id + '/' + teamId).once('value')).val(); } catch(e) {}
+    if(!saved[q.id]) { const m = myAnswers.find(a => a.qId === q.id); if(m) saved[q.id] = { answer: m.answer, status: 'pending' }; }
+  }));
+  list.innerHTML = '';
+  qs.forEach(q => {
+    const cur = saved[q.id], graded = cur && cur.status && cur.status !== 'pending';
+    const card = document.createElement('div'); card.className = 'myq-card';
+    const n = document.createElement('div'); n.className = 'q-num'; n.textContent = 'Round ' + (q.roundIndex+1) + ' · Question ' + (q.index+1);
+    const t = document.createElement('div'); t.className = 'q-text'; t.textContent = q.text;
+    card.appendChild(n); card.appendChild(t);
+    const locked = graded || q.timed;
+    const note = document.createElement('div'); note.className = 'myq-note';
+    const save = async (val, btnEls) => {
+      const ok = await editAnswer(q, val);
+      note.textContent = ok ? 'Saved ✓' : 'Can\u2019t change this one anymore';
+      if(ok && btnEls) btnEls.forEach(b => b.classList.toggle('sel', b.dataset.v === val));
+    };
+    if(q.type === 'mc' || q.type === 'tf') {
+      const opts = q.type === 'tf' ? ['True','False'] : (q.choices || []);
+      const btns = [];
+      opts.forEach(o => {
+        const b = document.createElement('button'); b.className = 'myq-opt' + (cur && cur.answer === o ? ' sel' : '');
+        b.textContent = o; b.dataset.v = o; b.disabled = !!locked;
+        b.onclick = () => save(o, btns);
+        btns.push(b); card.appendChild(b);
+      });
+    } else {
+      const inp = document.createElement('input'); inp.className = 'open-input'; inp.value = (cur && cur.answer) || ''; inp.placeholder = 'Type your answer…'; inp.disabled = !!locked;
+      const sb = document.createElement('button'); sb.className = 'open-submit'; sb.textContent = 'Save answer'; sb.disabled = !!locked;
+      sb.onclick = () => { const v = inp.value.trim(); if(v) save(v); };
+      card.appendChild(inp); card.appendChild(sb);
+    }
+    if(locked) note.textContent = graded ? 'Already graded' : 'Timed question — locked';
+    card.appendChild(note);
+    list.appendChild(card);
+  });
+}
+async function editAnswer(q, value) {
+  try {
+    const cur = (await gref('answers/' + q.id + '/' + teamId).once('value')).val();
+    if(cur && cur.status && cur.status !== 'pending') return false;
+  } catch(e) {}
+  const i = myAnswers.findIndex(a => a.qId === q.id);
+  const entry = { qId:q.id, index:q.index, text:q.text, answer:value, elapsed:null };
+  if(i >= 0) myAnswers[i] = entry; else myAnswers.push(entry);
+  let correctAnswer = '', questionText = q.text || '';
+  try { const m = (await gref('questionMeta/' + q.id).once('value')).val(); if(m) { correctAnswer = m.correctAnswer || ''; questionText = m.questionText || questionText; } } catch(e) {}
+  try {
+    await gref('answers/' + q.id + '/' + teamId).set({ answer:value, timestamp:Date.now(), elapsed:null, teamName, questionText, correctAnswer, type:q.type||'open', status:'pending' });
+    return true;
+  } catch(e) { return false; }
 }
 
 // ═══════════════════════════════════════════════
@@ -452,7 +579,7 @@ async function register() {
 // ═══════════════════════════════════════════════
 function showWait() {
   document.getElementById('wait-name').textContent = teamName;
-  document.getElementById('wait-score').textContent = myScore;
+  renderScore();
   showScreen('wait-screen');
 }
 
@@ -507,11 +634,10 @@ function handleGame(game) {
     }
 
     // Update score from Firebase (source of truth)
-    if(game.teams && game.teams[teamId]) {
-      myScore = game.teams[teamId].score || 0;
-      document.getElementById('wait-score').textContent = myScore;
-      document.getElementById('q-score-badge').textContent = myScore + ' pts';
-    }
+    if(game.teams && game.teams[teamId]) myScore = game.teams[teamId].score || 0;
+    trackRoundScore(game);
+    renderScore();
+    if(game.status === 'question' && game.currentQuestion) rememberQuestion(game.currentQuestion);
 
     // Results visible — show per-answer results with scores
     if(game.resultsVisible && game.results && game.results[teamId]) {
@@ -560,7 +686,7 @@ function handleGame(game) {
 function renderQuestion(q) {
   showScreen('q-screen');
   document.getElementById('q-team-name').textContent = teamName;
-  document.getElementById('q-score-badge').textContent = myScore + ' pts';
+  renderScore();
   document.getElementById('locked-bar').style.display = 'none';
 
   const body = document.getElementById('q-body');
@@ -805,8 +931,8 @@ function showResults(results, teams) {
     .map(([id,t]) => ({id, score:t.score||0}))
     .sort((a,b) => b.score-a.score);
   const rank = sorted.findIndex(t => t.id === teamId) + 1;
-  if(scoreEl) scoreEl.textContent = myScore + ' pts';
-  if(rankEl && sorted.length) rankEl.textContent = '#' + rank + ' of ' + sorted.length;
+  if(scoreEl) scoreEl.textContent = '';   // totals only show once the next round starts
+  if(rankEl) rankEl.textContent = '';
 
   list.innerHTML = results.map(r => {
     const isCorrect = r.status === 'correct';
