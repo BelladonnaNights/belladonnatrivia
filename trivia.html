@@ -138,7 +138,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
 
 /* QUESTION SLIDE */
-.slide-question{justify-content:flex-start;padding:1.2rem 3.5rem 4.5rem 3.5rem;overflow:hidden}
+.slide-question{justify-content:flex-start;padding:4.5rem 7rem 4.5rem 7rem;overflow:hidden}
 .q-header{display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:.5rem;flex-shrink:0}
 .q-num-badge{
   font-family:var(--display);font-size:clamp(50px,7vw,80px);
@@ -372,6 +372,17 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 #ss-join-qr-code{width:100%;aspect-ratio:1/1;line-height:0;display:flex;align-items:center;justify-content:center}
 #ss-join-qr-code img,#ss-join-qr-code canvas{width:100% !important;height:100% !important}
 
+/* JOIN QR on the playing screen — small, bottom-left, kept inside the border */
+#game-join-qr{
+  position:fixed;left:4.5rem;bottom:4rem;z-index:830;display:none;
+  flex-direction:column;align-items:center;gap:5px;
+  background:#fff;border-radius:10px;padding:8px;pointer-events:none;
+  box-shadow:0 4px 18px rgba(0,0,0,.5);
+}
+#game-join-qr-label{font-family:var(--cinzel);font-weight:700;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#111}
+#game-join-qr-code{width:104px;height:104px;line-height:0}
+#game-join-qr-code img,#game-join-qr-code canvas{width:104px !important;height:104px !important}
+
 /* TOAST */
 #toast{
   position:fixed;top:1.5rem;left:50%;transform:translateX(-50%) translateY(-10px);
@@ -561,7 +572,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
     <canvas id="qr-canvas" style="border-radius:8px;background:#fff;padding:8px;display:block;margin:0 auto"></canvas>
   </div>
   <button id="setup-return-btn" onclick="returnToPresentation()" style="display:none;width:100%;max-width:420px;margin-top:8px;padding:14px;font-family:var(--cinzel);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);cursor:pointer">↩ Return to Presentation</button>
-  <div class="setup-hint">Space to reveal · → next · ← back · A answer key · Esc exit</div>
+  <div class="setup-hint">Space to reveal · → next · ← back · Esc exit</div>
 </div>
 
 <!-- ══════════════════════════════════════════
@@ -629,6 +640,8 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
     <button class="np-close" onclick="closeNotePopup()">Close</button>
   </div>
 </div>
+
+<div id="game-join-qr"><div id="game-join-qr-label">Join the Game</div><div id="game-join-qr-code"></div></div>
 
 <div id="toast"></div>
 
@@ -968,6 +981,8 @@ function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
     roundNum: (extra && extra.roundNum) || null, roundTotal: (extra && extra.roundTotal) || null,
     qNow: (extra && extra.qNow) || null, qTotal: (extra && extra.qTotal) || null,
     canFeedback: !!(extra && extra.canFeedback),
+    keyAnswer: (extra && extra.keyAnswer) || '',
+    answerKey: (extra && extra.answerKey) || null,
     whisperQ: (extra && extra.whisperQ) || '', whisperA: (extra && extra.whisperA) || '',
     ts: Date.now(),
   });
@@ -1537,7 +1552,7 @@ function slideCount() {
   if(round.twoPass) {
     return 1 + n + 1 + n + (hasThankyou ? 1 : 0) + 1;
   }
-  const hasAnswerKey = !round.showAnswers && !round.twoPass;
+  const hasAnswerKey = !round.showAnswers && !round.twoPass; // Trade Papers slide (key is on the host board)
   return 1 + n + (hasAnswerKey ? 1 : 0) + (hasThankyou ? 1 : 0) + 1;
 }
 
@@ -1856,7 +1871,7 @@ function renderCurrentSlide() {
   else if(type === S_THANKYOU) bgUrl = '';  // renderThankyou handles its own bg
   else if(type === S_SLIDE) bgUrl = '';
   else if(type === S_END) bgUrl = round.bgQuestion || ''; // never fall back to bgImage (admin banner)
-  else if(type === S_ANSWERKEY) bgUrl = '';  // answer key: plain black, no frame
+  else if(type === S_ANSWERKEY) bgUrl = round.bgQuestion || defBg();  // Trade Papers: same background as the questions
   else bgUrl = round.bgQuestion || defBg();   // question slides: own background, else the default — never the category banner
 
   if(bgUrl) {
@@ -1930,17 +1945,26 @@ function renderCurrentSlide() {
     } else if(type === S_INTERSTITIAL) {
       label = 'Interstitial'; text = 'Pass 1 Complete';
     } else if(type === S_ANSWERKEY) {
-      label = 'Answer Key'; text = round.tabName || round.title || '';
+      label = 'Trade Papers'; text = round.tabName || round.title || '';
     } else if(type === S_THANKYOU) {
       label = 'Thank You'; text = 'Round complete';
     } else if(type === S_END) {
       label = 'End'; text = 'Game over';
     }
+    let akData = null;
+    if(type === S_ANSWERKEY && !round.twoPass && !round.showAnswers && round.type !== 'slideshow' && round.type !== 'canva' && (round.questions||[]).length) {
+      const keyLine = q => {
+        if(round.type === 'music') return q.question + ' — ' + q.answer;
+        if(q.type === 'mc' && q._choices) { const c = q._choices.find(x => x.correct); if(c) return c.label + ' — ' + q.answer; }
+        return q.answer;
+      };
+      akData = { title: round.title || round.tabName || 'Answer Key', items: round.questions.map(keyLine) };
+    }
     const _n = round.type === 'slideshow' ? (round.slides||[]).length : (round.questions||[]).length;
     let _qNow = null;
     if(type === S_QUESTION) _qNow = questionInfo().qIndex + 1; else if(type === S_SLIDE) _qNow = state.slideIndex;
     pushSlideState(label, text, qNum, previewBg, answer, {
-      hasAudio, whisperQ, whisperA, roundNum: state.roundIndex + 1, roundTotal: state.rounds.length,
+      hasAudio, whisperQ, whisperA, answerKey: akData, keyAnswer: (type === S_QUESTION && round.questions[questionInfo().qIndex]) ? round.questions[questionInfo().qIndex].answer : '', roundNum: state.roundIndex + 1, roundTotal: state.rounds.length,
       qNow: _qNow, qTotal: _qNow ? _n : null,
       canFeedback: type === S_QUESTION && round.type !== 'music' && round.type !== 'slideshow' && round.type !== 'canva',
     });
@@ -1956,6 +1980,7 @@ function renderCurrentSlide() {
 
   // Show/hide timed override checkbox in HUD
   updateHudTimedCheckbox(round);
+  updateGameQr();
 
   updateJumpPanel();
 }
@@ -1972,12 +1997,15 @@ let ssQrVisible = true;   // Join QR shows on intro slides by default
 
 function startPreview() {
   // Collect all bgIntro images from pending rounds, fall back to bgQuestion
-  ssImages = ((pendingRounds && pendingRounds.length) ? pendingRounds : (state.rounds || []))
+  // Intro URLs saved in Settings win; if none are saved, fall back to each category's own intro image
+  const settingsIntro = (Array.isArray(appSettings.introUrls) ? appSettings.introUrls : Object.values(appSettings.introUrls || {}))
+    .map(u => String(u || '').trim()).filter(Boolean);
+  ssImages = settingsIntro.length ? settingsIntro : ((pendingRounds && pendingRounds.length) ? pendingRounds : (state.rounds || []))
     .map(r => r.bgIntro || r.bgQuestion || defBg())
     .filter(Boolean);
 
   if(!ssImages.length) {
-    toast('No intro slide images found — add Intro Slide Background URLs to your categories');
+    toast('No intro slide images found — add Intro Slide URLs in Settings');
     return;
   }
 
@@ -2050,6 +2078,32 @@ function stopPreview() {
   document.getElementById('ss-join-qr')?.classList.remove('show');
   document.exitFullscreen?.().catch(()=>{});
   if(db) liveRef('introPlaying').set(false);
+}
+
+// ── Small Join QR on the playing screen (host toggles it on the host board) ──
+let gameQrVisible = true, _gameQrUrl = '';
+function updateGameQr() {
+  const box = document.getElementById('game-join-qr');
+  if(!box) return;
+  let show = false;
+  try { show = gameQrVisible && !state.preShow && state.rounds.length > 0 && document.getElementById('pres-screen').classList.contains('show') && slideType() === S_QUESTION; } catch(e) {}
+  if(!show) { box.style.display = 'none'; return; }
+  const url = joinLink();
+  if(_gameQrUrl !== url) {
+    if(typeof QRCode === 'undefined') { setTimeout(updateGameQr, 300); return; }
+    const code = document.getElementById('game-join-qr-code');
+    code.innerHTML = '';
+    new QRCode(code, {text:url, width:104, height:104, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
+    _gameQrUrl = url;
+  }
+  box.style.display = 'flex';
+}
+if(db) { whenLiveReady(() => liveRef('gameQrVisible').on('value', snap => { gameQrVisible = snap.val() !== false; updateGameQr(); })); }
+
+function closeJoinPopup() {
+  joinPopupOpen = false;
+  const p = document.getElementById('join-popup'); if(p) p.style.display = 'none';
+  const b = document.getElementById('setup-join-btn'); if(b) b.innerHTML = 'Show Join QR Code';
 }
 
 // Also stop on any keypress
@@ -2259,6 +2313,7 @@ async function advancePreShow() {
 }
 
 function renderPreShow() {
+  updateGameQr();
   const container = document.getElementById('slide-container');
   container.innerHTML = '';
   const bg = document.getElementById('pres-bg');
@@ -2503,9 +2558,8 @@ function renderQuestion(container, round) {
   // MC choices
   let optionsHtml = '';
   if(q.type === 'mc') {
-    const choices = buildMCChoices(q);
-    // store on question for answer reveal
-    q._choices = choices;
+    // build the shuffled options once per question, so going back/forward never reshuffles them
+    const choices = q._choices || (q._choices = buildMCChoices(q));
     const items = choices.map(c=>`
       <div class="mc-opt">
         <div class="mc-opt-letter">${c.label}</div>
@@ -2813,27 +2867,11 @@ function playMusicAudio(btn) {
 }
 
 function renderAnswerKey(container, round) {
-  const n = round.questions.length;
-  const isMusic = round.type === 'music';
-  // Auto-size font so answers fill the full screen height
-  const perCol = Math.ceil(n / 2);
-  const fontSize = Math.min(32, Math.max(14, Math.floor(72 / perCol)));
-
-  const items = round.questions.map((q,i) => {
-    const label = isMusic
-      ? (q.question + ' <span style="color:var(--text3);font-size:.8em">—</span> ' + q.answer)
-      : q.answer;
-    return '<div class="ak-item">'
-      + '<div class="ak-num">' + (i+1) + '</div>'
-      + '<div class="ak-a">' + label + '</div>'
-      + '</div>';
-  }).join('');
-
+  // The answer key is host-board only now; the TV just tells everyone to swap papers
   const el = document.createElement('div');
-  el.className = 'slide slide-answerkey active';
-  el.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;';
-  el.innerHTML = '<div class="ak-title">Answer Key</div>'
-    + '<div class="ak-grid" style="font-size:' + fontSize + 'px;flex:1;min-height:0;">' + items + '</div>';
+  el.className = 'slide slide-end active';
+  el.style.cssText = 'position:absolute;inset:0;';
+  el.innerHTML = '<div class="end-title" style="font-size:clamp(70px,14vw,190px);margin-bottom:0">Trade<br>Papers</div>';
   container.appendChild(el);
 }
 
@@ -2860,10 +2898,9 @@ function renderEnd(container, round) {
     <div class="end-sub">${isMiniGame
       ? `Ready to head back?`
       : isLastRound
-        ? 'Thanks for playing. Check the answer key before wrapping up.'
+        ? 'Thanks for playing.'
         : `Up next: Round ${state.roundIndex+2}`}</div>
     <div class="end-btn-row">
-      <button class="end-btn end-btn-ghost" onclick="showAnswerKey()">View Answer Key</button>
       <button class="end-btn end-btn-ghost" onclick="toggleLeaderboard()" id="lb-toggle-btn">Show Leaderboard</button>
       ${btnHtml}
     </div>
@@ -3047,6 +3084,7 @@ function unlockAudioPlayback() {
 }
 
 function exitPresentation() {
+  setTimeout(updateGameQr, 0);
   document.getElementById('pres-screen').classList.remove('show');
   document.getElementById('hud').classList.remove('show');
   document.getElementById('fullscreen-btn').style.display = 'none';
@@ -3060,6 +3098,8 @@ function exitPresentation() {
 
 function returnToPresentation() {
   unlockAudioPlayback();
+  closeJoinPopup();
+  setTimeout(updateGameQr, 0);
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
@@ -3171,6 +3211,7 @@ async function launchFromSetup() {
   if(!pendingRounds.length) return;
   setTriviaPhase('live');
   unlockAudioPlayback(); // must happen synchronously, inside this real click
+  closeJoinPopup();      // don't leave the setup-screen QR popup floating over the game
 
   state.rounds = pendingRounds.map(r=>({...r, questions:[], slides:[]}));
   document.getElementById('setup-screen').style.display = 'none';
@@ -3476,6 +3517,7 @@ function toggleJoinPopup() {
 
 // Once the host's id is known, rebuild the join link/QR so players get ?g=<uid>
 function refreshJoinLinks() {
+  try { updateGameQr(); } catch(e) {}
   try {
     joinUrlCached = joinLink();
     const el = document.getElementById('join-url');
