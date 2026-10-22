@@ -374,7 +374,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 
 /* JOIN QR on the playing screen — small, bottom-left, kept inside the border */
 #game-join-qr{
-  position:fixed;left:4.5rem;bottom:4rem;z-index:830;display:none;
+  position:fixed;left:4.5rem;bottom:4.8rem;z-index:830;display:none;
   flex-direction:column;align-items:center;gap:5px;
   background:#fff;border-radius:10px;padding:8px;pointer-events:none;
   box-shadow:0 4px 18px rgba(0,0,0,.5);
@@ -582,6 +582,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div id="ss-slide-a" style="position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;opacity:0;transition:opacity 1.5s ease"></div>
   <div id="ss-slide-b" style="position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;opacity:0;transition:opacity 1.5s ease"></div>
   <div style="position:absolute;bottom:2rem;width:100%;text-align:center;font-family:var(--cinzel);font-size:11px;letter-spacing:.2em;color:rgba(255,255,255,.4)">CLICK OR PRESS ANY KEY TO DISMISS</div>
+  <button id="ss-launch-btn" onclick="event.stopPropagation();launchFromIntro()" style="display:none;position:absolute;left:2.2rem;bottom:2.2rem;padding:14px 26px;font-family:var(--cinzel);font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);cursor:pointer">Launch Trivia →</button>
   <div id="ss-join-qr" onclick="event.stopPropagation()">
     <div id="ss-join-qr-label">Join the Game Here:</div>
     <div id="ss-join-qr-code"></div>
@@ -759,7 +760,7 @@ function initLiveGame() {
   // Push initial slide state so host board shows something immediately
   liveRef('slideState').set({
     label: 'Game Ready',
-    text: 'Waiting for host to start…',
+    text: '',
     qNum: '',
     bgUrl: '',
     answer: '',
@@ -782,6 +783,7 @@ function initLiveGame() {
 
 function applyLeaderboard(show) {
   leaderboardVisible = !!show;
+  scheduleScreenPush(500);
   const overlay = document.getElementById('lb-overlay');
   if(overlay) overlay.style.display = leaderboardVisible ? 'flex' : 'none';
   const btn = document.getElementById('lb-toggle-btn');
@@ -807,6 +809,7 @@ function toggleLeaderboard() {
 }
 
 function renderLeaderboardOverlay(teams) {
+  scheduleScreenPush(600);
   const sorted = Object.entries(teams)
     .map(([id,t]) => ({id,name:t.name,score:t.score||0}))
     .sort((a,b) => b.score-a.score);
@@ -928,7 +931,7 @@ if(db) {
       case 'play-intro': startPreview(); break;
       case 'stop-intro':  stopPreview(); break;
       case 'toggle-intro-qr': setScreensaverQRVisible(!ssQrVisible); break;
-      case 'launch': if(!state.rounds.length && pendingRounds.length) launchFromSetup(); break;
+      case 'launch': if(!state.rounds.length && pendingRounds.length) { stopPreview(true); launchFromSetup(); } break;
       case 'set-intro-qr': setScreensaverQRVisible(!!cmd.value); break;
       case 'thumb-up':   sendQuestionThumb('up', true); break;
       case 'thumb-down': sendQuestionThumb('down', true); break;
@@ -963,6 +966,7 @@ window.addEventListener('beforeunload', () => {
         });
       });
       liveRef('slideState').remove();
+      liveRef('screen').remove();
       liveRef('status').set(null);
       liveRef('currentQuestion').set(null);
     } catch(e) {}
@@ -1981,6 +1985,7 @@ function renderCurrentSlide() {
   // Show/hide timed override checkbox in HUD
   updateHudTimedCheckbox(round);
   updateGameQr();
+  scheduleScreenPush(400);
 
   updateJumpPanel();
 }
@@ -2019,7 +2024,9 @@ function startPreview() {
   document.documentElement.requestFullscreen?.().catch(()=>{});
   ssShowNext();
   if(ssQrVisible) renderScreensaverQR();
+  const lb = document.getElementById('ss-launch-btn'); if(lb) lb.style.display = (pendingRounds.length && !state.rounds.length) ? 'block' : 'none';
   if(db) liveRef('introPlaying').set(true);
+  scheduleScreenPush(1800);
 }
 
 function renderScreensaverQR() {
@@ -2042,6 +2049,7 @@ function setScreensaverQRVisible(show) {
   if(ssQrVisible) renderScreensaverQR();
   else box.classList.remove('show');
   if(db) liveRef('introQrVisible').set(ssQrVisible);
+  scheduleScreenPush(400);
 }
 
 function ssShowNext() {
@@ -2068,18 +2076,61 @@ function ssShowNext() {
 
   // Schedule next slide — 30 seconds
   ssTimer = setTimeout(ssShowNext, 30000);
+  scheduleScreenPush(1900);
 }
 
-function stopPreview() {
+function stopPreview(keepFullscreen) {
   clearTimeout(ssTimer);
   ssTimer = null;
   document.getElementById('screensaver').style.display = 'none';
   document.getElementById('ss-slide-a').style.opacity = '0';
   document.getElementById('ss-slide-b').style.opacity = '0';
   document.getElementById('ss-join-qr')?.classList.remove('show');
-  document.exitFullscreen?.().catch(()=>{});
+  if(keepFullscreen !== true) document.exitFullscreen?.().catch(()=>{});
   if(db) liveRef('introPlaying').set(false);
+  scheduleScreenPush(300);
 }
+
+// Launch straight from the intro slides — stays full screen, no trip back to the setup window
+function launchFromIntro(e) {
+  if(e && e.stopPropagation) e.stopPropagation();
+  if(!pendingRounds.length || state.rounds.length) return;
+  stopPreview(true);
+  launchFromSetup();
+}
+
+// ── Mirror of the TV screen for the host board ──
+// A snapshot of exactly what's on the TV (slide HTML + this page's CSS + the window size) goes to Firebase;
+// admin.html redraws it in the host-board mini screen, so the host sees the same thing the audience does.
+let _scrTimer = null, _scrLast = '', _scrCssSent = false;
+function scheduleScreenPush(delay) {
+  if(_superseded || !db) return;
+  clearTimeout(_scrTimer);
+  _scrTimer = setTimeout(pushScreenSnapshot, delay == null ? 300 : delay);
+}
+function pushScreenSnapshot() {
+  if(_superseded || !db) return;
+  whenLiveReady(() => {
+    try {
+      const ss = document.getElementById('screensaver'), pres = document.getElementById('pres-screen');
+      const ssOn = ss && ss.style.display === 'block';
+      let html = '';
+      if(ssOn) html = ss.outerHTML;
+      else if(pres && pres.classList.contains('show')) {
+        html = '<div id="pres-screen" class="show">' + pres.innerHTML + '</div>';
+        const gq = document.getElementById('game-join-qr');
+        if(gq && gq.style.display !== 'none') html += gq.outerHTML;
+      }
+      if(!html) { _scrLast = ''; liveRef('screen').remove(); return; }
+      const key = window.innerWidth + 'x' + window.innerHeight + '|' + html;
+      if(key === _scrLast) return;
+      _scrLast = key;
+      if(!_scrCssSent) { liveRef('screenCss').set(document.getElementsByTagName('style')[0].textContent); _scrCssSent = true; }
+      liveRef('screen').set({ html, w: window.innerWidth, h: window.innerHeight, ts: Date.now() });
+    } catch(e) { console.warn('Screen mirror failed', e); }
+  });
+}
+window.addEventListener('resize', () => scheduleScreenPush(500));
 
 // ── Small Join QR on the playing screen (host toggles it on the host board) ──
 let gameQrVisible = true, _gameQrUrl = '';
@@ -2088,7 +2139,7 @@ function updateGameQr() {
   if(!box) return;
   let show = false;
   try { show = gameQrVisible && !state.preShow && state.rounds.length > 0 && document.getElementById('pres-screen').classList.contains('show') && slideType() === S_QUESTION; } catch(e) {}
-  if(!show) { box.style.display = 'none'; return; }
+  if(!show) { box.style.display = 'none'; scheduleScreenPush(300); return; }
   const url = joinLink();
   if(_gameQrUrl !== url) {
     if(typeof QRCode === 'undefined') { setTimeout(updateGameQr, 300); return; }
@@ -2098,6 +2149,7 @@ function updateGameQr() {
     _gameQrUrl = url;
   }
   box.style.display = 'flex';
+  scheduleScreenPush(400);
 }
 if(db) { whenLiveReady(() => liveRef('gameQrVisible').on('value', snap => { gameQrVisible = snap.val() !== false; updateGameQr(); })); }
 
@@ -2315,6 +2367,8 @@ async function advancePreShow() {
 
 function renderPreShow() {
   updateGameQr();
+  try { pushSlideState(state.preShow === PS_FOLLOWUS ? 'Follow Us' : state.preShow === PS_NEXTWEEK ? "Next Week's Rounds" : 'How to Play', '', '', '', '', { roundNum: 1, roundTotal: state.rounds.length }); } catch(e) {}
+  scheduleScreenPush(600);
   const container = document.getElementById('slide-container');
   container.innerHTML = '';
   const bg = document.getElementById('pres-bg');
@@ -3086,6 +3140,7 @@ function unlockAudioPlayback() {
 
 function exitPresentation() {
   setTimeout(updateGameQr, 0);
+  scheduleScreenPush(300);
   document.getElementById('pres-screen').classList.remove('show');
   document.getElementById('hud').classList.remove('show');
   document.getElementById('fullscreen-btn').style.display = 'none';
@@ -3101,6 +3156,7 @@ function returnToPresentation() {
   unlockAudioPlayback();
   closeJoinPopup();
   setTimeout(updateGameQr, 0);
+  scheduleScreenPush(400);
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('pres-screen').classList.add('show');
   document.getElementById('hud').classList.add('show');
