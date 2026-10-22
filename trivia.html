@@ -1997,12 +1997,13 @@ let ssQrVisible = true;   // Join QR shows on intro slides by default
 
 function startPreview() {
   // Collect all bgIntro images from pending rounds, fall back to bgQuestion
-  // Intro URLs saved in Settings win; if none are saved, fall back to each category's own intro image
+  // Intro slides = the URLs saved in Settings plus each category's own intro image (if it has one)
   const settingsIntro = (Array.isArray(appSettings.introUrls) ? appSettings.introUrls : Object.values(appSettings.introUrls || {}))
     .map(u => String(u || '').trim()).filter(Boolean);
-  ssImages = settingsIntro.length ? settingsIntro : ((pendingRounds && pendingRounds.length) ? pendingRounds : (state.rounds || []))
+  const catIntro = ((pendingRounds && pendingRounds.length) ? pendingRounds : (state.rounds || []))
     .map(r => r.bgIntro || r.bgQuestion || defBg())
     .filter(Boolean);
+  ssImages = [...new Set([...catIntro, ...settingsIntro])];
 
   if(!ssImages.length) {
     toast('No intro slide images found — add Intro Slide URLs in Settings');
