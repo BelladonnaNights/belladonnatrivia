@@ -595,6 +595,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   box-shadow:0 12px 48px rgba(0,0,0,.8);display:none;flex-direction:column;overflow:hidden;
 }
 .hb-history-popup.show{display:flex}
+/* floating, draggable, resizable (answer key) — sits beside the grading panel */
+.hb-history-popup.hb-floating{z-index:520;width:min(520px,92vw);max-height:70vh;resize:both;min-width:260px;min-height:160px;box-shadow:0 12px 48px rgba(0,0,0,.85)}
 .hb-history-header{
   display:flex;align-items:center;justify-content:space-between;
   padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0;
@@ -990,8 +992,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 </div>
 
 <!-- ANSWER KEY POPUP (host only) -->
-<div class="hb-history-popup" id="hb-answerkey-popup">
-  <div class="hb-history-header">
+<div class="hb-history-popup hb-floating" id="hb-answerkey-popup">
+  <div class="hb-history-header" id="hb-answerkey-drag" style="cursor:move;touch-action:none;user-select:none">
     <div class="hb-grading-title" id="hb-answerkey-title">ANSWER KEY</div>
     <button class="hb-grading-close" onclick="closeAnswerKey()">×</button>
   </div>
@@ -3036,6 +3038,26 @@ function openAnswerKey() {
     + '</div>';
   document.getElementById('hb-answerkey-popup').classList.add('show');
 }
+(function initAnswerKeyDrag(){
+  const pop = document.getElementById('hb-answerkey-popup'), bar = document.getElementById('hb-answerkey-drag');
+  if(!pop || !bar) return;
+  let dx = 0, dy = 0, dragging = false;
+  bar.addEventListener('pointerdown', e => {
+    if(e.target.closest('button')) return;
+    const r = pop.getBoundingClientRect();
+    pop.style.transform = 'none'; pop.style.left = r.left + 'px'; pop.style.top = r.top + 'px';
+    dx = e.clientX - r.left; dy = e.clientY - r.top; dragging = true;
+    bar.setPointerCapture(e.pointerId);
+  });
+  bar.addEventListener('pointermove', e => {
+    if(!dragging) return;
+    const x = Math.max(0, Math.min(window.innerWidth - 80, e.clientX - dx));
+    const y = Math.max(0, Math.min(window.innerHeight - 40, e.clientY - dy));
+    pop.style.left = x + 'px'; pop.style.top = y + 'px';
+  });
+  const end = () => { dragging = false; };
+  bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
+})();
 function closeAnswerKey() { document.getElementById('hb-answerkey-popup')?.classList.remove('show'); }
 
 function toggleHostIntroQR() {
