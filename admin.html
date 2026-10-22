@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<script>try{if(localStorage.getItem('bella_theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}</script>
 <title>Trivia Admin — Belladonna</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
@@ -674,6 +675,31 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-adj-take:hover{background:rgba(155,89,182,.38) !important}
 .hb-lock-btn{padding:4px 10px;border-radius:7px;border:1px solid var(--border2);background:rgba(255,255,255,.05);cursor:pointer;font-size:20px;line-height:1.2}
 .hb-lock-btn.on{background:var(--gold-dim);border-color:var(--gold-glow);color:var(--gold)}
+
+/* Host-board mini screen = a live copy of the TV */
+#hb-screen-frame{position:absolute;left:0;top:0;border:0;transform-origin:0 0;pointer-events:none;background:#000;display:none}
+.hb-preview-thumb.mirroring #hb-screen-frame{display:block}
+.hb-preview-thumb.mirroring .hb-preview-thumb-bg,.hb-preview-thumb.mirroring .hb-preview-thumb-overlay{display:none}
+#hb-preview-type,#hb-preview-num,#hb-preview-q,#hb-preview-answer{display:none !important}
+
+/* ── LIGHT MODE ── */
+:root[data-theme="light"]{
+  --bg:#f7f4ee;--surface:#ffffff;--surface2:#f2ede3;--surface3:#e7e0d1;
+  --border:rgba(40,30,10,.10);--border2:rgba(40,30,10,.18);--border3:rgba(40,30,10,.28);
+  --text:#1d1a14;--text2:#4b4437;--text3:#8c8272;
+  --gold:#8f6f14;--gold2:#7d5f0e;--gold3:#a98421;
+  --gold-shine:linear-gradient(135deg,#8f6f14 0%,#c9a84c 45%,#8f6f14 70%,#a98421 100%);
+  --gold-dim:rgba(143,111,20,.12);--gold-glow:rgba(143,111,20,.35);--gold-glow2:rgba(143,111,20,.55);
+  --green:#1e9e57;--green-dim:rgba(30,158,87,.12);--red:#c0392b;--red-dim:rgba(192,57,43,.10);
+}
+:root[data-theme="light"] .nav{background:rgba(247,244,238,.95)}
+:root[data-theme="light"] #host-board{background:rgba(247,244,238,.98)}
+:root[data-theme="light"] .field-input,:root[data-theme="light"] .lineup-input,:root[data-theme="light"] .hb-adj-input,:root[data-theme="light"] #hb-fb-note textarea{background:#fff;color:var(--text)}
+:root[data-theme="light"] .banner-menu,:root[data-theme="light"] .filter-more-dropdown{background:#fff}
+:root[data-theme="light"] .banner-menu button{color:#333}
+:root[data-theme="light"] .hb-btn-ghost,:root[data-theme="light"] .hb-nav-btn,:root[data-theme="light"] .hb-fb-btn,:root[data-theme="light"] .hb-timed-row,:root[data-theme="light"] .hb-score-row,:root[data-theme="light"] .hb-grade-group,:root[data-theme="light"] .hb-lock-btn{background:rgba(0,0,0,.035)}
+:root[data-theme="light"] .hb-fb-btn svg{fill:#333}
+:root[data-theme="light"] .cat-card{box-shadow:0 1px 6px rgba(40,30,10,.08)}
 </style>
 </head>
 <body>
@@ -693,6 +719,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <button class="nav-btn nav-btn-ghost" onclick="openAdminLogin()" id="admin-gear-btn" title="Admin">
       ⚙ Admin
     </button>
+    <button class="nav-btn nav-btn-ghost" id="theme-toggle-btn" onclick="toggleTheme()" title="Switch between dark and light mode">☀ Light</button>
     <button class="nav-btn nav-btn-ghost banner-toggle-btn" onclick="openBannerMenu(this,event)" title="Switch between the category banner images and a plain text banner showing just the category name">Banners: Gold on black ▾</button>
     <button class="nav-btn nav-btn-ghost" onclick="openChangePassword()" id="admin-pw-btn" style="display:none;font-size:9px">
       Change Password
@@ -745,6 +772,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
             </svg>
           </div>
         </div>
+        <iframe id="hb-screen-frame" sandbox="" title="Mirror of the TV screen"></iframe>
         <div class="hb-preview-resize-handle" id="hb-preview-resize-handle" title="Drag to resize"></div>
       </div>
       <div class="hb-position" id="hb-position"></div>
@@ -1999,9 +2027,9 @@ function togglePairs(id) {
 var TEXT_BANNERS = false;
 var BANNER_MODE = 'gb';   // default: gold on black (a saved choice, made after this default, wins)
 try { var _bm = localStorage.getItem('bella_trivia_banner_mode_v1'); if (_bm) BANNER_MODE = _bm; } catch (e) {}
-var BANNER_STYLES = { bw: { bg: '#fff', fg: '#000', label: 'Black on white' }, wb: { bg: 'var(--bg)', fg: '#fff', label: 'White on black' }, gb: { bg: 'var(--bg)', fg: '#c9a84c', shine: true, label: 'Gold on black' } };
+var BANNER_STYLES = { bw: { bg: '#fff', fg: '#000', label: 'Black on white' }, wb: { bg: '#080808', fg: '#fff', label: 'White on black' }, gb: { bg: '#080808', fg: '#c9a84c', shine: true, label: 'Gold on black' } };
 function bannerStyleAttr() { var st = BANNER_STYLES[BANNER_MODE]; return st ? 'background:' + st.bg + ';' : ''; }
-function bannerTextAttr() { var st = BANNER_STYLES[BANNER_MODE]; if (!st) return ''; return st.shine ? 'background:var(--gold-shine);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;' : 'color:' + st.fg + ';'; }
+function bannerTextAttr() { var st = BANNER_STYLES[BANNER_MODE]; if (!st) return ''; return st.shine ? 'background:linear-gradient(135deg,#c9a84c 0%,#f5df90 45%,#c9a84c 70%,#e2b84a 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;' : 'color:' + st.fg + ';'; }
 function setBannerMode(m) {
   BANNER_MODE = m; TEXT_BANNERS = m !== 'img';
   try { localStorage.setItem('bella_trivia_banner_mode_v1', m); } catch (e) {}
@@ -3352,8 +3380,47 @@ function fitPreviewText() {
 }
 (function(){
   const t = document.getElementById('hb-preview-thumb');
-  if(t && window.ResizeObserver) new ResizeObserver(() => fitPreviewText()).observe(t);
+  if(t && window.ResizeObserver) new ResizeObserver(() => { fitPreviewText(); fitScreenFrame(); }).observe(t);
 })();
+
+// ── Live copy of the TV screen in the host-board mini screen ──
+let _scrCss = '', _scrData = null;
+function fitScreenFrame() {
+  const t = document.getElementById('hb-preview-thumb'), f = document.getElementById('hb-screen-frame');
+  if(!t || !f || !_scrData) return;
+  const w = _scrData.w || 1920, h = _scrData.h || 1080;
+  const k = Math.min(t.clientWidth / w, t.clientHeight / h);
+  f.style.width = w + 'px'; f.style.height = h + 'px';
+  f.style.transform = 'scale(' + k + ')';
+  f.style.left = ((t.clientWidth - w * k) / 2) + 'px';
+  f.style.top = ((t.clientHeight - h * k) / 2) + 'px';
+}
+function renderScreenMirror() {
+  const t = document.getElementById('hb-preview-thumb'), f = document.getElementById('hb-screen-frame');
+  if(!t || !f) return;
+  if(!_scrData || !_scrData.html) { t.classList.remove('mirroring'); f.removeAttribute('srcdoc'); return; }
+  f.srcdoc = '<!doctype html><html><head><meta charset="utf-8">'
+    + '<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@500;600;700&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">'
+    + '<style>' + _scrCss + '</style>'
+    + '<style>html,body{background:#000}.slide.active,.slide.active.visible{opacity:1!important;animation:none!important}#pres-screen,#pres-screen.show{display:block!important}</style>'
+    + '</head><body>' + _scrData.html + '</body></html>';
+  t.classList.add('mirroring');
+  fitScreenFrame();
+}
+
+// ── Dark / light mode ──
+function syncThemeBtn() {
+  const b = document.getElementById('theme-toggle-btn');
+  if(b) b.textContent = document.documentElement.getAttribute('data-theme') === 'light' ? '☾ Dark' : '☀ Light';
+}
+function toggleTheme() {
+  const light = document.documentElement.getAttribute('data-theme') !== 'light';
+  if(light) document.documentElement.setAttribute('data-theme', 'light'); else document.documentElement.removeAttribute('data-theme');
+  try { localStorage.setItem('bella_theme', light ? 'light' : 'dark'); } catch(e) {}
+  syncThemeBtn();
+  try { renderLibrary(); } catch(e) {}
+}
+syncThemeBtn();
 
 // ── Escape helper ──────────────────────────────────────────────────────
 function escHtml(s) {
@@ -3495,6 +3562,11 @@ function attachHbListeners() {
   const label = document.getElementById('hb-live-label');
   if(label) label.textContent = isLive ? 'Game Live' : 'No game active';
 });
+
+  const scrCssRef = liveRef('screenCss'); _hbRefs.push(scrCssRef);
+  scrCssRef.on('value', snap => { _scrCss = snap.val() || ''; renderScreenMirror(); });
+  const scrRef = liveRef('screen'); _hbRefs.push(scrRef);
+  scrRef.on('value', snap => { _scrData = snap.val(); renderScreenMirror(); });
 
   const introPlayingRef = liveRef('introPlaying'); _hbRefs.push(introPlayingRef);
   introPlayingRef.on('value', snap => {
