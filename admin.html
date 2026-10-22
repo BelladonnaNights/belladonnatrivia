@@ -411,7 +411,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-preview-thumb-num{font-family:var(--display);font-size:20px;color:var(--gold);line-height:1;
   background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
 .hb-preview-slide-type{font-family:var(--cinzel);font-size:7px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
-.hb-preview-q-text{font-size:9px;color:var(--text);line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;text-align:center}
+.hb-preview-q-text{font-size:9px;color:var(--text);line-height:1.2;text-align:center;width:100%;overflow-wrap:anywhere}
 .hb-preview-ans-text{font-size:9px;color:var(--green);text-align:center}
 
 /* Middle: scores + answers */
@@ -649,7 +649,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-nav-controls{gap:10px;margin-top:10px}
 .hb-nav-btn{padding:13px 22px;font-size:14px;letter-spacing:.08em;border-radius:8px}
 .hb-grade-btn-trigger{padding:11px 18px;font-size:13px;letter-spacing:.08em;border-radius:8px}
-.hb-preview-q-text{font-size:12px;-webkit-line-clamp:3}
+.hb-preview-q-text{font-size:12px}
 .hb-peek-label{font-size:11px}
 .hb-peek-text{font-size:14px;line-height:1.4}
 .hb-peek-answer{font-size:13px}
@@ -820,7 +820,12 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <span class="hb-timed-label">Join QR on Intro</span>
         <div class="hb-toggle" id="hb-intro-qr-toggle" onclick="toggleHostIntroQR()"></div>
       </div>
+      <div class="hb-timed-row">
+        <span class="hb-timed-label">Join QR on Game</span>
+        <div class="hb-toggle on" id="hb-game-qr-toggle" onclick="toggleHostGameQR()"></div>
+      </div>
       <button class="hb-btn hb-btn-ghost" id="hb-lb-btn" onclick="toggleLbAdmin()">Show Leaderboard</button>
+      <button class="hb-btn hb-btn-gold" id="hb-answerkey-btn" onclick="openAnswerKey()" style="display:none">Answer Key</button>
       <button class="hb-btn hb-btn-gold" id="hb-give-scores-btn" onclick="pressGiveScores()" style="display:none">Give Scores →</button>
       <button class="hb-btn hb-btn-ghost" onclick="openHistory()">Game History</button>
       <button class="hb-btn hb-btn-ghost" onclick="confirmAction('clear')">Clear Scores</button>
@@ -949,6 +954,15 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   <div class="hb-history-body" id="hb-history-body">
     <div style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);text-align:center;padding:2rem">Loading…</div>
   </div>
+</div>
+
+<!-- ANSWER KEY POPUP (host only) -->
+<div class="hb-history-popup" id="hb-answerkey-popup">
+  <div class="hb-history-header">
+    <div class="hb-grading-title" id="hb-answerkey-title">ANSWER KEY</div>
+    <button class="hb-grading-close" onclick="closeAnswerKey()">×</button>
+  </div>
+  <div class="hb-history-body" id="hb-answerkey-body"></div>
 </div>
 
 <!-- CONFIRM MODAL -->
@@ -1228,6 +1242,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
           <div class="field" style="grid-column:1/-1">
             <div class="field-label">Background URL (not used by the new pre-show slides)</div>
             <input class="field-input" id="s-plain-bg" placeholder="https://… image shown behind Follow Us and Rules slides"/>
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <div class="field-label">Intro Slide URLs — one per line, as many as you like</div>
+            <textarea class="field-input" id="s-intro-urls" rows="6" style="resize:vertical;line-height:1.6;font-size:12px" placeholder="https://… one image URL per line"></textarea>
+            <div class="field-hint">These rotate on the intro-slides screensaver. If this list is empty, each category's own intro image is used instead.</div>
           </div>
           <div class="field" style="grid-column:1/-1">
             <div class="field-label">Default Category Background URL</div>
@@ -1714,6 +1733,7 @@ function openSettings() {
   document.getElementById('s-plain-bg').value = appSettings.plainBg||'';
   document.getElementById('s-logo').value = appSettings.logo||'';
   document.getElementById('s-default-bg').value = appSettings.defaultBg||'';
+  document.getElementById('s-intro-urls').value = (Array.isArray(appSettings.introUrls) ? appSettings.introUrls : Object.values(appSettings.introUrls||{})).join('\n');
   document.getElementById('s-logo-text').value = appSettings.logoText||'';
   document.getElementById('s-scan1').value = appSettings.scan1||'';
   document.getElementById('s-scan2').value = appSettings.scan2||'';
@@ -1736,6 +1756,7 @@ async function saveSettings() {
     plainBg: document.getElementById('s-plain-bg').value.trim(),
     logo: document.getElementById('s-logo').value.trim(),
     defaultBg: document.getElementById('s-default-bg').value.trim(),
+    introUrls: (function(){ const l = document.getElementById('s-intro-urls').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean); return l.length ? l : null; })(),
     logoText: document.getElementById('s-logo-text').value.trim(),
     scan1: document.getElementById('s-scan1').value.trim(),
     scan2: document.getElementById('s-scan2').value.trim(),
@@ -2961,6 +2982,29 @@ let hostIntroQrOn = true;
 function toggleHostIntro() {
   sendHostCommand(hostIntroOn ? 'stop-intro' : 'play-intro');
 }
+let hostGameQrOn = true;
+function toggleHostGameQR() {
+  const want = !hostGameQrOn;
+  hostGameQrOn = want;
+  document.getElementById('hb-game-qr-toggle')?.classList.toggle('on', want);
+  liveRef('gameQrVisible').set(want);
+}
+
+// ── Answer key (host board only — never shown on the big screen) ──
+let hostAnswerKey = null, _akShownFor = null;
+function updateAnswerKeyBtn() { const b = document.getElementById('hb-answerkey-btn'); if(b) b.style.display = hostAnswerKey ? 'block' : 'none'; }
+function openAnswerKey() {
+  if(!hostAnswerKey) return;
+  document.getElementById('hb-answerkey-title').textContent = 'ANSWER KEY' + (hostAnswerKey.title ? ' — ' + hostAnswerKey.title : '');
+  document.getElementById('hb-answerkey-body').innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px 28px;padding:14px 22px">'
+    + hostAnswerKey.items.map((t, i) => '<div style="display:flex;gap:12px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--border)">'
+      + '<span style="font-family:var(--cinzel);font-weight:700;font-size:16px;background:var(--gold);color:#000;border-radius:5px;padding:2px 9px;min-width:34px;text-align:center;flex-shrink:0">' + (i + 1) + '</span>'
+      + '<span style="font-family:var(--cinzel);font-size:20px;color:var(--text);line-height:1.3">' + escHtml(t) + '</span></div>').join('')
+    + '</div>';
+  document.getElementById('hb-answerkey-popup').classList.add('show');
+}
+function closeAnswerKey() { document.getElementById('hb-answerkey-popup')?.classList.remove('show'); }
+
 function toggleHostIntroQR() {
   // Send the state we WANT (not a blind flip) so it can never get out of step with the TV
   const want = !hostIntroQrOn;
@@ -3012,6 +3056,7 @@ async function runConfirmedAction() {
   } else if(action === 'reset') {
     await liveRef().remove();
     lbAdminVisible = false; hostTimedOn = false;
+    hostAnswerKey = null; _akShownFor = null; updateAnswerKeyBtn(); closeAnswerKey();
     allAnswersCache = {};
     document.getElementById('hb-timed-toggle').classList.remove('on');
     document.getElementById('hb-lb-btn')?.classList.remove('active');
@@ -3289,6 +3334,27 @@ async function ungradeAnswer(btn) {
   toast('Marked as pending');
 }
 
+
+// Make the question text in the host-board mini screen as big as it can be without being cut off
+function fitPreviewText() {
+  const thumb = document.getElementById('hb-preview-thumb'), q = document.getElementById('hb-preview-q');
+  if(!thumb || !q || !q.textContent) return;
+  const H = thumb.clientHeight;
+  if(!H) return;
+  const others = ['hb-preview-type','hb-preview-num','hb-preview-answer']
+    .map(id => document.getElementById(id))
+    .filter(e => e && e.textContent && e.style.display !== 'none')
+    .reduce((a, e) => a + e.offsetHeight + 2, 0);
+  const avail = H - others - 14;
+  let px = Math.floor(H * 0.3);
+  q.style.fontSize = px + 'px';
+  while(px > 8 && q.scrollHeight > avail) { px--; q.style.fontSize = px + 'px'; }
+}
+(function(){
+  const t = document.getElementById('hb-preview-thumb');
+  if(t && window.ResizeObserver) new ResizeObserver(() => fitPreviewText()).observe(t);
+})();
+
 // ── Escape helper ──────────────────────────────────────────────────────
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -3472,9 +3538,23 @@ function attachHbListeners() {
     hostIntroQrOn = snap.val() !== false;   // on by default
     document.getElementById('hb-intro-qr-toggle')?.classList.toggle('on', hostIntroQrOn);
   });
+  const gameQrRef = liveRef('gameQrVisible'); _hbRefs.push(gameQrRef);
+  gameQrRef.on('value', snap => {
+    hostGameQrOn = snap.val() !== false;   // on by default
+    document.getElementById('hb-game-qr-toggle')?.classList.toggle('on', hostGameQrOn);
+  });
 
   const slideStateRef = liveRef('slideState'); _hbRefs.push(slideStateRef); slideStateRef.on('value', snap => {
   const s = snap.val();
+  if(s && s.answerKey && s.answerKey.items) {
+    const items = Array.isArray(s.answerKey.items) ? s.answerKey.items : Object.values(s.answerKey.items);
+    if(items.length) {
+      hostAnswerKey = { title: s.answerKey.title || '', items };
+      updateAnswerKeyBtn();
+      const akId = (s.roundNum || '') + ':' + hostAnswerKey.title;
+      if(akId !== _akShownFor) { _akShownFor = akId; openAnswerKey(); }   // pops up when the round's end slide comes on
+    }
+  } else { _akShownFor = null; }
   const typeEl   = document.getElementById('hb-preview-type');
   const numEl    = document.getElementById('hb-preview-num');
   const qEl      = document.getElementById('hb-preview-q');
@@ -3508,9 +3588,10 @@ function attachHbListeners() {
   if(typeEl) typeEl.textContent = s.label || '';
   if(numEl)  numEl.textContent  = s.qNum  || '';
   if(qEl)    qEl.textContent    = s.text  || '';
-  if(slideLabel) slideLabel.textContent = (s.qNum ? s.qNum + ' — ' : '') + (s.text || s.label || '');
+  if(slideLabel) { const ka = s.keyAnswer || s.answer || ''; slideLabel.innerHTML = escHtml((s.qNum ? s.qNum + ' — ' : '') + (s.text || s.label || '')) + (ka ? ' <span style="color:var(--green);font-weight:600">→ ' + escHtml(ka) + '</span>' : ''); }
   if(ansEl)  { ansEl.textContent = s.answer || ''; ansEl.style.display = s.answer ? 'block' : 'none'; }
   if(audioBtn) audioBtn.style.display = s.hasAudio ? 'inline-flex' : 'none';
+  fitPreviewText();
 });
 
 // Host-only "next question" peek — never shown on the audience screen or player phones
