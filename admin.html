@@ -817,6 +817,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
           <button class="hb-nav-btn hb-nav-btn-primary" id="hb-next-btn" onclick="hbNextClick()">Next →</button>
           <button class="hb-nav-btn" id="hb-audio-btn" onclick="sendHostCommand('audio')" style="display:none">▶ Play / ■ Stop Audio</button>
         </div>
+        <div style="margin-top:6px"><button class="hb-nav-btn" id="hb-bonus-btn" onclick="openBonusPrompt()" style="display:none;width:100%">+ Add bonus question</button></div>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 4px;flex-shrink:0">
         <div class="hb-section-label" style="margin:0">Live Scores</div>
@@ -1005,6 +1006,20 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <button class="hb-grading-close" onclick="closeAnswerKey()">×</button>
   </div>
   <div class="hb-history-body" id="hb-answerkey-body"></div>
+</div>
+
+<!-- BONUS QUESTION -->
+<div id="hb-bonus-modal" style="display:none;position:fixed;inset:0;z-index:998;background:rgba(0,0,0,.7);align-items:center;justify-content:center;backdrop-filter:blur(4px)">
+  <div class="hb-confirm-box" style="max-width:460px;text-align:left">
+    <div class="hb-confirm-title">Add bonus question</div>
+    <div class="hb-confirm-msg" style="margin-bottom:10px">It goes up on the TV and phones right away, and you can add as many as you like before locking answers.</div>
+    <textarea id="hb-bonus-q" class="field-input" rows="3" placeholder="Bonus question" style="width:100%;margin-bottom:8px"></textarea>
+    <input id="hb-bonus-a" class="field-input" placeholder="Answer" style="width:100%" onkeydown="if(event.key==='Enter')submitBonus()"/>
+    <div class="hb-confirm-btns" style="margin-top:14px">
+      <button class="btn btn-ghost" onclick="closeBonusPrompt()">Cancel</button>
+      <button class="btn btn-danger" onclick="submitBonus()">Add &amp; show</button>
+    </div>
+  </div>
 </div>
 
 <!-- CONFIRM MODAL -->
@@ -3355,11 +3370,12 @@ function effectiveStatus(qId, ans) {
 }
 const _autoGradeScheduled = new Set();
 function scheduleAutoGrade(qId, teamId, ans, isCorrect) {
-  const key = qId + '/' + teamId;
+  const key = qId + '/' + teamId + '/' + ans.answer;      // a changed answer gets graded again
   if(_autoGradeScheduled.has(key)) return;
   _autoGradeScheduled.add(key);
   // Auto-grade immediately — these are exact matches, no score held
-  setTimeout(() => liveRef('answers/' + qId + '/' + teamId).update({ status: isCorrect ? 'correct' : 'wrong', points: isCorrect ? POINTS_PER_CORRECT : 0 }), 100);
+  setTimeout(() => { const cur = (allAnswersCache[qId] || {})[teamId]; if(!cur || cur.answer !== ans.answer) return;   // they changed it meanwhile
+    liveRef('answers/' + qId + '/' + teamId).update({ status: isCorrect ? 'correct' : 'wrong', points: isCorrect ? POINTS_PER_CORRECT : 0 }); }, 100);
 }
 
 function updateGradeButton() {
@@ -3511,6 +3527,18 @@ function hbKeyMode() { return !!(_hbS && _hbS.keyNext && _hbS.qNow && _hbS.qTota
 function updateNextBtn() {
   const b = document.getElementById('hb-next-btn'); if(!b) return;
   b.textContent = hbLaunchMode() ? 'Launch Trivia' : hbKeyMode() ? 'Answer Key (lock all answers)' : 'Next →';
+}
+function openBonusPrompt() {
+  document.getElementById('hb-bonus-q').value = ''; document.getElementById('hb-bonus-a').value = '';
+  document.getElementById('hb-bonus-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('hb-bonus-q').focus(), 50);
+}
+function closeBonusPrompt() { document.getElementById('hb-bonus-modal').style.display = 'none'; }
+function submitBonus() {
+  const q = document.getElementById('hb-bonus-q').value.trim(), a = document.getElementById('hb-bonus-a').value.trim();
+  if(!q || !a) { toast('Add both the question and its answer', true); return; }
+  sendHostCommand('add-bonus', { q, a });
+  closeBonusPrompt(); toast('Bonus question added');
 }
 function hbNextClick() {
   if(hbKeyMode()) {   // lock answers, bring up the key, and send everyone their results
@@ -3787,6 +3815,7 @@ function attachHbListeners() {
   const slideStateRef = liveRef('slideState'); _hbRefs.push(slideStateRef); slideStateRef.on('value', snap => {
   const s = snap.val();
   _hbS = s; updateNextBtn();
+  { const bb = document.getElementById('hb-bonus-btn'); if(bb) bb.style.display = (s && s.canBonus) ? '' : 'none'; }
   if(s && s.gameOver) { if(!_endPrompted) { _endPrompted = true; setTimeout(() => confirmAction('endreset'), 600); } } else _endPrompted = false;
   if(s && s.answerKey && s.answerKey.items) {
     const items = Array.isArray(s.answerKey.items) ? s.answerKey.items : Object.values(s.answerKey.items);
