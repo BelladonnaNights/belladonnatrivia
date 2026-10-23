@@ -936,6 +936,13 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   <div class="lineup">
     <div class="lineup-launch-sticky">
       <button class="launch-btn" id="launch-btn" onclick="pressLaunchBtn()">Open Trivia</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">
+        <span>Answer slide says</span>
+        <select id="ak-label-select" class="field-input" style="padding:5px 8px;font-size:12px;width:auto" onchange="saveAkLabel(this.value)">
+          <option value="trade">Trade Papers</option>
+          <option value="answer">Answer Time</option>
+        </select>
+      </div>
     </div>
     <div class="lineup-header">
       <div class="lineup-title">TONIGHT'S LINEUP</div>
@@ -1754,7 +1761,9 @@ db.ref('trivia/categoryTypes').on('value', snap => {
 });
 db.ref('trivia/appSettings').on('value', snap => {
   appSettings = snap.val()||{};
+  const sel = document.getElementById('ak-label-select'); if(sel) sel.value = appSettings.answerSlideLabel === 'answer' ? 'answer' : 'trade';
 });
+function saveAkLabel(v) { db.ref('trivia/appSettings/answerSlideLabel').set(v === 'answer' ? 'answer' : 'trade').then(() => toast('Answer slide will say ' + (v === 'answer' ? 'Answer Time' : 'Trade Papers'))).catch(e => toast('Could not save: ' + e.message, true)); }
 // ═══════════════════════════════════════════════
 //  SETTINGS — Follow Us + Category Types
 // ═══════════════════════════════════════════════
@@ -2535,7 +2544,7 @@ function applyDefaults(catId, slotIndex) {
   if(!cat) return;
   lineupQCount[slotIndex]  = cat.defaultQCount || 20;
   lineupAnswers[slotIndex] = !!cat.defaultShowAnswers;
-  lineupTwoPass[slotIndex] = !!cat.defaultTwoPass;
+  lineupTwoPass[slotIndex] = cat.defaultTwoPass !== false;
   lineupTimed[slotIndex]   = !!cat.defaultTimed;
 }
 
@@ -2854,7 +2863,7 @@ let triviaPhase = null;
 function pressLaunchBtn() {
   if(triviaPhase === 'setup') { sendHostCommand('launch'); toast('Launching trivia night…'); }
   else if(triviaPhase === 'live') toast('Trivia night is already running');
-  else launchTrivia();
+  else confirmAction('opentrivia');
 }
 function renderLaunchBtn() {
   const b = document.getElementById('launch-btn');
@@ -3096,11 +3105,11 @@ function toggleLbAdmin() {
 
 function confirmAction(action) {
   pendingConfirmAction = action;
-  const titles = { clear: 'Clear Scores?', reset: 'Reset Game?', launch: 'Launch a new game?', endreset: 'Game over — reset?' };
+  const titles = { clear: 'Clear Scores?', reset: 'Reset Game?', opentrivia: 'Open a new game?', endreset: 'Game over — reset?' };
   const msgs = {
     clear: 'This will wipe all team scores and submitted answers. This cannot be undone.',
     reset: 'This will reset the entire game — all teams, scores, and answers will be cleared. Players will need to re-register.',
-    launch: 'Has the game on the host board been reset? If the last game\u2019s teams and scores are still showing, press Cancel and reset first.',
+    opentrivia: 'Has the game on the host board been reset? If the last game\u2019s teams and scores are still showing, press Cancel and reset first (Reset Game on the host board).',
     endreset: 'The game is over. Reset it now so the next game starts clean? (All teams, scores, and answers will be cleared.)'
   };
   document.getElementById('hb-confirm-title').textContent = titles[action];
@@ -3124,8 +3133,8 @@ async function runConfirmedAction() {
     toast('Scores cleared');
   } else if(action === 'give-scores') {
     await giveScores();
-  } else if(action === 'launch') {
-    sendHostCommand('launch');
+  } else if(action === 'opentrivia') {
+    launchTrivia();
   } else if(action === 'reset' || action === 'endreset') {
     await liveRef().remove();
     lbAdminVisible = false; hostTimedOn = false;
@@ -3408,7 +3417,7 @@ function buildResultsPayload() {
       if(!results[teamId]) results[teamId] = [];
       const st = effectiveStatus(qId, ans) || 'pending';
       const pts = st === 'correct' ? (typeof ans.points === 'number' && ans.points > 0 ? ans.points : POINTS_PER_CORRECT) : 0;
-      results[teamId].push({ qText: ans.questionText || '', answer: ans.answer || '', status: st, pts });
+      results[teamId].push({ qText: ans.questionText || '', answer: ans.answer || '', status: st, pts, round: qSortKey(qId)[0] });
       totals[teamId] = (totals[teamId] || 0) + pts;
     }
   }
@@ -3482,8 +3491,7 @@ function hbNextClick() {
     setTimeout(() => { try { giveScores(); } catch(e) { console.warn(e); } }, 900);
     return;
   }
-  if(hbLaunchMode()) { confirmAction('launch'); return; }
-  sendHostCommand('next');
+  sendHostCommand(hbLaunchMode() ? 'launch' : 'next');
 }
 let _scrCss = '', _scrData = null, _mirrorSig = '', _mirrorReady = false, _mirrorCss = null;
 function fitScreenFrame() {
@@ -3746,7 +3754,7 @@ function attachHbListeners() {
   const slideStateRef = liveRef('slideState'); _hbRefs.push(slideStateRef); slideStateRef.on('value', snap => {
   const s = snap.val();
   _hbS = s; updateNextBtn();
-  if(s && s.label === 'End') { if(!_endPrompted) { _endPrompted = true; setTimeout(() => confirmAction('endreset'), 600); } } else _endPrompted = false;
+  if(s && s.gameOver) { if(!_endPrompted) { _endPrompted = true; setTimeout(() => confirmAction('endreset'), 600); } } else _endPrompted = false;
   if(s && s.answerKey && s.answerKey.items) {
     const items = Array.isArray(s.answerKey.items) ? s.answerKey.items : Object.values(s.answerKey.items);
     if(items.length) {
