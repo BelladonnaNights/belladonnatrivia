@@ -541,6 +541,7 @@ import {
 const BUILTIN = [
   { key:'question',      label:'Question',       exportLabel:'Question',         type:'long', w:380 },
   { key:'answer',        label:'Answer',         exportLabel:'Answer',           type:'long', w:220 },
+  { key:'songAltAnswers', label:'Song Name Variable Answers', exportLabel:'Song Name Variable Answers', type:'long', w:240 },   // music categories only
   { key:'altAnswers',    label:'Variable Answers', exportLabel:'Variable Answers', type:'long', w:240 },
   { key:'difficulty',    label:'Diff',           exportLabel:'Difficulty (1-3)', type:'diff', w:70  },
   { key:'tags',          label:'Tags',           exportLabel:'Tags',             type:'tags', w:200 },
@@ -560,6 +561,7 @@ const CUSTOM_TYPES = { text:'Short text', long:'Long text / notes', thumbs:'Thum
 const CUSTOM_W = { text:170, long:280, thumbs:80, check:70, number:90 };
 const HEADER_MAP = {
   question:'question', answer:'answer',
+  songnamevariableanswers:'songAltAnswers', songvariableanswers:'songAltAnswers', songaltanswers:'songAltAnswers', songnamealtanswers:'songAltAnswers', artistvariableanswers:'altAnswers', artistaltanswers:'altAnswers',
   variableanswers:'altAnswers', variableanswer:'altAnswers', altanswers:'altAnswers', alternateanswers:'altAnswers', acceptedanswers:'altAnswers', alsoaccept:'altAnswers',
   difficulty:'difficulty', difficulty13:'difficulty', diff:'difficulty',
   imgurl:'imgUrl', imageurl:'imgUrl', img:'imgUrl', image:'imgUrl',
@@ -920,7 +922,11 @@ function startListeners(){
   }, () => {}));
 }
 
-const baseCols = () => [...BUILTIN, ...S.custom.filter(c => !BUILTIN.some(b => b.key === c.key)).map(c => ({ ...c, w: c.w || CUSTOM_W[c.type] || 170 }))];
+// Music categories: Question -> "Song Name", Answer -> "Artist", plus a Song Name Variable Answers column;
+// Variable Answers becomes "Artist Variable Answers". Other categories never see the song-variable column.
+const isMusicCat = () => /music/i.test((S.cats && S.cats.get(S.curId) && S.cats.get(S.curId).type) || '');
+const MUSIC_LABELS = { question:'Song Name', answer:'Artist', songAltAnswers:'Song Name Variable Answers', altAnswers:'Artist Variable Answers' };
+const baseCols = () => [...BUILTIN.filter(b => b.key !== 'songAltAnswers' || isMusicCat()).map(b => isMusicCat() && MUSIC_LABELS[b.key] ? { ...b, label: MUSIC_LABELS[b.key], exportLabel: MUSIC_LABELS[b.key] } : b), ...S.custom.filter(c => !BUILTIN.some(b => b.key === c.key)).map(c => ({ ...c, w: c.w || CUSTOM_W[c.type] || 170 }))];
 // Column order: Question is always first (pinned). Then the permanent order saved in Firestore (shared by all
 // devices), or a temporary drag-and-drop order for this session if one is active. Columns not in the saved
 // order (newly added ones) follow in their default position.
@@ -933,7 +939,13 @@ function orderCols(ord){
   for (const c of base) if (by.has(c.key)) out.push(c);
   return out;
 }
-const allCols = () => orderCols(S.tempOrder || S.order);
+const allCols = () => {
+  const cols = orderCols(S.tempOrder || S.order);
+  if (!isMusicCat()) return cols;
+  // music: Song Name, Artist, Song Name Variable Answers, Artist Variable Answers — always in that order
+  const pick = k => cols.find(c => c.key === k), pinned = ['question','answer','songAltAnswers','altAnswers'].map(pick).filter(Boolean);
+  return [...pinned, ...cols.filter(c => !pinned.includes(c))];
+};
 const colWidth = c => Math.max(60, Math.round(Number(S.colW && S.colW[c.key]) || c.w || 170));
 const visibleCols = () => allCols().filter(c => c.key === 'question' || !S.hidden.has(c.key));
 
@@ -1475,7 +1487,7 @@ tbody.addEventListener('click', async e => {
 /* ── Question editor: every column of one question as a fill-in form ── */
 const QE_ORDER = [
   ['The question', ['question']],
-  ['Answer', ['answer', 'altAnswers']],
+  ['Answer', ['answer', 'songAltAnswers', 'altAnswers']],
   ['Difficulty', ['difficulty']],
   ['Multiple choice options', ['optionA', 'optionB', 'optionC', 'optionD']],
   ['Media', ['imgUrl', 'soundUrl']],
@@ -1485,6 +1497,7 @@ const QE_ORDER = [
 ];
 const QE_HELP = {
   altAnswers: 'Other wordings that count as correct — one per line.',
+  songAltAnswers: 'Other wordings of the song name that count as correct — one per line.',
   difficulty: '1 = easy · 2 = medium · 3 = hard',
   optionA: 'Leave all four blank for an open-answer question.',
   tags: 'Separate tags with commas.'
