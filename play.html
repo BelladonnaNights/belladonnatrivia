@@ -742,6 +742,13 @@ function handleGame(game) {
       return;
     }
 
+    // Results / leaderboard were turned off: go back to wherever the player was
+    const _vis = Array.from(document.querySelectorAll('.screen')).find(s => !s.classList.contains('hidden'));
+    if(_vis && (_vis.id === 'results-screen' || _vis.id === 'lb-screen') && !myqOpen) {
+      if((game.status === 'question' || game.status === 'closed') && currentQ) showScreen('q-screen');
+      else if(game.status !== 'waiting') showWait();
+    }
+
     switch(game.status) {
       case 'question':
         if(!game.currentQuestion) break;
