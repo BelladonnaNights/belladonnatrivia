@@ -1764,13 +1764,19 @@ db.ref('trivia/appSettings').on('value', snap => {
   appSettings = snap.val()||{};
   syncAkSeg();
 });
+let _akLive = null;
 function syncAkSeg() {
-  const a = appSettings && appSettings.answerSlideLabel === 'answer';
+  let ls = null; try { ls = localStorage.getItem('trivia-ak-label'); } catch(e) {}
+  const a = (_akLive || ls || (appSettings && appSettings.answerSlideLabel)) === 'answer';
   document.getElementById('ak-seg-answer')?.classList.toggle('on', a);
   document.getElementById('ak-seg-trade')?.classList.toggle('on', !a);
 }
 function saveAkLabel(v) {
-  appSettings.answerSlideLabel = v === 'answer' ? 'answer' : 'trade'; syncAkSeg(); db.ref('trivia/appSettings/answerSlideLabel').set(v === 'answer' ? 'answer' : 'trade').then(() => toast('Answer slide will say ' + (v === 'answer' ? 'Answer Time' : 'Trade Papers'))).catch(e => toast('Could not save: ' + e.message, true)); }
+  v = v === 'answer' ? 'answer' : 'trade'; _akLive = v; syncAkSeg();
+  try { localStorage.setItem('trivia-ak-label', v); } catch(e) {}
+  // saved on this host's own game, so it needs no Settings/admin permission
+  liveRef('answerSlideLabel').set(v).then(() => toast('Answer slide will say ' + (v === 'answer' ? 'Answer Time' : 'Trade Papers'))).catch(e => toast('Could not save: ' + e.message, true));
+  return; db.ref('trivia/appSettings/answerSlideLabel').set(v === 'answer' ? 'answer' : 'trade').then(() => toast('Answer slide will say ' + (v === 'answer' ? 'Answer Time' : 'Trade Papers'))).catch(e => toast('Could not save: ' + e.message, true)); }
 // ═══════════════════════════════════════════════
 //  SETTINGS — Follow Us + Category Types
 // ═══════════════════════════════════════════════
@@ -3062,9 +3068,12 @@ function arrangePopups() {   // answer key + grading panel sit side by side
   const g = document.getElementById('hb-grading-popup'), k = document.getElementById('hb-answerkey-popup');
   if(!g || !k || !g.classList.contains('show') || !k.classList.contains('show')) return;
   const W = window.innerWidth, kw = k.offsetWidth;          // the key keeps its size
-  const gl = 12 + kw + 12, gw = Math.max(380, Math.min(680, W - gl - 12));
-  k.style.transform = 'none'; k.style.left = '12px'; k.style.top = '90px';
-  g.style.transform = 'none'; g.style.left = gl + 'px'; g.style.top = '90px'; g.style.width = gw + 'px';
+  const gw = Math.max(380, Math.min(680, W - kw - 36)), total = kw + 12 + gw;
+  const x0 = Math.max(12, Math.round((W - total) / 2));           // the pair sits centered together
+  g.style.width = gw + 'px';
+  const H = window.innerHeight, hMax = Math.max(k.offsetHeight, g.offsetHeight), top = Math.max(20, Math.round((H - hMax) / 2));
+  k.style.transform = 'none'; k.style.left = x0 + 'px'; k.style.top = top + 'px';
+  g.style.transform = 'none'; g.style.left = (x0 + kw + 12) + 'px'; g.style.top = top + 'px';
 }
 function makeDraggable(pop, bar) {
   if(!pop || !bar) return;
@@ -3715,6 +3724,12 @@ function attachHbListeners() {
   scrCssRef.on('value', snap => { _scrCss = snap.val() || ''; renderScreenMirror(); });
   const scrRef = liveRef('screen'); _hbRefs.push(scrRef);
   scrRef.on('value', snap => { _scrData = snap.val(); renderScreenMirror(); });
+
+  const akRef = liveRef('answerSlideLabel'); _hbRefs.push(akRef);
+  akRef.on('value', snap => {
+    _akLive = snap.val(); syncAkSeg();
+    if(!snap.val()) { let ls = null; try { ls = localStorage.getItem('trivia-ak-label'); } catch(e) {} if(ls) akRef.set(ls).catch(() => {}); }   // carry the host's choice into each new game
+  });
 
   const introPlayingRef = liveRef('introPlaying'); _hbRefs.push(introPlayingRef);
   introPlayingRef.on('value', snap => {
