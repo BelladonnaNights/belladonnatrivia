@@ -3031,10 +3031,13 @@ function updateAnswerKeyBtn() { const b = document.getElementById('hb-answerkey-
 function openAnswerKey() {
   if(!hostAnswerKey) return;
   document.getElementById('hb-answerkey-title').textContent = 'ANSWER KEY' + (hostAnswerKey.title ? ' — ' + hostAnswerKey.title : '');
-  document.getElementById('hb-answerkey-body').innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px 28px;padding:14px 22px">'
+  const _n = hostAnswerKey.items.length, _cols = _n <= 10 ? 1 : _n <= 20 ? 2 : _n <= 30 ? 3 : 4, _rows = Math.ceil(_n / _cols);
+  const _fs = _rows <= 10 ? 20 : _rows <= 15 ? 17 : 14;
+  { const pop = document.getElementById('hb-answerkey-popup'); if(pop) pop.style.width = Math.max(340, Math.min(Math.floor(window.innerWidth * 0.5), _cols * (_fs * 17) + 40)) + 'px'; }
+  document.getElementById('hb-answerkey-body').innerHTML = '<div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(' + _rows + ',auto);grid-template-columns:repeat(' + _cols + ',1fr);gap:0 28px;padding:14px 22px">'
     + hostAnswerKey.items.map((t, i) => '<div style="display:flex;gap:12px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--border)">'
       + '<span style="font-family:var(--cinzel);font-weight:700;font-size:16px;background:var(--gold);color:#000;border-radius:5px;padding:2px 9px;min-width:34px;text-align:center;flex-shrink:0">' + (i + 1) + '</span>'
-      + '<span style="font-family:var(--cinzel);font-size:20px;color:var(--text);line-height:1.3">' + escHtml(t) + '</span></div>').join('')
+      + '<span style="font-family:var(--cinzel);font-size:' + _fs + 'px;color:var(--text);line-height:1.3">' + escHtml(t) + '</span></div>').join('')
     + '</div>';
   document.getElementById('hb-answerkey-popup').classList.add('show');
   arrangePopups();
@@ -3042,9 +3045,10 @@ function openAnswerKey() {
 function arrangePopups() {   // answer key + grading panel sit side by side
   const g = document.getElementById('hb-grading-popup'), k = document.getElementById('hb-answerkey-popup');
   if(!g || !k || !g.classList.contains('show') || !k.classList.contains('show')) return;
-  const W = window.innerWidth, gw = Math.min(680, Math.floor(W * 0.52)), kw = Math.max(300, W - gw - 36);
-  g.style.transform = 'none'; g.style.left = '12px'; g.style.top = '90px'; g.style.width = gw + 'px';
-  k.style.transform = 'none'; k.style.left = (gw + 24) + 'px'; k.style.top = '90px'; k.style.width = kw + 'px';
+  const W = window.innerWidth, kw = k.offsetWidth;          // the key keeps its size
+  const gl = 12 + kw + 12, gw = Math.max(380, Math.min(680, W - gl - 12));
+  k.style.transform = 'none'; k.style.left = '12px'; k.style.top = '90px';
+  g.style.transform = 'none'; g.style.left = gl + 'px'; g.style.top = '90px'; g.style.width = gw + 'px';
 }
 function makeDraggable(pop, bar) {
   if(!pop || !bar) return;
@@ -3466,10 +3470,17 @@ function hbLaunchMode() { return hostIntroOn && !(_hbS && _hbS.roundNum); }
 function hbKeyMode() { return !!(_hbS && _hbS.keyNext && _hbS.qNow && _hbS.qTotal && _hbS.qNow === _hbS.qTotal); }
 function updateNextBtn() {
   const b = document.getElementById('hb-next-btn'); if(!b) return;
-  b.textContent = hbLaunchMode() ? 'Launch Trivia' : hbKeyMode() ? 'Answer Key →' : 'Next →';
+  b.textContent = hbLaunchMode() ? 'Launch Trivia' : hbKeyMode() ? 'Answer Key (lock all answers)' : 'Next →';
 }
-function hbNextClick() { sendHostCommand(hbLaunchMode() ? 'launch' : 'next'); }
-let _scrCss = '', _scrData = null, _mirrorSig = '', _mirrorReady = false;
+function hbNextClick() {
+  if(hbKeyMode()) {   // lock answers, bring up the key, and send everyone their results
+    sendHostCommand('next');
+    setTimeout(() => { try { giveScores(); } catch(e) { console.warn(e); } }, 900);
+    return;
+  }
+  sendHostCommand(hbLaunchMode() ? 'launch' : 'next');
+}
+let _scrCss = '', _scrData = null, _mirrorSig = '', _mirrorReady = false, _mirrorCss = null;
 function fitScreenFrame() {
   const t = document.getElementById('hb-preview-thumb'), f = document.getElementById('hb-screen-frame');
   if(!t || !f || !_scrData) return;
@@ -3484,19 +3495,21 @@ function renderScreenMirror() {
   const t = document.getElementById('hb-preview-thumb'), f = document.getElementById('hb-screen-frame');
   if(!t || !f) return;
   if(!_scrData || !_scrData.html) { t.classList.remove('mirroring'); _mirrorSig = ''; return; }
-  const sig = _scrCss.length + '|' + _scrData.w + 'x' + _scrData.h + '|' + _scrData.html;
+  const sig = _scrData.w + 'x' + _scrData.h + '|' + _scrData.html + '|' + (_mirrorCss === _scrCss ? '' : 'css');
   if(sig === _mirrorSig) { t.classList.add('mirroring'); fitScreenFrame(); return; }   // nothing changed: leave it alone
   _mirrorSig = sig;
   try {
     const d = f.contentDocument;
-    if(_mirrorReady && d && d.body) { d.body.innerHTML = _scrData.html; t.classList.add('mirroring'); fitScreenFrame(); return; }   // swap content in place, no reload
+    if(_mirrorReady && d && d.body) {
+      if(_mirrorCss !== _scrCss) { const st = d.getElementById('mcss'); if(st) st.textContent = _scrCss; _mirrorCss = _scrCss; }
+      d.body.innerHTML = _scrData.html; t.classList.add('mirroring'); fitScreenFrame(); return; }   // swap content in place, no reload
   } catch(e) {}
-  _mirrorReady = false;
+  _mirrorReady = false; _mirrorCss = _scrCss;
   f.onload = () => { _mirrorReady = true; };
   f.srcdoc = '<!doctype html><html><head><meta charset="utf-8">'
     + '<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@500;600;700&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">'
-    + '<style>' + _scrCss + '</style>'
-    + '<style>html,body{background:#000}.slide.active,.slide.active.visible{opacity:1!important;animation:none!important}#pres-screen,#pres-screen.show{display:block!important}</style>'
+    + '<style id="mcss">' + _scrCss + '</style>'
+    + '<style>[style*="background-clip"],.round-title span{background:none!important;-webkit-text-fill-color:#e6c25a!important;color:#e6c25a!important}html,body{background:#000}.slide.active,.slide.active.visible{opacity:1!important;animation:none!important}#pres-screen,#pres-screen.show{display:block!important}</style>'
     + '</head><body>' + _scrData.html + '</body></html>';
   t.classList.add('mirroring');
   fitScreenFrame();
