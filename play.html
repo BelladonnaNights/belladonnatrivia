@@ -458,6 +458,8 @@ async function renderMyQ() {
   const saved = {};
   await Promise.all(qs.map(async q => {
     try { saved[q.id] = (await gref('answers/' + q.id + '/' + teamId).once('value')).val(); } catch(e) {}
+    if(q.type === 'music') { try { const art = (await gref('answers/' + q.id + '_artist/' + teamId).once('value')).val(); const sv = saved[q.id];
+      if(sv || art) saved[q.id] = { answer: ((sv && sv.answer) || '\u2014') + ' \u2014 ' + ((art && art.answer) || '\u2014'), status: ((sv && sv.status && sv.status !== 'pending') || (art && art.status && art.status !== 'pending')) ? 'graded' : 'pending' }; } catch(e) {} }
     if(!saved[q.id]) { const m = myAnswers.find(a => a.qId === q.id); if(m) saved[q.id] = { answer: m.answer, status: 'pending' }; }
   }));
   list.innerHTML = '';
@@ -508,10 +510,12 @@ async function editAnswer(q, value) {
   try {
     const cur = (await gref('answers/' + q.id + '/' + teamId).once('value')).val();
     if(cur && cur.status && cur.status !== 'pending') return false;
+    if(q.type === 'music') { const c2 = (await gref('answers/' + q.id + '_artist/' + teamId).once('value')).val(); if(c2 && c2.status && c2.status !== 'pending') return false; }
   } catch(e) {}
   const i = myAnswers.findIndex(a => a.qId === q.id);
   const entry = { qId:q.id, index:q.index, text:q.text, answer:value, elapsed:null };
   if(i >= 0) myAnswers[i] = entry; else myAnswers.push(entry);
+  if(q.type === 'music') return await writeMusicAnswers(q, value, null);
   let correctAnswer = '', questionText = q.text || '';
   try { const m = (await gref('questionMeta/' + q.id).once('value')).val(); if(m) { correctAnswer = m.correctAnswer || ''; questionText = m.questionText || questionText; } } catch(e) {}
   try {
@@ -857,6 +861,24 @@ function updateAudioBtn() {
   if(stopBtn) stopBtn.style.display = currentAudio ? 'block' : 'none';
 }
 
+// Music: the song name and the artist are two separate answers (1 point each)
+async function writeMusicAnswers(q, combined, elapsed) {
+  const i = String(combined).indexOf(' \u2014 ');
+  const song = i < 0 ? String(combined) : combined.slice(0, i), artist = i < 0 ? '' : combined.slice(i + 3);
+  const clean = x => (x.trim() === '\u2014' ? '' : x.trim());
+  let ok = true;
+  for(const [id, val] of [[q.id, clean(song)], [q.id + '_artist', clean(artist)]]) {
+    const r = gref('answers/' + id + '/' + teamId);
+    if(!val) { try { await r.remove(); } catch(e) {} continue; }
+    let meta = null;
+    try { meta = (await gref('questionMeta/' + id).once('value')).val(); } catch(e) {}
+    try {
+      await r.set({ answer: val, timestamp: Date.now(), elapsed: elapsed == null ? null : elapsed, teamName,
+        questionText: (meta && meta.questionText) || '', correctAnswer: (meta && meta.correctAnswer) || '', type: 'open', status: 'pending' });
+    } catch(e) { ok = false; }
+  }
+  return ok;
+}
 async function submitAnswer(value, btn, type) {
   if(!currentQ || lockedAll) return;
   const isTimed = currentQ.timed;
@@ -902,6 +924,7 @@ async function submitAnswer(value, btn, type) {
   }
 
   // Write to Firebase
+  if(value !== null && currentQ.type === 'music') { await writeMusicAnswers(currentQ, value, elapsed); return; }
   if(value !== null) {
     let correctAnswer = currentQ.correct || '';
     let questionText = currentQ.text || '';
