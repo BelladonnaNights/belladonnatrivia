@@ -995,7 +995,7 @@ function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
     answer: answer || '',
     hasAudio: !!(extra && extra.hasAudio),
     roundNum: (extra && extra.roundNum) || null, roundTotal: (extra && extra.roundTotal) || null,
-    qNow: (extra && extra.qNow) || null, qTotal: (extra && extra.qTotal) || null, keyNext: !!(extra && extra.keyNext),
+    qNow: (extra && extra.qNow) || null, qTotal: (extra && extra.qTotal) || null, keyNext: !!(extra && extra.keyNext), gameOver: !!(extra && extra.gameOver),
     canFeedback: !!(extra && extra.canFeedback),
     keyAnswer: (extra && extra.keyAnswer) || '',
     answerKey: (extra && extra.answerKey) || null,
@@ -1976,7 +1976,7 @@ function renderCurrentSlide() {
     } else if(type === S_INTERSTITIAL) {
       label = 'Interstitial'; text = 'Pass 1 Complete';
     } else if(type === S_ANSWERKEY) {
-      label = 'Trade Papers'; text = round.tabName || round.title || '';
+      label = akSlideWords().join(' '); text = round.tabName || round.title || '';
     } else if(type === S_THANKYOU) {
       label = 'Thank You'; text = 'Round complete';
     } else if(type === S_END) {
@@ -1997,6 +1997,7 @@ function renderCurrentSlide() {
     pushSlideState(label, text, qNum, previewBg, answer, {
       hasAudio, whisperQ, whisperA, answerKey: akData, keyAnswer: (type === S_QUESTION && round.questions[questionInfo().qIndex]) ? round.questions[questionInfo().qIndex].answer : '', roundNum: state.roundIndex + 1, roundTotal: state.rounds.length,
       qNow: _qNow, qTotal: _qNow ? _n : null,
+      gameOver: type === S_END && state.roundIndex >= state.rounds.length - 1,
       keyNext: type === S_QUESTION && !round.twoPass && !round.showAnswers && round.type !== 'slideshow' && round.type !== 'canva',
       canFeedback: type === S_QUESTION && round.type !== 'music' && round.type !== 'slideshow' && round.type !== 'canva',
     });
@@ -2224,7 +2225,9 @@ function loadNextWeek() {
       out.dateKey = nk;
       const norm = x => String(x||'').toLowerCase().replace(/\s+/g,' ').trim();
       const val = async path => { try { return (await db.ref(path).once('value')).val(); } catch(e) { return null; } };
+      out.vid = vid;
       let vName = await val('trivia/planner/venues/'+vid+'/name') || p.get('venueName') || localStorage.getItem('trivia-last-venueName') || '';
+      out.vName = vName;
       const cats = await val('trivia/categories') || {};
       const kindOfCat = c => {
         const t = String(c && c.type || '').toLowerCase();
@@ -2241,7 +2244,13 @@ function loadNextWeek() {
       const add = (kind, label) => { const key = kind+'|'+norm(label); if(!label || seen.has(key)) return; seen.add(key); out.items.push({ kind, label }); };
 
       // Trivia night (its rounds can include bingo / karaoke categories too)
-      const g = await val('trivia/planner/gigs/'+vid+'/'+nk);
+      let g = await val('trivia/planner/gigs/'+vid+'/'+nk);
+      if(!g && vName) {   // the launch link's venue id may not be the Planner's — match the Planner venue by name
+        const pv = await val('trivia/planner/venues') || {};
+        const alt = Object.entries(pv).find(([id, v]) => id !== vid && norm(v && v.name) === norm(vName));
+        if(alt) g = await val('trivia/planner/gigs/'+alt[0]+'/'+nk);
+      }
+      console.info('[Next week]', { venueId: vid, venueName: vName, date: nk, trivia: !!g });
       if(g && g.status !== 'cancelled') {
         const rounds = [];
         if(g.themeName) rounds.push({ id:g.themeId, name:g.themeName });
@@ -2333,7 +2342,7 @@ function renderNextWeek(container) {
   if(!n && pending) {
     rows = '';
   } else if(!n) {
-    rows = `<div style="margin-top:150px;text-align:center;font-family:var(--cinzel);font-weight:600;font-size:54px;letter-spacing:.14em;text-transform:uppercase;color:#fff;line-height:1.5">Next week&rsquo;s schedule<br>is coming soon</div>`;
+    rows = `<div style="margin-top:150px;text-align:center;font-family:var(--cinzel);font-weight:600;font-size:54px;letter-spacing:.14em;text-transform:uppercase;color:#fff;line-height:1.5">Next week&rsquo;s schedule<br>is coming soon</div><div style="margin-top:30px;text-align:center;font-family:var(--cinzel);font-size:20px;letter-spacing:.1em;color:rgba(255,255,255,.35)">${psEsc(r.vid ? ((r.vName || r.vid) + ' · ' + (r.dateKey || '')) : 'no venue was passed to this page')}</div>`;
   } else {
     const avail = 610;                                   // vertical room for the list
     const rowH = Math.min(196, Math.floor(avail / n));
@@ -2961,12 +2970,13 @@ function playMusicAudio(btn) {
   }
 }
 
+function akSlideWords() { return (appSettings && appSettings.answerSlideLabel === 'answer') ? ['Answer', 'Time'] : ['Trade', 'Papers']; }
 function renderAnswerKey(container, round) {
   // The answer key is host-board only now; the TV just tells everyone to swap papers
   const el = document.createElement('div');
   el.className = 'slide slide-end active';
   el.style.cssText = 'position:absolute;inset:0;';
-  el.innerHTML = '<div class="end-title" style="font-size:clamp(70px,14vw,190px);margin-bottom:0">Trade<br>Papers</div>';
+  el.innerHTML = '<div class="end-title" style="font-size:clamp(70px,14vw,190px);margin-bottom:0">' + akSlideWords().join('<br>') + '</div>';
   container.appendChild(el);
 }
 
@@ -3306,6 +3316,7 @@ function checkUrlParams() {
 
 // "Has the host board been reset?" check before a new game goes live (skipped when the host board already asked)
 function askLaunch(go) {
+  go(); return;   // the reset check now happens on the host board when Open Trivia is pressed
   if(_viaHost) { go(); return; }
   const m = document.getElementById('launch-confirm'); if(!m) { go(); return; }
   m.style.display = 'flex';
