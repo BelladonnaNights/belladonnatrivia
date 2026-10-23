@@ -362,7 +362,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 
 /* JOIN QR — bottom-right corner box shown over the intro-slide screensaver */
 #ss-join-qr{
-  position:absolute;right:2.2rem;bottom:2.2rem;width:min(38vh,28vw);max-width:none;min-width:230px;
+  position:absolute;left:2.2rem;bottom:2.2rem;width:min(38vh,28vw);max-width:none;min-width:230px;
   display:none;flex-direction:column;align-items:center;gap:.6rem;
   background:rgba(255,255,255,.96);border-radius:16px;padding:1rem;
   box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:2010;
@@ -582,7 +582,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   <div id="ss-slide-a" style="position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;opacity:0;transition:opacity 1.5s ease"></div>
   <div id="ss-slide-b" style="position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;opacity:0;transition:opacity 1.5s ease"></div>
   <div style="position:absolute;bottom:2rem;width:100%;text-align:center;font-family:var(--cinzel);font-size:11px;letter-spacing:.2em;color:rgba(255,255,255,.4)">CLICK OR PRESS ANY KEY TO DISMISS</div>
-  <button id="ss-launch-btn" onclick="event.stopPropagation();launchFromIntro()" style="display:none;position:absolute;left:2.2rem;bottom:2.2rem;padding:14px 26px;font-family:var(--cinzel);font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);cursor:pointer">Launch Trivia →</button>
+  <button id="ss-launch-btn" onclick="event.stopPropagation();launchFromIntro()" style="display:none;position:absolute;right:2.2rem;bottom:2.2rem;padding:14px 26px;font-family:var(--cinzel);font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;background:var(--gold-shine);color:#000;border:none;border-radius:var(--radius);cursor:pointer">Launch Trivia →</button>
   <div id="ss-join-qr" onclick="event.stopPropagation()">
     <div id="ss-join-qr-label">Join the Game Here:</div>
     <div id="ss-join-qr-code"></div>
@@ -818,7 +818,7 @@ function renderLeaderboardOverlay(teams) {
     <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;
       background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px">
       <div style="font-family:var(--display);font-size:32px;color:${i<3?'var(--gold)':'var(--text3)'};min-width:36px">${i+1}</div>
-      <div style="flex:1;font-family:var(--cinzel);font-size:15px;letter-spacing:.08em">${t.name}</div>
+      <div style="flex:1;font-family:var(--cinzel);font-size:28px;letter-spacing:.06em">${t.name}</div>
       <div style="font-family:var(--display);font-size:32px;color:var(--gold)">${t.score}</div>
     </div>`).join('');
 }
@@ -938,7 +938,8 @@ if(db) {
       case 'feedback-note': saveHostFeedbackNote(cmd.text); break;
       case 'audio':
         // Try music play button first, then regular audio button
-        const musicBtn = document.getElementById('music-play-btn');
+        if(window._musicAudio) { stopMusicAudio(); break; }          // already playing -> the host button stops it
+        const musicBtn = document.getElementById('music-play-btn') || document.getElementById('music-play-again-btn');
         if(musicBtn && !musicBtn.disabled) { playMusicAudio(musicBtn); break; }
         const audioBtn = document.querySelector('.audio-btn:not([disabled])');
         if(audioBtn) { audioBtn.click(); break; }
@@ -983,7 +984,7 @@ function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
     answer: answer || '',
     hasAudio: !!(extra && extra.hasAudio),
     roundNum: (extra && extra.roundNum) || null, roundTotal: (extra && extra.roundTotal) || null,
-    qNow: (extra && extra.qNow) || null, qTotal: (extra && extra.qTotal) || null,
+    qNow: (extra && extra.qNow) || null, qTotal: (extra && extra.qTotal) || null, keyNext: !!(extra && extra.keyNext),
     canFeedback: !!(extra && extra.canFeedback),
     keyAnswer: (extra && extra.keyAnswer) || '',
     answerKey: (extra && extra.answerKey) || null,
@@ -1938,7 +1939,7 @@ function renderCurrentSlide() {
       qNum   = 'Q' + (qIndex+1);
       text   = q ? q.question : '';
       answer = (state.answerVisible || state.bonusVisible) && q ? q.answer : '';
-      hasAudio = !!(q && q.audioUrl);
+      hasAudio = !!(q && q.audioUrl) || round.type === 'music';
       whisperQ = (q && q.whisperQ) || ''; whisperA = (q && q.whisperA) || '';
       if(q) recordPlay(round, q);
       // Picture-round questions: show the actual question image in the
@@ -1970,6 +1971,7 @@ function renderCurrentSlide() {
     pushSlideState(label, text, qNum, previewBg, answer, {
       hasAudio, whisperQ, whisperA, answerKey: akData, keyAnswer: (type === S_QUESTION && round.questions[questionInfo().qIndex]) ? round.questions[questionInfo().qIndex].answer : '', roundNum: state.roundIndex + 1, roundTotal: state.rounds.length,
       qNow: _qNow, qTotal: _qNow ? _n : null,
+      keyNext: type === S_QUESTION && !round.twoPass && !round.showAnswers && round.type !== 'slideshow' && round.type !== 'canva',
       canFeedback: type === S_QUESTION && round.type !== 'music' && round.type !== 'slideshow' && round.type !== 'canva',
     });
     pushNextQuestionPeek();
@@ -2803,6 +2805,13 @@ function renderMusicQuestion(container, round) {
   }
 }
 
+function stopMusicAudio() {
+  if(window._musicAudio) { try { window._musicAudio.pause(); } catch(e) {} window._musicAudio = null; }
+  if(window._musicCtx) { try { window._musicCtx.close(); } catch(e) {} window._musicCtx = null; }
+  document.querySelectorAll('#music-play-btn,#music-play-again-btn').forEach(b => { b.disabled = false; b.classList.remove('playing'); });
+  document.querySelectorAll('.music-bars').forEach(b => b.classList.remove('playing'));
+  const hint = document.getElementById('music-play-hint'); if(hint) hint.textContent = 'Click to play';
+}
 function playMusicAudio(btn) {
   if(!btn || btn.disabled) return;
   const src       = btn.dataset.audioSrc;
