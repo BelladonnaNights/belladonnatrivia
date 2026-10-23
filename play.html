@@ -391,7 +391,8 @@ let answered = false;
 let timerInterval = null;
 let timerStart = null;
 let myAnswers = []; // history of answers this game
-let inTwoPass = false; // track if current round is two-pass
+let inTwoPass = false;
+let lockedAll = false; // host pressed 'Answer Key (lock all answers)' // track if current round is two-pass
 
 // ═══════════════════════════════════════════════
 //  SCREENS
@@ -466,7 +467,8 @@ async function renderMyQ() {
     const n = document.createElement('div'); n.className = 'q-num'; n.textContent = 'Round ' + (q.roundIndex+1) + ' · Question ' + (q.index+1);
     const t = document.createElement('div'); t.className = 'q-text'; t.textContent = q.text;
     card.appendChild(n); card.appendChild(t);
-    const locked = graded || q.timed;
+    const oldRound = currentQ && typeof currentQ.roundIndex === 'number' && q.roundIndex < currentQ.roundIndex;
+    const locked = graded || q.timed || lockedAll || oldRound;
     const note = document.createElement('div'); note.className = 'myq-note';
     const save = async (val, btnEls) => {
       const ok = await editAnswer(q, val);
@@ -482,18 +484,27 @@ async function renderMyQ() {
         b.onclick = () => save(o, btns);
         btns.push(b); card.appendChild(b);
       });
+    } else if(q.type === 'music') {
+      const parts = String((cur && cur.answer) || '').split(' \u2014 ');
+      const si = document.createElement('input'); si.className = 'open-input'; si.placeholder = 'Name of the song'; si.value = parts[0] === '\u2014' ? '' : (parts[0] || ''); si.disabled = !!locked;
+      const ai = document.createElement('input'); ai.className = 'open-input'; ai.placeholder = 'Name of the artist'; ai.value = parts[1] === '\u2014' ? '' : (parts[1] || ''); ai.disabled = !!locked;
+      const sb = document.createElement('button'); sb.className = 'open-submit'; sb.textContent = 'Save answer'; sb.disabled = !!locked;
+      sb.onclick = () => { const a = si.value.trim(), b = ai.value.trim(); if(a || b) save((a || '\u2014') + ' \u2014 ' + (b || '\u2014')); };
+      card.appendChild(si); card.appendChild(ai); card.appendChild(sb);
     } else {
       const inp = document.createElement('input'); inp.className = 'open-input'; inp.value = (cur && cur.answer) || ''; inp.placeholder = 'Type your answer…'; inp.disabled = !!locked;
       const sb = document.createElement('button'); sb.className = 'open-submit'; sb.textContent = 'Save answer'; sb.disabled = !!locked;
       sb.onclick = () => { const v = inp.value.trim(); if(v) save(v); };
       card.appendChild(inp); card.appendChild(sb);
     }
-    if(locked) note.textContent = graded ? 'Already graded' : 'Timed question — locked';
+    if(locked) note.textContent = (lockedAll || oldRound || graded) ? 'Answers are locked' : 'Timed question — locked';
     card.appendChild(note);
     list.appendChild(card);
   });
 }
 async function editAnswer(q, value) {
+  if(lockedAll) return false;
+  if(currentQ && typeof currentQ.roundIndex === 'number' && q.roundIndex < currentQ.roundIndex) return false;
   try {
     const cur = (await gref('answers/' + q.id + '/' + teamId).once('value')).val();
     if(cur && cur.status && cur.status !== 'pending') return false;
@@ -504,7 +515,7 @@ async function editAnswer(q, value) {
   let correctAnswer = '', questionText = q.text || '';
   try { const m = (await gref('questionMeta/' + q.id).once('value')).val(); if(m) { correctAnswer = m.correctAnswer || ''; questionText = m.questionText || questionText; } } catch(e) {}
   try {
-    await gref('answers/' + q.id + '/' + teamId).set({ answer:value, timestamp:Date.now(), elapsed:null, teamName, questionText, correctAnswer, type:q.type||'open', status:'pending' });
+    await gref('answers/' + q.id + '/' + teamId).set({ answer:value, timestamp:Date.now(), elapsed:null, teamName, questionText, correctAnswer, type:(q.type === 'music' ? 'open' : (q.type||'open')), status:'pending' });
     return true;
   } catch(e) { return false; }
 }
@@ -591,7 +602,7 @@ function startListening() {
   if(_listening) return;
   _listening = true;
   const game = {};
-  const keys = ['status','currentQuestion','sessionId','leaderboardVisible','resultsVisible','results','teams'];
+  const keys = ['status','currentQuestion','sessionId','leaderboardVisible','resultsVisible','results','teams','answersLocked'];
   let loaded = 0, timer = null;
   const fire = () => { clearTimeout(timer); timer = setTimeout(() => handleGame(Object.assign({}, game)), 30); };
   keys.forEach(k => {
@@ -635,12 +646,14 @@ function handleGame(game) {
 
     // Update score from Firebase (source of truth)
     if(game.teams && game.teams[teamId]) myScore = game.teams[teamId].score || 0;
+    lockedAll = !!game.answersLocked;
     trackRoundScore(game);
     renderScore();
     if(game.status === 'question' && game.currentQuestion) rememberQuestion(game.currentQuestion);
 
     // Results visible — show per-answer results with scores
     if(game.resultsVisible && game.results && game.results[teamId]) {
+      if(myqOpen) { myqOpen = false; }   // pull them out of the editor — results are up
       showResults(game.results[teamId], game.teams || {});
       return;
     }
@@ -717,6 +730,23 @@ function renderQuestion(q) {
       grid.appendChild(btn);
     });
     body.appendChild(grid);
+  } else if(q.type === 'music') {
+    const wrap = document.createElement('div');
+    wrap.className = 'open-wrap';
+    const song = document.createElement('input');
+    song.type = 'text'; song.className = 'open-input'; song.placeholder = 'Name of the song'; song.autocomplete = 'off'; song.autocorrect = 'off'; song.spellcheck = false;
+    const artist = document.createElement('input');
+    artist.type = 'text'; artist.className = 'open-input'; artist.placeholder = 'Name of the artist'; artist.autocomplete = 'off'; artist.autocorrect = 'off'; artist.spellcheck = false;
+    const submitBtn = document.createElement('button');
+    submitBtn.className = 'open-submit'; submitBtn.textContent = 'Submit Answer';
+    submitBtn.onclick = () => {
+      const s = song.value.trim(), a = artist.value.trim();
+      if(s || a) submitAnswer((s || '—') + ' — ' + (a || '—'), submitBtn, 'open');
+    };
+    song.addEventListener('keydown', e => { if(e.key === 'Enter') artist.focus(); });
+    artist.addEventListener('keydown', e => { if(e.key === 'Enter') submitBtn.click(); });
+    wrap.appendChild(song); wrap.appendChild(artist); wrap.appendChild(submitBtn);
+    body.appendChild(wrap);
   } else if(q.type === 'tf') {
     const grid = document.createElement('div');
     grid.className = 'tf-choices';
@@ -828,7 +858,7 @@ function updateAudioBtn() {
 }
 
 async function submitAnswer(value, btn, type) {
-  if(!currentQ) return;
+  if(!currentQ || lockedAll) return;
   const isTimed = currentQ.timed;
 
   // Timed: lock after first answer. Untimed: allow changing until host advances.
@@ -888,7 +918,7 @@ async function submitAnswer(value, btn, type) {
         teamName: teamName,
         questionText,
         correctAnswer,
-        type: currentQ.type || 'open',
+        type: (currentQ.type === 'music' ? 'open' : (currentQ.type || 'open')),
         status: 'pending',
       });
     } catch(e) { console.error('Answer not saved', e); }
