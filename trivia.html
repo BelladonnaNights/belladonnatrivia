@@ -883,11 +883,18 @@ function pushLiveQuestion(q, qIndex, round) {
     }
   });
   // Store correct answer on the question node so grading panel can read it
-  liveRef(`questionMeta/${qId}`).set({
-    questionText: q.question,
-    correctAnswer: q.answer,
-    altAnswers: Array.isArray(q.altAnswers) ? q.altAnswers : [],
-  });
+  if(round.type === 'music') {
+    // Music: the song name is one answer (1 point) and the artist is another (1 point), graded separately
+    liveRef(`questionMeta/${qId}`).set({ questionText: 'Song name', correctAnswer: q.question, altAnswers: Array.isArray(q.songAlts) ? q.songAlts : [] });
+    liveRef(`questionMeta/${qId}_artist`).set({ questionText: 'Artist \u2014 ' + q.question, correctAnswer: q.answer, altAnswers: Array.isArray(q.altAnswers) ? q.altAnswers : [] });
+    liveRef(`answers/${qId}_artist`).remove();
+  } else {
+    liveRef(`questionMeta/${qId}`).set({
+      questionText: q.question,
+      correctAnswer: q.answer,
+      altAnswers: Array.isArray(q.altAnswers) ? q.altAnswers : [],
+    });
+  }
   liveRef(`answers/${qId}`).remove();
 }
 
@@ -1241,7 +1248,7 @@ function vaultMusicRow(id, d, catId) {
   if(!song || !artist) return null;
   return { question:song, answer:artist, difficulty:1, imageUrl:'', audioUrl:safe(d.soundUrl).trim(),
            startTime:parseMusicTime(safe(d.startTime)), endTime:parseMusicTime(safe(d.endTime)),
-           albumArt:safe(d.imgUrl).trim(), altAnswers:parseAlts(d.altAnswers), type:'standard', mcOptions:[], notes:safe(d.notes).trim(), whisperQ:safe(d.whisperQ).trim(), whisperA:safe(d.whisperA).trim(), rowIndex:null,
+           albumArt:safe(d.imgUrl).trim(), altAnswers:parseAlts(d.altAnswers), songAlts:parseAlts(d.songAltAnswers), type:'standard', mcOptions:[], notes:safe(d.notes).trim(), whisperQ:safe(d.whisperQ).trim(), whisperA:safe(d.whisperA).trim(), rowIndex:null,
            vaultQuestionId:id, vaultCatId:catId, feedbackKey:`vault__${catId}__${id}` };
 }
 
