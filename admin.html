@@ -485,7 +485,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .hb-btn-gold{background:var(--gold-dim);color:var(--gold);border:1px solid var(--gold-glow)}
 .hb-btn-gold:hover{background:rgba(201,168,76,.2)}
 .hb-btn-gold.active{background:rgba(201,168,76,.22);color:var(--gold3)}
-.hb-btn-ghost{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border2)}
+.hb-btn-ghost{background:rgba(255,255,255,.04);color:var(--text2);border:1px solid var(--border2)}
 .hb-btn-ghost:hover{background:rgba(255,255,255,.08);color:var(--text)}
 .hb-btn-ghost.active{background:var(--gold-dim);color:var(--gold);border-color:var(--gold-glow)}
 
@@ -3141,6 +3141,8 @@ async function resetThenOpen() {   // middle button: reset the game, then open t
 }
 function closeConfirm() {
   document.getElementById('hb-confirm').classList.remove('show');
+  const _m = document.getElementById('hb-confirm-mid'); if(_m) _m.style.display = 'none';
+  const _o = document.getElementById('hb-confirm-ok'); if(_o) _o.textContent = 'Confirm';
   pendingConfirmAction = null;
 }
 async function runConfirmedAction() {
@@ -3424,6 +3426,8 @@ function pressGiveScores() {
     for(const ans of Object.values(answers)) if(!effectiveStatus(qId, ans)) ungraded++;
   }
   pendingConfirmAction = 'give-scores';
+  document.getElementById('hb-confirm-mid').style.display = 'none';
+  document.getElementById('hb-confirm-ok').textContent = 'Confirm';
   document.getElementById('hb-confirm-title').textContent = 'Give Scores?';
   document.getElementById('hb-confirm-msg').textContent =
     'This sends every team their graded answers and updates the scores on their phones.'
