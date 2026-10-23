@@ -435,7 +435,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 }
 .hb-score-rank{font-family:var(--display);font-size:18px;color:var(--text3);min-width:20px;line-height:1}
 .hb-score-rank.top{color:var(--gold)}
-.hb-score-name{flex:1;font-family:var(--cinzel);font-size:11px;letter-spacing:.05em;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb-score-name{flex:1;font-family:var(--cinzel);font-size:18px;letter-spacing:.04em;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hb-score-pts{font-family:var(--display);font-size:22px;color:var(--gold);line-height:1}
 .hb-submit-count{font-family:var(--cinzel);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text2)}
 
@@ -3096,10 +3096,12 @@ function toggleLbAdmin() {
 
 function confirmAction(action) {
   pendingConfirmAction = action;
-  const titles = { clear: 'Clear Scores?', reset: 'Reset Game?' };
+  const titles = { clear: 'Clear Scores?', reset: 'Reset Game?', launch: 'Launch a new game?', endreset: 'Game over — reset?' };
   const msgs = {
     clear: 'This will wipe all team scores and submitted answers. This cannot be undone.',
-    reset: 'This will reset the entire game — all teams, scores, and answers will be cleared. Players will need to re-register.'
+    reset: 'This will reset the entire game — all teams, scores, and answers will be cleared. Players will need to re-register.',
+    launch: 'Has the game on the host board been reset? If the last game\u2019s teams and scores are still showing, press Cancel and reset first.',
+    endreset: 'The game is over. Reset it now so the next game starts clean? (All teams, scores, and answers will be cleared.)'
   };
   document.getElementById('hb-confirm-title').textContent = titles[action];
   document.getElementById('hb-confirm-msg').textContent = msgs[action];
@@ -3122,7 +3124,9 @@ async function runConfirmedAction() {
     toast('Scores cleared');
   } else if(action === 'give-scores') {
     await giveScores();
-  } else if(action === 'reset') {
+  } else if(action === 'launch') {
+    sendHostCommand('launch');
+  } else if(action === 'reset' || action === 'endreset') {
     await liveRef().remove();
     lbAdminVisible = false; hostTimedOn = false;
     hostAnswerKey = null; _akShownFor = null; updateAnswerKeyBtn(); closeAnswerKey();
@@ -3465,7 +3469,7 @@ function fitPreviewText() {
 })();
 
 // ── Live copy of the TV screen in the host-board mini screen ──
-let _hbS = null;
+let _hbS = null, _endPrompted = false;
 function hbLaunchMode() { return hostIntroOn && !(_hbS && _hbS.roundNum); }
 function hbKeyMode() { return !!(_hbS && _hbS.keyNext && _hbS.qNow && _hbS.qTotal && _hbS.qNow === _hbS.qTotal); }
 function updateNextBtn() {
@@ -3478,7 +3482,8 @@ function hbNextClick() {
     setTimeout(() => { try { giveScores(); } catch(e) { console.warn(e); } }, 900);
     return;
   }
-  sendHostCommand(hbLaunchMode() ? 'launch' : 'next');
+  if(hbLaunchMode()) { confirmAction('launch'); return; }
+  sendHostCommand('next');
 }
 let _scrCss = '', _scrData = null, _mirrorSig = '', _mirrorReady = false, _mirrorCss = null;
 function fitScreenFrame() {
@@ -3741,6 +3746,7 @@ function attachHbListeners() {
   const slideStateRef = liveRef('slideState'); _hbRefs.push(slideStateRef); slideStateRef.on('value', snap => {
   const s = snap.val();
   _hbS = s; updateNextBtn();
+  if(s && s.label === 'End') { if(!_endPrompted) { _endPrompted = true; setTimeout(() => confirmAction('endreset'), 600); } } else _endPrompted = false;
   if(s && s.answerKey && s.answerKey.items) {
     const items = Array.isArray(s.answerKey.items) ? s.answerKey.items : Object.values(s.answerKey.items);
     if(items.length) {
