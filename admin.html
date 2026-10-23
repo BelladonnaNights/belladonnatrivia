@@ -775,7 +775,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
             </svg>
           </div>
         </div>
-        <iframe id="hb-screen-frame" sandbox="" title="Mirror of the TV screen"></iframe>
+        <iframe id="hb-screen-frame" sandbox="allow-same-origin" title="Mirror of the TV screen"></iframe>
         <div class="hb-preview-resize-handle" id="hb-preview-resize-handle" title="Drag to resize"></div>
       </div>
       <div class="hb-position" id="hb-position"></div>
@@ -811,8 +811,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         </div>
         <div class="hb-nav-controls">
           <button class="hb-nav-btn" onclick="sendHostCommand('back')">← Back</button>
-          <button class="hb-nav-btn hb-nav-btn-primary" onclick="sendHostCommand('next')">Next →</button>
-          <button class="hb-nav-btn" id="hb-audio-btn" onclick="sendHostCommand('audio')" style="display:none">▶ Play Audio</button>
+          <button class="hb-nav-btn hb-nav-btn-primary" id="hb-next-btn" onclick="hbNextClick()">Next →</button>
+          <button class="hb-nav-btn" id="hb-audio-btn" onclick="sendHostCommand('audio')" style="display:none">▶ Play / ■ Stop Audio</button>
         </div>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 4px;flex-shrink:0">
@@ -3037,10 +3037,18 @@ function openAnswerKey() {
       + '<span style="font-family:var(--cinzel);font-size:20px;color:var(--text);line-height:1.3">' + escHtml(t) + '</span></div>').join('')
     + '</div>';
   document.getElementById('hb-answerkey-popup').classList.add('show');
+  arrangePopups();
 }
-(function initAnswerKeyDrag(){
-  const pop = document.getElementById('hb-answerkey-popup'), bar = document.getElementById('hb-answerkey-drag');
+function arrangePopups() {   // answer key + grading panel sit side by side
+  const g = document.getElementById('hb-grading-popup'), k = document.getElementById('hb-answerkey-popup');
+  if(!g || !k || !g.classList.contains('show') || !k.classList.contains('show')) return;
+  const W = window.innerWidth, gw = Math.min(680, Math.floor(W * 0.52)), kw = Math.max(300, W - gw - 36);
+  g.style.transform = 'none'; g.style.left = '12px'; g.style.top = '90px'; g.style.width = gw + 'px';
+  k.style.transform = 'none'; k.style.left = (gw + 24) + 'px'; k.style.top = '90px'; k.style.width = kw + 'px';
+}
+function makeDraggable(pop, bar) {
   if(!pop || !bar) return;
+  bar.style.cursor = 'move'; bar.style.touchAction = 'none'; bar.style.userSelect = 'none';
   let dx = 0, dy = 0, dragging = false;
   bar.addEventListener('pointerdown', e => {
     if(e.target.closest('button')) return;
@@ -3057,7 +3065,9 @@ function openAnswerKey() {
   });
   const end = () => { dragging = false; };
   bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
-})();
+}
+makeDraggable(document.getElementById('hb-answerkey-popup'), document.getElementById('hb-answerkey-drag'));
+makeDraggable(document.getElementById('hb-grading-popup'), document.querySelector('#hb-grading-popup .hb-grading-header'));
 function closeAnswerKey() { document.getElementById('hb-answerkey-popup')?.classList.remove('show'); }
 
 function toggleHostIntroQR() {
@@ -3198,6 +3208,7 @@ function openGradingPanel() {
   const at = gradingQuestions.findIndex(q => q.qId === currentQId);
   gradingIndex = at >= 0 ? at : 0;
   document.getElementById('hb-grading-popup').classList.add('show');
+  arrangePopups();
   renderGradingQuestion();
 }
 function closeGradingPanel() {
@@ -3357,6 +3368,7 @@ function syncLiveScores() {
       if((t.score || 0) !== want) updates[LIVE_GAME_PATH + '/teams/' + teamId + '/score'] = want;
     }
     if(Object.keys(updates).length) db.ref().update(updates).catch(e => console.warn('Live score update failed:', e && e.message));
+    pushResultsLive();
   } catch(e) { console.warn('syncLiveScores', e); }
 }
 
@@ -3379,12 +3391,11 @@ function pressGiveScores() {
     + ' Press the button again afterward to hide the results.';
   document.getElementById('hb-confirm').classList.add('show');
 }
-async function giveScores() {
-  const teamsSnap = await liveRef('teams').once('value');
-  const teams = teamsSnap.val() || {};
-  const results = {};  // teamId -> [{qText, answer, status, pts}]
-  const totals = {};
-  for(const [qId, answers] of Object.entries(allAnswersCache)) {
+// teamId -> [{qText, answer, status, pts}] in the order the questions were asked
+function buildResultsPayload() {
+  const results = {}, totals = {};
+  const ordered = Object.entries(allAnswersCache || {}).sort((a, b) => { const x = qSortKey(a[0]), y = qSortKey(b[0]); return x[0] - y[0] || x[1] - y[1]; });
+  for(const [qId, answers] of ordered) {
     for(const [teamId, ans] of Object.entries(answers)) {
       if(!results[teamId]) results[teamId] = [];
       const st = effectiveStatus(qId, ans) || 'pending';
@@ -3393,6 +3404,24 @@ async function giveScores() {
       totals[teamId] = (totals[teamId] || 0) + pts;
     }
   }
+  return { results, totals };
+}
+// Once results are showing, any grade change is pushed to the phones straight away
+let _liveResultsSig = '';
+function pushResultsLive() {
+  if(!hostResultsShown) { _liveResultsSig = ''; return; }
+  const { results } = buildResultsPayload();
+  const sig = JSON.stringify(results);
+  if(sig === _liveResultsSig) return;
+  _liveResultsSig = sig;
+  const u = {}; for(const [tid, res] of Object.entries(results)) u[LIVE_GAME_PATH + '/results/' + tid] = res;
+  if(Object.keys(u).length) db.ref().update(u).catch(e => console.warn('Live results update failed', e && e.message));
+}
+async function giveScores() {
+  const teamsSnap = await liveRef('teams').once('value');
+  const teams = teamsSnap.val() || {};
+  const { results, totals } = buildResultsPayload();
+  _liveResultsSig = JSON.stringify(results);
   const updates = { [LIVE_GAME_PATH + '/resultsVisible']: true };
   for(const [teamId, res] of Object.entries(results)) {
     updates[LIVE_GAME_PATH + '/results/' + teamId] = res;
@@ -3432,7 +3461,15 @@ function fitPreviewText() {
 })();
 
 // ── Live copy of the TV screen in the host-board mini screen ──
-let _scrCss = '', _scrData = null;
+let _hbS = null;
+function hbLaunchMode() { return hostIntroOn && !(_hbS && _hbS.roundNum); }
+function hbKeyMode() { return !!(_hbS && _hbS.keyNext && _hbS.qNow && _hbS.qTotal && _hbS.qNow === _hbS.qTotal); }
+function updateNextBtn() {
+  const b = document.getElementById('hb-next-btn'); if(!b) return;
+  b.textContent = hbLaunchMode() ? 'Launch Trivia' : hbKeyMode() ? 'Answer Key →' : 'Next →';
+}
+function hbNextClick() { sendHostCommand(hbLaunchMode() ? 'launch' : 'next'); }
+let _scrCss = '', _scrData = null, _mirrorSig = '', _mirrorReady = false;
 function fitScreenFrame() {
   const t = document.getElementById('hb-preview-thumb'), f = document.getElementById('hb-screen-frame');
   if(!t || !f || !_scrData) return;
@@ -3446,7 +3483,16 @@ function fitScreenFrame() {
 function renderScreenMirror() {
   const t = document.getElementById('hb-preview-thumb'), f = document.getElementById('hb-screen-frame');
   if(!t || !f) return;
-  if(!_scrData || !_scrData.html) { t.classList.remove('mirroring'); f.removeAttribute('srcdoc'); return; }
+  if(!_scrData || !_scrData.html) { t.classList.remove('mirroring'); _mirrorSig = ''; return; }
+  const sig = _scrCss.length + '|' + _scrData.w + 'x' + _scrData.h + '|' + _scrData.html;
+  if(sig === _mirrorSig) { t.classList.add('mirroring'); fitScreenFrame(); return; }   // nothing changed: leave it alone
+  _mirrorSig = sig;
+  try {
+    const d = f.contentDocument;
+    if(_mirrorReady && d && d.body) { d.body.innerHTML = _scrData.html; t.classList.add('mirroring'); fitScreenFrame(); return; }   // swap content in place, no reload
+  } catch(e) {}
+  _mirrorReady = false;
+  f.onload = () => { _mirrorReady = true; };
   f.srcdoc = '<!doctype html><html><head><meta charset="utf-8">'
     + '<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@500;600;700&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">'
     + '<style>' + _scrCss + '</style>'
@@ -3635,6 +3681,7 @@ function attachHbListeners() {
     hostIntroOn = !!snap.val();
     const btn = document.getElementById('hb-intro-btn');
     if(btn) btn.textContent = hostIntroOn ? 'Stop Intro Slides' : 'Play Intro Slides';
+    updateNextBtn();
   });
 
   const fbResRef = liveRef('feedbackResult'); _hbRefs.push(fbResRef);
@@ -3680,6 +3727,7 @@ function attachHbListeners() {
 
   const slideStateRef = liveRef('slideState'); _hbRefs.push(slideStateRef); slideStateRef.on('value', snap => {
   const s = snap.val();
+  _hbS = s; updateNextBtn();
   if(s && s.answerKey && s.answerKey.items) {
     const items = Array.isArray(s.answerKey.items) ? s.answerKey.items : Object.values(s.answerKey.items);
     if(items.length) {
