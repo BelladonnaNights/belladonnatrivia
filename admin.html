@@ -595,6 +595,9 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   box-shadow:0 12px 48px rgba(0,0,0,.8);display:none;flex-direction:column;overflow:hidden;
 }
 .hb-history-popup.show{display:flex}
+.hb-seg{display:flex;border:1px solid var(--border2);border-radius:var(--radius, 10px);overflow:hidden}
+.hb-seg button{flex:1;padding:10px 6px;border:none;background:transparent;color:var(--text2);font-family:var(--cinzel);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.hb-seg button.on{background:var(--gold-shine);color:#000;font-weight:700}
 /* floating, draggable, resizable (answer key) — sits beside the grading panel */
 .hb-history-popup.hb-floating{z-index:520;width:min(520px,92vw);max-height:70vh;resize:both;min-width:260px;min-height:160px;box-shadow:0 12px 48px rgba(0,0,0,.85)}
 .hb-history-header{
@@ -858,6 +861,10 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
       <button class="hb-btn hb-btn-ghost" id="hb-lb-btn" onclick="toggleLbAdmin()">Show Leaderboard</button>
       <button class="hb-btn hb-btn-gold" id="hb-answerkey-btn" onclick="openAnswerKey()" style="display:none">Answer Key</button>
       <button class="hb-btn hb-btn-gold" id="hb-give-scores-btn" onclick="pressGiveScores()" style="display:none">Give Scores →</button>
+      <div class="hb-seg" id="ak-seg" title="What the answer-key slide says on the TV">
+        <button id="ak-seg-trade" onclick="saveAkLabel('trade')">Trade Papers</button>
+        <button id="ak-seg-answer" onclick="saveAkLabel('answer')">Answer Time</button>
+      </div>
       <button class="hb-btn hb-btn-ghost" onclick="openHistory()">Game History</button>
       <button class="hb-btn hb-btn-ghost" onclick="confirmAction('clear')">Clear Scores</button>
       <button class="hb-btn hb-btn-ghost" onclick="confirmAction('reset')">Reset Game</button>
@@ -936,13 +943,6 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   <div class="lineup">
     <div class="lineup-launch-sticky">
       <button class="launch-btn" id="launch-btn" onclick="pressLaunchBtn()">Open Trivia</button>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">
-        <span>Answer slide says</span>
-        <select id="ak-label-select" class="field-input" style="padding:5px 8px;font-size:12px;width:auto" onchange="saveAkLabel(this.value)">
-          <option value="trade">Trade Papers</option>
-          <option value="answer">Answer Time</option>
-        </select>
-      </div>
     </div>
     <div class="lineup-header">
       <div class="lineup-title">TONIGHT'S LINEUP</div>
@@ -1014,6 +1014,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <div class="hb-confirm-msg" id="hb-confirm-msg"></div>
     <div class="hb-confirm-btns">
       <button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button>
+      <button class="btn btn-ghost" id="hb-confirm-mid" onclick="resetThenOpen()" style="display:none;border-color:var(--gold-glow);color:var(--gold)">Reset game first</button>
       <button class="btn btn-danger" id="hb-confirm-ok" onclick="runConfirmedAction()">Confirm</button>
     </div>
   </div>
@@ -1761,9 +1762,15 @@ db.ref('trivia/categoryTypes').on('value', snap => {
 });
 db.ref('trivia/appSettings').on('value', snap => {
   appSettings = snap.val()||{};
-  const sel = document.getElementById('ak-label-select'); if(sel) sel.value = appSettings.answerSlideLabel === 'answer' ? 'answer' : 'trade';
+  syncAkSeg();
 });
-function saveAkLabel(v) { db.ref('trivia/appSettings/answerSlideLabel').set(v === 'answer' ? 'answer' : 'trade').then(() => toast('Answer slide will say ' + (v === 'answer' ? 'Answer Time' : 'Trade Papers'))).catch(e => toast('Could not save: ' + e.message, true)); }
+function syncAkSeg() {
+  const a = appSettings && appSettings.answerSlideLabel === 'answer';
+  document.getElementById('ak-seg-answer')?.classList.toggle('on', a);
+  document.getElementById('ak-seg-trade')?.classList.toggle('on', !a);
+}
+function saveAkLabel(v) {
+  appSettings.answerSlideLabel = v === 'answer' ? 'answer' : 'trade'; syncAkSeg(); db.ref('trivia/appSettings/answerSlideLabel').set(v === 'answer' ? 'answer' : 'trade').then(() => toast('Answer slide will say ' + (v === 'answer' ? 'Answer Time' : 'Trade Papers'))).catch(e => toast('Could not save: ' + e.message, true)); }
 // ═══════════════════════════════════════════════
 //  SETTINGS — Follow Us + Category Types
 // ═══════════════════════════════════════════════
@@ -3114,7 +3121,14 @@ function confirmAction(action) {
   };
   document.getElementById('hb-confirm-title').textContent = titles[action];
   document.getElementById('hb-confirm-msg').textContent = msgs[action];
+  document.getElementById('hb-confirm-mid').style.display = action === 'opentrivia' ? '' : 'none';
+  document.getElementById('hb-confirm-ok').textContent = action === 'opentrivia' ? 'Open Trivia' : 'Confirm';
   document.getElementById('hb-confirm').classList.add('show');
+}
+async function resetThenOpen() {   // middle button: reset the game, then open trivia
+  pendingConfirmAction = 'reset';
+  await runConfirmedAction();
+  launchTrivia();
 }
 function closeConfirm() {
   document.getElementById('hb-confirm').classList.remove('show');
@@ -3179,7 +3193,7 @@ function normalizeForGrade(s) {
 let gradingQuestions = []; // array of {qId, qText, correctAnswer, answers: [{teamId, teamName, answer, elapsed, status}]}
 let gradingIndex = 0;      // current question index
 let gradingTab = 'all';    // 'all' | 'todo' (only questions with answers still waiting on a grade)
-function qSortKey(id) { const m = /^q_(\d+)_(\d+)/.exec(id || ''); return m ? [+m[1], +m[2]] : [9999, 0]; }
+function qSortKey(id) { const m = /^q_(\d+)_(\d+)(_artist)?/.exec(id || ''); return m ? [+m[1], +m[2], m[3] ? 1 : 0] : [9999, 0, 0]; }
 function gradingNeedsWork(q) { return q.answers.some(a => !effectiveStatus(q.qId, a)); }
 let pendingScoresMap = {}; // teamId -> pts to add (held until Give Scores)
 
@@ -3200,7 +3214,7 @@ function buildGradingQuestions() {
       answers: ansEntries.map(([teamId, a]) => ({teamId, ...a})),
     });
   }
-  gradingQuestions.sort((a, b) => { const x = qSortKey(a.qId), y = qSortKey(b.qId); return x[0] - y[0] || x[1] - y[1]; });
+  gradingQuestions.sort((a, b) => { const x = qSortKey(a.qId), y = qSortKey(b.qId); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; });
   const todoN = gradingQuestions.filter(gradingNeedsWork).length;
   const nEl = document.getElementById('hb-gtab-todo-n'); if(nEl) nEl.textContent = todoN ? '(' + todoN + ')' : '';
   const tA = document.getElementById('hb-gtab-all'), tT = document.getElementById('hb-gtab-todo');
@@ -3411,7 +3425,7 @@ function pressGiveScores() {
 // teamId -> [{qText, answer, status, pts}] in the order the questions were asked
 function buildResultsPayload() {
   const results = {}, totals = {};
-  const ordered = Object.entries(allAnswersCache || {}).sort((a, b) => { const x = qSortKey(a[0]), y = qSortKey(b[0]); return x[0] - y[0] || x[1] - y[1]; });
+  const ordered = Object.entries(allAnswersCache || {}).sort((a, b) => { const x = qSortKey(a[0]), y = qSortKey(b[0]); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; });
   for(const [qId, answers] of ordered) {
     for(const [teamId, ans] of Object.entries(answers)) {
       if(!results[teamId]) results[teamId] = [];
