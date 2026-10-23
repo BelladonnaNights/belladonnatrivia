@@ -865,9 +865,10 @@ function pushLiveQuestion(q, qIndex, round) {
   liveRef().update({
     status: 'question',
     resultsVisible: false,
+    answersLocked: false,
     currentQuestion: {
-      id: qId, text: q.question, type: q.type||'open',
-      choices, correct: q.answer, index: qIndex,
+      id: qId, text: round.type==='music' ? 'Name that song' : q.question, type: round.type==='music' ? 'music' : (q.type||'open'),
+      choices, correct: round.type==='music' ? '' : q.answer, index: qIndex,
       timed, timeLimit: 10,
       roundIndex: state.roundIndex, openedAt: Date.now(),
     }
@@ -923,7 +924,8 @@ if(db) {
     const cmd = snap.val();
     if(_superseded || !cmd || !cmd.ts || cmd.ts <= lastHostCommandTs) return;
     lastHostCommandTs = cmd.ts;
-    switch(cmd.cmd) {
+    _viaHost = true;
+    try { switch(cmd.cmd) {
       case 'next':    advanceSlide(); break;
       case 'back':    retreatSlide(); break;
       case 'reveal':  advanceSlide(); break;
@@ -947,7 +949,7 @@ if(db) {
         const anyAudioBtn = document.querySelector('[data-audio-src]');
         if(anyAudioBtn && !anyAudioBtn.disabled) { anyAudioBtn.click(); }
         break;
-    }
+    } } finally { _viaHost = false; }
   }));
 }
 
@@ -1710,8 +1712,23 @@ function closeNotePopup() {
   document.getElementById('note-popup').classList.remove('show');
 }
 
+let _viaHost = false;
+// On a round's last question the only way forward is the host board's "Answer Key (lock all answers)" button —
+// not the clicker, a key press, or a click on the TV.
+function answerKeyLocksNext() {
+  try {
+    if(state.preShow || !state.rounds.length || slideType() !== S_QUESTION) return false;
+    const round = state.rounds[state.roundIndex];
+    return !round.twoPass && !round.showAnswers && round.type !== 'slideshow' && round.type !== 'canva'
+      && questionInfo().qIndex + 1 === (round.questions || []).length;
+  } catch(e) { return false; }
+}
 function advanceSlide() {
   if(state.preShow) { advancePreShow(); return; }
+  if(answerKeyLocksNext()) {
+    if(!_viaHost) { toast('Use the Answer Key button on the host board'); return; }
+    if(db) liveRef('answersLocked').set(true);     // phones can no longer change answers
+  }
   const type = slideType();
   if(type === S_JUMP) return;
 
@@ -2296,6 +2313,8 @@ function psStage(container, innerHtml) {
 }
 
 function renderNextWeek(container) {
+  const pending = window._nextWeekResult == null;
+  if(pending) loadNextWeek().then(r => { window._nextWeekResult = r; if(state.preShow === PS_NEXTWEEK) renderPreShow(); });
   const r = window._nextWeekResult || { items:[], dateKey:'' };
   const items = r.items || [];
   const n = items.length;
@@ -2303,7 +2322,9 @@ function renderNextWeek(container) {
   const kinds = [...new Set(items.map(i => tag[i.kind]))];
   const sub = kinds.length ? kinds.join(' · ') : 'Trivia';
   let rows = '';
-  if(!n) {
+  if(!n && pending) {
+    rows = '';
+  } else if(!n) {
     rows = `<div style="margin-top:150px;text-align:center;font-family:var(--cinzel);font-weight:600;font-size:54px;letter-spacing:.14em;text-transform:uppercase;color:#fff;line-height:1.5">Next week&rsquo;s schedule<br>is coming soon</div>`;
   } else {
     const avail = 610;                                   // vertical room for the list
