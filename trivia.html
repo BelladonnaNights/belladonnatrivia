@@ -1752,8 +1752,7 @@ function advanceSlide() {
   if(type === S_QUESTION) {
     liveRef('status').set('closed');
     // Stop any music audio
-    if(window._musicAudio) { window._musicAudio.pause(); window._musicAudio = null; }
-    if(window._musicCtx) { try { window._musicCtx.close(); } catch(e) {} window._musicCtx = null; }
+    fadeOutMusicNow();
   }
 
   if(type === S_INTRO || type === S_INTERSTITIAL || type === S_THANKYOU || type === S_ANSWERKEY) {
@@ -2850,9 +2849,19 @@ function renderMusicQuestion(container, round) {
   }
 }
 
+// Stopping a clip fades it out (same as the natural end) instead of cutting it off
+function fadeOutMusicNow() {
+  const a = window._musicAudio, c = window._musicCtx, g = window._musicGain;
+  window._musicAudio = null; window._musicCtx = null; window._musicGain = null;
+  if(!a) return;
+  const done = () => { try { a.pause(); } catch(e) {} try { if(c) c.close(); } catch(e) {} };
+  if(g && c && c.state !== 'closed') {
+    try { g.gain.cancelScheduledValues(c.currentTime); g.gain.setValueAtTime(g.gain.value, c.currentTime); g.gain.linearRampToValueAtTime(0, c.currentTime + 1.5); } catch(e) {}
+    setTimeout(done, 1600);
+  } else done();
+}
 function stopMusicAudio() {
-  if(window._musicAudio) { try { window._musicAudio.pause(); } catch(e) {} window._musicAudio = null; }
-  if(window._musicCtx) { try { window._musicCtx.close(); } catch(e) {} window._musicCtx = null; }
+  fadeOutMusicNow();
   document.querySelectorAll('#music-play-btn,#music-play-again-btn').forEach(b => { b.disabled = false; b.classList.remove('playing'); });
   document.querySelectorAll('.music-bars').forEach(b => b.classList.remove('playing'));
   const hint = document.getElementById('music-play-hint'); if(hint) hint.textContent = 'Click to play';
@@ -2889,6 +2898,7 @@ function playMusicAudio(btn) {
   const ctx  = new (window.AudioContext || window.webkitAudioContext)();
   window._musicCtx = ctx;
   const gain = ctx.createGain();
+  window._musicGain = gain;
   gain.connect(ctx.destination);
   gain.gain.setValueAtTime(0, ctx.currentTime); // start silent
 
@@ -2977,7 +2987,12 @@ function playMusicAudio(btn) {
   }
 }
 
-function akSlideWords() { return (appSettings && appSettings.answerSlideLabel === 'answer') ? ['Answer', 'Time'] : ['Trade', 'Papers']; }
+let _akLabelLive = null;
+if(db) whenLiveReady(() => liveRef('answerSlideLabel').on('value', snap => {
+  _akLabelLive = snap.val();
+  try { if(!state.preShow && state.rounds.length && slideType() === S_ANSWERKEY) renderCurrentSlide(); } catch(e) {}
+}));
+function akSlideWords() { return ((_akLabelLive || (appSettings && appSettings.answerSlideLabel)) === 'answer') ? ['Answer', 'Time'] : ['Trade', 'Papers']; }
 function renderAnswerKey(container, round) {
   // The answer key is host-board only now; the TV just tells everyone to swap papers
   const el = document.createElement('div');
