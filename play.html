@@ -294,7 +294,7 @@ html,body{
   color:var(--text3);min-width:32px;text-align:center;
 }
 .lb-rank.top{color:var(--gold)}
-.lb-name{flex:1;font-family:var(--cinzel);font-size:13px;letter-spacing:.08em;color:var(--text)}
+.lb-name{flex:1;font-family:var(--cinzel);font-size:20px;letter-spacing:.08em;color:var(--text)}
 .lb-pts{font-family:var(--display);font-size:28px;color:var(--gold)}
 .lb-you{border-color:rgba(201,168,76,.4);background:rgba(201,168,76,.06)}
 </style>
@@ -345,7 +345,7 @@ html,body{
 
 <!-- ── MY ANSWERS (view / edit) ── -->
 <div class="screen hidden" id="myq-screen" style="justify-content:flex-start;padding-top:1.25rem;overflow-y:auto">
-  <div style="width:100%;max-width:480px;display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+  <div style="position:sticky;top:-1.25rem;z-index:20;width:calc(100% + 3rem);margin:-1.25rem -1.5rem 1rem;padding:1rem 1.5rem .75rem;background:var(--bg);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
     <div style="font-family:var(--display);font-size:30px;letter-spacing:.06em;color:var(--gold)">MY ANSWERS</div>
     <button class="reg-btn" style="width:auto;padding:10px 16px;font-size:11px" onclick="closeMyQ()">← Back to game</button>
   </div>
