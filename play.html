@@ -963,19 +963,9 @@ async function submitAnswer(value, btn, type) {
   if(!currentQ || lockedAll) return;
   const isTimed = currentQ.timed;
 
-  // Timed: lock after first answer. Untimed: allow changing until host advances.
-  if(isTimed && answered) return;
-
+  // Players can change their answer any time until the host locks answers / the timer runs out
   const elapsed = timerStart ? (Date.now() - timerStart) / 1000 : null;
-
-  if(isTimed) {
-    answered = true;
-    clearTimer();
-    lockInputs();
-  } else {
-    // Untimed — clear previous selection highlight, allow re-select
-    document.querySelectorAll('.choice-btn, .tf-btn').forEach(b => b.classList.remove('selected'));
-  }
+  document.querySelectorAll('.choice-btn, .tf-btn').forEach(b => b.classList.remove('selected'));
 
   // Show selected state
   if(btn) btn.classList.add('selected');
