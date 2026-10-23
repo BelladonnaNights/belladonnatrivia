@@ -642,6 +642,16 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   </div>
 </div>
 
+<div id="launch-confirm" style="display:none;position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,.8);align-items:center;justify-content:center">
+  <div style="background:#121008;border:1px solid var(--gold-glow);border-radius:16px;padding:2rem 2.4rem;max-width:520px;text-align:center">
+    <div style="font-family:var(--display);font-size:38px;letter-spacing:.06em;color:var(--gold);margin-bottom:.5rem">Launch a new game?</div>
+    <div style="font-family:var(--serif);font-size:20px;color:var(--text2);margin-bottom:1.4rem;line-height:1.4">Has the game on the host board been reset?<br>If the last game&rsquo;s teams and scores are still there, reset it first.</div>
+    <div style="display:flex;gap:12px;justify-content:center">
+      <button id="launch-confirm-no" style="padding:12px 24px;font-family:var(--cinzel);font-size:12px;letter-spacing:.12em;text-transform:uppercase;background:transparent;border:1px solid var(--border2);color:var(--text2);border-radius:10px;cursor:pointer">Not yet</button>
+      <button id="launch-confirm-yes" style="padding:12px 24px;font-family:var(--cinzel);font-size:12px;letter-spacing:.12em;text-transform:uppercase;background:var(--gold-shine);border:none;color:#000;font-weight:700;border-radius:10px;cursor:pointer">Yes, launch</button>
+    </div>
+  </div>
+</div>
 <div id="game-join-qr"><div id="game-join-qr-label">Join the Game</div><div id="game-join-qr-code"></div></div>
 
 <div id="toast"></div>
@@ -865,7 +875,6 @@ function pushLiveQuestion(q, qIndex, round) {
   liveRef().update({
     status: 'question',
     resultsVisible: false,
-    answersLocked: false,
     currentQuestion: {
       id: qId, text: round.type==='music' ? 'Name that song' : q.question, type: round.type==='music' ? 'music' : (q.type||'open'),
       choices, correct: round.type==='music' ? '' : q.answer, index: qIndex,
@@ -1727,7 +1736,7 @@ function advanceSlide() {
   if(state.preShow) { advancePreShow(); return; }
   if(answerKeyLocksNext()) {
     if(!_viaHost) { toast('Use the Answer Key button on the host board'); return; }
-    if(db) liveRef('answersLocked').set(true);     // phones can no longer change answers
+    if(db) liveRef('currentQuestion/locked').set(true);     // phones can no longer change answers
   }
   const type = slideType();
   if(type === S_JUMP) return;
@@ -2114,8 +2123,7 @@ function stopPreview(keepFullscreen) {
 function launchFromIntro(e) {
   if(e && e.stopPropagation) e.stopPropagation();
   if(!pendingRounds.length || state.rounds.length) return;
-  stopPreview(true);
-  launchFromSetup();
+  askLaunch(() => { stopPreview(true); doLaunchFromSetup(); });
 }
 
 // ── Mirror of the TV screen for the host board ──
@@ -3296,7 +3304,16 @@ function checkUrlParams() {
   return true;
 }
 
-async function launchFromSetup() {
+// "Has the host board been reset?" check before a new game goes live (skipped when the host board already asked)
+function askLaunch(go) {
+  if(_viaHost) { go(); return; }
+  const m = document.getElementById('launch-confirm'); if(!m) { go(); return; }
+  m.style.display = 'flex';
+  document.getElementById('launch-confirm-yes').onclick = () => { m.style.display = 'none'; go(); };   // real click: audio unlock still works
+  document.getElementById('launch-confirm-no').onclick = () => { m.style.display = 'none'; };
+}
+function launchFromSetup() { askLaunch(doLaunchFromSetup); }
+async function doLaunchFromSetup() {
   if(!pendingRounds.length) return;
   setTriviaPhase('live');
   unlockAudioPlayback(); // must happen synchronously, inside this real click
