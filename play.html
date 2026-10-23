@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Trivia Night"/>
 <meta name="theme-color" content="#080808"/>
 <title>Belladonna Trivia — Play</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
@@ -24,7 +28,7 @@
   --c1:#8B6914;--c2:#C4952A;--c3:#E8C547;--c4:#F5DFA0;
 }
 html,body{
-  height:100%;width:100%;
+  height:100%;width:100%;overscroll-behavior:none;-webkit-text-size-adjust:100%;touch-action:manipulation;
   font-family:var(--font);
   background:var(--bg);color:var(--text);
   overflow:hidden;
@@ -33,13 +37,16 @@ html,body{
 
 /* ── SCREENS ── */
 .screen{
-  position:fixed;inset:0;
+  position:fixed;top:0;left:0;right:0;bottom:0;height:100dvh;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:1.5rem;
+  padding:calc(1.5rem + env(safe-area-inset-top)) calc(1.5rem + env(safe-area-inset-right)) calc(1.5rem + env(safe-area-inset-bottom)) calc(1.5rem + env(safe-area-inset-left));
   transition:opacity .3s ease;
 }
 .screen.hidden{opacity:0;pointer-events:none}
 
+.app-hint{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);max-width:320px;line-height:1.4}
+.app-btn{background:transparent;border:1px solid rgba(201,168,76,.4);color:var(--gold);font-family:var(--cinzel);font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:10px 16px;border-radius:10px;cursor:pointer}
+#fs-fab{position:fixed;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:60;width:38px;height:38px;border-radius:50%;background:rgba(18,16,12,.85);border:1px solid rgba(201,168,76,.4);color:var(--gold);font-size:18px;display:none;align-items:center;justify-content:center;cursor:pointer}
 /* ── REGISTER SCREEN ── */
 #reg-screen{
   background:var(--bg);
@@ -311,7 +318,14 @@ html,body{
   <input class="reg-input" id="reg-input" type="text" placeholder="Name or Team Name" maxlength="32" autocomplete="off" autocorrect="off" spellcheck="false"/>
   <button class="reg-btn" id="reg-btn" onclick="register()">Join Game</button>
   <div class="reg-hint" id="reg-status">Waiting for game to start…</div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:8px" id="app-extras">
+    <button class="app-btn" id="fs-btn" style="display:none" onclick="toggleFullscreen()">⛶ Go Fullscreen</button>
+    <button class="app-btn" id="install-btn" style="display:none" onclick="installApp()">Install as app</button>
+    <div class="app-hint" id="app-hint"></div>
+  </div>
 </div>
+
+<button id="fs-fab" onclick="toggleFullscreen()" title="Fullscreen">⛶</button>
 
 <!-- ── WAITING ── -->
 <div class="screen hidden" id="wait-screen">
@@ -403,6 +417,64 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
 }
+
+// ═══════════════════════════════════════════════
+//  APP MODE — fullscreen + installable
+// ═══════════════════════════════════════════════
+const fsOK = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches) || navigator.standalone === true;
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function inFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function enterFullscreen() {
+  if(!fsOK || inFullscreen() || isStandalone()) return;
+  const el = document.documentElement;
+  try { (el.requestFullscreen || el.webkitRequestFullscreen).call(el, { navigationUI: 'hide' }); } catch(e) {}
+}
+function toggleFullscreen() {
+  if(inFullscreen()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch(e) {} }
+  else enterFullscreen();
+}
+function syncFsUi() {
+  const show = fsOK && !isStandalone();
+  const b = document.getElementById('fs-btn'); if(b) { b.style.display = show ? '' : 'none'; b.textContent = inFullscreen() ? '⛶ Exit Fullscreen' : '⛶ Go Fullscreen'; }
+  const fab = document.getElementById('fs-fab');
+  const regOpen = !document.getElementById('reg-screen').classList.contains('hidden');
+  if(fab) fab.style.display = (show && !inFullscreen() && !regOpen) ? 'flex' : 'none';
+}
+document.addEventListener('fullscreenchange', syncFsUi);
+document.addEventListener('webkitfullscreenchange', syncFsUi);
+setInterval(syncFsUi, 1500);
+
+// Installable "app": a manifest built on the fly so it keeps this game's link (?g=…)
+let _installEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _installEvt = e; const b = document.getElementById('install-btn'); if(b) b.style.display = ''; });
+window.addEventListener('appinstalled', () => { const b = document.getElementById('install-btn'); if(b) b.style.display = 'none'; });
+function installApp() { if(_installEvt) { _installEvt.prompt(); _installEvt = null; } }
+function appIcon(size) {
+  const c = document.createElement('canvas'); c.width = c.height = size; const x = c.getContext('2d');
+  x.fillStyle = '#080808'; x.fillRect(0, 0, size, size);
+  x.strokeStyle = '#c9a84c'; x.lineWidth = size * 0.025; x.strokeRect(size * .06, size * .06, size * .88, size * .88);
+  x.fillStyle = '#c9a84c'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = '700 ' + Math.round(size * .55) + 'px Bebas Neue, Impact, sans-serif'; x.fillText('B', size / 2, size * .46);
+  x.font = '600 ' + Math.round(size * .09) + 'px Cinzel, Georgia, serif'; x.fillText('TRIVIA', size / 2, size * .8);
+  return c.toDataURL('image/png');
+}
+function setupAppManifest() {
+  try {
+    const i192 = appIcon(192), i512 = appIcon(512);
+    const man = { name: 'Belladonna Trivia', short_name: 'Trivia', start_url: location.href, scope: location.origin + location.pathname.replace(/[^/]*$/, ''),
+      display: 'standalone', orientation: 'portrait', background_color: '#080808', theme_color: '#080808',
+      icons: [{ src: i192, sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: i512, sizes: '512x512', type: 'image/png', purpose: 'any' }] };
+    const l = document.createElement('link'); l.rel = 'manifest'; l.href = URL.createObjectURL(new Blob([JSON.stringify(man)], { type: 'application/manifest+json' }));
+    document.head.appendChild(l);
+    const a = document.createElement('link'); a.rel = 'apple-touch-icon'; a.href = i192; document.head.appendChild(a);
+  } catch(e) {}
+  const hint = document.getElementById('app-hint');
+  if(hint && !isStandalone()) hint.textContent = isIOS
+    ? 'Tip: tap Share, then “Add to Home Screen” to play full screen like an app.'
+    : (fsOK ? 'Tip: use your browser menu → “Add to Home screen” to play like an app.' : '');
+}
+window.addEventListener('DOMContentLoaded', () => { setupAppManifest(); syncFsUi(); });
 
 // ═══════════════════════════════════════════════
 //  SCORE — only revealed when a new round starts (never live)
@@ -530,6 +602,7 @@ async function editAnswer(q, value) {
 async function register() {
   const name = document.getElementById('reg-input').value.trim();
   if(!name) return;
+  enterFullscreen();   // joining is a tap, so the browser allows it (Android; iPhone can't)
   const btn = document.getElementById('reg-btn');
   const statusEl = document.getElementById('reg-status');
   if(!GID){
