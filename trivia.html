@@ -943,6 +943,7 @@ if(db) {
     _viaHost = true;
     try { switch(cmd.cmd) {
       case 'next':    advanceSlide(); break;
+      case 'add-bonus': addBonusQuestion(cmd.q, cmd.a); break;
       case 'back':    retreatSlide(); break;
       case 'reveal':  advanceSlide(); break;
       case 'rerandomize-next': rerandomizeNextQuestion(); break;
@@ -1002,7 +1003,7 @@ function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
     answer: answer || '',
     hasAudio: !!(extra && extra.hasAudio),
     roundNum: (extra && extra.roundNum) || null, roundTotal: (extra && extra.roundTotal) || null,
-    qNow: (extra && extra.qNow) || null, qTotal: (extra && extra.qTotal) || null, keyNext: !!(extra && extra.keyNext), gameOver: !!(extra && extra.gameOver),
+    qNow: (extra && extra.qNow) || null, qTotal: (extra && extra.qTotal) || null, keyNext: !!(extra && extra.keyNext), canBonus: !!(extra && extra.canBonus), gameOver: !!(extra && extra.gameOver),
     canFeedback: !!(extra && extra.canFeedback),
     keyAnswer: (extra && extra.keyAnswer) || '',
     answerKey: (extra && extra.answerKey) || null,
@@ -1731,6 +1732,22 @@ function closeNotePopup() {
 let _viaHost = false;
 // On a round's last question the only way forward is the host board's "Answer Key (lock all answers)" button —
 // not the clicker, a key press, or a click on the TV.
+// Host board "Add bonus question": append an extra question to this round and go to it
+function addBonusQuestion(text, answer) {
+  text = String(text || '').trim(); answer = String(answer || '').trim();
+  if(!text || !answer || state.preShow || !state.rounds.length || slideType() !== S_QUESTION) return;
+  const round = currentRound();
+  if(round.type === 'music' || round.type === 'slideshow' || round.type === 'canva') return;
+  round.questions.push({ question: 'Bonus: ' + text, answer, difficulty: 1, imageUrl: '', audioUrl: '', altAnswers: [], type: 'standard', mcOptions: [], notes: '', whisperQ: '', whisperA: '', rowIndex: null, bonus: true });
+  if(round.twoPass) {
+    // pass 1 only: the bonus goes in right after the last question, and pass 2 now covers it too
+    if(questionInfo().isPass2) { round.questions.pop(); return; }
+    state.slideIndex = round.questions.length;   // jump to the new question (index n)
+    renderCurrentSlide();
+    return;
+  }
+  advanceSlide();
+}
 function answerKeyLocksNext() {
   try {
     if(state.preShow || !state.rounds.length || slideType() !== S_QUESTION) return false;
@@ -2004,6 +2021,7 @@ function renderCurrentSlide() {
       hasAudio, whisperQ, whisperA, answerKey: akData, keyAnswer: (type === S_QUESTION && round.questions[questionInfo().qIndex]) ? round.questions[questionInfo().qIndex].answer : '', roundNum: state.roundIndex + 1, roundTotal: state.rounds.length,
       qNow: _qNow, qTotal: _qNow ? _n : null,
       gameOver: type === S_END && state.roundIndex >= state.rounds.length - 1,
+      canBonus: type === S_QUESTION && round.type !== 'music' && round.type !== 'slideshow' && round.type !== 'canva' && !questionInfo().isPass2 && questionInfo().qIndex === (round.questions || []).length - 1,
       keyNext: type === S_QUESTION && !round.twoPass && !round.showAnswers && round.type !== 'slideshow' && round.type !== 'canva',
       canFeedback: type === S_QUESTION && round.type !== 'music' && round.type !== 'slideshow' && round.type !== 'canva',
     });
