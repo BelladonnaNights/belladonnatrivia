@@ -959,6 +959,7 @@ if(db) {
       case 'thumb-down': sendQuestionThumb('down', true); break;
       case 'feedback-note': saveHostFeedbackNote(cmd.text); break;
       case 'audio': toggleSlideAudio(); break;
+      case 'audio-restart': restartSlideAudio(); break;
       case 'key-next': _viaHost = false; advanceSlide(); break;   // the clicker, relayed by the host board
       case 'key-back': _viaHost = false; retreatSlide(); break;
     } } finally { _viaHost = false; }
@@ -1741,10 +1742,24 @@ function toggleSlideAudio() {
   const ab = document.querySelector('.audio-btn:not([disabled])'); if(ab) { ab.click(); return; }
   const any = document.querySelector('[data-audio-src]'); if(any && !any.disabled) any.click();
 }
+// double press BACK on an audio slide = start the clip over from the beginning
+let _backTimer = null;
+function restartSlideAudio() {
+  window._musicResume = null;
+  const mb = document.getElementById('music-play-btn') || document.getElementById('music-play-again-btn');
+  if(mb) { mb.disabled = false; playMusicAudio(mb); return; }
+  if(window._musicAudio) stopMusicAudio();
+  toggleSlideAudio();
+}
+function clickerBack() {
+  if(!slideHasAudio()) { retreatSlide(); return; }
+  if(_backTimer) { clearTimeout(_backTimer); _backTimer = null; restartSlideAudio(); return; }
+  _backTimer = setTimeout(() => { _backTimer = null; retreatSlide(); }, 600);
+}
 function clickerForward() {
   if(!slideHasAudio()) { advanceSlide(); return; }
   if(_fwdTimer) { clearTimeout(_fwdTimer); _fwdTimer = null; toggleSlideAudio(); return; }   // double press
-  _fwdTimer = setTimeout(() => { _fwdTimer = null; advanceSlide(); }, 450);
+  _fwdTimer = setTimeout(() => { _fwdTimer = null; advanceSlide(); }, 600);
 }
 // On a round's last question the only way forward is the host board's "Answer Key (lock all answers)" button —
 // not the clicker, a key press, or a click on the TV.
@@ -2892,6 +2907,8 @@ function fadeOutMusicNow() {
   const a = window._musicAudio, c = window._musicCtx, g = window._musicGain;
   window._musicAudio = null; window._musicCtx = null; window._musicGain = null;
   if(!a) return;
+  // remember where it stopped so playing again picks up from there (not from the start)
+  if(a._origSrc && a.currentTime > 0.5) window._musicResume = { src: a._origSrc, time: a.currentTime };
   const done = () => { try { a.pause(); } catch(e) {} try { if(c) c.close(); } catch(e) {} };
   if(g && c && c.state !== 'closed') {
     try { g.gain.cancelScheduledValues(c.currentTime); g.gain.setValueAtTime(g.gain.value, c.currentTime); g.gain.linearRampToValueAtTime(0, c.currentTime + 1.5); } catch(e) {}
@@ -2907,7 +2924,8 @@ function stopMusicAudio() {
 function playMusicAudio(btn) {
   if(!btn || btn.disabled) return;
   const src       = btn.dataset.audioSrc;
-  const startTime = parseMusicTime(btn.dataset.start);
+  let startTime = parseMusicTime(btn.dataset.start);
+  if(window._musicResume && window._musicResume.src === src && window._musicResume.time > startTime) startTime = window._musicResume.time;   // resume where it was stopped
   const endTime   = parseMusicTime(btn.dataset.end);
   if(!src) return;
 
@@ -2929,6 +2947,7 @@ function playMusicAudio(btn) {
   const FADE = 3; // seconds fade in / fade out
 
   const audio = new Audio(src);
+  audio._origSrc = src;
   audio.crossOrigin = 'anonymous';
   window._musicAudio = audio;
 
@@ -2985,6 +3004,7 @@ function playMusicAudio(btn) {
     btn.disabled = false;
     if(bars) bars.classList.remove('playing');
     if(hint) hint.textContent = 'Click to play again';
+    if(window._musicAudio === audio) window._musicResume = null;   // it finished: next play starts over
     window._musicAudio = null;
     try { ctx.close(); } catch(e) {}
     window._musicCtx = null;
@@ -3002,8 +3022,10 @@ function playMusicAudio(btn) {
   });
 
   const startPlayback = () => {
+    if(window._musicAudio !== audio) return;     // stopped while it was still loading — don't start it afterwards
     if(startTime > 0) audio.currentTime = startTime;
     ctx.resume().then(() => {
+      if(window._musicAudio !== audio) return;
       doFadeIn();
       audio.play().catch(err => {
         console.error('play() rejected:', err);
@@ -3140,7 +3162,8 @@ document.addEventListener('keydown', e => {
   // Back — ←, ↑, PageUp (clicker), Backspace, media "previous"
   if(e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'Backspace' || e.key === 'MediaTrackPrevious' || e.key === 'p' || e.key === 'P') {
     e.preventDefault();
-    retreatSlide(); return;
+    if(e.repeat) return;
+    clickerBack(); return;
   }
 
   // J+number = jump to mini game
