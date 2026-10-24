@@ -3557,7 +3557,7 @@ function setTimedSeconds(v) {
   liveRef('timedSeconds').set(n).then(() => toast('Timed questions: ' + n + ' seconds')).catch(e => toast('Could not save: ' + e.message, true));
 }
 // Clicker: while a game is live, its keys drive the TV window — never scroll this page
-let _fwdKeyT = null;
+let _fwdKeyT = null, _backKeyT = null;
 document.addEventListener('keydown', e => {
   if(triviaPhase !== 'live') return;
   const t = e.target; if(t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
@@ -3567,10 +3567,17 @@ document.addEventListener('keydown', e => {
   if(!fwd && !back) return;
   e.preventDefault();
   if(e.repeat) return;
-  if(back) { sendHostCommand('key-back'); return; }
+  if(back) {
+    if(_hbS && _hbS.hasAudio) {                    // double press back = play the clip from the start
+      if(_backKeyT) { clearTimeout(_backKeyT); _backKeyT = null; sendHostCommand('audio-restart'); return; }
+      _backKeyT = setTimeout(() => { _backKeyT = null; sendHostCommand('key-back'); }, 600);
+      return;
+    }
+    sendHostCommand('key-back'); return;
+  }
   if(_hbS && _hbS.hasAudio) {                      // double press = play / stop the clip, single = next
     if(_fwdKeyT) { clearTimeout(_fwdKeyT); _fwdKeyT = null; sendHostCommand('audio'); return; }
-    _fwdKeyT = setTimeout(() => { _fwdKeyT = null; sendHostCommand('key-next'); }, 450);
+    _fwdKeyT = setTimeout(() => { _fwdKeyT = null; sendHostCommand('key-next'); }, 600);
     return;
   }
   sendHostCommand('key-next');
