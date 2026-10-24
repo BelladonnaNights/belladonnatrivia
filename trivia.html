@@ -890,7 +890,6 @@ function pushLiveQuestion(q, qIndex, round) {
     // Music: the song name is one answer (1 point) and the artist is another (1 point), graded separately
     liveRef(`questionMeta/${qId}`).set({ questionText: 'Song name', correctAnswer: q.question, altAnswers: Array.isArray(q.songAlts) ? q.songAlts : [] });
     liveRef(`questionMeta/${qId}_artist`).set({ questionText: 'Artist \u2014 ' + q.question, correctAnswer: q.answer, altAnswers: Array.isArray(q.altAnswers) ? q.altAnswers : [] });
-    if(!_pushedQ.has(qId)) liveRef(`answers/${qId}_artist`).remove();
   } else {
     liveRef(`questionMeta/${qId}`).set({
       questionText: q.question,
@@ -899,7 +898,7 @@ function pushLiveQuestion(q, qIndex, round) {
     });
   }
   // only clear leftovers the first time this question comes up — going back through questions must not wipe answers
-  if(!_pushedQ.has(qId)) { _pushedQ.add(qId); liveRef(`answers/${qId}`).remove(); }
+  _pushedQ.add(qId);   // (answers are only ever cleared by Reset Game / Clear Scores — never by showing a question)
 }
 
 // Tell the host board (admin.html) where this page is: 'setup' (waiting to launch) or 'live'
@@ -2026,7 +2025,8 @@ function renderCurrentSlide() {
       label = 'End'; text = 'Game over';
     }
     let akData = null;
-    if(type === S_ANSWERKEY && !round.twoPass && !round.showAnswers && round.type !== 'slideshow' && round.type !== 'canva' && (round.questions||[]).length) {
+    // the key goes to the host board at the end of a one-pass round (Trade Papers slide) or at the end of pass 1 of a two-pass round
+    if(((type === S_ANSWERKEY && !round.twoPass && !round.showAnswers) || (type === S_INTERSTITIAL && round.twoPass)) && round.type !== 'slideshow' && round.type !== 'canva' && (round.questions||[]).length) {
       const keyLine = q => {
         if(round.type === 'music') return q.question + ' — ' + q.answer;
         if(q.type === 'mc' && q._choices) { const c = q._choices.find(x => x.correct); if(c) return c.label + ' — ' + q.answer; }
