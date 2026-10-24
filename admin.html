@@ -3455,13 +3455,22 @@ function pressGiveScores() {
 // teamId -> [{qText, answer, status, pts}] in the order the questions were asked
 function buildResultsPayload() {
   const results = {}, totals = {};
-  const ordered = Object.entries(allAnswersCache || {}).sort((a, b) => { const x = qSortKey(a[0]), y = qSortKey(b[0]); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; });
-  for(const [qId, answers] of ordered) {
-    for(const [teamId, ans] of Object.entries(answers)) {
+  // every question that has been asked (from its meta) plus any with answers — unanswered ones still get a row
+  const ids = [...new Set([...Object.keys(allAnswersCache || {}), ...Object.keys(questionMetaCache || {})])]
+    .sort((a, b) => { const x = qSortKey(a), y = qSortKey(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; });
+  const teamIds = [...new Set([...Object.keys(latestTeams || {}), ...Object.values(allAnswersCache || {}).flatMap(a => Object.keys(a || {}))])];
+  for(const qId of ids) {
+    const answers = (allAnswersCache || {})[qId] || {}, meta = (questionMetaCache || {})[qId] || {}, k = qSortKey(qId);
+    for(const teamId of teamIds) {
       if(!results[teamId]) results[teamId] = [];
+      const ans = answers[teamId];
+      if(!ans) {
+        results[teamId].push({ qText: meta.questionText || '', answer: '', status: 'wrong', pts: 0, round: k[0], num: k[1] + 1 });
+        continue;
+      }
       const st = effectiveStatus(qId, ans) || 'pending';
       const pts = st === 'correct' ? (typeof ans.points === 'number' && ans.points > 0 ? ans.points : POINTS_PER_CORRECT) : 0;
-      results[teamId].push({ qText: ans.questionText || '', answer: ans.answer || '', status: st, pts, round: qSortKey(qId)[0] });
+      results[teamId].push({ qText: ans.questionText || meta.questionText || '', answer: ans.answer || '', status: st, pts, round: k[0], num: k[1] + 1 });
       totals[teamId] = (totals[teamId] || 0) + pts;
     }
   }
