@@ -480,7 +480,12 @@ window.addEventListener('DOMContentLoaded', () => { setupAppManifest(); syncFsUi
 //  SCORE — only revealed when a new round starts (never live)
 // ═══════════════════════════════════════════════
 let shownScore = 0, prevShown = 0;
-function scoreKey() { return 'bella_score_' + (GID || '') + '_' + (mySessionId || ''); }
+function scoreKey() { return 'bella_score_' + (GID || '') + '_' + (mySessionId || '') + '_' + (teamId || ''); }
+// A fresh game (host reset / new session / new team): forget last game's score, questions and answers
+function resetLocalGameState() {
+  try { Object.keys(localStorage).filter(k => k.indexOf('bella_score_') === 0 || k.indexOf('bella_seenq_') === 0).forEach(k => localStorage.removeItem(k)); } catch(e) {}
+  shownScore = 0; prevShown = 0; myScore = 0; seenQs = {}; myAnswers = []; currentQ = null; answered = false; lockedAll = false;
+}
 function trackRoundScore(game) {
   let st = null;
   try { st = JSON.parse(localStorage.getItem(scoreKey()) || 'null'); } catch(e) {}
@@ -492,6 +497,7 @@ function trackRoundScore(game) {
     }
   }
   if(st) { shownScore = st.shown; prevShown = st.prev; }
+  if(game.teams && game.teams[teamId] && shownScore > myScore) shownScore = myScore;   // never show more than the server has
 }
 function renderScore() {
   const w = document.getElementById('wait-score'); if(w) w.textContent = shownScore;
@@ -619,6 +625,7 @@ async function register() {
       // new game session -> new team identity
       teamId = null;
       localStorage.removeItem('bella_team_id');
+      resetLocalGameState();
     }
     if(sid){
       mySessionId = sid;
@@ -633,6 +640,7 @@ async function register() {
 
     const teamRef = gref('teams/' + teamId);
     const existing = await teamRef.once('value');
+    if(!existing.exists()) resetLocalGameState();   // brand-new team on the server = brand-new game
     if(existing.exists()){
       myScore = (existing.val() || {}).score || 0;
       if((existing.val() || {}).name !== name){ try{ await teamRef.child('name').set(name); }catch(e){} }
@@ -703,12 +711,13 @@ function handleGame(game) {
         document.getElementById('reg-btn').textContent = 'Join Game';
         document.getElementById('reg-status').textContent = 'No game active — enter your name when the host launches';
         showScreen('reg-screen');
-      }
+      } else { resetLocalGameState(); }   // host reset the game: drop last game's score and answers
       return;
     }
 
     // Host explicitly removed liveGame entirely (full reset)
     if(!game.status && !game.teams) {
+      resetLocalGameState();
       teamId = null; teamName = null; currentQ = null; answered = false;
       localStorage.removeItem('bella_team_id');
       localStorage.removeItem('bella_session_id');
