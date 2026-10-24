@@ -676,6 +676,10 @@ a{color:inherit}
     </select>
     <label class="form-label">Note (optional)</label>
     <input type="text" class="form-input" id="gig-note" placeholder="e.g. cancelled — Mariners game">
+    <div id="gig-big-wrap" style="display:none;margin-top:10px">
+      <label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:13px"><input type="checkbox" id="gig-big" onchange="document.getElementById('gig-bigname').style.display=this.checked?'block':'none'"> Big night: post this on social media (shows in HQ and Clio)</label>
+      <input type="text" class="form-input" id="gig-bigname" placeholder="Event name for the posts, e.g. Gothic Masquerade (optional)" style="display:none;margin-top:6px">
+    </div>
     <div id="gig-campaign" class="camp-box" style="display:none"></div>
     <div id="gig-venue-note" style="display:none;margin-top:8px;padding:8px 10px;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-size:12.5px"></div>
     <div class="modal-actions">
@@ -2103,6 +2107,7 @@ async function mirrorHqGigsToPlanner(){
     const k=modeOf(g.kind), pp=P[k];
     if(ignV[k+'__'+hqSlug(g.venue)] || ignG[hqGigKey(k,g.venue,g.date)]) continue;
     const evExtra=k==='events'?{eventKind:g.kind}:{};
+    const bigExtra=k==='events'?{bigNight:!!g.bigNight,bigName:g.bigName||''}:{};
     const venues=await load(pp.v), gigs=await load(pp.g);
     const dow=new Date(g.date+'T12:00:00').getDay();
     const host=(g.host&&g.host!=='Unassigned')?g.host:null;
@@ -2131,8 +2136,11 @@ async function mirrorHqGigsToPlanner(){
       try{await dbFs.collection('gig_schedule').doc(g.id).update({status:'cancelled'});wrote++;}catch(e){console.warn('Could not cancel HQ gig',e);}
       continue;
     }
+    if(have&&k==='events'&&(!!have.bigNight!==!!g.bigNight||(have.bigName||'')!==(g.bigName||''))){
+      try{await db.ref(pp.g+'/'+vid+'/'+g.date).update({bigNight:!!g.bigNight,bigName:g.bigName||''});have.bigNight=!!g.bigNight;have.bigName=g.bigName||'';wrote++;}catch(e){console.warn('Could not update the big night flag',e);}
+    }
     if(have)continue;
-    const rec=Object.assign({themeId:null,themeName:null,status:'planned',note:g.notes||'',host,locationId:g.locationId||null,fromHQ:true},evExtra);
+    const rec=Object.assign({themeId:null,themeName:null,status:'planned',note:g.notes||'',host,locationId:g.locationId||null,fromHQ:true},evExtra,bigExtra);
     await db.ref(pp.g+'/'+vid+'/'+g.date).set(rec);
     (gigs[vid]=gigs[vid]||{})[g.date]=rec; wrote++;
   }
@@ -4767,6 +4775,10 @@ function openGigModal(venueId, dateKey){
     ? (existing.status==='cancelled' ? 'cancelled' : (existing.themeName ? 'planned' : 'unplanned'))
     : 'unplanned';
   document.getElementById('gig-note').value = existing ? (existing.note||'') : '';
+  document.getElementById('gig-big-wrap').style.display = plannerMode==='events' ? 'block' : 'none';
+  document.getElementById('gig-big').checked = !!(existing && existing.bigNight);
+  document.getElementById('gig-bigname').value = (existing && existing.bigName) || '';
+  document.getElementById('gig-bigname').style.display = (existing && existing.bigNight) ? 'block' : 'none';
   document.getElementById('gig-clear-btn').style.display = existing ? 'inline-block' : 'none';
   renderGigWarnings();
   renderGigSchedulePreview();
@@ -5191,6 +5203,24 @@ function renderGigWarnings(){
   }
   box.innerHTML = warnings.map(w=>`<div class="warn-chip">⚠ ${w}</div>`).join('');
 }
+// Big night: an event ticked "Big night" is also written to HQ's gig_schedule (one shared record: HQ, Planner and Clio all read it).
+async function pushBigNightToHQ(venueId, dateKey, rec, prev){
+  const v = state.venues[venueId]||{}, vname = v.name||'';
+  if(!vname) return;
+  const norm = x=>(x||'').toString().trim().toLowerCase();
+  const found = (_hqGigsRaw||[]).find(g=>g.date===dateKey && norm(g.venue)===norm(vname) && ['events','private events'].includes(norm(g.kind)));
+  const cancelled = rec.status==='cancelled';
+  if(found){
+    if(!!found.bigNight===!!rec.bigNight && (found.bigName||'')===(rec.bigName||'') && !cancelled) return;
+    const up={bigNight:!!rec.bigNight, bigName:rec.bigName||''};
+    if(cancelled) up.status='cancelled';
+    await dbFs.collection('gig_schedule').doc(found.id).update(up);
+    return;
+  }
+  if(!rec.bigNight) return;
+  const id = 'bn_'+hqGigKey('events', vname, dateKey);
+  await dbFs.collection('gig_schedule').doc(id).set({date:dateKey,time:'',endTime:'',kind:rec.eventKind||prev.eventKind||'Events',venue:vname,host:rec.host||'Unassigned',status:cancelled?'cancelled':'scheduled',notes:rec.note||'',seriesId:null,timeLocked:false,cadence:null,cadenceAnchor:null,locationId:rec.locationId||null,bigNight:true,bigName:rec.bigName||'',fromPlanner:true});
+}
 function saveGig(){
   const venueId = document.getElementById('gig-venue').value;
   const dateKey = document.getElementById('gig-date').value;
@@ -5209,7 +5239,10 @@ function saveGig(){
     const path = MODE_PATHS.events.gigs+'/'+venueId+'/'+dateKey;
     if(status==='unplanned'){ db.ref(path).remove().then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); }); return; }
     const prev = (state.gigs[venueId]||{})[dateKey]||{};
-    db.ref(path).set(Object.assign({}, prev.eventKind?{eventKind:prev.eventKind}:{}, {themeId:null, themeName:null, status:status==='cancelled'?'cancelled':'planned', note, host, locationId:selectedLocationId})).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
+    const bigNight = !!document.getElementById('gig-big').checked, bigName = document.getElementById('gig-bigname').value.trim();
+    const newRec = Object.assign({}, prev.eventKind?{eventKind:prev.eventKind}:{}, {themeId:null, themeName:null, status:status==='cancelled'?'cancelled':'planned', note, host, locationId:selectedLocationId, bigNight, bigName:bigNight?bigName:''});
+    // HQ's gig_schedule first (so the HQ mirror never sees a stale flag), then this Planner record.
+    pushBigNightToHQ(venueId, dateKey, newRec, prev).catch(e=>console.warn('Big night to HQ failed:',e)).then(()=>db.ref(path).set(newRec)).then(()=>{ toast('Saved.'); closeModal('gig-modal-overlay'); });
     return;
   }
   let rounds = (gigCtx.rounds||[]).filter(r=>r && r.name && r.name.trim());
