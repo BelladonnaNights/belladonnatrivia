@@ -1075,8 +1075,8 @@ function showResults(results, teams) {
     return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px">'
       + '<div style="font-size:22px;color:' + color + ';flex-shrink:0;width:28px;text-align:center">' + icon + '</div>'
       + '<div style="flex:1;min-width:0">'
-      + '<div style="font-size:11px;color:var(--text3);font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (r.qText||'') + '</div>'
-      + '<div style="font-size:14px;color:var(--text);font-family:var(--font)">' + (r.answer||'(no answer)') + '</div>'
+      + '<div style="font-size:11px;color:var(--text3);font-family:var(--cinzel);letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (r.num ? r.num + '. ' : '') + (r.qText||'') + '</div>'
+      + '<div style="font-size:14px;color:var(--text);font-family:var(--font)">' + (r.answer || '\u2014') + '</div>'
       + '</div>'
       + (r.pts ? '<div style="font-family:var(--display);font-size:20px;color:var(--gold);flex-shrink:0">+' + r.pts + '</div>' : '')
       + '</div>';
