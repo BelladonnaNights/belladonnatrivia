@@ -1759,7 +1759,7 @@ let lineupAnswers = [false, false, false, false, false];
 let lineupMainRound = [false, false, false, false, false];
 let lineupSegmentSize = [5, 5, 5, 5, 5];
 let lineupQCount = [20, 20, 20, 20, 20];
-let lineupTwoPass = [false, false, false, false, false];
+let lineupTwoPass = [true, true, true, true, true];
 let lineupTimed   = [false, false, false, false, false];
 let activeGenres = new Set(); // empty = show all
 let editingId = null;
@@ -2573,7 +2573,7 @@ function applyDefaults(catId, slotIndex) {
   if(!cat) return;
   lineupQCount[slotIndex]  = cat.defaultQCount || 20;
   lineupAnswers[slotIndex] = !!cat.defaultShowAnswers;
-  lineupTwoPass[slotIndex] = cat.defaultTwoPass !== false;
+  lineupTwoPass[slotIndex] = true;   // every category starts as two-pass; uncheck it for a night if needed
   lineupTimed[slotIndex]   = !!cat.defaultTimed;
 }
 
@@ -2657,7 +2657,7 @@ function openModal(id) {
   // Default round settings
   document.getElementById('f-default-qcount').value       = cat?.defaultQCount ?? 20;
   document.getElementById('f-default-showanswers').checked = !!cat?.defaultShowAnswers;
-  document.getElementById('f-default-twopass').checked    = !!cat?.defaultTwoPass;
+  document.getElementById('f-default-twopass').checked    = cat ? cat.defaultTwoPass !== false : true;
   document.getElementById('f-default-timed').checked      = !!cat?.defaultTimed;
   const timedRow = document.getElementById('f-default-timed-row');
   if(timedRow) timedRow.style.display = (cat?.type === 'music' || cat?.type === 'slideshow') ? 'none' : 'flex';
