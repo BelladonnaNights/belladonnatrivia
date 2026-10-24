@@ -405,6 +405,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   cursor:pointer;
   user-select:none;
 }
+.music-speaker-btn,.music-speaker-btn:disabled{cursor:default !important}
 .music-speaker-btn{
   width:clamp(140px,22vw,220px);height:clamp(140px,22vw,220px);
   border-radius:50%;
@@ -421,7 +422,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
   transform:scale(1.03);
 }
 .music-speaker-btn:disabled{
-  cursor:not-allowed;
+  cursor:default;
   opacity:.5;
   transform:none;
 }
@@ -872,22 +873,24 @@ function pushLiveQuestion(q, qIndex, round) {
     liveRef('timedOverride').set(null);
   }
 
-  liveRef().update({
+  const lockedRound = lockedRounds.has(state.roundIndex);
+  const upd = {
     status: 'question',
-    resultsVisible: false,
     currentQuestion: {
       id: qId, text: round.type==='music' ? 'Name that song' : q.question, type: round.type==='music' ? 'music' : (q.type||'open'),
       choices, correct: round.type==='music' ? '' : q.answer, index: qIndex,
-      timed, timeLimit: 10,
+      timed, timeLimit: timedSeconds || 10, locked: lockedRound,
       roundIndex: state.roundIndex, openedAt: Date.now(),
     }
-  });
+  };
+  if(!lockedRound) upd.resultsVisible = false;   // revisiting a locked round keeps the results up
+  liveRef().update(upd);
   // Store correct answer on the question node so grading panel can read it
   if(round.type === 'music') {
     // Music: the song name is one answer (1 point) and the artist is another (1 point), graded separately
     liveRef(`questionMeta/${qId}`).set({ questionText: 'Song name', correctAnswer: q.question, altAnswers: Array.isArray(q.songAlts) ? q.songAlts : [] });
     liveRef(`questionMeta/${qId}_artist`).set({ questionText: 'Artist \u2014 ' + q.question, correctAnswer: q.answer, altAnswers: Array.isArray(q.altAnswers) ? q.altAnswers : [] });
-    liveRef(`answers/${qId}_artist`).remove();
+    if(!_pushedQ.has(qId)) liveRef(`answers/${qId}_artist`).remove();
   } else {
     liveRef(`questionMeta/${qId}`).set({
       questionText: q.question,
@@ -895,7 +898,8 @@ function pushLiveQuestion(q, qIndex, round) {
       altAnswers: Array.isArray(q.altAnswers) ? q.altAnswers : [],
     });
   }
-  liveRef(`answers/${qId}`).remove();
+  // only clear leftovers the first time this question comes up — going back through questions must not wipe answers
+  if(!_pushedQ.has(qId)) { _pushedQ.add(qId); liveRef(`answers/${qId}`).remove(); }
 }
 
 // Tell the host board (admin.html) where this page is: 'setup' (waiting to launch) or 'live'
@@ -955,17 +959,9 @@ if(db) {
       case 'thumb-up':   sendQuestionThumb('up', true); break;
       case 'thumb-down': sendQuestionThumb('down', true); break;
       case 'feedback-note': saveHostFeedbackNote(cmd.text); break;
-      case 'audio':
-        // Try music play button first, then regular audio button
-        if(window._musicAudio) { stopMusicAudio(); break; }          // already playing -> the host button stops it
-        const musicBtn = document.getElementById('music-play-btn') || document.getElementById('music-play-again-btn');
-        if(musicBtn && !musicBtn.disabled) { playMusicAudio(musicBtn); break; }
-        const audioBtn = document.querySelector('.audio-btn:not([disabled])');
-        if(audioBtn) { audioBtn.click(); break; }
-        // Try data-audio-src buttons
-        const anyAudioBtn = document.querySelector('[data-audio-src]');
-        if(anyAudioBtn && !anyAudioBtn.disabled) { anyAudioBtn.click(); }
-        break;
+      case 'audio': toggleSlideAudio(); break;
+      case 'key-next': _viaHost = false; advanceSlide(); break;   // the clicker, relayed by the host board
+      case 'key-back': _viaHost = false; retreatSlide(); break;
     } } finally { _viaHost = false; }
   }));
 }
@@ -1730,6 +1726,27 @@ function closeNotePopup() {
 }
 
 let _viaHost = false;
+const lockedRounds = new Set();   // rounds whose answers are locked (so going back through them doesn't reopen them)
+const _pushedQ = new Set();
+let timedSeconds = 10;
+if(db) whenLiveReady(() => liveRef('timedSeconds').on('value', snap => { const n = parseInt(snap.val()); timedSeconds = n >= 3 ? n : 10; }));
+// Clicker: one press = next; on a slide with audio, a quick double press plays / stops the clip
+let _fwdTimer = null;
+function slideHasAudio() {
+  try { const r = currentRound(); if(state.preShow || slideType() !== S_QUESTION) return false; return r.type === 'music' || !!(currentQuestion() && currentQuestion().audioUrl); } catch(e) { return false; }
+}
+function toggleSlideAudio() {
+  if(window._musicAudio) { stopMusicAudio(); return; }
+  const mb = document.getElementById('music-play-btn') || document.getElementById('music-play-again-btn');
+  if(mb && !mb.disabled) { playMusicAudio(mb); return; }
+  const ab = document.querySelector('.audio-btn:not([disabled])'); if(ab) { ab.click(); return; }
+  const any = document.querySelector('[data-audio-src]'); if(any && !any.disabled) any.click();
+}
+function clickerForward() {
+  if(!slideHasAudio()) { advanceSlide(); return; }
+  if(_fwdTimer) { clearTimeout(_fwdTimer); _fwdTimer = null; toggleSlideAudio(); return; }   // double press
+  _fwdTimer = setTimeout(() => { _fwdTimer = null; advanceSlide(); }, 450);
+}
 // On a round's last question the only way forward is the host board's "Answer Key (lock all answers)" button —
 // not the clicker, a key press, or a click on the TV.
 // Host board "Add bonus question": append an extra question to this round and go to it
@@ -1752,8 +1769,10 @@ function answerKeyLocksNext() {
   try {
     if(state.preShow || !state.rounds.length || slideType() !== S_QUESTION) return false;
     const round = state.rounds[state.roundIndex];
-    return !round.twoPass && !round.showAnswers && round.type !== 'slideshow' && round.type !== 'canva'
-      && questionInfo().qIndex + 1 === (round.questions || []).length;
+    if(round.type === 'slideshow' || round.type === 'canva') return false;
+    const qi = questionInfo();
+    if(qi.qIndex + 1 !== (round.questions || []).length) return false;
+    return round.twoPass ? !qi.isPass2 : !round.showAnswers;   // end of the first pass, or the end of a one-pass round
   } catch(e) { return false; }
 }
 function advanceSlide() {
@@ -1761,6 +1780,7 @@ function advanceSlide() {
   if(answerKeyLocksNext()) {
     if(!_viaHost) { toast('Use the Answer Key button on the host board'); return; }
     if(db) liveRef('currentQuestion/locked').set(true);     // phones can no longer change answers
+    lockedRounds.add(state.roundIndex);
   }
   const type = slideType();
   if(type === S_JUMP) return;
@@ -2022,7 +2042,7 @@ function renderCurrentSlide() {
       qNow: _qNow, qTotal: _qNow ? _n : null,
       gameOver: type === S_END && state.roundIndex >= state.rounds.length - 1,
       canBonus: type === S_QUESTION && round.type !== 'music' && round.type !== 'slideshow' && round.type !== 'canva' && !questionInfo().isPass2 && questionInfo().qIndex === (round.questions || []).length - 1,
-      keyNext: type === S_QUESTION && !round.twoPass && !round.showAnswers && round.type !== 'slideshow' && round.type !== 'canva',
+      keyNext: type === S_QUESTION && round.type !== 'slideshow' && round.type !== 'canva' && (round.twoPass ? !questionInfo().isPass2 : !round.showAnswers),
       canFeedback: type === S_QUESTION && round.type !== 'music' && round.type !== 'slideshow' && round.type !== 'canva',
     });
     pushNextQuestionPeek();
@@ -3113,7 +3133,8 @@ document.addEventListener('keydown', e => {
   // some send ↓, Enter, Space, or a media "next" key)
   if(e.key === ' ' || e.code === 'Space' || e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'Enter' || e.key === 'PageDown' || e.key === 'MediaTrackNext' || e.key === 'n' || e.key === 'N') {
     e.preventDefault();
-    advanceSlide(); return;
+    if(e.repeat) return;
+    clickerForward(); return;
   }
 
   // Back — ←, ↑, PageUp (clicker), Backspace, media "previous"
