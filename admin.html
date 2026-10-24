@@ -843,7 +843,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <button class="hb-peek-rerandom-btn" id="hb-peek-rerandom-btn" onclick="sendHostCommand('rerandomize-next')" style="display:none">Re-randomize ↻</button>
       </div>
       <div class="hb-timed-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-        <span class="hb-timed-label" style="font-size:11px;letter-spacing:.08em">⏱ Timed (10s)</span>
+        <span class="hb-timed-label" style="font-size:11px;letter-spacing:.08em">⏱ Timed (<span id="hb-timed-secs-lbl">10</span>s)</span>
+        <label style="display:flex;align-items:center;gap:8px;font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">Seconds per question <input id="hb-timed-secs" type="number" min="3" max="600" value="10" class="hb-adj-input" style="width:64px" onchange="setTimedSeconds(this.value)"/></label>
         <span id="hb-timed-sub" style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">next question only</span>
         <div style="display:flex;align-items:center;gap:16px">
           <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()" title="Time the next question"></div>
@@ -3540,6 +3541,31 @@ function submitBonus() {
   sendHostCommand('add-bonus', { q, a });
   closeBonusPrompt(); toast('Bonus question added');
 }
+function setTimedSeconds(v) {
+  let n = parseInt(v); if(isNaN(n)) n = 10; n = Math.max(3, Math.min(600, n));
+  document.getElementById('hb-timed-secs').value = n;
+  try { localStorage.setItem('trivia-timed-secs', String(n)); } catch(e) {}
+  liveRef('timedSeconds').set(n).then(() => toast('Timed questions: ' + n + ' seconds')).catch(e => toast('Could not save: ' + e.message, true));
+}
+// Clicker: while a game is live, its keys drive the TV window — never scroll this page
+let _fwdKeyT = null;
+document.addEventListener('keydown', e => {
+  if(triviaPhase !== 'live') return;
+  const t = e.target; if(t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  const fwd = ['PageDown','ArrowDown','ArrowRight','MediaTrackNext'].includes(e.key) || (e.key === ' ' && (t === document.body || !t));
+  const back = ['PageUp','ArrowUp','ArrowLeft','MediaTrackPrevious'].includes(e.key);
+  if(!fwd && !back) return;
+  e.preventDefault();
+  if(e.repeat) return;
+  if(back) { sendHostCommand('key-back'); return; }
+  if(_hbS && _hbS.hasAudio) {                      // double press = play / stop the clip, single = next
+    if(_fwdKeyT) { clearTimeout(_fwdKeyT); _fwdKeyT = null; sendHostCommand('audio'); return; }
+    _fwdKeyT = setTimeout(() => { _fwdKeyT = null; sendHostCommand('key-next'); }, 450);
+    return;
+  }
+  sendHostCommand('key-next');
+}, true);
 function hbNextClick() {
   if(hbKeyMode()) {   // lock answers, bring up the key, and send everyone their results
     sendHostCommand('next');
@@ -3792,6 +3818,13 @@ function attachHbListeners() {
   timedRef.on('value', snap => {
     hostTimedOn = snap.val() === true;
     document.getElementById('hb-timed-toggle')?.classList.toggle('on', hostTimedOn);
+  });
+  const timedSecsRef = liveRef('timedSeconds'); _hbRefs.push(timedSecsRef);
+  timedSecsRef.on('value', snap => {
+    const v = snap.val();
+    if(v == null) { let ls = null; try { ls = localStorage.getItem('trivia-timed-secs'); } catch(e) {} if(ls) timedSecsRef.set(parseInt(ls) || 10).catch(() => {}); return; }
+    const inp = document.getElementById('hb-timed-secs'); if(inp && document.activeElement !== inp) inp.value = v;
+    const l = document.getElementById('hb-timed-secs-lbl'); if(l) l.textContent = v;
   });
   const timedLockRef = liveRef('timedLock'); _hbRefs.push(timedLockRef);
   timedLockRef.on('value', snap => {
