@@ -1426,7 +1426,7 @@ function plannerStart(user){
   attachBingoPairLibraryListener();
   attachVenueMenuPairLibraryListener();
   attachMoviesListeners();
-  vmxListen();
+  vmxListen(null,()=>{try{if(activeTab==='venues'&&typeof renderVenues==='function')renderVenues();}catch(e){}});
 }
 // A read-only, always-on mirror of the real Bingo category library, kept
 // separate from state.themes (which only ever holds the CURRENT mode's
@@ -2575,7 +2575,9 @@ function renderVenues(){
   const groups=new Map();
   list.forEach(([id,v])=>{const base=venueBaseName(v),k=base?vmxKey(base):'\u0000none';if(!groups.has(k))groups.set(k,{name:base,rows:[]});groups.get(k).rows.push([id,v]);});
   const kindOf=v=>v._mode?ALL_MODE_LABEL[v._mode]:(plannerMode&&plannerMode!=='all'&&ALL_MODE_LABEL[plannerMode]?ALL_MODE_LABEL[plannerMode]:'');
-  const hq=(_hqVenuesRaw||[]).filter(v=>v&&v.name&&!v.inactive).sort((x,y)=>String(x.name).localeCompare(String(y.name)));
+  // The master venues list (RTDB venues/) is the one list of who our venues are. HQ's older Firestore list is only a fallback while the master hasn't loaded.
+  const _mst=Object.entries(window.__vmxMaster||{}).filter(([id,m])=>id[0]!=='_'&&m&&m.name&&!m.inactive&&m.active!==false).map(([id,m])=>({name:m.name,id}));
+  const hq=(_mst.length?_mst:(_hqVenuesRaw||[]).filter(v=>v&&v.name&&!v.inactive)).sort((x,y)=>String(x.name).localeCompare(String(y.name)));
   _hqAddNames=hq.map(v=>v.name);
   const nightRows=(g)=>{
     let h='';const seen={};
