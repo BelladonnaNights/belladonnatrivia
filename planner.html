@@ -2064,6 +2064,39 @@ function startHqGigMirror(){
       _hqMirrorTimer=setTimeout(()=>mirrorHqGigsToPlanner().catch(e=>console.warn('HQ mirror failed:',e)),1200);
     },err=>console.warn('Could not read HQ gig schedule for the mirror:',err&&err.message));
   }catch(e){console.warn('HQ mirror unavailable',e);}
+  try{
+    dbFs.collection('hq_data').doc('venues-list').onSnapshot(snap=>{
+      let list=[];try{list=(snap.exists&&snap.data().value)?JSON.parse(snap.data().value):[];}catch(e){}
+      _hqVenuesRaw=Array.isArray(list)?list:[];
+      clearTimeout(_hqVenueTimer);
+      _hqVenueTimer=setTimeout(()=>mirrorHqVenuesToPlanner().catch(e=>console.warn('HQ venue mirror failed:',e)),1500);
+    },err=>console.warn('Could not read HQ venue list for the mirror:',err&&err.message));
+  }catch(e){console.warn('HQ venue mirror unavailable',e);}
+}
+// Every venue on HQ's Venues tab that is not Inactive gets a Planner venue too (even with no gig
+// scheduled, and even if it is not one of ours), so you never add a venue twice. Only ADDS: a venue
+// the Planner already has (any night type, matched by name) is left alone, and a venue you removed
+// here stays removed (same "ignore" note the gig mirror uses). Created under Events as a plain
+// venue; switch its night type in Edit Venue when you plan on it.
+let _hqVenuesRaw=[],_hqVenueTimer=null;
+async function mirrorHqVenuesToPlanner(){
+  const hv=_hqVenuesRaw.filter(v=>v&&v.name&&!v.inactive);
+  if(!hv.length)return;
+  const paths=['trivia/planner/venues','trivia/planner/karaokeVenues','trivia/planner/eventVenues','bingo/landing/venues'];
+  const have=new Set();
+  for(const p of paths){const o=(await db.ref(p).once('value')).val()||{};Object.values(o).forEach(v=>{if(v&&v.name)have.add(hqNorm(v.name));});}
+  const ignV=(await db.ref('trivia/planner/hqIgnoredVenues').once('value')).val()||{};
+  let wrote=0;
+  for(const v of hv){
+    if(have.has(hqNorm(v.name)))continue;
+    if(['trivia','karaoke','events','bingo'].some(k=>ignV[k+'__'+hqSlug(v.name)]))continue;
+    const id=db.ref('trivia/planner/eventVenues').push().key;
+    const rec={name:v.name,groupName:v.name,day:'',time:'',pay:{amount:null,method:''},status:v.noRecurring?'one-time':'active',source:'hq',cadence:'weekly',cadenceAnchor:'',notes:'Created from HQ venue list',host:'',hqVenueId:v.id||'',createdAt:Date.now()};
+    if(v.locationId)rec.locationId=v.locationId;
+    await db.ref('trivia/planner/eventVenues/'+id).set(rec);
+    have.add(hqNorm(v.name));wrote++;
+  }
+  if(wrote)toast('Added '+wrote+' venue'+(wrote>1?'s':'')+' from HQ.');
 }
 // ── Deletions stick: HQ's schedule keeps its own copy of every gig, so the mirror below used to re-create anything
 //    removed here ("Created from HQ"). Removing a gig or venue in the Planner now leaves a small "ignore" note
