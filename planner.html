@@ -441,8 +441,8 @@ a{color:inherit}
     <div class="section-sub">Every venue, current, seasonal, paused, or finished.</div>
     <div class="filter-bar" id="venue-list-filters">
       <input class="search-input" id="venue-search" placeholder="Search venues…" oninput="renderVenues()">
-      <button class="pill" data-vf="all" onclick="setVenueFilter('all')">All</button>
-      <button class="pill active" data-vf="active" onclick="setVenueFilter('active')">Active</button>
+      <button class="pill active" data-vf="all" onclick="setVenueFilter('all')">All</button>
+      <button class="pill" data-vf="active" onclick="setVenueFilter('active')">Active</button>
       <button class="pill" data-vf="seasonal" onclick="setVenueFilter('seasonal')">Seasonal</button>
       <button class="pill" data-vf="paused" onclick="setVenueFilter('paused')">Paused</button>
       <button class="pill" data-vf="finished" onclick="setVenueFilter('finished')">Finished</button>
@@ -2140,6 +2140,7 @@ async function mirrorHqGigsToPlanner(){
   let wrote=0;
   for(const g of list){
     const k=modeOf(g.kind), pp=P[k];
+    if(!hqNorm(g.venue)) continue;   // an HQ gig with no venue name must never create a nameless venue here
     if(ignV[k+'__'+hqSlug(g.venue)] || ignG[hqGigKey(k,g.venue,g.date)]) continue;
     const evExtra=k==='events'?{eventKind:g.kind}:{};
     const bigExtra=k==='events'?{bigNight:!!g.bigNight,bigName:g.bigName||''}:{};
@@ -2517,7 +2518,7 @@ function setDashboardView(v){
 // ═══════════════════════════════════════════════
 //  VENUES TAB — list only (calendar/day-boxes live on Dashboard)
 // ═══════════════════════════════════════════════
-let venueFilter = 'active';
+let venueFilter = 'all';
 let venueSort = {key:'name', dir:1};
 function setVenueFilter(f){ venueFilter=f; document.querySelectorAll('[data-vf]').forEach(p=>p.classList.toggle('active', p.dataset.vf===f)); renderVenues(); }
 function setVenueSort(key){ if(venueSort.key===key) venueSort.dir*=-1; else { venueSort={key,dir:1}; } renderVenues(); }
