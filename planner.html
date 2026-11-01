@@ -2081,25 +2081,7 @@ function startHqGigMirror(){
 // here stays removed (same "ignore" note the gig mirror uses). Created under Events as a plain
 // venue; switch its night type in Edit Venue when you plan on it.
 let _hqVenuesRaw=[],_hqVenueTimer=null;
-async function mirrorHqVenuesToPlanner(){
-  const hv=_hqVenuesRaw.filter(v=>v&&v.name&&!v.inactive);
-  if(!hv.length)return;
-  const paths=['trivia/planner/venues','trivia/planner/karaokeVenues','trivia/planner/eventVenues','bingo/landing/venues'];
-  const have=new Set();
-  for(const p of paths){const o=(await db.ref(p).once('value')).val()||{};Object.values(o).forEach(v=>{if(v&&v.name)have.add(hqNorm(v.name));});}
-  const ignV=(await db.ref('trivia/planner/hqIgnoredVenues').once('value')).val()||{};
-  let wrote=0;
-  for(const v of hv){
-    if(have.has(hqNorm(v.name)))continue;
-    if(['trivia','karaoke','events','bingo'].some(k=>ignV[k+'__'+hqSlug(v.name)]))continue;
-    const id=db.ref('trivia/planner/eventVenues').push().key;
-    const rec={name:v.name,groupName:v.name,day:'',time:'',pay:{amount:null,method:''},status:v.noRecurring?'one-time':'active',source:'hq',cadence:'weekly',cadenceAnchor:'',notes:'Created from HQ venue list',host:'',hqVenueId:v.id||'',createdAt:Date.now()};
-    if(v.locationId)rec.locationId=v.locationId;
-    await db.ref('trivia/planner/eventVenues/'+id).set(rec);
-    have.add(hqNorm(v.name));wrote++;
-  }
-  if(wrote)toast('Added '+wrote+' venue'+(wrote>1?'s':'')+' from HQ.');
-}
+async function mirrorHqVenuesToPlanner(){ try{ if(typeof renderVenues==='function'&&document.getElementById('venues-rows')) renderVenues(); }catch(e){} }
 // ── Deletions stick: HQ's schedule keeps its own copy of every gig, so the mirror below used to re-create anything
 //    removed here ("Created from HQ"). Removing a gig or venue in the Planner now leaves a small "ignore" note
 //    that the mirror respects. Re-adding a venue by hand clears its note. (HQ's own copy is never touched.)
@@ -2533,6 +2515,37 @@ function sortEntries(list, sortState, valueFn){
     return String(av||'').localeCompare(String(bv||''))*sortState.dir;
   });
 }
+let _hqAddNames=[],venuesNotHqOpen=false;
+function toggleNotInHq(){venuesNotHqOpen=!venuesNotHqOpen;renderVenues();}
+// + Add gig on an HQ venue: pick the kind of night and the date, then the normal gig window opens for it.
+function hqAddGig(i){
+  const name=_hqAddNames[i];if(!name)return;
+  let ov=document.getElementById('hqadd-overlay');
+  if(!ov){ov=document.createElement('div');ov.className='modal-overlay';ov.id='hqadd-overlay';ov.innerHTML='<div class="modal"><h3 id="hqadd-title"></h3><label class="form-label">What kind of night</label><select class="form-select" id="hqadd-kind"><option value="karaoke">Karaoke</option><option value="trivia">Trivia</option><option value="bingo">Bingo</option><option value="events">Events</option></select><label class="form-label">Date</label><input type="date" class="form-input" id="hqadd-date"><div class="modal-actions" style="margin-top:1rem;display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-ghost" onclick="closeModal(\'hqadd-overlay\')">Cancel</button><button class="btn btn-primary" onclick="hqAddGigGo()">Continue</button></div></div>';document.body.appendChild(ov);}
+  ov.dataset.name=name;document.getElementById('hqadd-title').textContent='Add a gig at '+name;
+  document.getElementById('hqadd-date').value=toKey(new Date());
+  openModal('hqadd-overlay');
+}
+async function hqAddGigGo(){
+  const ov=document.getElementById('hqadd-overlay'),name=ov.dataset.name,mode=document.getElementById('hqadd-kind').value,date=document.getElementById('hqadd-date').value;
+  if(!date)return toast('Pick a date.',true);
+  const key=vmxKey(name),have=Object.entries(allData.venues[mode]||{}).filter(([id,v])=>v&&vmxKey(v.name)===key);
+  let id=have.length?have[0][0]:null;
+  closeModal('hqadd-overlay');
+  try{
+    if(!id){
+      id=db.ref(MODE_PATHS[mode].venues).push().key;
+      const rec={name,groupName:name,day:'',time:'',pay:{amount:null,method:''},status:'one-time',source:'hq',cadence:'weekly',cadenceAnchor:'',notes:'',host:'',locationId:selectedLocationId};
+      await db.ref(MODE_PATHS[mode].venues+'/'+id).set(rec);
+    }
+    let tries=0;
+    const go=()=>{
+      if(((allData.venues[mode]||{})[id])||tries++>25){enterContext(mode);setTimeout(()=>window.openGigModal(id,date),60);}
+      else setTimeout(go,120);
+    };
+    go();
+  }catch(e){toast('Could not start that gig: '+(e&&e.message||e),true);}
+}
 function toggleVenuesWeek(){
   const w=document.getElementById('vwk'),a=document.getElementById('vwk-arrow');if(!w)return;
   const open=w.style.display==='none';w.style.display=open?'':'none';if(a)a.innerHTML=open?'&#9662;':'&#9656;';
@@ -2557,20 +2570,20 @@ function renderVenues(){
     if(venueSort.key==='day') return DAY_MAP[v.day]??9;
     return v[venueSort.key];
   });
+  // HQ is the master list: every non-inactive HQ venue shows once (even with no nights); anything the Planner has that HQ doesn't goes in a collapsed "Not in HQ" group at the bottom.
+  list = list.filter(([id,v])=>!(v && v.source==='hq' && /created from hq venue list/i.test(v.notes||'')));
   const groups=new Map();
-  list.forEach(([id,v])=>{const base=venueBaseName(v),k=base?base.toLowerCase():'\u0000none';if(!groups.has(k))groups.set(k,{name:base,rows:[]});groups.get(k).rows.push([id,v]);});
+  list.forEach(([id,v])=>{const base=venueBaseName(v),k=base?vmxKey(base):'\u0000none';if(!groups.has(k))groups.set(k,{name:base,rows:[]});groups.get(k).rows.push([id,v]);});
   const kindOf=v=>v._mode?ALL_MODE_LABEL[v._mode]:(plannerMode&&plannerMode!=='all'&&ALL_MODE_LABEL[plannerMode]?ALL_MODE_LABEL[plannerMode]:'');
-  let html='';
-  groups.forEach(g=>{
-    const sts=g.rows.map(([id,v])=>v.status||'active');
-    const top=sts.includes('active')?'active':(sts.includes('seasonal')?'seasonal':(sts.includes('one-time')?'one-time':sts[0]));
-    const seen={};
-    html+=`<tr style="background:rgba(201,169,110,.05)"><td class="venue-name" colspan="3" style="font-weight:600">${g.name?escapeHtml(g.name):'<span style="color:var(--red,#e0705f)">(no name) &mdash; fix or delete these</span>'} <span style="font-size:10px;opacity:.6;font-weight:400">${g.rows.length} night${g.rows.length===1?'':'s'}</span></td><td><span class="badge badge-${top}">${top.replace('-',' ')}</span></td><td></td><td></td></tr>`;
+  const hq=(_hqVenuesRaw||[]).filter(v=>v&&v.name&&!v.inactive).sort((x,y)=>String(x.name).localeCompare(String(y.name)));
+  _hqAddNames=hq.map(v=>v.name);
+  const nightRows=(g)=>{
+    let h='';const seen={};
     g.rows.forEach(([id,v])=>{
       const pay = v.pay && v.pay.amount ? `$${v.pay.amount} ${v.pay.method||''}` : '—';
       const dupKey=(kindOf(v)||'')+'|'+(v.day||'')+'|'+(v.time||'');
       const dup=seen[dupKey];seen[dupKey]=true;
-      html+=`<tr style="cursor:pointer" onclick="openVenueDetail('${id}')">
+      h+=`<tr style="cursor:pointer" onclick="openVenueDetail('${id}')">
       <td class="venue-name" colspan="2" style="padding-left:1.8rem;font-weight:400"><span style="opacity:.6">&#8627;</span> ${escapeHtml(kindOf(v)||'Night')} &middot; ${v.day||'no day'} ${fmtVT(v.time)}${cadenceTag(v)?` <span style="font-size:10px;opacity:.7;border:1px solid currentColor;border-radius:8px;padding:0 5px;">${cadenceTag(v)}</span>`:''}${dup?' <span style="font-size:10px;color:var(--red,#e0705f);border:1px solid currentColor;border-radius:8px;padding:0 5px;">duplicate?</span>':''}</td>
       <td>${pay}</td>
       <td><span class="badge badge-${v.status||'active'}">${(v.status||'active').replace('-',' ')}</span></td>
@@ -2578,8 +2591,29 @@ function renderVenues(){
       <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openQuickSchedule('${id}')">Plan</button> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openVenueModal('${id}')">Edit</button></td>
     </tr>`;
     });
-  });
+    return h;
+  };
+  const topStatus=g=>{const sts=g.rows.map(([id,v])=>v.status||'active');return sts.includes('active')?'active':(sts.includes('seasonal')?'seasonal':(sts.includes('one-time')?'one-time':sts[0]));};
+  let html='';const used=new Set();
+  if(!hq.length){
+    // HQ's list has not loaded yet (or is empty): show what the Planner has, grouped, until it does.
+    groups.forEach(g=>{html+=`<tr style="background:rgba(201,169,110,.05)"><td class="venue-name" colspan="3" style="font-weight:600">${g.name?escapeHtml(g.name):'(no name)'} <span style="font-size:10px;opacity:.6;font-weight:400">${g.rows.length} night${g.rows.length===1?'':'s'}</span></td><td><span class="badge badge-${topStatus(g)}">${topStatus(g).replace('-',' ')}</span></td><td></td><td></td></tr>`+nightRows(g);});
+  } else {
+    hq.forEach((hv,i)=>{
+      const k=vmxKey(hv.name),g=groups.get(k)||{name:hv.name,rows:[]};used.add(k);
+      if(q && !String(hv.name).toLowerCase().includes(q)) return;
+      if(venueFilter!=='all' && !g.rows.length) return;
+      html+=`<tr style="background:rgba(201,169,110,.05)"><td class="venue-name" colspan="3" style="font-weight:600">${escapeHtml(hv.name)} <span style="font-size:10px;opacity:.6;font-weight:400">${g.rows.length?g.rows.length+' night'+(g.rows.length===1?'':'s'):'nothing scheduled yet'}</span></td><td>${g.rows.length?`<span class="badge badge-${topStatus(g)}">${topStatus(g).replace('-',' ')}</span>`:''}</td><td></td><td style="text-align:right"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();hqAddGig(${i})">+ Add gig</button></td></tr>`+nightRows(g);
+    });
+    const extra=[...groups.entries()].filter(([k])=>!used.has(k)).map(e=>e[1]);
+    if(extra.length){
+      const n=extra.reduce((t,g)=>t+g.rows.length,0);
+      html+=`<tr style="cursor:pointer" onclick="toggleNotInHq()"><td class="venue-name" colspan="6" style="opacity:.75;padding-top:1.2rem">${venuesNotHqOpen?'&#9662;':'&#9656;'} Not in HQ &mdash; ${extra.length} venue${extra.length===1?'':'s'}, ${n} night${n===1?'':'s'} the Planner has that HQ doesn't</td></tr>`;
+      if(venuesNotHqOpen) extra.forEach(g=>{html+=`<tr style="background:rgba(224,112,95,.05)"><td class="venue-name" colspan="3" style="font-weight:600">${g.name?escapeHtml(g.name):'<span style="color:var(--red,#e0705f)">(no name)</span>'}</td><td></td><td></td><td></td></tr>`+nightRows(g);});
+    }
+  }
   document.getElementById('venues-rows').innerHTML = html;
+  list.length = html ? Math.max(list.length,1) : 0;
   document.getElementById('venues-empty').style.display = list.length ? 'none' : 'block';
 }
 
