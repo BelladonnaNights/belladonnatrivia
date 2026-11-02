@@ -402,6 +402,8 @@ td.art.artcell{padding-right:66px}
     </div>
     <div class="nav-right">
       <span class="sync-label" id="userLabel" style="margin-right:.5rem"></span>
+ <a class="btn ghost sm" id="csvMakerBtn" href="https://belladonnanights.github.io/belladonna-tools/trivia-CSV-tool.html" target="_blank" rel="noopener">CSV Maker</a>
+      <button class="btn ghost sm" id="promptsBtn" title="Your saved prompts">✎ Prompts</button>
       <button class="btn ghost sm" id="notesBtn" title="Host notes waiting for review">★ Notes to review<span class="nb zero" id="notesBadge">0</span></button>
       <button class="btn ghost sm" id="themeBtn">☀ Light Mode</button>
       <a class="btn ghost sm" href="https://belladonnanights.github.io/belladonna-gateway/accounts.html?view=account">My Account</a>
@@ -1374,6 +1376,29 @@ function openNotesReview(onlyKey){
   openModal({ title: onlyKey ? 'Notes on this question' : 'Host notes to review', body, wide: !onlyKey, actions: [{ label: 'Close', primary: true, onClick: closeModal }], onClose: () => { fbRedraw = null; } });
 }
 $('#notesBtn').addEventListener('click', () => openNotesReview());
+/* Prompts: one big box to type or paste into. Saves to Firestore (triviaConfig/vault-prompts). */
+$('#promptsBtn').addEventListener('click', () => run(async () => {
+  let text = '';
+  try { const d = await getDoc(doc(db, 'triviaConfig', 'vault-prompts')); if (d.exists()) text = d.data().text || ''; } catch (e) { toast('Could not load your prompts: ' + (e && e.message || e)); return; }
+  let saved = text;
+  const save = async () => {
+    const ta = $('#promptsText'); if (!ta) return true;
+    const v = ta.value;
+    if (v === saved) return true;
+    try { await setDoc(doc(db, 'triviaConfig', 'vault-prompts'), { text: v, updatedAt: serverTimestamp() }, { merge: true }); saved = v; return true; }
+    catch (e) { toast(/permission/i.test(e.message) ? 'Save blocked. Publish the updated Firestore rules.' : 'Couldn\u2019t save your prompts: ' + e.message); return false; }
+  };
+  openModal({
+    title: 'Prompts', wide: true,
+    body: '<textarea id="promptsText" spellcheck="true" style="width:100%;min-height:55vh;resize:vertical;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px;color:var(--text);font:15px/1.55 var(--font);outline:none"></textarea>',
+    actions: [
+      { label: 'Close', onClick: async () => { if (await save()) closeModal(); } },
+      { label: 'Save', primary: true, onClick: async () => { if (await save()) toast('Saved.'); } }
+    ]
+  });
+  const ta = $('#promptsText'); ta.value = text; ta.focus();
+  ta.addEventListener('blur', () => { save(); });
+}));
 
 function buildRow(r){
   const tr = document.createElement('tr'); tr.dataset.id = r.id;
