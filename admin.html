@@ -740,7 +740,6 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     </button>
     <div class="sync-dot" id="sync-dot"></div>
     <div class="sync-label" id="sync-label">connecting…</div>
-    <div id="build-tag" style="font-size:9px;opacity:.45;letter-spacing:.08em;white-space:nowrap" title="If this does not say this build, your browser is showing an older copy of the page">build 11-03c</div>
   </div>
 </nav>
 
@@ -848,8 +847,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         <button class="hb-peek-rerandom-btn" id="hb-peek-rerandom-btn" onclick="sendHostCommand('rerandomize-next')" style="display:none">Re-randomize ↻</button>
       </div>
       <div class="hb-timed-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-        <span class="hb-timed-label" style="font-size:11px;letter-spacing:.08em">⏱ Timed (<span id="hb-timed-secs-lbl">10</span>s)</span>
-        <label style="display:flex;align-items:center;gap:8px;font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">Seconds per question <input id="hb-timed-secs" type="number" min="3" max="600" value="10" class="hb-adj-input" style="width:64px" onchange="setTimedSeconds(this.value)"/></label>
+        <span class="hb-timed-label" style="font-size:11px;letter-spacing:.08em">⏱ Timed (<span id="hb-timed-secs-lbl">20</span>s)</span>
+        <label style="display:flex;align-items:center;gap:8px;font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">Seconds per question <input id="hb-timed-secs" type="number" min="3" max="600" value="20" class="hb-adj-input" style="width:64px" onchange="setTimedSeconds(this.value)"/></label>
         <span id="hb-timed-sub" style="font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3)">next question only</span>
         <div style="display:flex;align-items:center;gap:16px">
           <div class="hb-toggle" id="hb-timed-toggle" onclick="toggleHostTimed()" title="Time the next question"></div>
@@ -3941,7 +3940,7 @@ function attachHbListeners() {
   const timedSecsRef = liveRef('timedSeconds'); _hbRefs.push(timedSecsRef);
   timedSecsRef.on('value', snap => {
     const v = snap.val();
-    if(v == null) { let ls = null; try { ls = localStorage.getItem('trivia-timed-secs'); } catch(e) {} if(ls) timedSecsRef.set(parseInt(ls) || 10).catch(() => {}); return; }
+    if(v == null) { let ls = null; try { ls = localStorage.getItem('trivia-timed-secs'); } catch(e) {} if(ls) timedSecsRef.set(parseInt(ls) || 20).catch(() => {}); return; }
     const inp = document.getElementById('hb-timed-secs'); if(inp && document.activeElement !== inp) inp.value = v;
     const l = document.getElementById('hb-timed-secs-lbl'); if(l) l.textContent = v;
   });
