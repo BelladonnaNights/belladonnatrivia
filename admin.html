@@ -36,14 +36,14 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
   position:sticky;top:0;z-index:200;
   background:rgba(8,8,8,.95);backdrop-filter:blur(16px);
   border-bottom:1px solid var(--border);
-  padding:0 2rem;height:64px;
-  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 2rem;min-height:64px;box-sizing:border-box;
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;
 }
 .nav-left{display:flex;align-items:center;gap:14px}
 .nav-title{font-family:var(--display);font-size:24px;letter-spacing:.06em;line-height:1}
 .nav-title span{background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .nav-subtitle{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-left:4px;padding-left:14px;border-left:1px solid var(--border2)}
-.nav-right{display:flex;align-items:center;gap:10px}
+.nav-right{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;justify-content:flex-end;min-width:0}
 .nav-btn{
   font-family:var(--cinzel);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
   border-radius:var(--radius);padding:8px 16px;cursor:pointer;transition:all .2s;border:none;
@@ -322,7 +322,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 #toast.error{background:rgba(231,76,60,.15);border-color:rgba(231,76,60,.4);color:var(--red)}
 /* ── HOST BOARD STRIP ── */
 #host-board{
-  position:sticky;top:64px;z-index:190;
+  position:sticky;top:var(--nav-h,64px);z-index:190;
   width:100%;
   background:rgba(8,8,8,.98);
   border-bottom:2px solid var(--gold-glow);
@@ -635,11 +635,11 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 /* Confirm modal */
 #hb-confirm{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
 #hb-confirm.show{display:flex}
-.hb-confirm-box{background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:1.5rem;max-width:320px;width:90%;text-align:center}
+.hb-confirm-box{background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:1.5rem;max-width:380px;width:90%;box-sizing:border-box;text-align:center}
 .hb-confirm-title{font-family:var(--display);font-size:22px;letter-spacing:.06em;color:var(--gold);margin-bottom:.5rem}
 .hb-confirm-msg{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--text2);margin-bottom:1.25rem;line-height:1.5}
-.hb-confirm-btns{display:flex;gap:8px}
-.hb-confirm-btns button{flex:1}
+.hb-confirm-btns{display:flex;gap:8px;flex-wrap:wrap}
+.hb-confirm-btns button{flex:1 1 90px;min-width:0;white-space:normal}
 
 /* ── SCHEDULE ── */
 .nav-btn-sched{font-size:12px;padding:5px 14px;letter-spacing:.06em}
@@ -2923,11 +2923,11 @@ function renderLaunchBtn() {
   b.textContent = triviaPhase === 'setup' ? 'Launch Trivia Night →' : triviaPhase === 'live' ? 'Trivia Night Is Live ✓' : 'Open Trivia';
   b.style.opacity = triviaPhase === 'live' ? '.6' : '';
 }
-function launchTrivia() {
+function launchTrivia(preWin) {
   const activeRounds = lineup.map((id,i) => id ? {cat: categories.find(c=>c.id===id), slotIndex: i} : null)
     .filter(r => r && r.cat);
 
-  if(!activeRounds.length) return toast('Add at least one category to the lineup.', true);
+  if(!activeRounds.length) { toast('Add at least one category to the lineup.', true); return false; }
 
   const params = new URLSearchParams();
   if(selectedVenueId){
@@ -2960,7 +2960,10 @@ function launchTrivia() {
     params.set(`r${i}_segmentSize`, lineupSegmentSize[slotIndex]||5);
   });
 
-  window.open(`trivia.html?${params.toString()}`, '_blank');
+  const _url = `trivia.html?${params.toString()}`;
+  if(preWin && !preWin.closed) { try { preWin.location.href = _url; return true; } catch(e) {} }
+  window.open(_url, '_blank');
+  return true;
 }
 
 // ═══════════════════════════════════════════════
@@ -3174,10 +3177,13 @@ function confirmAction(action) {
   document.getElementById('hb-confirm-ok').textContent = action === 'opentrivia' ? 'Open Trivia' : 'Confirm';
   document.getElementById('hb-confirm').classList.add('show');
 }
-async function resetThenOpen() {   // middle button: reset the game, then open trivia
+async function resetThenOpen() {   // middle button: reset the game, then open trivia on its own
+  // open the tab right now, while the tap still counts (browsers block a tab opened after waiting), then point it at the game
+  const pre = window.open('', '_blank');
   pendingConfirmAction = 'reset';
-  await runConfirmedAction();
-  launchTrivia();
+  try { await runConfirmedAction(); } catch(e) { console.warn('reset failed', e); }
+  const ok = launchTrivia(pre);
+  if(!ok && pre) { try { pre.close(); } catch(e) {} }
 }
 function closeConfirm() {
   document.getElementById('hb-confirm').classList.remove('show');
@@ -4691,6 +4697,14 @@ document.addEventListener('keydown', e => {
     if(draggingDivider) { draggingDivider = false; divider.classList.remove('dragging'); }
     draggingCorner = false;
   });
+})();
+
+// keep sticky bars below the top bar, even when it wraps onto two lines in a narrow window
+(function(){
+  function setNavH(){ const n = document.querySelector('nav.nav'); if(n) document.documentElement.style.setProperty('--nav-h', n.offsetHeight + 'px'); }
+  window.addEventListener('resize', setNavH); window.addEventListener('load', setNavH);
+  if(window.ResizeObserver){ const n = document.querySelector('nav.nav'); if(n) new ResizeObserver(setNavH).observe(n); }
+  setNavH();
 })();
 </script>
 </body>
