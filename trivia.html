@@ -947,6 +947,7 @@ if(db) {
     try { switch(cmd.cmd) {
       case 'next':    advanceSlide(); break;
       case 'add-bonus': addBonusQuestion(cmd.q, cmd.a); break;
+      case 'add-bonus-random': addRandomBonus(); break;
       case 'back':    retreatSlide(); break;
       case 'reveal':  advanceSlide(); break;
       case 'rerandomize-next': rerandomizeNextQuestion(); break;
@@ -1778,6 +1779,39 @@ function addBonusQuestion(text, answer) {
     return;
   }
   advanceSlide();
+}
+// Host board "Add bonus question" (one tap): pull another random, unused question from this round's own category
+let _bonusBusy = false;
+async function addRandomBonus() {
+  if(_bonusBusy) return;
+  if(state.preShow || !state.rounds.length || slideType() !== S_QUESTION) return;
+  const round = currentRound();
+  if(round.type === 'music' || round.type === 'slideshow' || round.type === 'canva') return;
+  if(round.twoPass && questionInfo().isPass2) return;
+  _bonusBusy = true;
+  try {
+    let pool = round.pool;
+    if(!pool || !pool.length) {
+      try { const loaded = await loadVaultQuestions(round, 1); if(loaded && loaded.pool) { round.pool = loaded.pool; pool = loaded.pool; } } catch(e) {}
+    }
+    if(!pool || !pool.length) { toast('No question list found for this category, so no bonus question could be added.'); return; }
+    const used = new Set(round.questions.map(q => q.bonusOf || rowId(q)));
+    let cands = pool.filter(r => !used.has(rowId(r)));
+    if(!cands.length) { toast('No unused questions left in this category for a bonus.'); return; }
+    // match the round's style (multiple choice with multiple choice, and so on) when possible
+    const last = round.questions[round.questions.length - 1];
+    const same = last ? cands.filter(r => r.type === last.type) : [];
+    if(same.length) cands = same;
+    cands = preferFresh(shuffle(cands), venuePlaysCache);
+    const pick = cands[0];
+    round.questions.push(Object.assign({}, pick, { question: 'Bonus: ' + pick.question, bonus: true, bonusOf: rowId(pick) }));
+    if(round.twoPass) {
+      state.slideIndex = round.questions.length;
+      renderCurrentSlide();
+      return;
+    }
+    advanceSlide();
+  } finally { _bonusBusy = false; }
 }
 function answerKeyLocksNext() {
   try {
