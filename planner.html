@@ -361,6 +361,7 @@ a{color:inherit}
   <div class="panel active" id="panel-dashboard">
     <div class="section-title">Dashboard</div>
     <div class="section-sub">Everything scheduled, mapped out by day, week, or month.</div>
+    <div id="viCard" class="card" style="display:none;margin-bottom:1rem;padding:12px 14px;"></div>
     <div class="filter-bar">
       <div class="vd-view-toggle">
         <button class="pill active" data-dview="week" onclick="setDashboardView('week')">This Week</button>
@@ -6012,6 +6013,46 @@ if(spreadsheetFormat==='classic') setTimeout(scrollSpreadsheetToToday, 50);
 </script>
 <script>
 VRQ.init({fs:function(){return dbFs;},rtdb:function(){return db;},toast:function(m,b){toast(m,b);}});
+/* ── Venue ideas card (dashboard): venues suggest category ideas from the Venue Menu; approve or decline here ── */
+var VI={list:null,open:false,tries:0};
+function viEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function viFs(){return (typeof dbFs!=='undefined'?dbFs:null);}
+function viStart(){
+  var d=null;try{d=viFs();}catch(e){}
+  if(!d){if(VI.tries++<20)setTimeout(viStart,1500);return;}
+  try{d.collection('venueFeedback').where('type','==','categoryEntry').onSnapshot(function(s){
+    VI.list=s.docs.map(function(x){return Object.assign({id:x.id},x.data());});viRender();
+  },function(){VI.list=null;viRender();if(VI.tries++<20)setTimeout(viStart,5000);});}catch(e){}
+}
+function viRender(){
+  var box=document.getElementById('viCard');if(!box)return;
+  if(!VI.list){box.style.display='none';return;}
+  var L=VI.list.slice().sort(function(a,b){return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0);});
+  var pend=L.filter(function(x){return !x.decision||x.decision==='pending';}),done=L.filter(function(x){return x.decision&&x.decision!=='pending';});
+  if(!L.length){box.style.display='none';return;}
+  var card=function(x){var dec=x.decision||'pending';
+    return '<div style="border:1px solid var(--border);border-left:3px solid '+(dec==='approved'?'#7DC996':dec==='declined'?'#C0654F':'#D3944F')+';border-radius:6px;padding:10px 12px;margin-top:8px;">'
+    +'<div><b>'+viEsc(x.entryName||'(no name)')+'</b> · '+viEsc(x.gameType||'')+' · <i>'+viEsc(dec)+'</i></div>'
+    +'<div style="font-size:12px;opacity:.8;margin:2px 0;">'+viEsc(x.venueName||'Unknown venue')+(x.targetDate?' · wants it for '+viEsc(x.targetDate):'')+'</div>'
+    +(x.description?'<div style="white-space:pre-line;margin-top:4px;">'+viEsc(x.description)+'</div>':'')
+    +(x.sampleQuestions?'<div style="white-space:pre-line;margin-top:4px;"><b>Samples:</b> '+viEsc(x.sampleQuestions)+'</div>':'')
+    +'<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">'
+    +(dec!=='approved'?'<button class="btn btn-ghost btn-sm" onclick="viDecide(\''+x.id+'\',\'approved\')">Approve</button>':'')
+    +(dec!=='declined'?'<button class="btn btn-ghost btn-sm" onclick="viDecide(\''+x.id+'\',\'declined\')">Decline</button>':'')
+    +(dec!=='pending'?'<button class="btn btn-ghost btn-sm" onclick="viDecide(\''+x.id+'\',\'pending\')">Undo</button>':'')
+    +'</div></div>';};
+  box.style.display='';
+  box.innerHTML='<details'+(VI.open||pend.length?' open':'')+' ontoggle="VI.open=this.open"><summary style="cursor:pointer;font-weight:600;">Venue ideas ('+pend.length+' waiting)</summary>'
+    +'<div style="font-size:12px;opacity:.75;margin:4px 0;">Category ideas venues sent from the Venue Menu. After approving, add it to the catalog in the Venue Menu admin (Feedback Inbox, Add to catalog).</div>'
+    +(pend.length?pend.map(card).join(''):'<div style="margin-top:6px;opacity:.7;">Nothing waiting.</div>')
+    +(done.length?'<details style="margin-top:10px;"><summary style="cursor:pointer;opacity:.8;">Answered ('+done.length+')</summary>'+done.map(card).join('')+'</details>':'')
+    +'</details>';
+}
+function viDecide(id,v){
+  try{viFs().collection('venueFeedback').doc(id).update({decision:v,status:v==='pending'?'new':'read'}).catch(function(e){alert('Could not save: '+e.message);});}catch(e){}
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',viStart);else viStart();
+
 </script>
 </body>
 </html>
