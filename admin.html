@@ -44,9 +44,10 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 .nav-title span{background:var(--gold-shine);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .nav-subtitle{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--text3);margin-left:4px;padding-left:14px;border-left:1px solid var(--border2)}
 .nav-right{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;justify-content:flex-end;min-width:0}
+.nav-right>*{flex:0 0 auto}
 .nav-btn{
   font-family:var(--cinzel);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
-  border-radius:var(--radius);padding:8px 16px;cursor:pointer;transition:all .2s;border:none;
+  border-radius:var(--radius);padding:8px 16px;cursor:pointer;transition:all .2s;border:none;white-space:nowrap;
 }
 .nav-btn-ghost{background:transparent;color:var(--gold);border:1px solid var(--gold-glow)}
 .nav-btn-ghost:hover{background:var(--gold-dim)}
@@ -596,7 +597,8 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 }
 .hb-history-popup.show{display:flex}
 .hb-seg{display:flex;border:1px solid var(--border2);border-radius:var(--radius, 10px);overflow:hidden}
-.hb-seg button{flex:1;padding:10px 6px;border:none;background:transparent;color:var(--text2);font-family:var(--cinzel);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.hb-seg{flex-wrap:wrap}
+.hb-seg button{flex:1 1 45%;min-width:0;line-height:1.2;overflow-wrap:anywhere;padding:10px 6px;border:none;background:transparent;color:var(--text2);font-family:var(--cinzel);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
 .hb-seg button.on{background:var(--gold-shine);color:#000;font-weight:700}
 /* floating, draggable, resizable (answer key) — sits beside the grading panel */
 .hb-history-popup.hb-floating{z-index:520;width:min(520px,92vw);max-height:70vh;resize:both;min-width:260px;min-height:160px;box-shadow:0 12px 48px rgba(0,0,0,.85)}
@@ -738,6 +740,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     </button>
     <div class="sync-dot" id="sync-dot"></div>
     <div class="sync-label" id="sync-label">connecting…</div>
+    <div id="build-tag" style="font-size:9px;opacity:.45;letter-spacing:.08em;white-space:nowrap" title="If this does not say this build, your browser is showing an older copy of the page">build 11-03c</div>
   </div>
 </nav>
 
@@ -1020,6 +1023,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
     <div class="hb-confirm-btns" style="display:flex;gap:8px;justify-content:space-between">
       <button class="btn btn-ghost" onclick="addSongRow(true)">+ Add song</button>
       <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="closeSongList();hbReplayClick()">↻ Go through the round again</button>
         <button class="btn btn-ghost" onclick="closeSongList()">Close (it stays saved)</button>
       </div>
     </div>
@@ -1515,7 +1519,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
           <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Two-pass mode</span>
         </label>
         <label style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem;cursor:pointer">
-          <input type="checkbox" id="f-songlist" style="accent-color:var(--gold);width:13px;height:13px"/>
+          <input type="checkbox" id="f-songlist" onchange="if(this.checked){var q=document.getElementById('f-default-qcount');if(q)q.value=1;}" style="accent-color:var(--gold);width:13px;height:13px"/>
           <span style="font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Song list pop-up (host types each song and artist as they play, then goes through the round again)</span>
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer" id="f-default-timed-row">
@@ -2951,7 +2955,7 @@ function launchTrivia(preWin) {
     params.set(`r${i}_thankYou`, cat.thankYouUrl||'');
     params.set(`r${i}_catType`, cat.catType||'');
     params.set(`r${i}_name`, cat.name||'');
-    params.set(`r${i}_qcount`, lineupQCount[slotIndex]||20);
+    params.set(`r${i}_qcount`, cat.songList ? 1 : (lineupQCount[slotIndex]||20));
     params.set(`r${i}_showAnswers`, lineupAnswers[slotIndex] === true ? '1' : '0');
     params.set(`r${i}_twoPass`, lineupTwoPass[slotIndex] ? '1' : '0');
     params.set(`r${i}_songList`, cat.songList ? '1' : '0');
@@ -3570,6 +3574,20 @@ function updateNextBtn() {
 }
 // ── Song list pop-up (Name This Song rounds). Every keystroke is saved to Firebase under songLists/r<round> ──
 let _songRows = [], _songRoundKey = null, _songSaveTimer = null;
+function hbRoundCat() {
+  const act = lineup.map(id => id ? categories.find(c => c.id === id) : null).filter(Boolean);
+  const n = ((_hbS && _hbS.roundNum) || 1) - 1;
+  return act[n] || null;
+}
+let _songReplayed = {};
+function songRoundActive() { const c = hbRoundCat(); return !!((_hbS && _hbS.songList) || (c && c.songList)); }
+function updateSongButtons() {
+  const s = _hbS, live = !!(s && (s.roundNum || s.label));
+  const sb = document.getElementById('hb-songs-btn'); if(sb) sb.style.display = (live && songRoundActive()) ? '' : 'none';
+  const rn = (s && s.roundNum) || 1;
+  const rb = document.getElementById('hb-replay-btn');
+  if(rb) rb.style.display = (live && ((s && s.canReplay) || (songRoundActive() && !_songReplayed[rn] && !(s && s.songDone)))) ? '' : 'none';
+}
 function songKey() { return 'r' + (((_hbS && _hbS.roundNum) || 1) - 1); }
 function songPad(i) { return 'p' + String(i + 1).padStart(4, '0'); }
 async function openSongList() {
@@ -3618,7 +3636,10 @@ function closeSongList() {
 }
 function hbReplayClick() {
   // a song-list round replays from the typed songs; any other round turns itself into a two-pass round
-  if(_hbS && _hbS.songList) sendHostCommand('replay-songs'); else sendHostCommand('replay-round');
+  const rn = (_hbS && _hbS.roundNum) || 1;
+  if(songRoundActive() && !_songReplayed[rn]) { _songReplayed[rn] = true; sendHostCommand('replay-songs'); }
+  else sendHostCommand('replay-round');
+  setTimeout(updateSongButtons, 50);
 }
 function openBonusPrompt() {
   // One tap: the game screen picks another random, unused question from this round's category and adds it to the round
@@ -3947,8 +3968,7 @@ function attachHbListeners() {
   const s = snap.val();
   _hbS = s; updateNextBtn();
   { const bb = document.getElementById('hb-bonus-btn'); if(bb) bb.style.display = (s && s.canBonus) ? '' : 'none'; }
-  { const sb = document.getElementById('hb-songs-btn'); if(sb) sb.style.display = (s && s.songList) ? '' : 'none'; }
-  { const rb = document.getElementById('hb-replay-btn'); if(rb) rb.style.display = (s && s.canReplay) ? '' : 'none'; }
+  updateSongButtons();
   if(s && s.gameOver) { if(!_endPrompted) { _endPrompted = true; setTimeout(() => confirmAction('endreset'), 600); } } else _endPrompted = false;
   if(s && s.answerKey && s.answerKey.items) {
     const items = Array.isArray(s.answerKey.items) ? s.answerKey.items : Object.values(s.answerKey.items);
