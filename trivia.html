@@ -167,6 +167,7 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 .q-image-wrap.loaded{opacity:1;}
 .q-image-wrap img{width:100%;height:100%;object-fit:contain;display:block;}
 .q-text-block{text-align:center;max-width:1000px;display:flex;flex-direction:column;align-items:center;}
+.q-question.song-q{font-size:clamp(56px,8.5vw,130px);line-height:1.15}
 .q-question{
   font-family:var(--cinzel);font-weight:600;
   font-size:clamp(32px,5vw,68px);
@@ -379,10 +380,10 @@ body.song-pass #game-join-qr{left:6.5rem;bottom:6.6rem}
 #game-join-qr{
   position:fixed;left:4.5rem;bottom:4.8rem;z-index:830;display:none;
   flex-direction:column;align-items:center;gap:5px;
-  background:#fff;border-radius:10px;padding:8px;pointer-events:none;
+  background:#000;border:1px solid rgba(255,255,255,.35);border-radius:10px;padding:8px;pointer-events:none;
   box-shadow:0 4px 18px rgba(0,0,0,.5);
 }
-#game-join-qr-label{font-family:var(--cinzel);font-weight:700;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#111}
+#game-join-qr-label{font-family:var(--cinzel);font-weight:700;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#fff;text-align:center;line-height:1.25}
 #game-join-qr-code{width:104px;height:104px;line-height:0}
 #game-join-qr-code img,#game-join-qr-code canvas{width:104px !important;height:104px !important}
 
@@ -656,7 +657,7 @@ body.song-pass #game-join-qr{left:6.5rem;bottom:6.6rem}
     </div>
   </div>
 </div>
-<div id="game-join-qr"><div id="game-join-qr-label">Join the Game</div><div id="game-join-qr-code"></div></div>
+<div id="game-join-qr"><div id="game-join-qr-label">Join the<br>Game</div><div id="game-join-qr-code"></div></div>
 
 <div id="toast"></div>
 
@@ -2327,7 +2328,7 @@ function updateGameQr() {
     if(typeof QRCode === 'undefined') { setTimeout(updateGameQr, 300); return; }
     const code = document.getElementById('game-join-qr-code');
     code.innerHTML = '';
-    new QRCode(code, {text:url, width:104, height:104, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
+    new QRCode(code, {text:url, width:104, height:104, colorDark:'#ffffff', colorLight:'#000000', correctLevel:QRCode.CorrectLevel.M});
     _gameQrUrl = url;
   }
   box.style.display = 'flex';
@@ -2875,7 +2876,7 @@ function renderQuestion(container, round) {
     </div>
     <div class="q-body">
       <div class="q-text-block">
-        <div class="q-question${hasImage ? ' has-image' : ''}">${q.question}</div>
+        <div class="q-question${hasImage ? ' has-image' : ''}${q.songListItem ? ' song-q' : ''}">${q.question}</div>
         ${optionsHtml}
         ${audioHtml}
       </div>
