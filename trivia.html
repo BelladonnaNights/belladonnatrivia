@@ -948,6 +948,8 @@ if(db) {
       case 'next':    advanceSlide(); break;
       case 'add-bonus': addBonusQuestion(cmd.q, cmd.a); break;
       case 'add-bonus-random': addRandomBonus(); break;
+      case 'replay-round': replayRoundAgain(); break;
+      case 'replay-songs': replaySongList(); break;
       case 'back':    retreatSlide(); break;
       case 'reveal':  advanceSlide(); break;
       case 'rerandomize-next': rerandomizeNextQuestion(); break;
@@ -1000,7 +1002,7 @@ function pushSlideState(label, text, qNum, bgUrl, answer, extra) {
     answer: answer || '',
     hasAudio: !!(extra && extra.hasAudio),
     roundNum: (extra && extra.roundNum) || null, roundTotal: (extra && extra.roundTotal) || null,
-    qNow: (extra && extra.qNow) || null, qTotal: (extra && extra.qTotal) || null, keyNext: !!(extra && extra.keyNext), canBonus: !!(extra && extra.canBonus), gameOver: !!(extra && extra.gameOver),
+    qNow: (extra && extra.qNow) || null, qTotal: (extra && extra.qTotal) || null, keyNext: !!(extra && extra.keyNext), canBonus: !!(extra && extra.canBonus), songList: !!(extra && extra.songList), canReplay: !!(extra && extra.canReplay), gameOver: !!(extra && extra.gameOver),
     canFeedback: !!(extra && extra.canFeedback),
     keyAnswer: (extra && extra.keyAnswer) || '',
     answerKey: (extra && extra.answerKey) || null,
@@ -1780,6 +1782,56 @@ function addBonusQuestion(text, answer) {
   }
   advanceSlide();
 }
+// ── Go through this round again ──
+// Any ordinary round can be turned into a two-pass round at its end: the host taps "Go through this round again" on the last question
+// (or on the answer key / end screen) and the round replays with the answers shown. No need to have picked two-pass up front.
+function replayAvailable(round, type) {
+  try {
+    if(state.preShow || !round) return false;
+    if(round.songList && !round.songDone) return type !== S_INTRO;
+    if(round.type === 'slideshow' || round.type === 'canva' || round.twoPass) return false;
+    const n = (round.questions || []).length;
+    if(!n) return false;
+    if(type === S_QUESTION) return questionInfo().qIndex === n - 1;
+    return type === S_ANSWERKEY || type === S_END || type === S_THANKYOU;
+  } catch(e) { return false; }
+}
+function replayRoundAgain() {
+  const round = currentRound();
+  if(!round) return;
+  const type = slideType();
+  if(round.songList && !round.songDone) { replaySongList(); return; }
+  if(!replayAvailable(round, type)) return;
+  const n = round.questions.length;
+  const atLast = type === S_QUESTION;
+  round.twoPass = true;
+  if(!atLast) state.slideIndex = 1 + n;     // the "Pass 1 complete" slide; Next starts the answers pass
+  renderCurrentSlide();
+  toast('Going through this round again');
+}
+// Song-list rounds ("Name This Song"): the host types the songs into the pop-up on the host board while they play from another
+// player (saved live under songLists/r<round>). This turns those songs into an answers pass.
+async function replaySongList() {
+  const round = currentRound();
+  if(!round || round.songDone || round.type === 'slideshow' || round.type === 'canva') { if(round && round.songDone) toast('Already going through the songs.'); }
+  if(!round || round.songDone || round.type === 'slideshow' || round.type === 'canva') return;
+  let list = [];
+  try {
+    const snap = await liveRef('songLists/r' + state.roundIndex).once('value');
+    const v = snap.val() || {};
+    list = Object.keys(v).sort().map(k => v[k]).filter(x => x && (String(x.title || '').trim() || String(x.artist || '').trim()));
+  } catch(e) { console.warn('song list read failed', e); }
+  if(!list.length) { toast('No songs typed into the song list yet.'); return; }
+  round.questions = list.map((x, i) => {
+    const t = String(x.title || '').trim(), a = String(x.artist || '').trim();
+    return { question: 'Song ' + (i + 1), answer: [t, a].filter(Boolean).join(' — '), difficulty: 1, imageUrl: '', audioUrl: '', altAnswers: [], type: 'standard', mcOptions: [], notes: '', whisperQ: '', whisperA: '', rowIndex: null, songListItem: true };
+  });
+  round.type = 'trivia'; round.twoPass = true; round.showAnswers = false; round.timed = false; round.songDone = true; round.slides = [];
+  state.slideIndex = list.length + 2;       // first answer of pass 2
+  state.answerVisible = false;
+  renderCurrentSlide();
+  toast('Going through the songs again');
+}
 // Host board "Add bonus question" (one tap): pull another random, unused question from this round's own category
 let _bonusBusy = false;
 async function addRandomBonus() {
@@ -2092,6 +2144,8 @@ function renderCurrentSlide() {
       gameOver: type === S_END && state.roundIndex >= state.rounds.length - 1,
       canBonus: type === S_QUESTION && round.type !== 'music' && round.type !== 'slideshow' && round.type !== 'canva' && !questionInfo().isPass2 && questionInfo().qIndex === (round.questions || []).length - 1,
       keyNext: type === S_QUESTION && round.type !== 'slideshow' && round.type !== 'canva' && (round.twoPass ? !questionInfo().isPass2 : !round.showAnswers),
+      songList: !!round.songList && !round.songDone,
+      canReplay: replayAvailable(round, type),
       canFeedback: type === S_QUESTION && round.type !== 'music' && round.type !== 'slideshow' && round.type !== 'canva',
     });
     pushNextQuestionPeek();
@@ -3389,6 +3443,7 @@ function checkUrlParams() {
       questionCount:qCount,
       showAnswers: p.get(`r${i}_showAnswers`) !== '0',
       twoPass: p.get(`r${i}_twoPass`) === '1',
+      songList: p.get(`r${i}_songList`) === '1',
       timed: p.get(`r${i}_timed`) === '1',
       isMainRound: p.get(`r${i}_isMainRound`) === '1',
       segmentSize: parseInt(p.get(`r${i}_segmentSize`))||5,
@@ -3705,7 +3760,7 @@ async function tryStandaloneAutoLoad(){
     bgImage:cat.bgImage||'', bgIntro:cat.bgIntro||'',
     bgQuestion:(cat.type==='canva'?cat.canvaBgUrl:null)||cat.bgQuestion||'',
     bgPlain:cat.bgPlain||'', thankYouUrl:cat.thankYouUrl||'', catType:cat.catType||'',
-    title:cat.name||round.label||'Round', questionCount:20, showAnswers:false, twoPass:false, timed:false,
+    title:cat.name||round.label||'Round', questionCount:20, showAnswers:false, twoPass:!(cat.type==='slideshow'||cat.type==='canva'), songList:!!cat.songList, timed:false,
     isMainRound:false, segmentSize:5, segmentStart:0, slides:[]
   }));
 
