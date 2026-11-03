@@ -1824,7 +1824,7 @@ async function replaySongList() {
   if(!list.length) { toast('No songs typed into the song list yet.'); return; }
   round.questions = list.map((x, i) => {
     const t = String(x.title || '').trim(), a = String(x.artist || '').trim();
-    return { question: 'Song ' + (i + 1), answer: [t, a].filter(Boolean).join(' — '), difficulty: 1, imageUrl: '', audioUrl: '', altAnswers: [], type: 'standard', mcOptions: [], notes: '', whisperQ: '', whisperA: '', rowIndex: null, songListItem: true };
+    return { question: [t, a].filter(Boolean).join(' — '), answer: [t, a].filter(Boolean).join(' — '), difficulty: 1, imageUrl: '', audioUrl: '', altAnswers: [], type: 'standard', mcOptions: [], notes: '', whisperQ: '', whisperA: '', rowIndex: null, songListItem: true };
   });
   round.type = 'trivia'; round.twoPass = true; round.showAnswers = false; round.timed = false; round.songDone = true; round.slides = []; round.audioUrl = ''; round.autoPlay = false;
   state.slideIndex = list.length + 2;       // first answer of pass 2
@@ -1916,7 +1916,8 @@ function advanceSlide() {
       if(state.slideIndex < max) { state.slideIndex++; renderCurrentSlide(); }
       return;
     }
-    const shouldReveal = (round.twoPass && isPass2) || (!round.twoPass && round.showAnswers !== false);
+    const _cq = round.questions[questionInfo().qIndex];
+    const shouldReveal = !(_cq && _cq.songListItem) && ((round.twoPass && isPass2) || (!round.twoPass && round.showAnswers !== false));
     if(shouldReveal && !state.answerVisible) {
       state.answerVisible = true; renderCurrentSlide();
     } else {
@@ -1940,6 +1941,7 @@ function retreatSlide() {
   if(slideType() === S_QUESTION && state.answerVisible) {
     state.answerVisible = false; renderCurrentSlide(); return;
   }
+  if(currentRound() && currentRound().songDone && state.slideIndex <= currentRound().questions.length + 2) return;   // song list: Back stays within the typed songs
   state.answerVisible = false;
   state.currentType = null;
   if(state.slideIndex > 0) { state.slideIndex--; renderCurrentSlide(); return; }
