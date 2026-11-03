@@ -372,6 +372,9 @@ html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);backgro
 #ss-join-qr-code{width:100%;aspect-ratio:1/1;line-height:0;display:flex;align-items:center;justify-content:center}
 #ss-join-qr-code img,#ss-join-qr-code canvas{width:100% !important;height:100% !important}
 
+/* song-list answers pass: nudge the header and QR so they sit inside the border */
+body.song-pass .slide-question{padding-top:6rem}
+body.song-pass #game-join-qr{left:6.5rem;bottom:6.6rem}
 /* JOIN QR on the playing screen — small, bottom-left, kept inside the border */
 #game-join-qr{
   position:fixed;left:4.5rem;bottom:4.8rem;z-index:830;display:none;
@@ -879,7 +882,7 @@ function pushLiveQuestion(q, qIndex, round) {
     currentQuestion: {
       id: qId, text: round.type==='music' ? 'Name that song' : q.question, type: round.type==='music' ? 'music' : (q.type||'open'),
       choices, correct: round.type==='music' ? '' : q.answer, index: qIndex,
-      timed, timeLimit: timedSeconds || 10, locked: lockedRound,
+      timed, timeLimit: timedSeconds || 20, locked: lockedRound,
       roundIndex: state.roundIndex, openedAt: Date.now(),
     }
   };
@@ -1731,8 +1734,8 @@ function closeNotePopup() {
 let _viaHost = false;
 const lockedRounds = new Set();   // rounds whose answers are locked (so going back through them doesn't reopen them)
 const _pushedQ = new Set();
-let timedSeconds = 10;
-if(db) whenLiveReady(() => liveRef('timedSeconds').on('value', snap => { const n = parseInt(snap.val()); timedSeconds = n >= 3 ? n : 10; }));
+let timedSeconds = 20;
+if(db) whenLiveReady(() => liveRef('timedSeconds').on('value', snap => { const n = parseInt(snap.val()); timedSeconds = n >= 3 ? n : 20; }));
 // Clicker: one press = next; on a slide with audio, a quick double press plays / stops the clip
 let _fwdTimer = null;
 function slideHasAudio() {
@@ -2784,6 +2787,7 @@ function renderSlide(container, round) {
 }
 
 function renderQuestion(container, round) {
+  document.body.classList.toggle('song-pass', !!round.songDone);
   const { qIndex, isPass2 } = questionInfo();
   const q = round.questions[qIndex];
   const n = round.questions.length;
