@@ -1813,8 +1813,8 @@ function replayRoundAgain() {
 // player (saved live under songLists/r<round>). This turns those songs into an answers pass.
 async function replaySongList() {
   const round = currentRound();
-  if(!round || round.songDone || round.type === 'slideshow' || round.type === 'canva') { if(round && round.songDone) toast('Already going through the songs.'); }
-  if(!round || round.songDone || round.type === 'slideshow' || round.type === 'canva') return;
+  if(!round) return;
+  if(round.songDone) { toast('Already going through the songs.'); return; }
   let list = [];
   try {
     const snap = await liveRef('songLists/r' + state.roundIndex).once('value');
@@ -1826,7 +1826,7 @@ async function replaySongList() {
     const t = String(x.title || '').trim(), a = String(x.artist || '').trim();
     return { question: 'Song ' + (i + 1), answer: [t, a].filter(Boolean).join(' — '), difficulty: 1, imageUrl: '', audioUrl: '', altAnswers: [], type: 'standard', mcOptions: [], notes: '', whisperQ: '', whisperA: '', rowIndex: null, songListItem: true };
   });
-  round.type = 'trivia'; round.twoPass = true; round.showAnswers = false; round.timed = false; round.songDone = true; round.slides = [];
+  round.type = 'trivia'; round.twoPass = true; round.showAnswers = false; round.timed = false; round.songDone = true; round.slides = []; round.audioUrl = ''; round.autoPlay = false;
   state.slideIndex = list.length + 2;       // first answer of pass 2
   state.answerVisible = false;
   renderCurrentSlide();
