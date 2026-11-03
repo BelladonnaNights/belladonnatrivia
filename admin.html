@@ -3539,9 +3539,9 @@ function updateNextBtn() {
   b.textContent = hbLaunchMode() ? 'Launch Trivia' : hbKeyMode() ? 'Answer Key (lock all answers)' : 'Next →';
 }
 function openBonusPrompt() {
-  document.getElementById('hb-bonus-q').value = ''; document.getElementById('hb-bonus-a').value = '';
-  document.getElementById('hb-bonus-modal').style.display = 'flex';
-  setTimeout(() => document.getElementById('hb-bonus-q').focus(), 50);
+  // One tap: the game screen picks another random, unused question from this round's category and adds it to the round
+  sendHostCommand('add-bonus-random');
+  toast('Adding a random bonus question');
 }
 function closeBonusPrompt() { document.getElementById('hb-bonus-modal').style.display = 'none'; }
 function submitBonus() {
