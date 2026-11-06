@@ -967,6 +967,7 @@ if(db) {
       case 'feedback-note': saveHostFeedbackNote(cmd.text); break;
       case 'audio': toggleSlideAudio(); break;
       case 'audio-restart': restartSlideAudio(); break;
+      case 'music-folder': lmLoad(); break;
       case 'key-next': _viaHost = false; advanceSlide(); break;   // the clicker, relayed by the host board
       case 'key-back': _viaHost = false; retreatSlide(); break;
     } } finally { _viaHost = false; }
@@ -3079,26 +3080,19 @@ async function lmReconnect(){
     if((await h.requestPermission({mode:'read'}))==='granted'){ LM.files.clear(); LM.urls={}; LM.status='scanning…'; lmButton(); await lmScanHandle(h,0); lmDone(h.name); }
   }catch(e){ console.warn(e); lmPick(); }
 }
-function lmButton(){
-  let b=document.getElementById('lm-btn');
-  if(!b){ b=document.createElement('button'); b.id='lm-btn';
-    b.style.cssText='position:fixed;left:8px;bottom:8px;z-index:99999;font:11px/1 sans-serif;letter-spacing:.08em;padding:6px 10px;border-radius:99px;border:1px solid rgba(201,168,76,.5);background:rgba(0,0,0,.6);color:#c9a84c;cursor:pointer;opacity:.28;transition:opacity .2s';
-    b.onmouseenter=()=>b.style.opacity=1; b.onmouseleave=()=>b.style.opacity=.28;
-    b.onclick=()=>{ LM.pending?lmReconnect():lmPick(); };
-    document.body.appendChild(b); }
-  b.textContent=LM.pending?'🎵 Reconnect music folder':('🎵 '+(LM.status||'Music folder'));
-  b.title='Songs with no audio URL are looked up in this folder as "Artist - Title.mp3" or "Title - Artist.mp3"';
+function lmButton(){   // no button on the TV; the host board shows the status
+  try{ if(typeof db!=='undefined'&&db&&typeof whenLiveReady==='function') whenLiveReady(()=>liveRef('musicFolder').set({count:LM.files.size,pending:!!LM.pending,ts:Date.now()}).catch(()=>{})); }catch(e){}
 }
-(async function lmInit(){
-  lmButton();
+async function lmLoad(){
   if(!window.showDirectoryPicker) return;
   const h=await lmLoadHandle(); if(!h) return;
   LM.handle=h;
   try{
-    if((await h.queryPermission({mode:'read'}))==='granted'){ LM.status='scanning…'; lmButton(); await lmScanHandle(h,0); lmDone(h.name); }
+    if((await h.queryPermission({mode:'read'}))==='granted'){ LM.files.clear(); LM.urls={}; LM.pending=false; await lmScanHandle(h,0); lmDone(h.name); }
     else { LM.pending=true; lmButton(); }
   }catch(e){ LM.pending=true; lmButton(); }
-})();
+}
+lmLoad();
 
 function playMusicAudio(btn) {
   if(!btn || btn.disabled) return;
