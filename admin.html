@@ -709,6 +709,25 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
 :root[data-theme="light"] .hb-btn-ghost,:root[data-theme="light"] .hb-nav-btn,:root[data-theme="light"] .hb-fb-btn,:root[data-theme="light"] .hb-timed-row,:root[data-theme="light"] .hb-score-row,:root[data-theme="light"] .hb-grade-group,:root[data-theme="light"] .hb-lock-btn{background:rgba(0,0,0,.035)}
 :root[data-theme="light"] .hb-fb-btn svg{fill:#333}
 :root[data-theme="light"] .cat-card{box-shadow:0 1px 6px rgba(40,30,10,.08)}
+
+/* ── HOST BOARD: fits any screen, scrolls by itself ── */
+#host-board.expanded #host-board-body{
+  max-height:calc(100vh - var(--nav-h,64px) - 46px);
+  max-height:calc(100dvh - var(--nav-h,64px) - 46px);
+  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+  grid-template-columns:minmax(200px,min(var(--hb-left-w,340px),42vw)) minmax(0,1fr) minmax(170px,210px);
+}
+#host-board.expanded #host-board-body::-webkit-scrollbar{width:10px}
+#host-board.expanded #host-board-body::-webkit-scrollbar-thumb{background:rgba(201,168,76,.35);border-radius:6px}
+#host-board-body *{min-width:0}
+.hb-nav-btn,.hb-btn{white-space:normal;line-height:1.25}
+.hb-left,.hb-middle,.hb-right{min-width:0}
+body.hb-open{overflow:hidden}
+@media (max-width:900px){
+  #host-board.expanded #host-board-body{grid-template-columns:minmax(0,1fr)}
+  #host-board-body .hb-left,#host-board-body .hb-middle,#host-board-body .hb-right{grid-column:1;grid-row:auto;border-right:none}
+  #host-board-body .hb-col-divider{display:none}
+}
 </style>
 </head>
 <body>
@@ -858,6 +877,7 @@ html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var
         </div>
       </div>
       <button class="hb-btn hb-btn-ghost" id="hb-intro-btn" onclick="toggleHostIntro()">Play Intro Slides</button>
+      <button class="hb-btn hb-btn-ghost" id="hb-music-btn" onclick="hbMusicPick()" title="Songs with no audio URL are looked up in this folder as Artist - Title.mp3">🎵 Music folder</button>
       <div class="hb-timed-row">
         <span class="hb-timed-label">Join QR on Intro</span>
         <div class="hb-toggle" id="hb-intro-qr-toggle" onclick="toggleHostIntroQR()"></div>
@@ -3014,6 +3034,7 @@ function liveRef(subpath) {
 function toggleHostBoard() {
   const board = document.getElementById('host-board');
   board.classList.toggle('expanded');
+  document.body.classList.toggle('hb-open', board.classList.contains('expanded'));
   // Update layout min-height so page content adjusts
   const layout = document.querySelector('.layout');
   if(layout) layout.style.minHeight = board.classList.contains('expanded')
@@ -3041,6 +3062,27 @@ function updateSubmitCount() {
       ? (currentTeamCount > 0 ? currentTeamCount + ' teams · ' + currentSubmitCount + ' answered' : 'Game live')
       : '';
   }
+}
+
+// ── Music folder: picked HERE on the host board; the TV page (same browser) reads it ──
+function hbMusicLabel(v) {
+  const b = document.getElementById('hb-music-btn'); if(!b) return;
+  if(!v) { b.textContent = '🎵 Music folder'; return; }
+  b.textContent = v.pending ? '🎵 Music folder: TV needs access' : ('🎵 Music folder · ' + (v.count || 0) + ' songs');
+}
+async function hbMusicPick() {
+  if(!window.showDirectoryPicker) { toast('The music folder needs Chrome or Edge', true); return; }
+  try {
+    const h = await window.showDirectoryPicker({ mode: 'read' });
+    await new Promise((res, rej) => {
+      const r = indexedDB.open('bb-music-folder', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('h');
+      r.onerror = () => rej(r.error);
+      r.onsuccess = () => { const tx = r.result.transaction('h', 'readwrite'); tx.objectStore('h').put(h, 'dir'); tx.oncomplete = res; tx.onerror = () => rej(tx.error); };
+    });
+    toast('Music folder set: ' + h.name);
+    sendHostCommand('music-folder');
+  } catch(e) { if(e && e.name !== 'AbortError') toast('Could not set the music folder: ' + (e.message || e), true); }
 }
 
 // Send command to trivia.html via Firebase
@@ -3885,6 +3927,10 @@ function attachHbListeners() {
   // Detach any previous listeners
   _hbRefs.forEach(r => r.off());
   _hbRefs = [];
+
+  const mfRef = liveRef('musicFolder');
+  _hbRefs.push(mfRef);
+  mfRef.on('value', snap => hbMusicLabel(snap.val()));
 
   const statusRef = liveRef('status');
   _hbRefs.push(statusRef);
