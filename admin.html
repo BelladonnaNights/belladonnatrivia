@@ -3607,7 +3607,7 @@ function fitPreviewText() {
 
 // ── Live copy of the TV screen in the host-board mini screen ──
 let _hbS = null, _endPrompted = false;
-function hbLaunchMode() { return hostIntroOn && !(_hbS && _hbS.roundNum); }
+function hbLaunchMode() { return triviaPhase === 'setup' || (triviaPhase !== 'live' && hostIntroOn && !(_hbS && _hbS.roundNum)); }
 function hbKeyMode() { return !!(_hbS && _hbS.keyNext && _hbS.qNow && _hbS.qTotal && _hbS.qNow === _hbS.qTotal); }
 function updateNextBtn() {
   const b = document.getElementById('hb-next-btn'); if(!b) return;
@@ -3976,7 +3976,7 @@ function attachHbListeners() {
   });
 
   const phaseRef = liveRef('triviaPhase'); _hbRefs.push(phaseRef);
-  phaseRef.on('value', snap => { triviaPhase = snap.val() || null; renderLaunchBtn(); });
+  phaseRef.on('value', snap => { triviaPhase = snap.val() || null; renderLaunchBtn(); try { updateNextBtn(); } catch(e) {} });
 
   const timedRef = liveRef('timedOverride'); _hbRefs.push(timedRef);
   timedRef.on('value', snap => {
