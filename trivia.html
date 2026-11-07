@@ -2947,7 +2947,6 @@ function renderMusicQuestion(container, round) {
       + '</div>';
 
     container.appendChild(el);
-  try { musicActivationCheck(); } catch(e) {}
     return;
   }
 
@@ -2992,6 +2991,7 @@ function renderMusicQuestion(container, round) {
     + '</div>';
 
   container.appendChild(el);
+  try { musicActivationCheck(); } catch(e) {}   // first song of the night: tell the host board to show "play the first song from the TV screen"
 
   // Push to Firebase for digital answering
   if(!state.answerVisible && !questionInfo().isPass2) {
@@ -3032,11 +3032,13 @@ function setMusicNeedsClick(v) {
   try { if(db) whenLiveReady(() => liveRef('musicNeedsClick').set(v ? true : null)); } catch(e) {}
 }
 function musicActivationCheck() {
-  const ua = navigator.userActivation;
-  const active = ua ? !!ua.hasBeenActive : false;
-  setMusicNeedsClick(!(active || window._musicEverPlayed));
+  // Shown ONCE per night (per time this TV page is open): from the first music question until someone clicks this TV screen or a song plays.
+  if(window._musicEverPlayed || window._musicClickedAfter) { setMusicNeedsClick(false); return; }
+  window._musicQSeen = true;
+  window._needsClickSent = undefined;       // always re-send, so the host board shows it even if it opened late
+  setMusicNeedsClick(true);
 }
-['pointerdown', 'keydown', 'click'].forEach(ev => document.addEventListener(ev, e => { if(e.isTrusted) setMusicNeedsClick(false); }, true));
+['pointerdown', 'keydown', 'click'].forEach(ev => document.addEventListener(ev, e => { if(e.isTrusted && window._musicQSeen) { window._musicClickedAfter = true; setMusicNeedsClick(false); } }, true));
 function musicBtnClick(btn) {
   if(window._musicAudio) { stopMusicAudio(); return; }
   playMusicAudio(btn);
