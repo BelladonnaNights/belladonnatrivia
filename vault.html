@@ -55,7 +55,7 @@ a{color:inherit}
 
 /* ── NAV (same bar as the planner / trivia admin) ── */
 #app{display:flex;flex-direction:column;height:100vh}
-.nav{position:sticky;top:0;z-index:200;background:rgba(8,8,8,.95);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 2rem;height:64px;flex:none;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.nav{position:sticky;top:0;z-index:200;background:rgba(8,8,8,.95);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:6px 2rem;min-height:64px;height:auto;flex:none;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
 .nav-left{display:flex;align-items:center;gap:14px}
 .nav-logo-img{width:38px;height:38px;object-fit:contain}
 .nav-title{font-family:var(--display);font-size:24px;letter-spacing:.06em;line-height:1;color:#f0ede8}
@@ -68,6 +68,24 @@ a{color:inherit}
 .sync-dot.error{background:var(--red)}
 @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
 .sync-label{font-family:var(--cinzel);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
+
+
+/* ── small windows: buttons wrap instead of overlapping ── */
+.nav-left,.nav-right{flex-wrap:wrap;min-width:0}
+.nav-right{justify-content:flex-end;row-gap:6px}
+@media (max-width:1250px){ .nav{padding:6px 1rem} .nav-subtitle{display:none} .nav .btn.sm{padding:7px 11px;font-size:9.5px} }
+@media (max-width:980px){
+  .nav-left,.nav-right{width:100%} .nav-right{justify-content:flex-start}
+  .top{padding:.8rem 1rem .7rem}
+  .tools{width:100%} .tools .btn,.tools .pill{flex:0 0 auto}
+  #q,#bQ{flex:1 1 160px;min-width:120px;width:auto!important}
+}
+@media (max-width:640px){
+  .btn{padding:7px 10px;font-size:9.5px;letter-spacing:.06em}
+  .nav-title{font-size:19px} .nav .btn.sm{padding:6px 9px;font-size:9px}
+  .titleBlock{width:100%} .catTitle{max-width:100%}
+  .mFoot{flex-wrap:wrap}
+}
 
 /* ── buttons / pills / fields ── */
 .btn{font-family:var(--cinzel);font-size:10px;letter-spacing:.1em;text-transform:uppercase;border-radius:var(--radius);padding:9px 16px;cursor:pointer;transition:all .2s;background:transparent;color:var(--text2);border:1px solid var(--border2);white-space:nowrap;text-decoration:none;display:inline-block;line-height:1.3}
@@ -457,6 +475,7 @@ td.art.artcell{padding-right:66px}
             <button class="btn ghost hidden" id="resetOrderBtn" title="Put the columns back in their saved order">Reset column order</button>
             <button class="btn ghost" id="colsBtn">Columns</button>
             <button class="btn ghost" id="qListBtn" title="A plain list of every question and answer, to paste into your AI so it doesn't repeat any">Question list</button>
+            <button class="btn ghost" id="catListBtn" title="A list of every trivia category with its About notes">Category list</button>
             <button class="btn ghost" id="importBtn">Import CSVs</button>
             <button class="btn primary" id="addBtn">+ Add question</button>
           </div>
@@ -497,6 +516,7 @@ td.art.artcell{padding-right:66px}
           <div class="tools">
             <input id="bQ" placeholder="Search songs…" autocomplete="off" style="width:200px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 13px;color:var(--text);font:14px var(--font);outline:none">
             <div class="chips" id="bFilter"><button class="pill on" data-f="all">All</button><button class="pill" data-f="have">In catalog</button><button class="pill" data-f="missing">Missing</button><button class="pill" data-f="tosearch" title="Not in your catalog and not searched for yet">To search</button><button class="pill" data-f="searched" title="Not in your catalog but already searched for on BPM Supreme">Searched</button></div>
+            <button class="btn ghost hidden" id="bNewSongs" title="Songs that were new in your catalog imports \u2014 stays until you clear it">New songs</button>
             <button class="btn ghost hidden" id="bExportMissing">Export CSV</button>
             <button class="btn ghost" id="bUndo" title="Nothing to undo" disabled style="opacity:.45">↶ Undo</button>
             <button class="btn ghost" id="bIndexLink" title="Link this list to a category in the Bingo index — or create one">Bingo index</button>
@@ -2067,6 +2087,30 @@ function openImport(){
 /* ═══════════════════════════════════════════════════════════
    QUESTION LIST — plain "question — answer" lines to paste into an AI so it avoids repeats
    ═══════════════════════════════════════════════════════════ */
+$('#catListBtn').addEventListener('click', () => {
+  const body = document.createElement('div');
+  body.innerHTML = `<p class="hint">Every trivia category with its About notes, to copy or download.</p>
+    <label class="chk"><input type="checkbox" id="clArch"> Include archived categories</label>
+    <label class="chk"><input type="checkbox" id="clType" checked> Group by category type</label>
+    <label class="fld" style="margin-top:10px">List<textarea id="clOut" rows="16" readonly style="width:100%;font-size:12px"></textarea></label>
+    <div id="clCount" class="hint"></div>`;
+  const one = v => String(v ?? '').replace(/[ \t]+/g, ' ').trim();
+  const cats = () => [...S.cats.values()].filter(c => $('#clArch').checked || !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }));
+  const fmt = c => one(c.name) + (c.questionCount != null ? ' (' + c.questionCount + ' questions)' : '') + (c.archived ? ' [archived]' : '') + '\n' + (one(c.about) ? String(c.about).trim().split(/\n/).map(l => '    ' + l.trim()).join('\n') : '    (no About notes)');
+  const draw = () => {
+    const list = cats(); let out;
+    if ($('#clType').checked){ const by = new Map(); list.forEach(c => { const t = c.type || 'No type'; if (!by.has(t)) by.set(t, []); by.get(t).push(c); }); out = [...by].map(([t, cs]) => '== ' + t.toUpperCase() + ' ==\n\n' + cs.map(fmt).join('\n\n')).join('\n\n\n'); }
+    else out = list.map(fmt).join('\n\n');
+    $('#clOut').value = out; $('#clCount').textContent = list.length.toLocaleString() + ' categories';
+  };
+  const copy = async () => { const t = $('#clOut').value; if (!t) return; try { await navigator.clipboard.writeText(t); } catch (e) { $('#clOut').select(); document.execCommand('copy'); } toast('List copied'); };
+  const csv = () => {
+    const rows = ['Category,Type,Questions,About', ...cats().map(c => [csvEscape(c.name), csvEscape(c.type || ''), csvEscape(c.questionCount != null ? c.questionCount : ''), csvEscape(c.about || '')].join(','))].join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows], { type: 'text/csv;charset=utf-8' })); a.download = 'trivia-categories.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  openModal({ title: 'Category list', body, wide: true, actions: [{ label: 'Close', onClick: closeModal }, { label: 'Download CSV', onClick: csv }, { label: 'Copy list', primary: true, onClick: copy }] });
+  $('#clArch').addEventListener('change', draw); $('#clType').addEventListener('change', draw); draw();
+});
 $('#qListBtn').addEventListener('click', () => {
   const cats = [...S.cats.values()].filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name)));
   const body = document.createElement('div');
@@ -2145,6 +2189,7 @@ $('#tagSearchBtn').addEventListener('click', () => {
    A song's key is built from its title + artist, so ticking it on
    ANY list ticks it on EVERY list that has the same song.
    ═══════════════════════════════════════════════════════════ */
+let CAT_SORT = { k: 't', d: 1 };   // a refresh puts it back to Song A\u2013Z
 const B = {
   lists: new Map(), owned: new Set(), curId: null, loaded: false,
   sort: (LS.get('bSort4', null) || { by:'name', dir:1 }), showArch: false, filter: 'all', q: '',
@@ -2284,11 +2329,12 @@ function startBingo(){
     $('#bList').innerHTML = `<p class="hint" style="padding:12px">Can't read the bingo lists yet.<br>${/permission/i.test(err.message) ? 'Publish the updated Firestore rules, then refresh.' : esc(err.message)}</p>`;
   }));
   B.unsubs.push(onSnapshot(collection(db, 'bingoConfig'), snap => {
-    B.catChunks = new Map(); B.owned = new Set(); B.removed = new Set(); B.searched = new Set(); B.catMode = 'exact'; B.catCount = 0; B.catUpdated = null;
+    B.catChunks = new Map(); B.owned = new Set(); B.removed = new Set(); B.searched = new Set(); B.catMode = 'exact'; B.catCount = 0; B.catUpdated = null; B.newTxt = '';
     const songChunks = [];
     for (const d of snap.docs){
       const v = d.data();
       if (d.id === 'catalog'){ B.owned = new Set(Object.keys(v.owned || {})); B.removed = new Set(Object.keys(v.removed || {})); B.searched = new Set(Object.keys(v.searched || {})); }
+      else if (d.id === 'catalogNew'){ B.newTxt = v.txt || ''; }
       else if (d.id === 'catalogMeta'){ B.catMode = v.mode === 'title' ? 'title' : 'exact'; B.catCount = v.count || 0; B.catUpdated = v.updatedAtMs || null; }
       else if (d.id.startsWith('full_')) B.catChunks.set(d.id, v.s || '');       // older imports: keys only
       else if (d.id.startsWith('songs_')){ B.catChunks.set(d.id, ''); songChunks.push([Number(d.id.slice(6)), v.txt || '']); }
@@ -2387,7 +2433,8 @@ function catalogRows(){
   const inImport = e => B.cat.has(B.catMode === 'title' ? e._tk : e._k) || (e.m && B.catMode !== 'title' && B.cat.has(songKey(e.t, e.m))) || looseHit(B.catLoose, e);
   for (const e of allSongs()){ const k = B.catMode === 'title' ? e._tk : e._k; if (!m.has(k) && isOwned(e) && !inImport(e)) m.set(k, { ...e, lists: e.lists, _src: 'list' }); }
   const out = [...m.values()].filter(r => !B.removed.has(r._k));
-  return out.sort((a, b) => (a.t || '').localeCompare(b.t || '', undefined, { sensitivity: 'base', numeric: true })).map((r, i) => ({ ...r, idx: i, ro: true }));
+  const cmp = (x, y) => String(x || '').localeCompare(String(y || ''), undefined, { sensitivity: 'base', numeric: true });
+  return out.sort((a, b) => CAT_SORT.k === 'a' ? ((cmp(a.a, b.a) || cmp(a.t, b.t)) * CAT_SORT.d) : (cmp(a.t, b.t) * CAT_SORT.d || cmp(a.a, b.a))).map((r, i) => ({ ...r, idx: i, ro: true }));
 }
 function currentRows(){
   if (B.curId === CATALOG) return catalogRows();
@@ -2404,6 +2451,15 @@ function songListNames(k, exceptId){
   for (const l of B.lists.values()) if (l.id !== exceptId && !l.archived && l.songs.some(s => s._k === k)) out.push(l.name);
   return out;
 }
+function catSortTh(){
+  const ar = k => CAT_SORT.k === k ? (CAT_SORT.d > 0 ? ' \u25b2' : ' \u25bc') : ' \u21c5';
+  return `<th data-csort="t" style="cursor:pointer;color:var(--gold)" title="Click to sort by song \u2014 click again to reverse (a refresh resets it)">Song${ar('t')}</th><th data-csort="a" style="cursor:pointer;color:var(--gold)" title="Click to sort by artist A\u2013Z \u2014 click again to reverse (a refresh resets it)">Artist${ar('a')}</th>`;
+}
+$('#bGrid').addEventListener('click', e => {
+  const th = e.target.closest('th[data-csort]'); if (!th) return;
+  const k = th.dataset.csort; CAT_SORT = CAT_SORT.k === k ? { k, d: -CAT_SORT.d } : { k, d: 1 };
+  renderBingoAll();
+});
 function renderBingoAll(){
   renderBingoSide();
   const isMissing = B.curId === MISSING, isCat = B.curId === CATALOG, special = isMissing || isCat, l = B.lists.get(B.curId);
@@ -2417,6 +2473,7 @@ function renderBingoAll(){
   if (!special) updateIndexBtn();
   if (!special) $('#bExtras').textContent = 'Extras' + ((l.extras || []).length ? ' (' + l.extras.length + ')' : '');
   $('#bExportMissing').classList.toggle('hidden', !special);
+  { const nb = $('#bNewSongs'), n = newSongLines().length; nb.classList.toggle('hidden', !isCat); nb.textContent = 'New songs' + (n ? ' (' + n.toLocaleString() + ')' : ''); }
   nm.readOnly = special;
   if (special){ nm.value = isCat ? 'My whole catalog' : 'Everything I’m missing'; $('#bArch').classList.add('hidden'); }
   else { if (document.activeElement !== nm) nm.value = l.name; $('#bArch').classList.toggle('hidden', !l.archived); }
@@ -2448,7 +2505,7 @@ function renderBingoAll(){
   const wrap = $('#bGridWrap'), st = wrap.scrollTop;
   const BPM = '<th class="ck" title="Tick once you\u2019ve searched for this song on BPM Supreme \u2014 it ticks everywhere the song appears">BPM</th>';
   $('#bGrid thead').innerHTML = special
-    ? `<tr><th>#</th>${isCat ? '' : '<th>In catalog</th>'}${isMissing ? BPM : ''}<th>Song</th><th>Artist</th><th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
+    ? `<tr><th>#</th>${isCat ? '' : '<th>In catalog</th>'}${isMissing ? BPM : ''}${isCat ? catSortTh() : '<th>Song</th><th>Artist</th>'}<th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
     : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th class="on" data-rsort="1" style="cursor:pointer;color:var(--gold)" title="How many of your OTHER bingo lists also have this song \u2014 click to put the songs on the most lists first">On other lists${B.rowSort ? ' \u25bc' : ' \u21c5'}</th><th>Movie / show</th><th></th></tr>`;
   const bpmMap = new Map();   // artist -> their songs that carry a BPM mark (searched tick, or a BPM file in the imported catalog)
   { const add = x => { const hit = B.searched.has(x._k) || isBpmFile(x) || x.bpm; if (!hit) return; const a = normSong(x.a); if (!a) return; for (const ak of new Set([a, ...artParts(x.a)])) (bpmMap.get(ak) || bpmMap.set(ak, []).get(ak)).push({ k: x._k, tk: x._tk }); }; for (const l of B.lists.values()) l.songs.forEach(add); B.catSongs.forEach(add); }
@@ -2845,6 +2902,9 @@ function openCatalogImport(){
   const go = async btn => {
     const songs = parse(); if (!songs.length){ toast('Paste or load your catalog first.'); return; }
     const mode = $('#ciMode').value, replace = $('#ciReplace').checked || (B.catCount && B.catMode !== mode);
+    /* which songs in this upload are NEW to the catalog (not already in it) — worked out before anything is saved */
+    const fresh = []; { const seenN = new Set(); for (const x of songs){ const sg = withKeys({ t: x.t, a: x.a, m: x.m || '' }), k = mode === 'title' ? sg._tk : sg._k; if (seenN.has(k)) continue; seenN.add(k); if (!isOwned(sg)) fresh.push(x); } }
+    const newLines = newSongLines(); { const have = new Set(newLines.map(l => l.toLowerCase())); for (const x of fresh){ const ln = String(x.t).replace(/\s+/g, ' ').trim() + (x.a ? ' - ' + String(x.a).replace(/\s+/g, ' ').trim() : ''); if (!have.has(ln.toLowerCase())){ have.add(ln.toLowerCase()); newLines.push(ln); } } }
     const keyOf = x => mode === 'title' ? titleKey(x.t) : songKey(x.t, x.a);
     const merged = new Map();
     if (!replace && B.catCount && B.catMode === mode) for (const x of B.catSongs) merged.set(mode === 'title' ? x._tk : x._k, { t: x.t, a: x.a, m: x.m, bpm: x.bpm });
@@ -2863,13 +2923,14 @@ function openCatalogImport(){
       const b = writeBatch(db);
       for (const id of B.catChunks.keys()){ if (id.startsWith('full_') && !legacyOnly) b.delete(doc(db, 'bingoConfig', id)); else if (id.startsWith('songs_') && !(Number(id.slice(6)) < chunks.length)) b.delete(doc(db, 'bingoConfig', id)); }
       b.set(doc(db, 'bingoConfig', 'catalogMeta'), { mode, count: arr.length + (legacyOnly ? B.cat.size : 0), chunks: chunks.length, updatedAt: serverTimestamp(), updatedAtMs: Date.now() });
+      if (fresh.length) b.set(doc(db, 'bingoConfig', 'catalogNew'), { txt: newLines.join('\n'), n: newLines.length, updatedAtMs: Date.now() });
       /* hand ticks (in catalog, BPM searched, un-ticked) are never touched by an import */
       await b.commit();
       return true;
     });
     if (!ok){ btn.disabled = false; btn.textContent = 'Import catalog'; return; }
     closeModal();
-    toast('Catalog saved \u2014 ' + arr.length.toLocaleString() + ' songs. Your lists are ticked.');
+    toast('Catalog saved \u2014 ' + arr.length.toLocaleString() + ' songs (' + fresh.length.toLocaleString() + ' new). Your lists are ticked.');
   };
   openModal({ title: 'Import my catalog', body, actions: [{ label: 'Cancel', onClick: closeModal }, { label: 'Import catalog', primary: true, onClick: go }] });
   $('#ciText').addEventListener('input', info); $('#ciOrder').addEventListener('change', info); $('#ciMode').addEventListener('change', info);
@@ -2888,6 +2949,23 @@ function openCatalogImport(){
   $('#ciText').focus();
 }
 $('#bCatBtn').addEventListener('click', openCatalogImport);
+const newSongLines = () => String(B.newTxt || '').split('\n').map(x => x.trim()).filter(Boolean);
+$('#bNewSongs').addEventListener('click', () => {
+  const lines = newSongLines();
+  const body = document.createElement('div');
+  body.innerHTML = `<p class="hint">Every song that was new to your catalog in your imports. It stays here until you clear it, and it\u2019s the same on every computer.</p>
+    <label class="fld">New songs<textarea id="nsOut" rows="16" readonly style="width:100%;font-size:12px">${esc(lines.join('\n'))}</textarea></label>
+    <div class="hint" id="nsCount">${lines.length.toLocaleString()} song${lines.length === 1 ? '' : 's'}</div>`;
+  const copy = async () => { const t = $('#nsOut').value; if (!t) return; try { await navigator.clipboard.writeText(t); } catch (e) { $('#nsOut').select(); document.execCommand('copy'); } toast('List copied'); };
+  const clear = async () => {
+    if (!lines.length) return;
+    if (!(await confirmBox({ title: 'Clear the new songs list?', message: 'This empties the list of ' + lines.length.toLocaleString() + ' new songs. Your catalog itself is not touched.', ok: 'Clear it', danger: true }))) return;
+    closeModal();
+    await run(() => setDoc(doc(db, 'bingoConfig', 'catalogNew'), { txt: '', n: 0, updatedAtMs: Date.now() }));
+    toast('New songs list cleared');
+  };
+  openModal({ title: 'New songs from my imports', body, wide: true, actions: [{ label: 'Close', onClick: closeModal }, { label: 'Clear list', danger: true, onClick: clear }, { label: 'Copy list', primary: true, onClick: copy }] });
+});
 
 /* ── More ⋯ ── */
 function exportBingoCSV(rows, name){
