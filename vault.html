@@ -930,6 +930,18 @@ function startListeners(){
   if (S.listening) { renderSide(); return; }
   S.listening = true;
   startFeedback();
+  try {
+    rtdb = rtdb || getDatabase(app);
+    S.unsubs.push(ronValue(rref(rtdb, 'trivia/categories'), snap => {
+      PLAN.byId = new Map(); PLAN.byName = new Map();
+      for (const t of Object.values(snap.val() || {})){
+        const alt = t && String(t.altName || '').trim(); if (!alt) continue;
+        if (t.vaultCatId) PLAN.byId.set(t.vaultCatId, alt);
+        if (t.name) PLAN.byName.set(normName(t.name), alt);
+      }
+      try { renderSide(); if (S.curId && S.cats.get(S.curId)) renderHead(); } catch (e) {}
+    }));
+  } catch (e) { console.warn('Planner secondary names unavailable:', e && e.message); }
   S.unsubs.push(onSnapshot(collection(db, 'triviaCategories'), snap => {
     S.cats = new Map(snap.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
     if (!S.pending) setSync('synced', 'connected');
@@ -997,7 +1009,10 @@ async function addType(name){
 function catByNorm(name){ const k = normName(name); for (const c of S.cats.values()) if (normName(c.name) === k) return c; return null; }
 
 const isFeatType = t => /^feature/i.test(String(t || '').trim());
-const secName = c => String(c.secondaryName || '').trim();
+/* Secondary names also live in the Planner (trivia/categories/<id>/altName). The Vault shows those too, so a name set in the Planner is already here. */
+const PLAN = { byId: new Map(), byName: new Map() };
+const secName = c => String(c.secondaryName || '').trim() || PLAN.byId.get(c.id) || PLAN.byName.get(normName(c.name)) || '';
+const showSec = c => isFeatType(c.type) || !!secName(c);
 const sideName = c => (isFeatType(c.type) && secName(c)) || c.name;
 function renderSide(){
   const q = $('#catSearch').value.trim().toLowerCase(), showArch = $('#showArchCats').checked;
@@ -1034,7 +1049,7 @@ function renderHead(){
   const c = S.cats.get(S.curId);
   if (!c){ if (S.curId){ S.curId = null; showEditor(false); } return; }
   const nm = $('#catName'); if (document.activeElement !== nm) nm.value = c.name;
-  const n2 = $('#catName2'); n2.classList.toggle('hidden', !isFeatType(c.type)); if (document.activeElement !== n2) n2.value = secName(c);
+  const n2 = $('#catName2'); n2.classList.toggle('hidden', !showSec(c)); if (document.activeElement !== n2) n2.value = secName(c);
   const sel = $('#catType');
   sel.innerHTML = typeList().map(t => `<option ${t === c.type ? 'selected' : ''}>${esc(t)}</option>`).join('') + (c.type && !typeList().includes(c.type) ? `<option selected>${esc(c.type)}</option>` : '') + `<option value="__new">＋ New type…</option>`;
   $('#catArchTag').classList.toggle('hidden', !c.archived);
@@ -1078,6 +1093,7 @@ $('#catName2').addEventListener('change', async e => {
   const v = e.target.value.trim();
   if (v === secName(c)) return;
   await run(() => updateDoc(catRef(c.id), { secondaryName: v || null, updatedAt: serverTimestamp() }));
+  try { const tid = await aboutFindTid(c.id); if (tid) await rupdate(rref(rtdb, 'trivia/categories/' + tid), { altName: v || null, updatedAt: Date.now() }); } catch (e) { console.warn('Could not update the Planner secondary name:', e && e.message); }   // keep the Planner in step
 });
 $('#catName2').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape'){ const c = S.cats.get(S.curId); if (c) e.target.value = secName(c); e.target.blur(); } });
 $('#catName').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape'){ const c = S.cats.get(S.curId); if (c) e.target.value = c.name; e.target.blur(); } });
@@ -2104,13 +2120,35 @@ function openImport(){
 $('#catListBtn').addEventListener('click', () => {
   const body = document.createElement('div');
   body.innerHTML = `<p class="hint">Every trivia category with its About notes, to copy or download.</p>
+    <div class="fld" style="margin:6px 0 2px">Types<div id="clTypes" style="display:flex;flex-wrap:wrap;gap:4px 16px;text-transform:none;letter-spacing:0"></div></div>
+    <div class="fld" style="margin:8px 0 2px">Categories
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px;text-transform:none;letter-spacing:0">
+        <input id="clFind" placeholder="Find a category\u2026" autocomplete="off" style="flex:1 1 160px;min-width:120px">
+        <button class="btn ghost sm" type="button" id="clAll">Select all shown</button><button class="btn ghost sm" type="button" id="clNone">Clear shown</button>
+      </div>
+      <div id="clPick" style="max-height:170px;overflow-y:auto;border:1px solid var(--border2);border-radius:var(--radius);padding:6px 10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 14px;text-transform:none;letter-spacing:0;font-family:var(--font);font-size:13px"></div>
+    </div>
     <label class="chk"><input type="checkbox" id="clArch"> Include archived categories</label>
     <label class="chk"><input type="checkbox" id="clType" checked> Group by category type</label>
+    <label class="chk"><input type="checkbox" id="clSongs"> Include the songs already on each music list</label>
     <label class="fld" style="margin-top:10px">List<textarea id="clOut" rows="16" readonly style="width:100%;font-size:12px"></textarea></label>
     <div id="clCount" class="hint"></div>`;
   const one = v => String(v ?? '').replace(/[ \t]+/g, ' ').trim();
-  const cats = () => [...S.cats.values()].filter(c => $('#clArch').checked || !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }));
-  const fmt = c => one(c.name) + (c.questionCount != null ? ' (' + c.questionCount + ' questions)' : '') + (c.archived ? ' [archived]' : '') + (one(c.aboutHeader) ? '\n    Header: ' + one(c.aboutHeader) : '') + '\n' + (one(c.about) ? String(c.about).trim().split(/\n/).map(l => '    ' + l.trim()).join('\n') : '    (no About notes)');
+  const typeOf = c => c.type || 'No type';
+  const allTypes = [...new Set([...S.cats.values()].map(typeOf))].sort((a, b) => a.localeCompare(b));
+  const offTypes = new Set(), offCats = new Set();
+  const shown = () => [...S.cats.values()].filter(c => ($('#clArch').checked || !c.archived) && !offTypes.has(typeOf(c))).sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }));
+  const cats = () => shown().filter(c => !offCats.has(c.id));
+  const drawPick = () => {
+    const q = $('#clFind').value.trim().toLowerCase();
+    $('#clPick').innerHTML = shown().filter(c => !q || String(c.name).toLowerCase().includes(q)).map(c => `<label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-cid="${esc(c.id)}" ${offCats.has(c.id) ? '' : 'checked'}> <span>${esc(c.name)}</span></label>`).join('') || '<span class="hint">No categories match.</span>';
+  };
+  const drawTypes = () => { $('#clTypes').innerHTML = allTypes.map(t => `<label class="chk" style="margin:0"><input type="checkbox" data-t="${esc(t)}" ${offTypes.has(t) ? '' : 'checked'}> ${esc(t)}</label>`).join(''); };
+  const catsOld = () => [...S.cats.values()].filter(c => $('#clArch').checked || !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }));
+  let songsBy = null;   // categoryId -> ["Song \u2013 Artist", ...], loaded the first time the box is ticked
+  const isMus = c => /music/i.test(c.type || '');
+  const songsOf = c => (songsBy && isMus(c) && songsBy.get(c.id)) || [];
+  const fmt = c => one(c.name) + (c.questionCount != null ? ' (' + c.questionCount + ' questions)' : '') + (c.archived ? ' [archived]' : '') + (secName(c) ? '\n    Secondary name: ' + secName(c) : '') + (one(c.aboutHeader) ? '\n    Header: ' + one(c.aboutHeader) : '') + '\n' + (one(c.about) ? String(c.about).trim().split(/\n/).map(l => '    ' + l.trim()).join('\n') : '    (no About notes)') + (songsBy && isMus(c) ? '\n    Songs (' + songsOf(c).length + '):' + (songsOf(c).length ? '\n' + songsOf(c).map(x => '      \u2022 ' + x).join('\n') : ' none yet') : '');
   const draw = () => {
     const list = cats(); let out;
     if ($('#clType').checked){ const by = new Map(); list.forEach(c => { const t = c.type || 'No type'; if (!by.has(t)) by.set(t, []); by.get(t).push(c); }); out = [...by].map(([t, cs]) => '== ' + t.toUpperCase() + ' ==\n\n' + cs.map(fmt).join('\n\n')).join('\n\n\n'); }
@@ -2119,11 +2157,31 @@ $('#catListBtn').addEventListener('click', () => {
   };
   const copy = async () => { const t = $('#clOut').value; if (!t) return; try { await navigator.clipboard.writeText(t); } catch (e) { $('#clOut').select(); document.execCommand('copy'); } toast('List copied'); };
   const csv = () => {
-    const rows = ['Category,Type,Questions,Header,About', ...cats().map(c => [csvEscape(c.name), csvEscape(c.type || ''), csvEscape(c.questionCount != null ? c.questionCount : ''), csvEscape(c.aboutHeader || ''), csvEscape(c.about || '')].join(','))].join('\r\n');
+    const rows = ['Category,Secondary name,Type,Questions,Header,About' + (songsBy ? ',Songs' : ''), ...cats().map(c => [csvEscape(c.name), csvEscape(secName(c)), csvEscape(c.type || ''), csvEscape(c.questionCount != null ? c.questionCount : ''), csvEscape(c.aboutHeader || ''), csvEscape(c.about || ''), ...(songsBy ? [csvEscape(songsOf(c).join(' | '))] : [])].join(','))].join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows], { type: 'text/csv;charset=utf-8' })); a.download = 'trivia-categories.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
   openModal({ title: 'Category list', body, wide: true, actions: [{ label: 'Close', onClick: closeModal }, { label: 'Download CSV', onClick: csv }, { label: 'Copy list', primary: true, onClick: copy }] });
-  $('#clArch').addEventListener('change', draw); $('#clType').addEventListener('change', draw); draw();
+  const redraw = () => { drawPick(); draw(); };
+  $('#clArch').addEventListener('change', redraw); $('#clType').addEventListener('change', draw);
+  $('#clTypes').addEventListener('change', e => { const t = e.target.dataset.t; if (t === undefined) return; e.target.checked ? offTypes.delete(t) : offTypes.add(t); redraw(); });
+  $('#clPick').addEventListener('change', e => { const id = e.target.dataset.cid; if (!id) return; e.target.checked ? offCats.delete(id) : offCats.add(id); draw(); });
+  $('#clFind').addEventListener('input', drawPick);
+  const shownNow = () => { const q = $('#clFind').value.trim().toLowerCase(); return shown().filter(c => !q || String(c.name).toLowerCase().includes(q)); };
+  $('#clAll').addEventListener('click', () => { shownNow().forEach(c => offCats.delete(c.id)); redraw(); });
+  $('#clNone').addEventListener('click', () => { shownNow().forEach(c => offCats.add(c.id)); redraw(); });
+  drawTypes(); drawPick();
+  $('#clSongs').addEventListener('change', async () => {
+    if (!$('#clSongs').checked){ songsBy = null; draw(); return; }
+    $('#clOut').value = 'Loading songs\u2026';
+    try {
+      const snap = await getDocs(query(qColl()));
+      const rows = snap.docs.map(d => d.data()).filter(q => !q.archived && one(q.question)).sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+      songsBy = new Map();
+      for (const q of rows){ const k = q.categoryId; if (!songsBy.has(k)) songsBy.set(k, []); songsBy.get(k).push(one(q.question) + (one(q.answer) ? ' \u2013 ' + one(q.answer) : '')); }
+    } catch (e){ songsBy = null; $('#clSongs').checked = false; toast('Couldn\u2019t load the songs: ' + (e && e.message || e)); }
+    draw();
+  });
+  draw();
 });
 $('#qListBtn').addEventListener('click', () => {
   const cats = [...S.cats.values()].filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name)));
