@@ -2936,7 +2936,7 @@ function renderMusicQuestion(container, round) {
         + ' data-audio-src="' + musicSrc(q) + '"'
         + ' data-start="' + (q.startTime || 0) + '"'
         + ' data-end="' + (q.endTime || 0) + '"'
-        + ' onclick="playMusicAudio(this)"'
+        + ' onclick="musicBtnClick(this)"'
         + ' style="margin-top:1rem;padding:8px 24px;font-family:var(--cinzel);font-size:10px;letter-spacing:.14em;text-transform:uppercase;'
         + 'background:transparent;border:1px solid var(--gold-glow);border-radius:99px;color:var(--gold);cursor:pointer;transition:all .2s;"'
         + ' onmouseover="this.style.background=\'var(--gold-dim)\'" onmouseout="this.style.background=\'transparent\'">'
@@ -2978,7 +2978,7 @@ function renderMusicQuestion(container, round) {
     +       ' data-audio-src="' + audioSrc + '"'
     +       ' data-start="' + (q.startTime || 0) + '"'
     +       ' data-end="' + (q.endTime || 0) + '"'
-    +       ' onclick="playMusicAudio(this)">'
+    +       ' onclick="musicBtnClick(this)">'
     +       '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">'
     +         '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>'
     +       '</svg>'
@@ -2998,24 +2998,35 @@ function renderMusicQuestion(container, round) {
   }
 }
 
-// Stopping a clip fades it out (same as the natural end) instead of cutting it off
+// Volume fades use the audio element itself (no WebAudio), so playback never waits on a suspended audio context
+function _fadeVol(a, to, ms, done) {
+  clearInterval(a._fadeT);
+  const from = a.volume, t0 = performance.now();
+  a._fadeT = setInterval(() => {
+    const k = Math.min(1, (performance.now() - t0) / Math.max(1, ms));
+    try { a.volume = Math.max(0, Math.min(1, from + (to - from) * k)); } catch(e) {}
+    if(k >= 1) { clearInterval(a._fadeT); if(done) done(); }
+  }, 40);
+}
+// Stopping a clip fades it out quickly instead of cutting it off, and the screen resets right away
 function fadeOutMusicNow() {
-  const a = window._musicAudio, c = window._musicCtx, g = window._musicGain;
-  window._musicAudio = null; window._musicCtx = null; window._musicGain = null;
+  const a = window._musicAudio;
+  window._musicAudio = null;
   if(!a) return;
   // remember where it stopped so playing again picks up from there (not from the start)
   if(a._origSrc && a.currentTime > 0.5) window._musicResume = { src: a._origSrc, time: a.currentTime };
-  const done = () => { try { a.pause(); } catch(e) {} try { if(c) c.close(); } catch(e) {} };
-  if(g && c && c.state !== 'closed') {
-    try { g.gain.cancelScheduledValues(c.currentTime); g.gain.setValueAtTime(g.gain.value, c.currentTime); g.gain.linearRampToValueAtTime(0, c.currentTime + 1.5); } catch(e) {}
-    setTimeout(done, 1600);
-  } else done();
+  _fadeVol(a, 0, 700, () => { try { a.pause(); } catch(e) {} });
 }
 function stopMusicAudio() {
   fadeOutMusicNow();
   document.querySelectorAll('#music-play-btn,#music-play-again-btn').forEach(b => { b.disabled = false; b.classList.remove('playing'); });
   document.querySelectorAll('.music-bars').forEach(b => b.classList.remove('playing'));
   const hint = document.getElementById('music-play-hint'); if(hint) hint.textContent = 'Click to play';
+}
+// One click starts it, the next click stops it
+function musicBtnClick(btn) {
+  if(window._musicAudio) { stopMusicAudio(); return; }
+  playMusicAudio(btn);
 }
 /* ── LOCAL MUSIC FOLDER ──
    A music row with a SOUND URL plays from that URL (through the Worker) like always.
@@ -3049,12 +3060,25 @@ function lmFind(q){
 function musicSrc(q){
   if(!q) return '';
   if(q.audioUrl) return 'https://canva-slides.belladonnaaudioalchemies.workers.dev/audio?url='+encodeURIComponent(q.audioUrl);
-  const k=lmFind(q); return k?('local:'+k):'';
+  const k=lmFind(q); if(k) lmWarm(k); return k?('local:'+k):'';
 }
 function lmBlobUrl(key){
   if(LM.urls[key]) return LM.urls[key];
   const f=LM.files.get(key); if(!f) return '';
-  return (LM.urls[key]=URL.createObjectURL(f));
+  lmWarm(key);                                    // next time it is already in memory
+  return URL.createObjectURL(f);
+}
+// read the song into memory ahead of time so pressing play is instant (keeps the last 8)
+async function lmWarm(key){
+  if(LM.urls[key]||(LM.warming||(LM.warming={}))[key]) return;
+  const f=LM.files.get(key); if(!f) return;
+  LM.warming[key]=1;
+  try{
+    const buf=await f.arrayBuffer();
+    LM.urls[key]=URL.createObjectURL(new Blob([buf],{type:f.type||'audio/mpeg'}));
+    const keys=Object.keys(LM.urls); while(keys.length>8){ const k=keys.shift(); try{URL.revokeObjectURL(LM.urls[k]);}catch(e){} delete LM.urls[k]; }
+  }catch(e){}
+  delete LM.warming[key];
 }
 async function lmScanHandle(dir, depth){
   for await (const [name, h] of dir.entries()){
@@ -3106,130 +3130,64 @@ async function lmLoad(){
 lmLoad();
 
 function playMusicAudio(btn) {
-  if(!btn || btn.disabled) return;
-  const src       = btn.dataset.audioSrc;
-  const playSrc   = String(src||'').startsWith('local:') ? lmBlobUrl(src.slice(6)) : src;
+  if(!btn) return;
+  const src = btn.dataset.audioSrc;
+  if(!src) return;
+  const hint = document.getElementById('music-play-hint');
+  const bars = document.getElementById('music-bars-' + questionInfo().qIndex);
+  const playSrc = String(src).startsWith('local:') ? lmBlobUrl(src.slice(6)) : src;
+  if(!playSrc) { if(hint) hint.textContent = 'File not found in the music folder'; return; }
   let startTime = parseMusicTime(btn.dataset.start);
   if(window._musicResume && window._musicResume.src === src && window._musicResume.time > startTime) startTime = window._musicResume.time;   // resume where it was stopped
-  const endTime   = parseMusicTime(btn.dataset.end);
-  if(!src||!playSrc) return;
+  const endTime = parseMusicTime(btn.dataset.end);
 
-  const bars = document.getElementById('music-bars-' + questionInfo().qIndex);
-  const hint = document.getElementById('music-play-hint');
+  // stop anything already playing, right now
+  if(window._musicAudio) { try { clearInterval(window._musicAudio._fadeT); window._musicAudio.pause(); } catch(e) {} window._musicAudio = null; }
 
-  // Stop anything already playing
-  if(window._musicAudio) {
-    try { window._musicAudio.pause(); } catch(e) {}
-    window._musicAudio = null;
-  }
-  if(window._musicCtx) {
-    try { window._musicCtx.close(); } catch(e) {}
-    window._musicCtx = null;
-  }
-
-  btn.disabled = true;
-
-  const FADE = 3; // seconds fade in / fade out
-
-  const audio = new Audio(playSrc);
+  const FADE_IN = 2, FADE_OUT = 3;
+  const audio = new Audio();
+  audio.preload = 'auto';
+  audio.volume = 0;
   audio._origSrc = src;
-  audio.crossOrigin = 'anonymous';
   window._musicAudio = audio;
+  btn.classList.add('playing');
+  if(bars) bars.classList.add('playing');
+  if(hint) hint.textContent = 'Loading…';          // instant feedback while the file opens
 
-  // Web Audio graph: source → gain → destination
-  const ctx  = new (window.AudioContext || window.webkitAudioContext)();
-  window._musicCtx = ctx;
-  const gain = ctx.createGain();
-  window._musicGain = gain;
-  gain.connect(ctx.destination);
-  gain.gain.setValueAtTime(0, ctx.currentTime); // start silent
-
-  const source = ctx.createMediaElementSource(audio);
-  source.connect(gain);
-
-  const doFadeIn = () => {
-    gain.gain.cancelScheduledValues(ctx.currentTime);
-    gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(1, ctx.currentTime + FADE);
+  const reset = (msg) => {
+    btn.classList.remove('playing'); btn.disabled = false;
+    if(bars) bars.classList.remove('playing');
+    if(hint && msg) hint.textContent = msg;
+    if(window._musicAudio === audio) window._musicAudio = null;
   };
+  let fadingOut = false;
 
-  const doFadeOut = (onDone) => {
-    gain.gain.cancelScheduledValues(ctx.currentTime);
-    gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + FADE);
-    setTimeout(() => {
-      audio.pause();
-      audio.dispatchEvent(new Event('ended'));
-      if(onDone) onDone();
-    }, FADE * 1000);
-  };
-
-  let fadeOutScheduled = false;
-
-  // Fade out before end time or before natural end
   audio.addEventListener('timeupdate', () => {
-    if(fadeOutScheduled) return;
+    if(fadingOut || window._musicAudio !== audio) return;
     const stopAt = endTime > 0 ? endTime : audio.duration;
     if(!stopAt || isNaN(stopAt)) return;
-    const remaining = stopAt - audio.currentTime;
-    if(remaining <= FADE + 0.05) {
-      fadeOutScheduled = true;
-      doFadeOut();
+    if(stopAt - audio.currentTime <= FADE_OUT + 0.05) {
+      fadingOut = true;
+      _fadeVol(audio, 0, FADE_OUT * 1000, () => { try { audio.pause(); } catch(e) {} if(window._musicAudio === audio) window._musicResume = null; reset('Click to play again'); });
     }
   });
+  audio.addEventListener('ended', () => { if(window._musicAudio === audio) window._musicResume = null; reset('Click to play again'); });
+  audio.addEventListener('error', () => { console.error('Music audio error:', audio.error); reset('Audio error — check console'); });
 
-  audio.addEventListener('canplaythrough', () => {
-    btn.classList.add('playing');
-    if(bars) bars.classList.add('playing');
-    if(hint) hint.textContent = 'Playing…';
-  });
-
-  audio.addEventListener('ended', () => {
-    btn.classList.remove('playing');
-    btn.disabled = false;
-    if(bars) bars.classList.remove('playing');
-    if(hint) hint.textContent = 'Click to play again';
-    if(window._musicAudio === audio) window._musicResume = null;   // it finished: next play starts over
-    window._musicAudio = null;
-    try { ctx.close(); } catch(e) {}
-    window._musicCtx = null;
-  });
-
-  audio.addEventListener('error', (e) => {
-    console.error('Music audio error:', e, audio.error);
-    btn.classList.remove('playing');
-    btn.disabled = false;
-    if(bars) bars.classList.remove('playing');
-    if(hint) hint.textContent = 'Audio error — check console';
-    window._musicAudio = null;
-    try { ctx.close(); } catch(e) {}
-    window._musicCtx = null;
-  });
-
-  const startPlayback = () => {
-    if(window._musicAudio !== audio) return;     // stopped while it was still loading — don't start it afterwards
-    if(startTime > 0) audio.currentTime = startTime;
-    ctx.resume().then(() => {
-      if(window._musicAudio !== audio) return;
-      doFadeIn();
-      audio.play().catch(err => {
-        console.error('play() rejected:', err);
-        btn.disabled = false;
-        if(hint) hint.textContent = 'Playback blocked — try again';
-      });
+  audio.addEventListener('loadedmetadata', () => {
+    if(window._musicAudio !== audio) return;       // stopped while it was still loading
+    if(startTime > 0) { try { audio.currentTime = startTime; } catch(e) {} }
+    audio.play().then(() => {
+      if(window._musicAudio !== audio) { try { audio.pause(); } catch(e) {} return; }
+      if(hint) hint.textContent = 'Playing…';
+      _fadeVol(audio, 1, FADE_IN * 1000);
+    }).catch(err => {
+      console.error('play() rejected:', err);
+      reset('Blocked by the browser: click once on this screen, then press play again');
     });
-  };
-
-  // Seek reliably: wait for metadata before setting currentTime
-  if(startTime > 0) {
-    audio.addEventListener('loadedmetadata', () => {
-      audio.currentTime = startTime;
-      startPlayback();
-    }, { once: true });
-    audio.load();
-  } else {
-    startPlayback();
-  }
+  }, { once: true });
+  audio.src = playSrc;
+  audio.load();
 }
 
 let _akLabelLive = null;
