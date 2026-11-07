@@ -2947,6 +2947,7 @@ function renderMusicQuestion(container, round) {
       + '</div>';
 
     container.appendChild(el);
+  try { musicActivationCheck(); } catch(e) {}
     return;
   }
 
@@ -3024,6 +3025,18 @@ function stopMusicAudio() {
   const hint = document.getElementById('music-play-hint'); if(hint) hint.textContent = 'Click to play';
 }
 // One click starts it, the next click stops it
+// The browser only lets a page start sound after someone has clicked on it once. If nobody has yet, tell the host board
+// to show "play the first song from the TV screen"; it clears itself the moment the TV page gets a click or plays a song.
+function setMusicNeedsClick(v) {
+  if(window._needsClickSent === v) return; window._needsClickSent = v;
+  try { if(db) whenLiveReady(() => liveRef('musicNeedsClick').set(v ? true : null)); } catch(e) {}
+}
+function musicActivationCheck() {
+  const ua = navigator.userActivation;
+  const active = ua ? !!ua.hasBeenActive : false;
+  setMusicNeedsClick(!(active || window._musicEverPlayed));
+}
+['pointerdown', 'keydown', 'click'].forEach(ev => document.addEventListener(ev, e => { if(e.isTrusted) setMusicNeedsClick(false); }, true));
 function musicBtnClick(btn) {
   if(window._musicAudio) { stopMusicAudio(); return; }
   playMusicAudio(btn);
@@ -3179,6 +3192,7 @@ function playMusicAudio(btn) {
     if(startTime > 0) { try { audio.currentTime = startTime; } catch(e) {} }
     audio.play().then(() => {
       if(window._musicAudio !== audio) { try { audio.pause(); } catch(e) {} return; }
+      window._musicEverPlayed = true; setMusicNeedsClick(false);
       if(hint) hint.textContent = 'Playing…';
       _fadeVol(audio, 1, FADE_IN * 1000);
     }).catch(err => {
