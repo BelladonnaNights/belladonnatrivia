@@ -192,6 +192,9 @@ tr.flash td{background:rgba(201,168,76,.28)!important;transition:background 1s}
 #grid td select option{background:var(--surface);color:var(--text)}
 #grid td select.d1{color:var(--green)}#grid td select.d2{color:var(--gold2)}#grid td select.d3{color:var(--red)}
 #grid td.c-check{text-align:center;padding-top:9px}
+#grid td.mcat,#grid td.mbpm{text-align:center;padding:9px 6px 0;font-size:12px;white-space:nowrap}
+#grid td.mcat input,#grid td.mbpm input{width:17px;height:17px;accent-color:var(--gold);cursor:pointer}
+#grid th.mcx{cursor:default}
 #grid td .thumb{display:block;width:100%;background:none;border:0;padding:7px 4px;font-size:16px;opacity:.9}
 #grid td .thumb[data-v='']{opacity:.3}
 td.num,th.num{position:sticky;left:0;z-index:2;width:86px;min-width:86px;text-align:right;color:var(--text3);padding:9px 8px 0 4px!important;font-size:12px;background:var(--surface)!important;white-space:nowrap}
@@ -1217,6 +1220,7 @@ function renderAll(){
   const cols = visibleCols();
   thead.innerHTML = '<tr><th class="num">#</th><th class="fb" title="Host feedback from live games: ★ = notes to review, then 👍 / 👎 counts">Feedback</th>' + cols.map(c =>
     `<th data-key="${c.key}" ${c.key === 'question' ? '' : 'draggable="true"'} title="${c.key === 'question' ? 'Click to sort' : 'Click to sort · drag to move this column for now'}" class="${c.key === 'question' ? 'stickyQ' : ''}" style="min-width:${colWidth(c)}px;width:${colWidth(c)}px">${esc(c.label)} <span class="sortInd">${S.sort.key === c.key ? (S.sort.dir === 1 ? '▲' : '▼') : ''}</span><span class="rz" data-rz="${c.key}" title="Drag to resize · double-click to reset"></span></th>`).join('') + '<th class="act"></th></tr>';
+  { const ax = mcAnchor(cols); if (ax){ const th = thead.querySelector(`th[data-key="${ax}"]`); if (th) th.insertAdjacentHTML('afterend', MC_TH); } }
   tbody.innerHTML = '';
   const persisted = [...S.rows.values()].filter(r => r.persisted).sort(cmpRows);
   const drafts = [...S.rows.values()].filter(r => !r.persisted);
@@ -1400,12 +1404,43 @@ $('#promptsBtn').addEventListener('click', () => run(async () => {
   ta.addEventListener('blur', () => { save(); });
 }));
 
+/* ── Music categories: "In catalog" + "BPM" columns — the SAME catalog and BPM-search ticks the Bingo lists use ── */
+const MC_TH = '<th class="mcx" style="min-width:96px;width:96px" title="Tick when this song is in your catalog (same catalog as Bingo)">In catalog</th><th class="mcx" style="min-width:110px;width:110px" title="Tick once you’ve searched for this song on BPM Supreme (same ticks as Bingo)">BPM</th>';
+function mcOn(){ return isMusicCat() && B.canBingo; }
+function mcAnchor(cols){ if (!mcOn()) return null; return cols.some(c => c.key === 'answer') ? 'answer' : 'question'; }
+function mcCells(r){
+  const t = String((r.data && r.data.question) || '').trim(), a = String((r.data && r.data.answer) || '').trim();
+  if (!t || !B.loaded) return '<td class="ck mcat">—</td><td class="ck mbpm">—</td>';
+  const sg = withKeys({ t, a, m: '' }), own = isOwned(sg), srch = B.searched.has(sg._k), bf = isBpmFile(sg);
+  const c1 = `<td class="ck mcat"><input type="checkbox" data-mck="${sg._k}" ${own ? 'checked' : ''} title="${own ? 'In your catalog — untick to remove it from every list' : 'Tick when this song is in your catalog'}"></td>`;
+  const c2 = own ? '<td class="ck mbpm" style="color:var(--text3)">—</td>'
+    : bf ? '<td class="ck mbpm" title="This song is a BPM Supreme file in your imported catalog">📋 BPM file</td>'
+    : `<td class="ck mbpm"><input type="checkbox" data-msk="${sg._k}" ${srch ? 'checked' : ''} title="${srch ? 'Already searched for on BPM Supreme — untick to undo' : 'Tick once you’ve searched for this on BPM Supreme'}"></td>`;
+  return c1 + c2;
+}
+function mcRefresh(){
+  if (!mcOn() || !S.rows) return;
+  for (const r of S.rows.values()){
+    const tr = r.tr; if (!tr) continue;
+    const o1 = tr.querySelector('td.mcat'), o2 = tr.querySelector('td.mbpm'); if (!o1 || !o2) continue;
+    const tmp = document.createElement('tbody'); tmp.innerHTML = '<tr>' + mcCells(r) + '</tr>';
+    const n1 = tmp.rows[0].cells[0], n2 = tmp.rows[0].cells[1];
+    if (o1.innerHTML !== n1.innerHTML) o1.replaceWith(n1);
+    if (o2.innerHTML !== n2.innerHTML) o2.replaceWith(n2);
+  }
+}
+tbody.addEventListener('change', e => {
+  const ck = e.target.closest && e.target.closest('input[data-mck]'); if (ck){ setOwned([ck.dataset.mck], ck.checked); return; }
+  const sk = e.target.closest && e.target.closest('input[data-msk]'); if (sk){ setSearched(sk.dataset.msk, sk.checked); }
+});
+
 function buildRow(r){
   const tr = document.createElement('tr'); tr.dataset.id = r.id;
   if (!r.persisted) tr.classList.add('draft');
   if (r.data.archived) tr.classList.add('arch');
   let h = '<td class="num"><button class="rowx rowedit" data-act="rowedit" tabindex="-1" title="Open this question as a form (edit every column)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.4" r="2.6"/><path d="M2.8 14c.5-2.9 2.6-4.4 5.2-4.4s4.7 1.5 5.2 4.4"/></svg></button><button class="rowx" data-act="rowdelete" tabindex="-1" title="Delete this question">\u2715</button><span class="dot"></span><span class="n"></span></td><td class="fb">' + fbHTML(r) + '</td>';
-  for (const c of visibleCols()) h += `<td class="c-${c.type}${c.key === 'question' ? ' stickyQ' : ''}">${cellHTML(c, r.data[c.key])}</td>`;
+  { const vc = visibleCols(), ax = mcAnchor(vc);
+    for (const c of vc){ h += `<td class="c-${c.type}${c.key === 'question' ? ' stickyQ' : ''}">${cellHTML(c, r.data[c.key])}</td>`; if (c.key === ax) h += mcCells(r); } }
   h += r.data.archived
     ? '<td class="act"><button class="ico" data-act="restore" tabindex="-1" title="Restore">↺</button><button class="ico del" data-act="delete" tabindex="-1" title="Delete forever">🗑</button></td>'
     : '<td class="act"><button class="ico" data-act="archive" tabindex="-1" title="Archive this question">✕</button></td>';
@@ -1413,6 +1448,7 @@ function buildRow(r){
 }
 function updateRowDom(r){
   const tr = r.tr; const act = document.activeElement;
+  try { mcRefresh(); } catch (e) {}
   tr.classList.toggle('arch', !!r.data.archived);
   const cell = tr.querySelector('td.act'); const wantArch = !!r.data.archived;
   if (cell && (cell.querySelector('[data-act=restore]') ? !wantArch : wantArch)){
@@ -1453,6 +1489,7 @@ async function onEdit(el){
   if (col.type === 'diff') el.className = 'd' + (v || 0);
   if (col.type === 'tags') el.value = v.join(', ');
   r.data[col.key] = v;
+  if (col.key === 'question' || col.key === 'answer'){ try { mcRefresh(); } catch (e) {} }
   await saveField(r, col.key, v);
 }
 async function saveField(r, key, v){
@@ -2239,6 +2276,7 @@ function startBingo(){
     B.lists = new Map(snap.docs.map(d => [d.id, prepList(d.id, d.data())]));
     B.loaded = true;
     mirrorToPlayer();
+    try { mcRefresh(); } catch (e) {}
     if (!IDX.loaded) loadIndexCats();
     if (B.mode === 'bingo') renderBingoAll();
     if (!B.curId){ const last = LS.get('bLast', null); if (last && (last === MISSING || last === CATALOG || B.lists.has(last))) { B.curId = last; if (B.mode === 'bingo') renderBingoAll(); } }
@@ -2266,6 +2304,7 @@ function startBingo(){
     B.catLoose = new Set(); B.bpmLoose = new Set();
     for (const x of B.catSongs){ const ks = looseKeysOf(x); ks.forEach(k => B.catLoose.add(k)); if (x.bpm) ks.forEach(k => B.bpmLoose.add(k)); }
     if (B.mode === 'bingo') renderBingoAll();
+    try { mcRefresh(); } catch (e) {}
   }, () => {}));
 }
 
@@ -2591,6 +2630,7 @@ async function setOwned(keys, on){
   keys.forEach(k => { owned[k] = on ? true : deleteField(); removed[k] = on ? deleteField() : true; });
   await run(() => setDoc(bCatalogRef(), { owned, removed, updatedAt: serverTimestamp() }, { merge: true }));
 }
+const _rba = renderBingoAll; renderBingoAll = function(){ _rba.apply(this, arguments); try { mcRefresh(); } catch (e) {} };
 async function setSearched(key, on){
   if (!UNDO.replaying){ const was = B.searched.has(key); pushUndo('Searched tick', () => setSearched(key, was)); }
   on ? B.searched.add(key) : B.searched.delete(key);
