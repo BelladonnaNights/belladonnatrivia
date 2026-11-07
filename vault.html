@@ -148,7 +148,9 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .top{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center;justify-content:space-between;padding:1rem 1.5rem .9rem;border-bottom:1px solid var(--border)}
 .titleBlock{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
 .catTitle{font-family:var(--display);font-size:32px;letter-spacing:.05em;line-height:1.2;background:transparent;border:1px solid transparent;border-radius:var(--radius);color:var(--gold2);padding:0 8px;min-width:140px;width:min(440px,56vw);outline:none}
-.aboutRow{display:flex;align-items:flex-start;gap:8px;margin:4px 0 2px;max-width:900px}
+.aboutRow{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:4px 0 2px;max-width:900px;width:100%}
+#aboutHdr{width:100%;background:transparent;border:1px solid transparent;border-bottom-color:var(--border);border-radius:0;color:var(--text2);font:italic 14px var(--serif);padding:4px 2px}
+#aboutHdr:hover{border-bottom-color:var(--border2)} #aboutHdr:focus{outline:none;border-bottom-color:var(--gold-glow2);background:var(--surface)}
 .aboutRow label{font-family:var(--cinzel);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);padding-top:7px;white-space:nowrap}
 .aboutRow textarea{flex:1;min-width:0;resize:vertical;background:transparent;border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font:inherit;font-size:13px;line-height:1.4;padding:5px 9px;height:32px;min-height:32px;overflow:hidden}
 .aboutRow textarea:hover{border-color:var(--border2)}
@@ -462,9 +464,9 @@ td.art.artcell{padding-right:66px}
             <button class="btn ghost sm" id="catMenuBtn">More ⋯</button>
           </div>
           <div class="aboutRow" id="aboutRow">
-            <label for="catAbout">About</label>
-            <textarea id="catAbout" spellcheck="true" placeholder="What is this category about? One line is plenty — or expand for the full notes on what's included." title="The first sentence shows on this category in the Trivia admin app"></textarea>
-            <button class="btn ghost sm" id="aboutToggle" title="Expand / collapse notes">▾ Notes</button>
+            <button class="btn ghost sm" id="aboutBtn" type="button" title="Open the full About notes for this category">About</button>
+            <input id="aboutHdr" type="text" autocomplete="off" spellcheck="true" placeholder="Header: keywords or a one-sentence description\u2026" title="Short description shown under the About button">
+            <textarea id="catAbout" spellcheck="true" style="display:none"></textarea>
           </div>
           <div class="tools">
             <input id="q" placeholder="Search this category…" autocomplete="off">
@@ -1168,6 +1170,7 @@ async function aboutLoad(id){
   ABOUT.tid = null; ABOUT.forId = id;
   const ta = $('#catAbout'), c = S.cats.get(id);
   ta.value = (c && c.about) || ''; ABOUT.lastSaved = ta.value; aboutFit();
+  { const h = $('#aboutHdr'); if (h) h.value = (c && c.aboutHeader) || ''; }
   try {
     const tid = await aboutFindTid(id);
     if (ABOUT.forId !== id) return;
@@ -1181,7 +1184,7 @@ async function aboutLoad(id){
     });
   } catch (e){ console.warn('About blurb link unavailable:', e && e.message); }
 }
-function aboutFit(){ const row = $('#aboutRow'); if (!row) return; if (/\n/.test($('#catAbout').value) || $('#catAbout').value.length > 110) $('#aboutToggle').textContent = row.classList.contains('open') ? '▴ Collapse' : '▾ Notes…'; else $('#aboutToggle').textContent = row.classList.contains('open') ? '▴ Collapse' : '▾ Notes'; }
+function aboutFit(){ const b = $('#aboutBtn'); if (!b) return; const has = !!$('#catAbout').value.trim(); b.textContent = has ? 'About \u25CF' : 'About'; b.title = has ? 'Open the About notes (this category has notes)' : 'Open the About notes \u2014 none written yet'; }
 async function aboutSave(){
   const id = ABOUT.forId, ta = $('#catAbout'); if (!id) return;
   const v = ta.value.trim(); if (v === ABOUT.lastSaved.trim()) return;
@@ -1193,10 +1196,21 @@ async function aboutSave(){
     else toast('Saved in the Vault. (No linked Trivia category found yet, so it will not show in Trivia admin.)');
   } catch (e){ toast('Could not sync the About line to Trivia: ' + (e && e.message || e)); }
 }
-$('#catAbout').addEventListener('input', () => { clearTimeout(ABOUT.timer); ABOUT.timer = setTimeout(aboutSave, 900); });
-$('#catAbout').addEventListener('blur', () => { clearTimeout(ABOUT.timer); aboutSave(); });
-$('#catAbout').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !$('#aboutRow').classList.contains('open')){ e.preventDefault(); e.target.blur(); } });
-$('#aboutToggle').addEventListener('click', () => { $('#aboutRow').classList.toggle('open'); aboutFit(); if ($('#aboutRow').classList.contains('open')) $('#catAbout').focus(); });
+$('#aboutBtn').addEventListener('click', () => {
+  const store = $('#catAbout');
+  const body = document.createElement('div');
+  body.innerHTML = `<p class="hint" style="margin-top:0">The full notes on what’s in this category. The first sentence shows on this category in the Trivia admin app. It saves as you type.</p><textarea id="aboutModalTa" spellcheck="true" style="width:100%;min-height:50vh;resize:vertical;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:12px;color:var(--text);font:inherit;font-size:14px;line-height:1.5"></textarea>`;
+  openModal({ title: 'About — ' + ((S.cats.get(S.curId) || {}).name || 'category'), body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }], onClose: () => { clearTimeout(ABOUT.timer); aboutSave(); aboutFit(); } });
+  const ta = $('#aboutModalTa'); ta.value = store.value;
+  ta.addEventListener('input', () => { store.value = ta.value; clearTimeout(ABOUT.timer); ABOUT.timer = setTimeout(aboutSave, 900); aboutFit(); });
+  ta.addEventListener('blur', () => { clearTimeout(ABOUT.timer); aboutSave(); });
+  ta.focus();
+});
+// the short header under the About button — stored on the Vault category
+$('#aboutHdr').addEventListener('change', async () => {
+  const id = ABOUT.forId; if (!id) return; const v = $('#aboutHdr').value.trim();
+  try { await updateDoc(catRef(id), { aboutHeader: v || null, updatedAt: serverTimestamp() }); } catch (e){ toast('Could not save the header: ' + (e && e.message || e)); }
+});
 let hoverT;
 $('#catList').addEventListener('mouseover', e => {
   const c = e.target.closest('.cat'); if (!c) return;
@@ -2096,7 +2110,7 @@ $('#catListBtn').addEventListener('click', () => {
     <div id="clCount" class="hint"></div>`;
   const one = v => String(v ?? '').replace(/[ \t]+/g, ' ').trim();
   const cats = () => [...S.cats.values()].filter(c => $('#clArch').checked || !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }));
-  const fmt = c => one(c.name) + (c.questionCount != null ? ' (' + c.questionCount + ' questions)' : '') + (c.archived ? ' [archived]' : '') + '\n' + (one(c.about) ? String(c.about).trim().split(/\n/).map(l => '    ' + l.trim()).join('\n') : '    (no About notes)');
+  const fmt = c => one(c.name) + (c.questionCount != null ? ' (' + c.questionCount + ' questions)' : '') + (c.archived ? ' [archived]' : '') + (one(c.aboutHeader) ? '\n    Header: ' + one(c.aboutHeader) : '') + '\n' + (one(c.about) ? String(c.about).trim().split(/\n/).map(l => '    ' + l.trim()).join('\n') : '    (no About notes)');
   const draw = () => {
     const list = cats(); let out;
     if ($('#clType').checked){ const by = new Map(); list.forEach(c => { const t = c.type || 'No type'; if (!by.has(t)) by.set(t, []); by.get(t).push(c); }); out = [...by].map(([t, cs]) => '== ' + t.toUpperCase() + ' ==\n\n' + cs.map(fmt).join('\n\n')).join('\n\n\n'); }
@@ -2105,7 +2119,7 @@ $('#catListBtn').addEventListener('click', () => {
   };
   const copy = async () => { const t = $('#clOut').value; if (!t) return; try { await navigator.clipboard.writeText(t); } catch (e) { $('#clOut').select(); document.execCommand('copy'); } toast('List copied'); };
   const csv = () => {
-    const rows = ['Category,Type,Questions,About', ...cats().map(c => [csvEscape(c.name), csvEscape(c.type || ''), csvEscape(c.questionCount != null ? c.questionCount : ''), csvEscape(c.about || '')].join(','))].join('\r\n');
+    const rows = ['Category,Type,Questions,Header,About', ...cats().map(c => [csvEscape(c.name), csvEscape(c.type || ''), csvEscape(c.questionCount != null ? c.questionCount : ''), csvEscape(c.aboutHeader || ''), csvEscape(c.about || '')].join(','))].join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows], { type: 'text/csv;charset=utf-8' })); a.download = 'trivia-categories.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
   openModal({ title: 'Category list', body, wide: true, actions: [{ label: 'Close', onClick: closeModal }, { label: 'Download CSV', onClick: csv }, { label: 'Copy list', primary: true, onClick: copy }] });
@@ -2544,7 +2558,9 @@ function renderBingoAll(){
 
 /* ── bingo grid: drag a column edge to resize (remembered); cut-off text shows on hover ── */
 const BCOL_DEF = { '#': 56, 'In catalog': 96, 'BPM': 110, 'Song': 300, 'Artist': 230, 'Movie / show': 210, 'On lists': 90, 'Not on': 90, 'Which lists': 320, 'Lists it’s on': 320, 'On other lists': 120, '': 84 };
-const bColName = th => th.textContent.replace(/[▼⇅]/g, '').trim();
+const bColName = th => th.textContent.replace(/[▼▲⇅]/g, '').trim();
+const CAT_DEF = { '#': 56, 'Song': 425, 'Artist': 525, 'Movie / show': 210, 'On lists': 90, 'Lists it\u2019s on': 320 };   // default widths on the "My whole catalog" page
+const bColKey = th => (B.curId === CATALOG ? 'cat:' : '') + bColName(th);
 const BCOLW = {};   // widths you've dragged this session — kept in memory too, so a re-render (e.g. coming back to the tab) never resets them
 function setupBingoCols(){
   const tbl = $('#bGrid'), ths = [...tbl.querySelectorAll('thead th')]; if (!ths.length) return;
@@ -2552,7 +2568,7 @@ function setupBingoCols(){
   const old = tbl.querySelector('colgroup'); if (old) old.remove();
   const cg = document.createElement('colgroup'); let total = 0;
   ths.forEach((th, i) => {
-    const name = bColName(th), w = Number(saved[name]) || BCOL_DEF[name] || 150;
+    const name = bColName(th), w = Number(saved[bColKey(th)]) || (B.curId === CATALOG ? CAT_DEF[name] : 0) || BCOL_DEF[name] || 150;
     const c = document.createElement('col'); c.style.width = w + 'px'; cg.appendChild(c); total += w;
     if (i < ths.length - 1 && !th.querySelector('.rz')){ const h = document.createElement('span'); h.className = 'rz'; th.appendChild(h); }
   });
@@ -2568,15 +2584,15 @@ $('#bGrid thead').addEventListener('mousedown', e => {
   const up = () => {
     document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); document.body.classList.remove('resizing');
     const w = parseInt(col.style.width, 10); if (!(w >= 40)) return;   // use the width we set while dragging (a <col>'s measured width can read 0 in some browsers)
-    BCOLW[bColName(th)] = w;
-    const saved = LS.get('bColW', {}) || {}; saved[bColName(th)] = w; LS.set('bColW', saved);
+    BCOLW[bColKey(th)] = w;
+    const saved = LS.get('bColW', {}) || {}; saved[bColKey(th)] = w; LS.set('bColW', saved);
   };
   document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
 });
 $('#bGrid thead').addEventListener('click', e => { if (e.target.closest('.rz')) e.stopPropagation(); }, true);
 $('#bGrid thead').addEventListener('dblclick', e => {   // double-click an edge to reset that column
   const h = e.target.closest('.rz'); if (!h) return;
-  const saved = LS.get('bColW', {}) || {}; delete saved[bColName(h.parentElement)]; delete BCOLW[bColName(h.parentElement)]; LS.set('bColW', saved); setupBingoCols();
+  const saved = LS.get('bColW', {}) || {}; delete saved[bColKey(h.parentElement)]; delete BCOLW[bColKey(h.parentElement)]; LS.set('bColW', saved); setupBingoCols();
 });
 /* a tooltip with the full text, only when something is actually cut off (bingo grid + trivia grid) */
 function hoverFull(e){
