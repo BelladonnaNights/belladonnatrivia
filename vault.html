@@ -1063,6 +1063,7 @@ function renderHead(){
   const sel = $('#catType');
   sel.innerHTML = typeList().map(t => `<option ${t === c.type ? 'selected' : ''}>${esc(t)}</option>`).join('') + (c.type && !typeList().includes(c.type) ? `<option selected>${esc(c.type)}</option>` : '') + `<option value="__new">＋ New type…</option>`;
   $('#catArchTag').classList.toggle('hidden', !c.archived);
+  { const ql = $('#qListBtn'); if (ql) ql.textContent = /music/i.test(c.type || '') ? 'Song list' : 'Question list'; }
   updateCount();
 }
 function showEditor(on){
@@ -2194,17 +2195,19 @@ $('#catListBtn').addEventListener('click', () => {
   draw();
 });
 $('#qListBtn').addEventListener('click', () => {
+  const curC = S.cats.get(S.curId), songMode = !!(curC && /music/i.test(curC.type || ''));
   const cats = [...S.cats.values()].filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name)));
   const body = document.createElement('div');
   body.innerHTML = `<p class="hint">A plain list of every question and its correct answer, one per line, to paste into the AI you write questions with so it doesn\u2019t repeat any. Archived questions are left out.</p>
     <label class="fld" style="max-width:420px">Which questions?
       <select id="qlCat"><option value="">All categories</option>${cats.map(c => `<option value="${esc(c.id)}"${c.id === S.curId ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
     <label class="chk"><input type="checkbox" id="qlGroup"> Put category names above each group</label>
-    <label class="fld" style="margin-top:10px">List<textarea id="qlOut" rows="14" readonly style="width:100%;font-size:12px" placeholder="Loading…"></textarea></label>
+    <label class="fld" style="margin-top:10px">${songMode ? 'Songs \u2014 one per line, Song - Artist. Edit, delete, reorder or add lines freely, then Save changes' : 'List'}<textarea id="qlOut" rows="14" ${songMode ? 'spellcheck="false"' : 'readonly'} style="width:100%;font-size:12px;min-height:300px;white-space:pre" placeholder="Loading…"></textarea></label>
+    ${songMode ? '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn primary sm" type="button" id="qlSave">Save changes</button><span id="qlSaveMsg" class="hint"></span></div>' : ''}
     <div id="qlCount" class="hint"></div>`;
   const actions = [{ label: 'Close', onClick: closeModal }, { label: 'Download .txt', onClick: () => dl() }, { label: 'Copy list', primary: true, onClick: () => copy() }];
-  openModal({ title: 'Question list', body, wide: true, actions });
-  let items = [];
+  openModal({ title: songMode ? 'Song list' : 'Question list', body, wide: true, actions });
+  let items = [], sdocs = [];
   const one = v => String(v ?? '').replace(/\s+/g, ' ').trim();
   async function load(){
     $('#qlOut').value = ''; $('#qlOut').placeholder = 'Loading…';
@@ -2212,11 +2215,18 @@ $('#qListBtn').addEventListener('click', () => {
     try {
       const snap = await getDocs(cid ? query(qColl(), where('categoryId', '==', cid)) : query(qColl()));
       items = snap.docs.map(d => d.data()).filter(q => !q.archived && one(q.question));
+      sdocs = snap.docs.filter(d => { const q = d.data(); return !q.archived && one(q.question); }).sort((a, b) => (Number(a.data().order) || 0) - (Number(b.data().order) || 0));
       draw();
     } catch (e) { $('#qlOut').placeholder = 'Couldn\u2019t load the questions: ' + e.message; }
   }
   function draw(){
     const grp = $('#qlGroup').checked;
+    if (songMode){
+      const one1 = !!$('#qlCat').value;
+      $('#qlOut').readOnly = !one1; $('#qlSave').disabled = !one1;
+      if (one1){ $('#qlOut').value = sdocs.map(d => { const q = d.data(); return one(q.question) + (one(q.answer) ? ' - ' + one(q.answer) : ''); }).join('\n'); $('#qlCount').textContent = sdocs.length.toLocaleString() + ' song' + (sdocs.length === 1 ? '' : 's'); $('#qlSaveMsg').textContent = ''; return; }
+      $('#qlSaveMsg').textContent = 'Pick one music category above to edit its songs.';
+    }
     const name = id => (S.cats.get(id) || {}).name || 'Uncategorized';
     const by = new Map();
     items.slice().sort((a, b) => name(a.categoryId).localeCompare(name(b.categoryId)) || (Number(a.order) || 0) - (Number(b.order) || 0))
@@ -2238,6 +2248,45 @@ $('#qListBtn').addEventListener('click', () => {
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
   }
   $('#qlCat').addEventListener('change', load); $('#qlGroup').addEventListener('change', draw);
+  if (songMode) $('#qlSave').addEventListener('click', async () => {
+    const cid = $('#qlCat').value, msg = $('#qlSaveMsg'), btn = $('#qlSave'); if (!cid) return;
+    const nk = x => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const want = [];
+    for (let line of $('#qlOut').value.split(/\r?\n/)){
+      line = line.replace(/\s*\[BPM\]\s*$/i, '').replace(/^\s*\d+\s*[.)\-:]\s+/, '').trim(); if (!line) continue;
+      const parts = (line.includes('\t') ? line.split('\t') : line.split(/\s+[\-\u2013\u2014]\s+/)).map(x => x.trim().replace(/^["\u201c]|["\u201d]$/g, '')).filter(Boolean);
+      want.push({ t: parts[0], a: parts.slice(1).join(' - ') });
+    }
+    // match each line to an existing song; a line edited in place keeps its song (and its sound URL, BPM, etc.)
+    const used = new Set(), match = new Array(want.length).fill(null);
+    want.forEach((w, i) => { const k = nk(w.t) + '|' + nk(w.a); const j = sdocs.findIndex((d, n) => !used.has(n) && nk(d.data().question) + '|' + nk(d.data().answer) === k); if (j >= 0){ used.add(j); match[i] = j; } });
+    want.forEach((w, i) => { if (match[i] === null && i < sdocs.length && !used.has(i)){ used.add(i); match[i] = i; } });
+    const ops = []; let added = 0, removed = 0, edited = 0, order = 0;
+    want.forEach(w => { order++; });
+    const batches = []; let batch = writeBatch(db), n = 0;
+    const push = fn => { fn(batch); if (++n >= 400){ batches.push(batch); batch = writeBatch(db); n = 0; } };
+    order = 0;
+    want.forEach((w, i) => {
+      order++; const j = match[i];
+      if (j === null){ added++; push(b => b.set(doc(qColl()), { question: w.t, answer: w.a, categoryId: cid, order, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), createdBy: S.user ? S.user.uid : null, createdByName: S.userName || null })); return; }
+      const d = sdocs[j], q = d.data(), upd = {};
+      if (nk(q.question) + '|' + nk(q.answer) !== nk(w.t) + '|' + nk(w.a)){ upd.question = w.t; upd.answer = w.a; edited++; }
+      if (Number(q.order) !== order) upd.order = order;
+      if (Object.keys(upd).length) push(b => b.update(d.ref, { ...upd, updatedAt: serverTimestamp() }));
+    });
+    sdocs.forEach((d, j) => { if (!used.has(j)){ removed++; push(b => b.update(d.ref, { archived: true, updatedAt: serverTimestamp() })); } });
+    if (!added && !removed && !edited && !batches.length && n === 0){ msg.textContent = 'No changes.'; return; }
+    btn.disabled = true; msg.textContent = 'Saving\u2026';
+    try {
+      if (n) batches.push(batch);
+      for (const b of batches) await b.commit();
+      if (added || removed) await updateDoc(catRef(cid), { questionCount: increment(added - removed), updatedAt: serverTimestamp() });
+      if (cid === S.curId) S.maxOrder = Math.max(S.maxOrder, order);
+      const bits = [added && added + ' added', edited && edited + ' edited', removed && removed + ' removed'].filter(Boolean).join(', ');
+      msg.textContent = 'Saved: ' + bits + '.'; toast('Song list saved'); await load(); msg.textContent = 'Saved: ' + bits + '.';
+    } catch (e){ msg.textContent = 'Couldn\u2019t save: ' + (/permission/i.test(e.message) ? 'blocked by Firestore rules.' : e.message); }
+    btn.disabled = false;
+  });
   load();
 });
 
