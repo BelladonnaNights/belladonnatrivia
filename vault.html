@@ -181,8 +181,10 @@ td.fb,th.fb{position:sticky;left:86px;z-index:2;width:120px;min-width:120px;max-
 th.fb{z-index:6;background:var(--surface2)!important;cursor:default}
 td.fb .star{background:none;border:0;cursor:pointer;color:var(--gold2);font-size:15px;line-height:1;padding:2px 3px;margin-right:2px}
 td.fb .star:hover{color:#fff}
-td.fb .fbup,td.fb .fbdn{color:var(--text2);margin-right:5px}
-td.fb .fbdn.has{color:var(--red)}
+td.fb .fbup,td.fb .fbdn{color:var(--gold2);margin-right:6px;display:inline-flex;align-items:center;gap:3px;opacity:.85}
+td.fb .fbdn.has,td.fb .fbup{opacity:1}
+.fbh{display:inline-flex;gap:8px;color:var(--gold2);vertical-align:middle}
+.thm{display:block}
 #notesBtn .nb{display:inline-block;min-width:18px;padding:0 6px;margin-left:6px;border-radius:99px;background:var(--gold);color:#080808;font-weight:700;font-size:11px;text-align:center}
 #notesBtn .nb.zero{display:none}
 tr.flash td{background:rgba(201,168,76,.28)!important;transition:background 1s}
@@ -403,6 +405,14 @@ textarea::placeholder{color:#8a8a8a !important}
 /* checkbox lists inside forms */
 .fld input[type=checkbox],.fld input[type=radio],.chk input{width:auto;flex:0 0 auto;margin:0}
 #clPick label,#clTypes label{color:var(--text);font-family:var(--font);font-size:13px;text-transform:none;letter-spacing:0;font-style:normal;white-space:normal;line-height:1.3}
+
+.tlist{display:flex;flex-direction:column;gap:6px;margin:6px 0}
+.trow{display:flex;flex-direction:row;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px}
+.trow .tgrab{cursor:grab;color:var(--gold2);font-size:18px;line-height:1;user-select:none;padding:0 4px}
+.trow input{flex:1;min-width:0;padding:8px 11px;background:var(--surface);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);outline:none}
+.trow input:focus{border-color:var(--gold-glow2)}
+.trow .tcount{color:var(--text3);font-size:12px;white-space:nowrap;min-width:78px;text-align:right}
+.trow.dragging{opacity:.4}.trow.dropT{box-shadow:0 -2px 0 var(--gold)}.trow.dropB{box-shadow:0 2px 0 var(--gold)}
 </style>
 </head>
 <body>
@@ -788,7 +798,7 @@ catch (e) { db = initializeFirestore(app, { localCache: memoryLocalCache() }); }
 const S = {
   user: null, cats: new Map(), fb: new Map(), custom: [], order: null, tempOrder: null, types: null, curId: null, unsubQ: null,
   rows: new Map(), maxOrder: 0, sort: { key:'order', dir:1 }, filter: { q:'', diff:0, tags:new Set() },
-  hidden: new Set(LS.get('hiddenCols', [])), collapsed: new Set(LS.get('collapsed', [])), sortCount: new Set(LS.get('sortCount', [])), colW: LS.get('colW', {}) || {},
+  hiddenG: new Set(['optionA','optionB','optionC','optionD']), hiddenM: new Set(['optionA','optionB','optionC','optionD']), orderM: null, tempFor: null, collapsed: new Set(LS.get('collapsed', [])), sortCount: new Set(LS.get('sortCount', [])), colW: LS.get('colW', {}) || {},
   pending: 0, listening: false, unsubs: [], firstQ: true
 };
 /* What this signed-in person may do in the Vault. Everyone who already had access keeps FULL access; only accounts made as limited
@@ -966,13 +976,20 @@ function startListeners(){
   }, () => {}));
   S.unsubs.push(onSnapshot(doc(db, 'triviaConfig', 'columns'), snap => {
     S.custom = snap.exists() ? (snap.data().custom || []) : [];
-    S.order = snap.exists() ? (snap.data().order || null) : null;
+    const d = snap.exists() ? snap.data() : {};
+    S.order = d.order || null; S.orderM = d.orderMusic || null;
+    // Option A-D are off by default everywhere; what you tick in Columns is saved for everyone, separately for music and the rest
+    S.hiddenG = new Set(Array.isArray(d.hidden) ? d.hidden : ['optionA','optionB','optionC','optionD']);
+    S.hiddenM = new Set(Array.isArray(d.hiddenMusic) ? d.hiddenMusic : ['optionA','optionB','optionC','optionD']);
     if (S.curId) renderAll();
   }, () => {}));
 }
 
 // Music categories: Question -> "Song Name", Answer -> "Artist", plus a Song Name Variable Answers column;
 // Variable Answers becomes "Artist Variable Answers". Other categories never see the song-variable column.
+Object.defineProperty(S, 'hidden', { get(){ return isMusicCat() ? S.hiddenM : S.hiddenG; } });
+const curOrder = () => isMusicCat() ? S.orderM : S.order;
+const tmpOrder = () => (S.tempOrder && S.tempFor === isMusicCat()) ? S.tempOrder : null;
 const isMusicCat = () => /music/i.test((S.cats && S.cats.get(S.curId) && S.cats.get(S.curId).type) || '');
 const MUSIC_LABELS = { question:'Song Name', answer:'Artist', songAltAnswers:'Song Name Variable Answers', altAnswers:'Artist Variable Answers' };
 const baseCols = () => [...BUILTIN.filter(b => b.key !== 'songAltAnswers' || isMusicCat()).map(b => isMusicCat() && MUSIC_LABELS[b.key] ? { ...b, label: MUSIC_LABELS[b.key], exportLabel: MUSIC_LABELS[b.key] } : b), ...S.custom.filter(c => !BUILTIN.some(b => b.key === c.key)).map(c => ({ ...c, w: c.w || CUSTOM_W[c.type] || 170 }))];
@@ -989,8 +1006,9 @@ function orderCols(ord){
   return out;
 }
 const allCols = () => {
-  const cols = orderCols(S.tempOrder || S.order);
-  if (!isMusicCat()) return cols;
+  const saved = tmpOrder() || curOrder();
+  const cols = orderCols(saved);
+  if (!isMusicCat() || saved) return cols;
   // music: Song Name, Artist, Song Name Variable Answers, Artist Variable Answers — always in that order
   const pick = k => cols.find(c => c.key === k), pinned = ['question','answer','songAltAnswers','altAnswers'].map(pick).filter(Boolean);
   return [...pinned, ...cols.filter(c => !pinned.includes(c))];
@@ -1279,7 +1297,7 @@ function insertSorted(r){
 
 function renderAll(){
   const cols = visibleCols();
-  thead.innerHTML = '<tr><th class="num">#</th><th class="fb" title="Host feedback from live games: ★ = notes to review, then 👍 / 👎 counts">Feedback</th>' + cols.map(c =>
+  thead.innerHTML = '<tr><th class="num">#</th><th class="fb" title="Host feedback from live games: ★ = notes to review, then thumbs up / thumbs down counts" aria-label="Feedback"><span class="fbh"><svg class="thm" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v9H4v-9h3zM7 11l4-8c1.5 0 2.5 1.2 2.2 2.7L12.7 9H19a2 2 0 0 1 2 2.4l-1.3 7A2 2 0 0 1 17.7 20H7"/></svg><svg class="thm" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="transform:scaleY(-1)"><path d="M7 11v9H4v-9h3zM7 11l4-8c1.5 0 2.5 1.2 2.2 2.7L12.7 9H19a2 2 0 0 1 2 2.4l-1.3 7A2 2 0 0 1 17.7 20H7"/></svg></span></th>' + cols.map(c =>
     `<th data-key="${c.key}" ${c.key === 'question' ? '' : 'draggable="true"'} title="${c.key === 'question' ? 'Click to sort' : 'Click to sort · drag to move this column for now'}" class="${c.key === 'question' ? 'stickyQ' : ''}" style="min-width:${colWidth(c)}px;width:${colWidth(c)}px">${esc(c.label)} <span class="sortInd">${S.sort.key === c.key ? (S.sort.dir === 1 ? '▲' : '▼') : ''}</span><span class="rz" data-rz="${c.key}" title="Drag to resize · double-click to reset"></span></th>`).join('') + '<th class="act"></th></tr>';
   { const ax = mcAnchor(cols); if (ax){ const th = thead.querySelector(`th[data-key="${ax}"]`); if (th) th.insertAdjacentHTML('afterend', MC_TH); } }
   tbody.innerHTML = '';
@@ -1288,7 +1306,7 @@ function renderAll(){
   const frag = document.createDocumentFragment();
   [...persisted, ...drafts].forEach(r => { r.tr = buildRow(r); frag.appendChild(r.tr); });
   tbody.appendChild(frag);
-  $('#resetOrderBtn').classList.toggle('hidden', !S.tempOrder);
+  $('#resetOrderBtn').classList.toggle('hidden', !tmpOrder());
   document.body.classList.toggle('showArch', $('#showArch').checked);
   applyFilter(); refreshDupes(); updateCount(); renderTagBar();
   requestAnimationFrame(() => autosizeAll($$('textarea', tbody)));
@@ -1322,7 +1340,7 @@ thead.addEventListener('drop', e => {
   const r = th.getBoundingClientRect(), after = e.clientX >= r.left + r.width / 2, target = th.dataset.key;
   const keys = allCols().map(c => c.key).filter(k => k !== 'question' && k !== dragKey);
   if (target === 'question') keys.unshift(dragKey); else { const i = keys.indexOf(target); keys.splice(i + (after ? 1 : 0), 0, dragKey); }
-  dragKey = null; clearDrop(); S.tempOrder = keys; renderAll();
+  dragKey = null; clearDrop(); S.tempOrder = keys; S.tempFor = isMusicCat(); renderAll();
 });
 thead.addEventListener('dragend', () => { dragKey = null; clearDrop(); });
 $('#resetOrderBtn').addEventListener('click', () => { S.tempOrder = null; renderAll(); });
@@ -1356,7 +1374,7 @@ function fbHTML(r){
   const rec = S.fb.get(fbKeyOf(r)); if (!rec) return '';
   const n = fbNotes(rec).length, up = rec.thumbsUp || 0, dn = rec.thumbsDown || 0;
   return (n ? `<button class="star" data-fbnotes title="${n} note${n > 1 ? 's' : ''} to review — click to read">★</button>` : '') +
-         (up || dn ? `<span class="fbup" title="Thumbs up">👍 ${up}</span><span class="fbdn ${dn ? 'has' : ''}" title="Thumbs down">👎 ${dn}</span>` : '');
+         (up || dn ? `<span class="fbup" title="Thumbs up"><svg class="thm" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v9H4v-9h3zM7 11l4-8c1.5 0 2.5 1.2 2.2 2.7L12.7 9H19a2 2 0 0 1 2 2.4l-1.3 7A2 2 0 0 1 17.7 20H7"/></svg> ${up}</span><span class="fbdn ${dn ? 'has' : ''}" title="Thumbs down"><svg class="thm" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="transform:scaleY(-1)"><path d="M7 11v9H4v-9h3zM7 11l4-8c1.5 0 2.5 1.2 2.2 2.7L12.7 9H19a2 2 0 0 1 2 2.4l-1.3 7A2 2 0 0 1 17.7 20H7"/></svg> ${dn}</span>` : '');
 }
 function fbRefreshRow(key){
   const m = /^vault__(.+?)__(.+)$/.exec(key); if (!m) return;
@@ -1765,12 +1783,14 @@ function applyFilter(){
   requestAnimationFrame(() => autosizeAll($$('tr:not([hidden]) textarea', tbody)));
 }
 let dupTimer; function scheduleDupes(){ clearTimeout(dupTimer); dupTimer = setTimeout(() => { refreshDupes(); updateCount(); renderTagBar(); }, 250); }
+// Music lists: the same song title by a different artist is not a duplicate, so only title + artist together count.
+function dupKey(r){ const c = S.cats.get((r.data && r.data.categoryId) || S.curId); const q = normQ(r.data.question); return c && /music/i.test(c.type || '') ? q + '|' + normQ(r.data.answer) : q; }
 function refreshDupes(){
   const m = new Map();
-  for (const r of S.rows.values()){ if (!r.persisted || r.data.archived) continue; const k = normQ(r.data.question); if (!k) continue; if (!m.has(k)) m.set(k, 0); m.set(k, m.get(k) + 1); }
+  for (const r of S.rows.values()){ if (!r.persisted || r.data.archived) continue; const k = dupKey(r); if (!k) continue; if (!m.has(k)) m.set(k, 0); m.set(k, m.get(k) + 1); }
   for (const r of S.rows.values()){
     if (!r.tr) continue;
-    const isDup = r.persisted && !r.data.archived && (m.get(normQ(r.data.question)) || 0) > 1 && !!String(r.data.question || '').trim();
+    const isDup = r.persisted && !r.data.archived && (m.get(dupKey(r)) || 0) > 1 && !!String(r.data.question || '').trim();
     r.tr.classList.toggle('dup', isDup); r.tr.firstElementChild.title = isDup ? 'Possible duplicate question' : '';
   }
 }
@@ -1790,12 +1810,11 @@ function openTypes(){
   const body = document.createElement('div');
   const draw = () => {
     const counts = new Map(); for (const c of S.cats.values()) if (c.type) counts.set(c.type, (counts.get(c.type) || 0) + 1);
-    body.innerHTML = `<p class="hint" style="margin:0 0 10px">Types group your categories in the sidebar, in this order — drag ⠿ or use ▲▼ to rearrange. Renaming a type renames it on every category that uses it.</p>
-      <div id="typeRows">${typeList().map((t, i) => `<div class="fld" style="display:flex;gap:8px;align-items:center;margin:6px 0">
-        <span class="tgrab" draggable="true" data-drag="${i}" title="Drag to reorder" style="cursor:grab;color:var(--text3);user-select:none;padding:0 2px">⠿</span>
-        <button class="btn ghost sm" data-up="${i}" ${i === 0 ? 'disabled' : ''} title="Move up">▲</button><button class="btn ghost sm" data-dn="${i}" ${i === typeList().length - 1 ? 'disabled' : ''} title="Move down">▼</button>
-        <input type="text" value="${esc(t)}" data-i="${i}" data-old="${esc(t)}" style="flex:1" autocomplete="off">
-        <span class="hint" style="min-width:70px;text-align:right">${counts.get(t) || 0} categor${(counts.get(t) || 0) === 1 ? 'y' : 'ies'}</span>
+    body.innerHTML = `<p class="hint" style="margin:0 0 10px">Types group your categories in the sidebar, in this order — drag the ⠿ handle to rearrange. Renaming a type renames it on every category that uses it.</p>
+      <div id="typeRows" class="tlist">${typeList().map((t, i) => `<div class="trow" draggable="true" data-drag="${i}">
+        <span class="tgrab" title="Drag to reorder">⠿</span>
+        <input type="text" value="${esc(t)}" data-i="${i}" data-old="${esc(t)}" autocomplete="off" draggable="false">
+        <span class="tcount">${counts.get(t) || 0} categor${(counts.get(t) || 0) === 1 ? 'y' : 'ies'}</span>
         <button class="btn ghost sm" data-del="${i}" ${(counts.get(t) || 0) ? 'disabled title="Move or delete its categories first"' : ''}>Delete</button></div>`).join('')}</div>
       <div class="fld" style="display:flex;gap:8px;margin-top:14px"><input type="text" id="newTypeIn" placeholder="New type name (for example: Holiday)" style="flex:1" autocomplete="off"><button class="btn primary sm" id="newTypeAdd">Add type</button></div>
       <div class="msg" id="typeMsg"></div>`;
@@ -1825,12 +1844,12 @@ function openTypes(){
     await run(() => saveTypes(list)); setTimeout(draw, 250);
   };
   let dragI = null;
-  body.addEventListener('dragstart', e => { const g = e.target.closest('[data-drag]'); if (!g) return; dragI = +g.dataset.drag; try { e.dataTransfer.setData('text/plain', String(dragI)); } catch (_) {} });
-  body.addEventListener('dragover', e => { if (dragI !== null) e.preventDefault(); });
-  body.addEventListener('drop', e => { if (dragI === null) return; e.preventDefault(); const row = e.target.closest('#typeRows .fld'); if (!row) { dragI = null; return; } const to = [...row.parentNode.children].indexOf(row); const from = dragI; dragI = null; moveType(from, to); });
+  const clr = () => $$('.trow.dropT,.trow.dropB,.trow.dragging', body).forEach(x => x.classList.remove('dropT', 'dropB', 'dragging'));
+  body.addEventListener('dragstart', e => { const g = e.target.closest('.trow[data-drag]'); if (!g || e.target.matches('input')) { e.preventDefault(); return; } dragI = +g.dataset.drag; g.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(dragI)); } catch (_) {} });
+  body.addEventListener('dragover', e => { if (dragI === null) return; const row = e.target.closest('.trow'); if (!row) return; e.preventDefault(); $$('.trow.dropT,.trow.dropB', body).forEach(x => x.classList.remove('dropT', 'dropB')); const r = row.getBoundingClientRect(); row.classList.add(e.clientY < r.top + r.height / 2 ? 'dropT' : 'dropB'); });
+  body.addEventListener('drop', e => { if (dragI === null) return; e.preventDefault(); const row = e.target.closest('.trow'); if (!row) { dragI = null; clr(); return; } const r = row.getBoundingClientRect(), after = e.clientY >= r.top + r.height / 2; let to = [...row.parentNode.children].indexOf(row) + (after ? 1 : 0); const from = dragI; if (from < to) to--; dragI = null; clr(); moveType(from, to); });
+  body.addEventListener('dragend', () => { dragI = null; clr(); });
   body.addEventListener('click', async e => {
-    const up = e.target.closest('[data-up]'); if (up && !up.disabled){ moveType(+up.dataset.up, +up.dataset.up - 1); return; }
-    const dn = e.target.closest('[data-dn]'); if (dn && !dn.disabled){ moveType(+dn.dataset.dn, +dn.dataset.dn + 1); return; }
     if (e.target.id === 'newTypeAdd'){ add(); return; }
     const d = e.target.closest('[data-del]'); if (!d || d.disabled) return;
     const t = typeList()[+d.dataset.del];
@@ -1935,16 +1954,17 @@ function exportCSV(){
 }
 
 async function saveCustom(list){ await setDoc(doc(db, 'triviaConfig', 'columns'), { custom: list, updatedAt: serverTimestamp() }, { merge: true }); }
-async function saveOrder(keys){ S.order = keys; await setDoc(doc(db, 'triviaConfig', 'columns'), { order: keys, updatedAt: serverTimestamp() }, { merge: true }); }
+async function saveOrder(keys){ const m = isMusicCat(); if (m) S.orderM = keys; else S.order = keys; await setDoc(doc(db, 'triviaConfig', 'columns'), { [m ? 'orderMusic' : 'order']: keys, updatedAt: serverTimestamp() }, { merge: true }); }
+async function saveHidden(){ const m = isMusicCat(); await setDoc(doc(db, 'triviaConfig', 'columns'), { [m ? 'hiddenMusic' : 'hidden']: [...S.hidden], updatedAt: serverTimestamp() }, { merge: true }); }
 
 $('#colsBtn').addEventListener('click', openColumns);
 function openColumns(){
   const body = document.createElement('div');
   const draw = () => {
     body.innerHTML = `<p class="hint">Tick the columns you want to see. Custom columns you add here become a field on every question.</p>
-      ${S.tempOrder ? `<div class="hint" style="margin:0 0 10px;padding:8px 10px;border:1px solid var(--gold-glow);border-radius:8px">You've rearranged the columns on the main page for now. <button class="linkbtn" id="makePerm">Make this arrangement permanent</button></div>` : ''}
-      <p class="hint" style="margin-top:0">Drag ⠿ or use ▲ ▼ to set the permanent column order — it's saved for everyone and every device. Question always stays first.</p>
-      <div class="list" id="colList">` + orderCols(S.order).map((c, i, arr) => {
+      ${tmpOrder() ? `<div class="hint" style="margin:0 0 10px;padding:8px 10px;border:1px solid var(--gold-glow);border-radius:8px">You've rearranged the columns on the main page for now. <button class="linkbtn" id="makePerm">Make this arrangement permanent</button></div>` : ''}
+      <p class="hint" style="margin-top:0"><b>${isMusicCat() ? 'Music trivia categories' : 'General Knowledge, Evergreen, Mini Games and Trivia categories'}</b> \u2014 this order and these ticks apply only to ${isMusicCat() ? 'music categories' : 'the non-music categories'}. Open a category of the other kind to set that one. Drag ⠿ or use ▲ ▼ to set the order; it's saved for everyone and every device. The first column stays first.</p>
+      <div class="list" id="colList">` + orderCols(curOrder()).map((c, i, arr) => {
         const custom = S.custom.some(x => x.key === c.key) && !BUILTIN.some(b => b.key === c.key);
         const pinned = c.key === 'question';
         return `<div class="item" data-k="${c.key}" ${pinned ? '' : 'draggable="true"'}><span class="grab" title="${pinned ? 'Pinned first' : 'Drag to move'}">${pinned ? '📌' : '⠿'}</span><label style="display:flex;gap:10px;align-items:center;flex:1"><input type="checkbox" data-vis="${c.key}" ${c.key === 'question' ? 'checked disabled' : (S.hidden.has(c.key) ? '' : 'checked')}><span class="lb">${esc(c.label)}${custom ? ` <small>${CUSTOM_TYPES[c.type] || ''}</small>` : ''}</span></label>${custom ? `<button class="linkbtn" data-ren="${c.key}">Rename</button><button class="linkbtn" data-rm="${c.key}">Remove</button>` : ''}${pinned ? '' : `<button class="mv" data-mv="-1:${c.key}" ${i <= 1 ? 'disabled' : ''} title="Move left">▲</button><button class="mv" data-mv="1:${c.key}" ${i === arr.length - 1 ? 'disabled' : ''} title="Move right">▼</button>`}</div>`;
@@ -1958,8 +1978,8 @@ function openColumns(){
   };
   draw();
   openModal({ title: 'Columns', body, actions: [{ label: 'Done', primary: true, onClick: closeModal }], onClose: () => renderAll() });
-  body.addEventListener('change', e => { const k = e.target.dataset.vis; if (!k) return; e.target.checked ? S.hidden.delete(k) : S.hidden.add(k); LS.set('hiddenCols', [...S.hidden]); });
-  const permKeys = () => orderCols(S.order).map(c => c.key).filter(k => k !== 'question');
+  body.addEventListener('change', e => { const k = e.target.dataset.vis; if (!k) return; e.target.checked ? S.hidden.delete(k) : S.hidden.add(k); run(() => saveHidden()); });
+  const permKeys = () => orderCols(curOrder()).map(c => c.key).filter(k => k !== 'question');
   const commitOrder = async keys => { S.tempOrder = null; await run(() => saveOrder(keys)); draw(); };
   body.addEventListener('click', async e => {
     if (e.target.id === 'makePerm'){ await commitOrder(allCols().map(c => c.key).filter(k => k !== 'question')); return; }
@@ -2203,9 +2223,11 @@ $('#qListBtn').addEventListener('click', () => {
       <select id="qlCat"><option value="">All categories</option>${cats.map(c => `<option value="${esc(c.id)}"${c.id === S.curId ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
     <label class="chk"><input type="checkbox" id="qlGroup"> Put category names above each group</label>
     <label class="fld" style="margin-top:10px">${songMode ? 'Songs \u2014 one per line, Song - Artist. Edit, delete, reorder or add lines freely, then Save changes' : 'List'}<textarea id="qlOut" rows="14" ${songMode ? 'spellcheck="false"' : 'readonly'} style="width:100%;font-size:12px;min-height:300px;white-space:pre" placeholder="Loading…"></textarea></label>
-    ${songMode ? '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn primary sm" type="button" id="qlSave">Save changes</button><span id="qlSaveMsg" class="hint"></span></div>' : ''}
+    ${songMode ? '<div id="qlSaveMsg" class="hint"></div>' : ''}
     <div id="qlCount" class="hint"></div>`;
-  const actions = [{ label: 'Close', onClick: closeModal }, { label: 'Download .txt', onClick: () => dl() }, { label: 'Copy list', primary: true, onClick: () => copy() }];
+  const actions = songMode
+    ? [{ label: 'Close', onClick: closeModal }, { label: 'Download .txt', onClick: () => dl() }, { label: 'Copy list', onClick: () => copy() }, { label: 'Save changes', primary: true, onClick: () => saveSongs() }]
+    : [{ label: 'Close', onClick: closeModal }, { label: 'Download .txt', onClick: () => dl() }, { label: 'Copy list', primary: true, onClick: () => copy() }];
   openModal({ title: songMode ? 'Song list' : 'Question list', body, wide: true, actions });
   let items = [], sdocs = [];
   const one = v => String(v ?? '').replace(/\s+/g, ' ').trim();
@@ -2223,7 +2245,7 @@ $('#qListBtn').addEventListener('click', () => {
     const grp = $('#qlGroup').checked;
     if (songMode){
       const one1 = !!$('#qlCat').value;
-      $('#qlOut').readOnly = !one1; $('#qlSave').disabled = !one1;
+      $('#qlOut').readOnly = !one1;
       if (one1){ $('#qlOut').value = sdocs.map(d => { const q = d.data(); return one(q.question) + (one(q.answer) ? ' - ' + one(q.answer) : ''); }).join('\n'); $('#qlCount').textContent = sdocs.length.toLocaleString() + ' song' + (sdocs.length === 1 ? '' : 's'); $('#qlSaveMsg').textContent = ''; return; }
       $('#qlSaveMsg').textContent = 'Pick one music category above to edit its songs.';
     }
@@ -2248,8 +2270,8 @@ $('#qListBtn').addEventListener('click', () => {
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
   }
   $('#qlCat').addEventListener('change', load); $('#qlGroup').addEventListener('change', draw);
-  if (songMode) $('#qlSave').addEventListener('click', async () => {
-    const cid = $('#qlCat').value, msg = $('#qlSaveMsg'), btn = $('#qlSave'); if (!cid) return;
+  async function saveSongs(){
+    const cid = $('#qlCat').value, msg = $('#qlSaveMsg'); if (!cid){ msg.textContent = 'Pick one music category above to save its songs.'; return; }
     const nk = x => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
     const want = [];
     for (let line of $('#qlOut').value.split(/\r?\n/)){
@@ -2276,17 +2298,16 @@ $('#qListBtn').addEventListener('click', () => {
     });
     sdocs.forEach((d, j) => { if (!used.has(j)){ removed++; push(b => b.update(d.ref, { archived: true, updatedAt: serverTimestamp() })); } });
     if (!added && !removed && !edited && !batches.length && n === 0){ msg.textContent = 'No changes.'; return; }
-    btn.disabled = true; msg.textContent = 'Saving\u2026';
+    msg.textContent = 'Saving\u2026';
     try {
       if (n) batches.push(batch);
       for (const b of batches) await b.commit();
       if (added || removed) await updateDoc(catRef(cid), { questionCount: increment(added - removed), updatedAt: serverTimestamp() });
       if (cid === S.curId) S.maxOrder = Math.max(S.maxOrder, order);
       const bits = [added && added + ' added', edited && edited + ' edited', removed && removed + ' removed'].filter(Boolean).join(', ');
-      msg.textContent = 'Saved: ' + bits + '.'; toast('Song list saved'); await load(); msg.textContent = 'Saved: ' + bits + '.';
+      toast('Song list saved: ' + bits); closeModal(); return;
     } catch (e){ msg.textContent = 'Couldn\u2019t save: ' + (/permission/i.test(e.message) ? 'blocked by Firestore rules.' : e.message); }
-    btn.disabled = false;
-  });
+  }
   load();
 });
 
