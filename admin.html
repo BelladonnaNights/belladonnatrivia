@@ -3064,6 +3064,21 @@ function updateSubmitCount() {
   }
 }
 
+// ── "Play the first song from the TV screen": the browser blocks sound on the TV page until someone clicks it once ──
+function hbMusicNeedsClick(on) {
+  let o = document.getElementById('hb-needclick');
+  if(!on) { if(o) o.remove(); return; }
+  if(o) return;
+  o = document.createElement('div'); o.id = 'hb-needclick';
+  o.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:24px';
+  o.innerHTML = '<div style="max-width:520px;background:#0e0e0e;border:2px solid var(--gold-glow);border-radius:14px;padding:28px 30px;text-align:center;box-shadow:0 10px 60px rgba(0,0,0,.8)">'
+    + '<div style="font-family:var(--cinzel);font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:12px">Music round</div>'
+    + '<div style="font-family:var(--display);font-size:30px;color:var(--text);line-height:1.2;margin-bottom:12px">Play the first song from the TV screen</div>'
+    + '<div style="font-family:var(--serif);font-style:italic;font-size:15px;color:var(--text2);line-height:1.5;margin-bottom:18px">Click the speaker on the trivia TV screen once. After that, the host board and the clicker can play and stop every song tonight. This box closes by itself.</div>'
+    + '<button class="hb-btn hb-btn-gold" style="width:auto;padding:10px 26px" onclick="document.getElementById(\'hb-needclick\').remove()">OK</button></div>';
+  document.body.appendChild(o);
+}
+
 // ── Music folder: picked HERE on the host board; the TV page (same browser) reads it ──
 function hbMusicLabel(v) {
   const b = document.getElementById('hb-music-btn'); if(!b) return;
@@ -3927,6 +3942,10 @@ function attachHbListeners() {
   // Detach any previous listeners
   _hbRefs.forEach(r => r.off());
   _hbRefs = [];
+
+  const mnRef = liveRef('musicNeedsClick');
+  _hbRefs.push(mnRef);
+  mnRef.on('value', snap => hbMusicNeedsClick(!!snap.val()));
 
   const mfRef = liveRef('musicFolder');
   _hbRefs.push(mfRef);
