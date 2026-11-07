@@ -3021,19 +3021,30 @@ function stopMusicAudio() {
    A music row with a SOUND URL plays from that URL (through the Worker) like always.
    A row with NO URL looks in the music folder you picked for a file named
    "Artist - Title.mp3" or "Title - Artist.mp3" (also .m4a .wav .ogg .flac .aac). */
-const LM = { files:new Map(), urls:{}, handle:null, pending:false, status:'' };
+const LM = { files:new Map(), list:[], urls:{}, handle:null, pending:false, status:'', seq:0 };
 const LM_EXT = /\.(mp3|m4a|wav|ogg|flac|aac|opus)$/i;
-function lmNorm(s){ return String(s||'').toLowerCase().replace(/\(.*?\)|\[.*?\]/g,' ').replace(/&/g,' and ').replace(/[^a-z0-9]+/g,''); }
-function lmKeyOf(name){ return lmNorm(name.replace(LM_EXT,'').replace(/^\s*\d{1,3}\s*[-_.)]\s*/,'')); }
+function lmNorm(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\(.*?\)|\[.*?\]/g,' ').replace(/&/g,' and ').replace(/[^a-z0-9]+/g,''); }
+function lmNormA(s){ return lmNorm(s).replace(/^the/,''); }
+function lmAdd(file, parent){
+  const id='f'+(LM.seq++), base=file.name.replace(LM_EXT,'').replace(/^\s*\d{1,3}\s*[-_.)]?\s+/,'');
+  LM.files.set(id,file);
+  LM.list.push({id, baseN:lmNorm(base), hay:lmNorm(parent+' '+file.name.replace(LM_EXT,'')), hayA:lmNormA(parent+' '+file.name.replace(LM_EXT,''))});
+}
+function lmReset(){ LM.files.clear(); LM.list=[]; LM.urls={}; }
 function lmFind(q){
-  if(!LM.files.size||!q) return '';
-  const t=lmNorm(q.question), a=lmNorm(q.answer);
+  if(!LM.list.length||!q) return '';
+  const t=lmNorm(q.question), a=lmNormA(q.answer);
   if(!t) return '';
-  const direct=[a+t, t+a, t];
-  for(const k of direct) if(LM.files.has(k)) return k;
-  let hit='';
-  for(const k of LM.files.keys()){ if(k.includes(t)&&(!a||k.includes(a))){ hit=k; break; } }
-  return hit;
+  let best=null;
+  for(const f of LM.list){
+    if(!f.hay.includes(t)) continue;
+    const hasArtist=!!a&&(f.hayA.includes(a)||f.hay.includes(a));
+    let score=1+(hasArtist?4:0);
+    if(f.baseN===t||f.baseN===t+a||f.baseN===a+t||f.baseN===lmNorm(q.answer)+t||f.baseN===t+lmNorm(q.answer)) score+=3;
+    else if(f.baseN.startsWith(t)||f.baseN.endsWith(t)) score+=1;
+    if(!best||score>best.score||(score===best.score&&f.hay.length<best.f.hay.length)) best={f,score};
+  }
+  return best?best.f.id:'';
 }
 function musicSrc(q){
   if(!q) return '';
@@ -3047,8 +3058,8 @@ function lmBlobUrl(key){
 }
 async function lmScanHandle(dir, depth){
   for await (const [name, h] of dir.entries()){
-    if(h.kind==='directory'){ if((depth||0)<4) await lmScanHandle(h,(depth||0)+1); }
-    else if(LM_EXT.test(name)){ try{ LM.files.set(lmKeyOf(name), await h.getFile()); }catch(e){} }
+    if(h.kind==='directory'){ if((depth||0)<12 && !name.startsWith('.')) await lmScanHandle(h,(depth||0)+1); }
+    else if(LM_EXT.test(name)){ try{ lmAdd(await h.getFile(), dir.name||''); }catch(e){} }
   }
 }
 function lmDone(label){
@@ -3063,21 +3074,21 @@ async function lmPick(){
   if(window.showDirectoryPicker){
     try{
       const h=await window.showDirectoryPicker({mode:'read'});
-      LM.files.clear(); LM.urls={}; LM.handle=h; await lmSaveHandle(h);
+      lmReset(); LM.handle=h; await lmSaveHandle(h);
       LM.status='scanning…'; lmButton(); await lmScanHandle(h,0); lmDone(h.name);
     }catch(e){ if(e&&e.name!=='AbortError') console.warn('music folder',e); }
     return;
   }
   let inp=document.getElementById('lm-input');
   if(!inp){ inp=document.createElement('input'); inp.type='file'; inp.id='lm-input'; inp.multiple=true; inp.setAttribute('webkitdirectory',''); inp.style.display='none';
-    inp.onchange=()=>{ LM.files.clear(); LM.urls={}; [...inp.files].forEach(f=>{ if(LM_EXT.test(f.name)) LM.files.set(lmKeyOf(f.name),f); }); lmDone('this session only'); };
+    inp.onchange=()=>{ lmReset(); [...inp.files].forEach(f=>{ if(LM_EXT.test(f.name)) lmAdd(f,(f.webkitRelativePath||'').split('/').slice(-2,-1)[0]||''); }); lmDone('this session only'); };
     document.body.appendChild(inp); }
   inp.click();
 }
 async function lmReconnect(){
   const h=LM.handle; if(!h) return lmPick();
   try{
-    if((await h.requestPermission({mode:'read'}))==='granted'){ LM.files.clear(); LM.urls={}; LM.status='scanning…'; lmButton(); await lmScanHandle(h,0); lmDone(h.name); }
+    if((await h.requestPermission({mode:'read'}))==='granted'){ lmReset(); LM.status='scanning…'; lmButton(); await lmScanHandle(h,0); lmDone(h.name); }
   }catch(e){ console.warn(e); lmPick(); }
 }
 function lmButton(){   // no button on the TV; the host board shows the status
@@ -3088,7 +3099,7 @@ async function lmLoad(){
   const h=await lmLoadHandle(); if(!h) return;
   LM.handle=h;
   try{
-    if((await h.queryPermission({mode:'read'}))==='granted'){ LM.files.clear(); LM.urls={}; LM.pending=false; await lmScanHandle(h,0); lmDone(h.name); }
+    if((await h.queryPermission({mode:'read'}))==='granted'){ lmReset(); LM.pending=false; await lmScanHandle(h,0); lmDone(h.name); }
     else { LM.pending=true; lmButton(); }
   }catch(e){ LM.pending=true; lmButton(); }
 }
