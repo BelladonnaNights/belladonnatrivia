@@ -3009,12 +3009,25 @@ async function submitApplySequenceAt(){
 let monthCalDate = (()=>{ const d=new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
 function shiftMonth(n){ monthCalDate = new Date(monthCalDate.getFullYear(), monthCalDate.getMonth()+n, 1); renderMonthCalendar(); }
 function jumpMonthToday(){ const d=new Date(); monthCalDate = new Date(d.getFullYear(), d.getMonth(), 1); renderMonthCalendar(); }
+// A venue HQ gives a start date ("Our Venues" -> Start date) doesn't run its regular night before that day.
+function hqStartDateFor(name){
+  const k = vmxKey(name||''); if(!k) return '';
+  let best = '';
+  (_hqVenuesRaw||[]).forEach(h=>{ if(h && h.startDate && vmxKey(h.name||'')===k && (!best || h.startDate<best)) best = h.startDate; });
+  Object.entries(window.__vmxMaster||{}).forEach(([id,m])=>{ if(id[0]!=='_' && m && m.startDate && vmxKey(m.name||'')===k && (!best || m.startDate<best)) best = m.startDate; });
+  return best;
+}
+function beforeHqStart(v, dk, rec){
+  if(rec) return false;
+  const sd = v.startDate || hqStartDateFor(v.name);
+  return !!(sd && dk < sd);
+}
 function gigsForDate(dk){
   const dow = fromKey(dk).getDay();
   const out = [];
   Object.entries(state.venues||{}).forEach(([id,v])=>{
     const rec = (state.gigs[id]||{})[dk] || null;
-    const recurs = venueRunsOn(v, dk);
+    const recurs = venueRunsOn(v, dk) && !beforeHqStart(v, dk, rec);
     // A real per-date record (e.g. a gig added from HQ on a one-off date, or a
     // fill-in host) always shows, even on a day that isn't the venue's usual night.
     if(!recurs && !rec) return;
