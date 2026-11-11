@@ -3085,6 +3085,21 @@ function gigsForDate(dk){
     if(rec && !rec.themeName && beforeHqStart(v, dk, null)) return;
     out.push({ venueId:id, venueName:v.name, gig: rec });
   });
+  // HQ is the schedule: a gig HQ has on this date always shows, even when the venue's repeat rule here (e.g. every other Saturday) didn't land on it.
+  try{
+    const have=new Set(out.map(it=>it.venueId));
+    (_hqGigsRaw||[]).forEach(g=>{
+      if(!g||g.date!==dk||g.status==='cancelled')return;
+      let m=(g.kind||'').toString().toLowerCase(); if(m==='private events')m='events';
+      if(!['trivia','karaoke','bingo','events'].includes(m))return;
+      const k=vmxKey(g.venue||''); if(!k)return;
+      const hit=Object.entries(state.venues||{}).find(([id,v])=>!have.has(id)&&modeOfVenue(id)===m&&vmxKey(v.name||'')===k&&!(v.status==='finished'&&!isOneOffNight(id,v)));
+      if(!hit||out.some(it=>modeOfVenue(it.venueId)===m&&vmxKey(it.venueName||'')===k))return;
+      const rec=(state.gigs[hit[0]]||{})[dk]||null;
+      if(rec&&rec.status==='cancelled')return;
+      have.add(hit[0]); out.push({venueId:hit[0],venueName:hit[1].name,gig:rec});
+    });
+  }catch(e){}
   // the same venue listed twice for the same night (duplicate venue records) shows once — keep the one with a plan / host
   const best = {};
   out.filter(it=>modeOfVenue(it.venueId)!=='events').forEach(it=>{
