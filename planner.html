@@ -1319,7 +1319,8 @@ let _vmxApplying=false;
 async function vmxApplyToLegacy(masterId,master,legacyAll){
   if(_vmxApplying)return;_vmxApplying=true;
   try{
-    const db_=VMX_RTDB();if(!db_||!master||!master.slots)return;
+    const db_=VMX_RTDB();if(!db_||!master)return;
+    master=Object.assign({},master,{slots:master.slots||{}});
     const legacy=(legacyAll||await vmxReadAll()).filter(l=>l.v.venueId===masterId||vmxKey(l.v.name)===vmxKey(master.name));
     const used=new Set();const upd={};const slotUpd={};
     Object.entries(master.slots).forEach(([sid,sl])=>{if(sl.ref)used.add(sl.ref.kind+'|'+sl.ref.id);});
@@ -1340,6 +1341,23 @@ async function vmxApplyToLegacy(masterId,master,legacyAll){
       if(sl.cadence)set('cadenceAnchor',sl.anchor||'');
       // host and status stay owned by the apps' own regular-host / status controls (they already sync HQ <-> Planner)
     });
+    // A night this venue had linked that no longer has a slot on the master was deleted in HQ: take it off the Planner too.
+    // Its record and its upcoming plans go; past plans stay in the database untouched.
+    {const today=toKey(new Date()),GP={Trivia:'trivia/planner/gigs',Karaoke:'trivia/planner/karaokeGigs',Events:'trivia/planner/eventGigs'};
+      for(const l of legacy){
+        if(used.has(l.kind+'|'+l.id))continue;
+        if(l.v.venueId!==masterId){
+          // Never linked: only a phantom if HQ has no night of this type for the venue AND it was auto-created from HQ or has nothing planned on it.
+          if(Object.values(master.slots).some(sl=>sl&&sl.kind===l.kind))continue;
+          let planned=0;
+          if(l.kind==='Bingo'){const sch=(await db_.ref('bingo/landing/schedule').once('value')).val()||{};planned=Object.values(sch).filter(e=>e&&e.venueId===l.id).length;}
+          else if(GP[l.kind]){planned=Object.keys((await db_.ref(GP[l.kind]+'/'+l.id).once('value')).val()||{}).length;}
+          if(!(l.v.source==='hq'||planned===0))continue;
+        }
+        upd[VMX_KIND_PATH[l.kind]+'/'+l.id]=null;
+        if(l.kind==='Bingo'){const sch=(await db_.ref('bingo/landing/schedule').once('value')).val()||{};Object.entries(sch).forEach(([eid,e])=>{if(e&&e.venueId===l.id&&(e.date||'')>=today)upd['bingo/landing/schedule/'+eid]=null;});}
+        else if(GP[l.kind]){const byDate=(await db_.ref(GP[l.kind]+'/'+l.id).once('value')).val()||{};Object.keys(byDate).forEach(dk=>{if(dk>=today)upd[GP[l.kind]+'/'+l.id+'/'+dk]=null;});}
+      }}
     const all=Object.assign({},upd,slotUpd);
     if(Object.keys(all).length)await db_.ref().update(all);
   }catch(e){console.warn('vmxApplyToLegacy',e);}
@@ -1357,7 +1375,7 @@ function vmxListen(onChange,onLoad){
     if(!window.__vmxSyncOn)return;
     _vmxT=setTimeout(async()=>{
       const legacyAll=await vmxReadAll();
-      for(const [id,m] of Object.entries(all)){if(id[0]!=='_'&&m&&m.slots)await vmxApplyToLegacy(id,m,legacyAll);}
+      for(const [id,m] of Object.entries(all)){if(id[0]!=='_'&&m&&m.name)await vmxApplyToLegacy(id,m,legacyAll);}
       if(onChange)onChange(all);
     },1500);
   },()=>{});
@@ -2112,7 +2130,7 @@ function noteVenueChanges(mode, prevRaw, curRaw){
 async function mirrorHqGigsToPlanner(){
   const today=toKey(new Date());
   const modeOf=k=>{k=(k||'').toLowerCase();return k==='private events'?'events':k;};
-  const list=_hqGigsRaw.filter(g=>g.date>=today&&g.status!=='cancelled'&&['trivia','karaoke','bingo','events'].includes(modeOf(g.kind)));
+  const list=_hqGigsRaw.filter(g=>g.date>=today&&g.status!=='cancelled'&&['trivia','karaoke','bingo','events'].includes(modeOf(g.kind))&&!(modeOf(g.kind)!=='events'&&(()=>{const w=hqVenueDatesFor(g.venue);return !!((w.start&&g.date<w.start)||(w.end&&g.date>w.end));})()));
   if(!list.length)return;
   const P={trivia:{v:'trivia/planner/venues',g:'trivia/planner/gigs'},karaoke:{v:'trivia/planner/karaokeVenues',g:'trivia/planner/karaokeGigs'},events:{v:'trivia/planner/eventVenues',g:'trivia/planner/eventGigs'},bingo:{v:'bingo/landing/venues',g:'bingo/landing/schedule'}};
   const ignG=(await db.ref('trivia/planner/hqIgnored').once('value')).val()||{};
@@ -2226,6 +2244,7 @@ function cadenceTag(v){ const c=(v&&v.cadence)||'weekly'; return c==='weekly'?''
 function fmtVT(t){ const m=/^\s*(\d{1,2}):(\d{2})\s*$/.exec(String(t||'')); if(!m) return t||''; let h=+m[1]; const ap=h>=12?'pm':'am'; h=h%12||12; return h+(m[2]==='00'?'':':'+m[2])+ap; }
 function venueRunsOn(v, dk, ignoreStatus){
   if(!v) return false;
+  if((v.cadence||'weekly')!=='single' && beforeHqStart(v, dk, null)) return false;   // not before the venue's start date, not after a trial ends
   if(v.endsOn && dk>=v.endsOn) return false;   // series ended from HQ ("this & future" delete)
   const cad = v.cadence||'weekly';
   const st = v.status||'active';
@@ -3012,11 +3031,12 @@ function shiftMonth(n){ monthCalDate = new Date(monthCalDate.getFullYear(), mont
 function jumpMonthToday(){ const d=new Date(); monthCalDate = new Date(d.getFullYear(), d.getMonth(), 1); renderMonthCalendar(); }
 // A venue HQ gives a start date ("Our Venues" -> Start date) doesn't run its regular night before that day,
 // and a trial venue doesn't run after its trial end date. Same rule HQ's own schedule uses.
-function hqVenueDatesFor(name){
+function hqVenueDatesFor(name, venueId){
   const k = vmxKey(name||''); const out = {start:'', end:''};
-  if(!k) return out;
+  if(!k && !venueId) return out;
+  const same = h=>{ if(!h) return false; if(venueId && (h.venueId===venueId || h.id===venueId)) return true; const hk=vmxKey(h.name||''); return !!hk && !!k && (hk===k || (Math.min(hk.length,k.length)>=6 && (hk.includes(k)||k.includes(hk)))); };
   const take = h=>{
-    if(!h || vmxKey(h.name||'')!==k) return;
+    if(!same(h)) return;
     if(h.startDate && (!out.start || h.startDate<out.start)) out.start = h.startDate;
     if((h.trial || h.status==='trial') && h.trialEnd && (!out.end || h.trialEnd>out.end)) out.end = h.trialEnd;
   };
@@ -3026,8 +3046,8 @@ function hqVenueDatesFor(name){
 }
 function beforeHqStart(v, dk, rec){
   if(rec && rec.themeName) return false;   // a night you actually planned stays visible
-  const d = hqVenueDatesFor(v.name);
-  const sd = v.startDate || d.start;
+  const d = hqVenueDatesFor(v.name, v.venueId);
+  const sd = d.start || v.startDate;
   return !!((sd && dk < sd) || (d.end && dk > d.end));
 }
 function gigsForDate(dk){
