@@ -1872,11 +1872,18 @@ function rebuildAllState(){
   clearTimeout(syncWatchdogTimer); setSyncStatus('synced'); hideErrorBanner();
   renderActiveTab();
 }
+let allIsAll = true;   // "All" is the default; pick one or more nights to narrow, or press All to go back
 function renderAllFilter(){
   const el = document.getElementById('all-filter'); if(!el) return;
-  el.innerHTML = '<span style="font-size:11px;color:var(--text3);align-self:center;margin-right:6px;letter-spacing:.08em">SHOW</span>' + ALL_MODES.map(m=>`<button class="pill ${allModesOn.has(m)?'active':''}" onclick="toggleAllMode('${m}')">${ALL_MODE_LABEL[m]}</button>`).join('');
+  el.innerHTML = '<span style="font-size:11px;color:var(--text3);align-self:center;margin-right:6px;letter-spacing:.08em">SHOW</span><button class="pill '+(allIsAll?'active':'')+'" onclick="toggleAllMode(\'__all\')">All</button>' + ALL_MODES.map(m=>`<button class="pill ${(!allIsAll&&allModesOn.has(m))?'active':''}" onclick="toggleAllMode('${m}')">${ALL_MODE_LABEL[m]}</button>`).join('');
 }
-function toggleAllMode(m){ if(allModesOn.has(m)){ if(allModesOn.size>1) allModesOn.delete(m); } else allModesOn.add(m); renderAllFilter(); if(plannerMode==='all') rebuildAllState(); }
+function toggleAllMode(m){
+  if(m==='__all'){ allIsAll = true; allModesOn = new Set(ALL_MODES); }
+  else if(allIsAll){ allIsAll = false; allModesOn = new Set([m]); }
+  else if(allModesOn.has(m)){ allModesOn.delete(m); if(!allModesOn.size){ allIsAll = true; allModesOn = new Set(ALL_MODES); } }
+  else allModesOn.add(m);
+  renderAllFilter(); if(plannerMode==='all') rebuildAllState();
+}
 // ── context: work "inside" one store (real ids, that store's categories) for the item being opened ──
 function loadContextState(m){
   const vraw = allData.venues[m]||{}, f = {};
@@ -2164,7 +2171,7 @@ async function mirrorHqGigsToPlanner(){
     if(hit){vid=hit[0];}
     else{
       vid=db.ref(pp.v).push().key;
-      const vrec={name:g.venue,groupName:g.venue,day:dayAbbr[dow],time:'',pay:{amount:null,method:''},status:(g.seriesId&&k!=='events')?'active':'finished',source:'hq',cadence:g.cadence||'weekly',cadenceAnchor:(g.cadence&&g.cadence!=='weekly')?g.date:'',notes:'Created from HQ',host:(g.seriesId&&k!=='events')?(host||''):'',locationId:g.locationId||null,createdAt:Date.now()};
+      const vrec={name:g.venue,groupName:g.venue,day:dayAbbr[dow],time:'',pay:{amount:null,method:''},status:(g.seriesId&&k!=='events')?'active':'one-time',source:'hq',cadence:(g.seriesId&&k!=='events')?(g.cadence||'weekly'):'single',cadenceAnchor:((g.seriesId&&k!=='events')?(g.cadence&&g.cadence!=='weekly'):true)?g.date:'',notes:'Created from HQ',host:(g.seriesId&&k!=='events')?(host||''):'',locationId:g.locationId||null,createdAt:Date.now()};
       Object.assign(vrec,evExtra);
       await db.ref(pp.v+'/'+vid).set(vrec); venues[vid]=vrec;
     }
@@ -2462,16 +2469,16 @@ function shiftWeek(n){ weekStart = addDays(weekStart, n*7); renderPlanning(); }
 function jumpToday(){ weekStart = startOfWeek(new Date()); renderPlanning(); }
 function renderPlanning(){
   document.getElementById('week-label').textContent = fmtRange(weekStart, addDays(weekStart,6));
-  const venues = Object.entries(state.venues||{})
-    .filter(([id,v])=>v.status==='active')
-    .sort((a,b)=> (DAY_MAP[a[1].day]??9) - (DAY_MAP[b[1].day]??9) || (a[1].name||'').localeCompare(b[1].name||''));
+  // One source of truth: the same per-day lineup the Dashboard and the calendars use (start dates, trial ends, one-off gigs and events all respected).
   const unassigned = [];
-  const rows = venues.map(([id,v])=>{
-    const d = v.day ? nextDateForDay(v.day, weekStart) : null;
-    const dk = d ? toKey(d) : null;
-    const gig = dk ? (state.gigs[id]||{})[dk] : null;
+  const lines = [];
+  for(let i=0;i<7;i++){
+    const d = addDays(weekStart,i), dk = toKey(d);
+    gigsForDate(dk).sort((x,y)=>String(((state.venues[x.venueId]||{}).time)||'').localeCompare(String(((state.venues[y.venueId]||{}).time)||''))||String(x.venueName||'').localeCompare(String(y.venueName||''))).forEach(it=>lines.push({id:it.venueId,v:state.venues[it.venueId]||{name:it.venueName},d,dk,gig:it.gig}));
+  }
+  const rows = lines.map(({id,v,d,dk,gig})=>{
     const isUnassigned = modeOfVenue(id)==='events' ? false : (!gig || (!gig.themeName && gig.status!=='cancelled'));
-    if(isUnassigned && dk) unassigned.push({id, name:v.name, dk});
+    if(isUnassigned) unassigned.push({id, name:v.name, dk});
     const themeCell = gig && gig.themeName
       ? `<span class="theme-link" onclick="openGigModal('${id}','${dk}')">${escapeHtml(gig.themeName)}</span>${gig.round3Name?`<br><span style="color:var(--text3);font-size:11px">♪ ${escapeHtml(gig.round3Name)}</span>`:''}`
       : gig && gig.status==='cancelled'
@@ -2480,15 +2487,15 @@ function renderPlanning(){
     const gst = gig ? (gig.status==='cancelled' ? 'cancelled' : (gig.themeName || modeOfVenue(id)==='events' ? (gig.status||'planned') : 'unplanned')) : 'unplanned';
     const statusBadge = `<span class="badge badge-${gst==='unplanned'?'empty':gst}">${gst}</span>`;
     return `<tr>
-      <td><div class="venue-name">${escapeHtml(v.name||'')}</div><div class="venue-meta">${v.day||''} ${fmtVT(v.time)}</div></td>
-      <td>${d?fmtDisplay(d):'—'}</td>
+      <td><div class="venue-name">${escapeHtml(v.name||'')}</div><div class="venue-meta">${v.day||''} ${fmtVT((gig&&gig.time)||v.time)}</div></td>
+      <td>${fmtDisplay(d)}</td>
       <td>${themeCell}</td>
       <td>${statusBadge}</td>
-      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openGigModal('${id}'${dk?`,'${dk}'`:''})">${gig&&gig.themeName?'Edit':'Assign'}</button></td>
+      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openGigModal('${id}','${dk}')">${gig&&gig.themeName?'Edit':'Assign'}</button></td>
     </tr>`;
   }).join('');
   document.getElementById('overview-rows').innerHTML = rows;
-  document.getElementById('overview-empty').style.display = venues.length ? 'none' : 'block';
+  document.getElementById('overview-empty').style.display = lines.length ? 'none' : 'block';
 
   const banner = document.getElementById('planning-banner');
   banner.innerHTML = unassigned.length
@@ -2585,6 +2592,8 @@ function renderVenues(){
   const q = (document.getElementById('venue-search')?.value||'').toLowerCase();
   let list = Object.entries(state.venues||{});
   if(venueFilter!=='all') list = list.filter(([id,v])=>v.status===venueFilter);
+  // finished one-offs and past events are history: hide them unless you are looking at Finished
+  list = list.filter(([id,v])=>!(isOneOffNight(id,v) && !oneOffNext(id,v) && venueFilter!=='finished'));
   if(q) list = list.filter(([id,v])=>(v.name||'').toLowerCase().includes(q));
   list = sortEntries(list, venueSort, ([id,v])=>{
     if(venueSort.key==='pay') return (v.pay&&v.pay.amount)||0;
@@ -2609,14 +2618,14 @@ function renderVenues(){
       h+=`<tr style="cursor:pointer" onclick="openVenueDetail('${id}')">
       <td class="venue-name" colspan="2" style="padding-left:1.8rem;font-weight:400"><span style="opacity:.6">&#8627;</span> ${escapeHtml(kindOf(v)||'Night')} &middot; ${v.day||'no day'} ${fmtVT(v.time)}${cadenceTag(v)?` <span style="font-size:10px;opacity:.7;border:1px solid currentColor;border-radius:8px;padding:0 5px;">${cadenceTag(v)}</span>`:''}${dup?' <span style="font-size:10px;color:var(--red,#e0705f);border:1px solid currentColor;border-radius:8px;padding:0 5px;">duplicate?</span>':''}</td>
       <td>${pay}</td>
-      <td><span class="badge badge-${v.status||'active'}">${(v.status||'active').replace('-',' ')}</span></td>
+      <td>${(isOneOffNight(id,v)&&oneOffNext(id,v))?`<span class="badge badge-one-time">one-off</span> <span style="font-size:10px;opacity:.7">${escapeHtml(fmtMDY(oneOffNext(id,v)))}</span>`:`<span class="badge badge-${v.status||'active'}">${(v.status||'active').replace('-',' ')}</span>`}</td>
       <td>${escapeHtml(v.host||'—')}</td>
       <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openQuickSchedule('${id}')">Plan</button> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openVenueModal('${id}')">Edit</button></td>
     </tr>`;
     });
     return h;
   };
-  const topStatus=g=>{const sts=g.rows.map(([id,v])=>v.status||'active');return sts.includes('active')?'active':(sts.includes('seasonal')?'seasonal':(sts.includes('one-time')?'one-time':sts[0]));};
+  const topStatus=g=>{const sts=g.rows.map(([id,v])=>(isOneOffNight(id,v)&&oneOffNext(id,v))?'one-time':(v.status||'active'));return sts.includes('active')?'active':(sts.includes('seasonal')?'seasonal':(sts.includes('one-time')?'one-time':sts[0]));};
   let html='';const used=new Set();
   if(!hq.length){
     // HQ's list has not loaded yet (or is empty): show what the Planner has, grouped, until it does.
@@ -3049,6 +3058,20 @@ function beforeHqStart(v, dk, rec){
   const d = hqVenueDatesFor(v.name, v.venueId);
   const sd = d.start || v.startDate;
   return !!((sd && dk < sd) || (d.end && dk > d.end));
+}
+// One-off nights (a single gig or an event a venue only has once) are not "finished" while they are still coming up.
+// They show as "one-off" until their last date passes, then drop off the venue's list (the history stays in the database).
+function isOneOffNight(id, v){
+  if(!v) return false;
+  if((v.cadence||'weekly')==='single' || v.status==='one-time') return true;
+  if(modeOfVenue(id)==='events') return true;
+  return v.status==='finished' && v.source==='hq' && /created from hq/i.test(v.notes||'');
+}
+function oneOffNext(id, v){
+  const today = toKey(new Date()); let next = '';
+  Object.entries((state.gigs||{})[id]||{}).forEach(([dk,g])=>{ if(dk>=today && !(g&&g.status==='cancelled') && (!next||dk<next)) next=dk; });
+  if(v && (v.cadence||'weekly')==='single' && v.cadenceAnchor && v.cadenceAnchor>=today && (!next||v.cadenceAnchor<next)) next=v.cadenceAnchor;
+  return next;
 }
 function gigsForDate(dk){
   const dow = fromKey(dk).getDay();
