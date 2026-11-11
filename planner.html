@@ -2073,6 +2073,7 @@ function startHqGigMirror(){
       _hqVenuesRaw=Array.isArray(list)?list:[];
       clearTimeout(_hqVenueTimer);
       _hqVenueTimer=setTimeout(()=>mirrorHqVenuesToPlanner().catch(e=>console.warn('HQ venue mirror failed:',e)),1500);
+      try{ if(typeof renderDayBoxes==='function') renderDayBoxes(); if(typeof renderMonthCalendar==='function') renderMonthCalendar(); }catch(e){}
     },err=>console.warn('Could not read HQ venue list for the mirror:',err&&err.message));
   }catch(e){console.warn('HQ venue mirror unavailable',e);}
 }
@@ -3009,18 +3010,25 @@ async function submitApplySequenceAt(){
 let monthCalDate = (()=>{ const d=new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
 function shiftMonth(n){ monthCalDate = new Date(monthCalDate.getFullYear(), monthCalDate.getMonth()+n, 1); renderMonthCalendar(); }
 function jumpMonthToday(){ const d=new Date(); monthCalDate = new Date(d.getFullYear(), d.getMonth(), 1); renderMonthCalendar(); }
-// A venue HQ gives a start date ("Our Venues" -> Start date) doesn't run its regular night before that day.
-function hqStartDateFor(name){
-  const k = vmxKey(name||''); if(!k) return '';
-  let best = '';
-  (_hqVenuesRaw||[]).forEach(h=>{ if(h && h.startDate && vmxKey(h.name||'')===k && (!best || h.startDate<best)) best = h.startDate; });
-  Object.entries(window.__vmxMaster||{}).forEach(([id,m])=>{ if(id[0]!=='_' && m && m.startDate && vmxKey(m.name||'')===k && (!best || m.startDate<best)) best = m.startDate; });
-  return best;
+// A venue HQ gives a start date ("Our Venues" -> Start date) doesn't run its regular night before that day,
+// and a trial venue doesn't run after its trial end date. Same rule HQ's own schedule uses.
+function hqVenueDatesFor(name){
+  const k = vmxKey(name||''); const out = {start:'', end:''};
+  if(!k) return out;
+  const take = h=>{
+    if(!h || vmxKey(h.name||'')!==k) return;
+    if(h.startDate && (!out.start || h.startDate<out.start)) out.start = h.startDate;
+    if((h.trial || h.status==='trial') && h.trialEnd && (!out.end || h.trialEnd>out.end)) out.end = h.trialEnd;
+  };
+  (_hqVenuesRaw||[]).forEach(take);
+  Object.entries(window.__vmxMaster||{}).forEach(([id,m])=>{ if(id[0]!=='_') take(m); });
+  return out;
 }
 function beforeHqStart(v, dk, rec){
-  if(rec) return false;
-  const sd = v.startDate || hqStartDateFor(v.name);
-  return !!(sd && dk < sd);
+  if(rec && rec.themeName) return false;   // a night you actually planned stays visible
+  const d = hqVenueDatesFor(v.name);
+  const sd = v.startDate || d.start;
+  return !!((sd && dk < sd) || (d.end && dk > d.end));
 }
 function gigsForDate(dk){
   const dow = fromKey(dk).getDay();
@@ -3031,6 +3039,7 @@ function gigsForDate(dk){
     // A real per-date record (e.g. a gig added from HQ on a one-off date, or a
     // fill-in host) always shows, even on a day that isn't the venue's usual night.
     if(!recurs && !rec) return;
+    if(rec && !rec.themeName && beforeHqStart(v, dk, null)) return;
     out.push({ venueId:id, venueName:v.name, gig: rec });
   });
   // the same venue listed twice for the same night (duplicate venue records) shows once — keep the one with a plan / host
