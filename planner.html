@@ -3092,9 +3092,9 @@ function gigsForDate(dk){
       if(!g||g.date!==dk||g.status==='cancelled')return;
       let m=(g.kind||'').toString().toLowerCase(); if(m==='private events')m='events';
       if(!['trivia','karaoke','bingo','events'].includes(m))return;
-      const k=vmxKey(g.venue||''); if(!k)return;
-      const hit=Object.entries(state.venues||{}).find(([id,v])=>!have.has(id)&&modeOfVenue(id)===m&&vmxKey(v.name||'')===k&&!(v.status==='finished'&&!isOneOffNight(id,v)));
-      if(!hit||out.some(it=>modeOfVenue(it.venueId)===m&&vmxKey(it.venueName||'')===k))return;
+      const K=x=>vmxKey(String(x||'').replace(/&/g,' and ')); const k=K(g.venue||''); if(!k)return;
+      const hit=Object.entries(state.venues||{}).find(([id,v])=>!have.has(id)&&modeOfVenue(id)===m&&K(venueBaseName(v))===k&&!(v.status==='finished'&&!isOneOffNight(id,v)));
+      if(!hit||out.some(it=>modeOfVenue(it.venueId)===m&&K(venueBaseName((state.venues||{})[it.venueId]||{name:it.venueName}))===k))return;
       const rec=(state.gigs[hit[0]]||{})[dk]||null;
       if(rec&&rec.status==='cancelled')return;
       have.add(hit[0]); out.push({venueId:hit[0],venueName:hit[1].name,gig:rec});
