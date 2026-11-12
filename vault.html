@@ -1953,7 +1953,24 @@ Object.assign(TREE_SPEC, {
   "General Knowledge": []
  }
 });
-const TREE_DEFAULT = Object.entries(TREE_SPEC).map(([m, subs]) => ({ n: m, c: Object.entries(subs).map(([sn, topics]) => ({ n: sn, c: topics.map(t => ({ n: t, c: [] })) })) }));
+const TREE_RAW = Object.entries(TREE_SPEC).map(([m, subs]) => ({ n: m, c: Object.entries(subs).map(([sn, topics]) => ({ n: sn, c: topics.map(t => ({ n: t, c: [] })) })) }));
+
+/* Overlapping categories merged into one each. mapPath() turns an old Category/Subcategory/Topic path into the merged one (longest matching rule wins). */
+const MERGE_RULES = [[["Geography & Travel"], ["Geography & History"]], [["History"], ["Geography & History"]], [["Geography & History", "Around the World"], ["Geography & History"]], [["Geography & History", "Around the World", "Landmarks"], ["Geography & History", "Famous Landmarks"]], [["Geography & History", "Around the World", "Languages"], ["Geography & History", "Languages of the World"]], [["Geography & History", "Pacific Northwest Knowledge"], ["Pacific Northwest"]], [["Geography & History", "Pacific Northwest Knowledge", "Mount Rainier & Puget Sound"], ["Pacific Northwest", "Nature & Parks"]], [["Geography & History", "Pacific Northwest Knowledge", "Tacoma"], ["Pacific Northwest", "Tacoma & South Sound"]], [["Geography & History", "Pacific Northwest Knowledge", "Local Landmarks"], ["Pacific Northwest", "Local History"]], [["Geography & History", "U.S. History & Fun Facts"], ["Geography & History"]], [["Geography & History", "U.S. History & Fun Facts", "Presidents"], ["Geography & History", "U.S. Presidents"]], [["Geography & History", "U.S. History & Fun Facts", "State Nicknames"], ["Geography & History", "U.S. States & Capitals"]], [["Geography & History", "U.S. History & Fun Facts", "The Constitution"], ["Geography & History", "American History"]], [["Geography & History", "U.S. History & Fun Facts", "Symbols & Landmarks"], ["Geography & History", "Famous Landmarks"]], [["Geography & History", "Ancient & World History"], ["Geography & History"]], [["Literature & Language"], ["Books & Literature"]], [["Books & Literature", "Bestsellers & Authors"], ["Books & Literature", "Authors"]], [["Books & Literature", "Bestsellers & Authors", "Authors"], ["Books & Literature", "Authors"]], [["Books & Literature", "Bestsellers & Authors", "Stephen King"], ["Fandoms & Themed Trivia", "Movie & Book Fandoms", "Stephen King"]], [["Books & Literature", "Fantasy & Dystopian Books", "Dystopia"], ["Books & Literature", "Fantasy & Dystopian Books", "Dystopian Books"]], [["Games & Pop Culture"], ["Pop Culture & Celebrities"]], [["Games & Pop Culture", "Pop Culture"], ["Pop Culture & Celebrities"]], [["Games & Pop Culture", "Pop Culture", "Celebrities"], ["Pop Culture & Celebrities", "Celebrity Trivia"]], [["Games & Pop Culture", "Pop Culture", "Internet Trends & Memes"], ["Pop Culture & Celebrities", "Memes & Viral Moments"]], [["Games & Pop Culture", "Pop Culture", "Iconic Ads"], ["Pop Culture & Celebrities", "Advertising & Slogans"]], [["Games & Pop Culture", "Pop Culture", "Viral Fads"], ["Pop Culture & Celebrities", "Fads & Trends"]], [["Games & Pop Culture", "Video Games"], ["Video Games & Toys"]], [["Games & Pop Culture", "Worst of the Worst"], ["Pop Culture & Celebrities", "Worst of the Worst"]], [["Games & Pop Culture", "World of Color"], ["Pop Culture & Celebrities", "World of Color"]], [["Games & Pop Culture", "Fairy Tales & Myths"], ["Fairy Tales & Fantasy"]], [["Games & Pop Culture", "Fairy Tales & Myths", "Magic & Myth"], ["Fairy Tales & Fantasy", "Wizards & Magic"]], [["Games & Pop Culture", "Fairy Tales & Myths", "Once Upon a Trivia Time"], ["Fairy Tales & Fantasy", "Classic Fairy Tales"]], [["Games & Pop Culture", "Fairy Tales & Myths", "Greek Myths"], ["Fairy Tales & Fantasy", "Mythology & Legends", "Greek Myths"]], [["Games & Pop Culture", "Fairy Tales & Myths", "King Arthur"], ["Fairy Tales & Fantasy", "Mythology & Legends", "King Arthur"]], [["Games & Pop Culture", "Wordplay & Mini Games"], ["Wordplay & Puzzles"]], [["The 1990s"], ["Decades & Nostalgia", "1990s"]], [["The 1990s", "90s Movies"], ["Decades & Nostalgia", "1990s", "Movies"]], [["The 1990s", "90s Television"], ["Decades & Nostalgia", "1990s", "Television"]], [["The 1990s", "90s Music"], ["Decades & Nostalgia", "1990s", "Music"]], [["The 1990s", "90s Fashion"], ["Decades & Nostalgia", "1990s", "Fashion"]], [["The 1990s", "90s Toys & Games"], ["Decades & Nostalgia", "1990s", "Toys & Games"]], [["The 1990s", "90s Technology"], ["Decades & Nostalgia", "1990s", "Technology"]], [["The 1990s", "90s Slang & Catchphrases"], ["Decades & Nostalgia", "1990s", "Slang & Catchphrases"]], [["The 1990s", "90s Events & News"], ["Decades & Nostalgia", "1990s", "Events & News"]], [["The 1990s", "90s Cartoons"], ["Decades & Nostalgia", "1990s", "Cartoons"]], [["The 1990s", "90s Food & Drink"], ["Decades & Nostalgia", "1990s", "Food & Drink"]], [["Music Through the Decades"], ["Decades & Nostalgia"]], [["Music Through the Decades", "1950s"], ["Decades & Nostalgia", "1950s", "Music"]], [["Music Through the Decades", "1960s"], ["Decades & Nostalgia", "1960s", "Music"]], [["Music Through the Decades", "1970s"], ["Decades & Nostalgia", "1970s", "Music"]], [["Music Through the Decades", "1980s"], ["Decades & Nostalgia", "1980s", "Music"]], [["Music Through the Decades", "1990s"], ["Decades & Nostalgia", "1990s", "Music"]], [["Music Through the Decades", "2000s"], ["Decades & Nostalgia", "2000s", "Music"]], [["Music Through the Decades", "2010s"], ["Decades & Nostalgia", "2010s", "Music"]], [["Music Through the Decades", "2020s"], ["Decades & Nostalgia", "2020s", "Music"]], [["Decades & Nostalgia", "1960s & 1970s"], ["Decades & Nostalgia", "1970s"]], [["Decades & Nostalgia", "1960s & 1970s", "60s & 70s Trivia"], ["Decades & Nostalgia", "1960s"]], [["Decades & Nostalgia", "1960s & 1970s", "Woodstock & Moon Landing"], ["Decades & Nostalgia", "1960s", "Woodstock & Moon Landing"]], [["Decades & Nostalgia", "1960s & 1970s", "Disco Era"], ["Decades & Nostalgia", "1970s", "Disco Era"]], [["Decades & Nostalgia", "1980s", "80s Trivia"], ["Decades & Nostalgia", "1980s"]], [["Decades & Nostalgia", "1990s", "90s Trivia"], ["Decades & Nostalgia", "1990s"]], [["Decades & Nostalgia", "1990s", "90s Sitcoms"], ["Decades & Nostalgia", "1990s", "Sitcoms"]], [["Decades & Nostalgia", "1990s", "90s Alt Rock"], ["Decades & Nostalgia", "1990s", "Alt Rock"]], [["Decades & Nostalgia", "2000s", "2000s Trivia"], ["Decades & Nostalgia", "2000s"]], [["Movies & Television", "Superheroes & Comics", "Batman"], ["Fandoms & Themed Trivia", "Movie & Book Fandoms", "Batman"]], [["Movies & Television", "Romance & Tearjerkers", "Rom-Coms"], ["Movies & Television", "Comedy & Rom-Coms", "Rom-Coms"]], [["Music", "Music Mini Games", "Before They Were Famous"], ["Movies & Television", "Actors & Talent", "Before They Were Famous"]]];
+function mapPath(path){
+  let best = null;
+  for (const [from, to] of MERGE_RULES){ if (from.length <= path.length && from.every((x, i) => x === path[i]) && (!best || from.length > best[0].length)) best = [from, to]; }
+  if (!best) return path;
+  const out = [...best[1], ...path.slice(best[0].length)];
+  return out.slice(0, 3);
+}
+function applyMerges(tree){
+  const out = [];
+  const walk = (L, pre) => L.forEach(x => { const path = [...pre, x.n]; const m = mapPath(path); mergeTree(out, [m.reduceRight((acc, n) => ({ n, c: acc ? [acc] : [] }), null)]); walk(x.c, path); });
+  walk(tree, []);
+  return out;
+}
+const TREE_DEFAULT = applyMerges(TREE_RAW);
 /* Adds anything in `add` that `cur` doesn't have yet (by name, any case), never removing or renaming. Returns how many nodes were added. */
 function mergeTree(cur, add){ let n = 0; add.forEach(a => { let m = cur.find(x => x.n.toLowerCase() === a.n.toLowerCase()); if (!m){ cur.push({ n: a.n, c: [] }); m = cur[cur.length - 1]; n++; } n += mergeTree(m.c, a.c); }); return n; }
 /* Older layouts: the 12 separate "Christmas ___" masters, then Christmas → Movies/Television/…  Both now map to Christmas → Christmas Movies/Christmas Television/… */
@@ -3143,7 +3160,7 @@ async function openTree(){
     };
     T.forEach(m => walk(m, m.n, 0, false));
     body.innerHTML = `<p class="hint" style="margin-top:0">Three levels: <strong>Category</strong> (like Christmas) → <strong>Subcategory</strong> (Movies, Music…) → <strong>Topic</strong> (Comedy, Carols…). Each question gets one of each. Renaming changes it on every question that uses it.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:0 0 10px"><label class="fld" style="flex:1;min-width:220px">Search<input type="search" id="trQ" value="${esc(TS.q)}" autocomplete="off" style="${st}"></label><button class="btn" data-ta="addtop">+ New game</button><button class="btn ghost" data-ta="suggest" title="Adds the built-in categories, subcategories and topics that you don't have yet. Nothing is removed or renamed.">Add suggested ones</button><button class="btn ghost" data-ta="expand">Open all</button><button class="btn ghost" data-ta="collapse">Close all</button><button class="btn ghost" data-ta="text">Copy / paste whole list</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:0 0 10px"><label class="fld" style="flex:1;min-width:220px">Search<input type="search" id="trQ" value="${esc(TS.q)}" autocomplete="off" style="${st}"></label><button class="btn" data-ta="addtop">+ New category</button><button class="btn ghost" data-ta="suggest" title="Adds the built-in categories, subcategories and topics that you don't have yet. Nothing is removed or renamed.">Add suggested ones</button><button class="btn ghost" data-ta="merge" title="Combines the overlapping categories (Geography &amp; Travel + History, Books + Literature, the decades, and so on) into one each and updates your questions to match.">Merge overlapping categories</button><button class="btn ghost" data-ta="expand">Open all</button><button class="btn ghost" data-ta="collapse">Close all</button><button class="btn ghost" data-ta="text">Copy / paste whole list</button></div>
       ${old ? `<div style="border:1px solid var(--gold2);border-radius:10px;padding:10px 12px;margin:0 0 10px"><b>${old.toLocaleString()}</b> question${old === 1 ? '' : 's'} still use the earlier layout (for example “Christmas Movies” as its own master category). <button class="btn primary" data-ta="migrate" style="margin-left:8px">Move them into this layout</button></div>` : ''}
       <div>${h || '<div class="hint">Nothing matches that search.</div>'}</div>`;
     const qi = body.querySelector('#trQ'); if (TS.focus){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
@@ -3158,6 +3175,17 @@ async function openTree(){
     if (act === 'open'){ if (TS.open.has(path)) TS.open.delete(path); else TS.open.add(path); return draw(); }
     if (act === 'expand'){ const all = (L, pre) => L.forEach(x => { const pth = pre ? pre + '||' + x.n : x.n; TS.open.add(pth); all(x.c, pth); }); all(taxTree(), ''); return draw(); }
     if (act === 'collapse'){ TS.open.clear(); return draw(); }
+    if (act === 'merge'){
+      if (!TS.mergeArm){ TS.mergeArm = true; e.target.textContent = 'Click again to merge'; setTimeout(() => { TS.mergeArm = false; if (e.target.isConnected) e.target.textContent = 'Merge overlapping categories'; }, 6000); return; }
+      TS.mergeArm = false; TS.busy = true;
+      try {
+        const cur = clone(), T = applyMerges(cur); mergeTree(T, TREE_DEFAULT);
+        const its = TS.docs.filter(x => { const n = tri(x), a = [n.m, n.s, n.t].filter(Boolean), b = mapPath(a); return a.length && b.join('||') !== a.join('||'); });
+        await run(async () => { await setDoc(doc(db, 'triviaConfig', 'taxonomy'), { tree: T, updatedAt: serverTimestamp() }); await writeTri(its, a => { const b = mapPath(a.filter(Boolean)); a[0] = b[0] || ''; a[1] = b[1] || ''; a[2] = b[2] || ''; }); });
+        toast('Merged — ' + its.length.toLocaleString() + ' questions updated');
+      } finally { TS.busy = false; }
+      return;
+    }
     if (act === 'suggest'){ const T = clone(), n = mergeTree(T, TREE_DEFAULT); if (!n) return toast('You already have all of them'); TS.busy = true; try { await saveTree(T); toast(n + ' added'); } finally { TS.busy = false; } return; }
     TS.busy = true;
     try {
@@ -3503,6 +3531,7 @@ function openRecat(){
     <label class="fld" style="max-width:300px">Questions per file<input type="number" id="rcN" value="300" min="50" max="5000"></label>
     <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="rcFull"> <span>Include every column (answers, notes, options, etc.). Leave off for AI — it only needs the question, answer and current categories.</span></label>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px"><button class="btn" id="rcDl">Download CSV files</button><button class="btn ghost" id="rcCopy">Copy the ChatGPT prompt</button></div>
+    <textarea id="rcPrompt" readonly spellcheck="false" style="width:100%;height:130px;resize:vertical;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:10px;color:var(--text);font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;margin-bottom:10px"></textarea>
     <div class="hint" id="rcInfo"></div>
     <p class="hint"><strong>Step 2.</strong> Give each file to ChatGPT with the prompt. Keep the Question ID column in what it sends back.</p>
     <p class="hint"><strong>Step 3.</strong> Drop the finished CSVs here. Each row is matched to its question by Question ID.</p>
@@ -3543,7 +3572,7 @@ function openRecat(){
       msg.textContent = `Downloaded ${items.length.toLocaleString()} questions in ${parts} file${parts === 1 ? '' : 's'}. If your browser asks to allow multiple downloads, say yes.`;
     } catch (err){ msg.className = 'msg'; msg.textContent = 'Couldn’t read the questions: ' + (err && err.message || err); }
   });
-  $('#rcCopy', body).addEventListener('click', async () => {
+  const buildPrompt = async () => {
     let tags = []; try { tags = await tagSet(); } catch (e) {}
     const t = `I'm going to give you a CSV of trivia questions. Fill in a Category, Subcategory, Topic and Tags for every row. This is labeling only: the questions stay where they are and nothing gets moved.
 
@@ -3553,7 +3582,7 @@ FOR EVERY ROW, FILL IN:
 - Category (required): pick ONE from the list below, spelled exactly as written.
 - Subcategory: pick ONE that sits under that Category.
 - Topic: pick ONE that sits under that Subcategory, only if one fits. Otherwise leave it blank.
-- Tags: 3 to 8 tags, separated by commas. Use tags from my tag list below whenever they fit. You may add new ones when something important is missing: short, specific, Title Case (people, shows, franchises, places, decades, themes, song or movie genres).
+- Tags: 3 to 8 tags, separated by commas. Use tags from my tag list below whenever they fit. You may add new ones when something important is missing: short, specific and ALL LOWERCASE (people, shows, franchises, places, decades, themes, song or movie genres). Every tag must be lowercase, including ones from my list.
 
 RULES:
 - Judge by what the question is actually about. The Game column is only the sheet (game) it lives on, so use it as a hint, but the labels can differ from it.
@@ -3566,9 +3595,17 @@ MY CATEGORIES (Category, then indented Subcategory, then indented Topic):
 ${rcTreeText(taxTree())}
 MY TAGS:
 ${tags.join(', ')}`;
-    try { await navigator.clipboard.writeText(t); toast('Prompt copied'); } catch (e) { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Prompt copied'); }
+    $('#rcPrompt', body).value = t; return t;
+  };
+  buildPrompt();
+  $('#rcCopy', body).addEventListener('click', async () => {
+    const ta = $('#rcPrompt', body); if (!ta.value) await buildPrompt();
+    ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+    if (!ok){ try { await navigator.clipboard.writeText(ta.value); ok = true; } catch (e) {} }
+    toast(ok ? 'Prompt copied' : 'Select the box and press Ctrl+C');
   });
-  const splitTags = v => String(v || '').split(/[,;|]/).map(x => x.trim()).filter(Boolean);
+  const splitTags = v => String(v || '').split(/[,;|]/).map(x => x.trim().toLowerCase()).filter(Boolean);
   const compute = async () => {
     const qs = await load(), rep = $('#rcRep', body).checked, keep = $('#rcKeep', body).checked;
     st.plan = []; st.rows = 0; st.missing = 0; st.newNodes = []; const seen = new Set();
