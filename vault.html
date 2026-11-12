@@ -2607,6 +2607,7 @@ $('#catMenuBtn').addEventListener('click', () => {
   const body = document.createElement('div'); body.className = 'menuList';
   body.innerHTML = `<button class="btn" data-a="export">Export this game as CSV</button>
     <button class="btn" data-a="recount">Recount questions</button>
+    <button class="btn" data-a="slashes">Remove stray “/” from the ends of this game’s questions</button>
     ${PERM.archiveCategories ? `<button class="btn" data-a="archive">${c.archived ? 'Restore this game' : 'Archive this game'}</button>
     <p class="hint" style="margin:0 0 6px">Archiving hides the game from the list. Its questions are kept.</p>` : ''}
     ${PERM.deleteCategories ? `<button class="btn danger" data-a="delete">Delete this sheet<br>and all its questions…</button>` : ''}`;
@@ -2615,10 +2616,26 @@ $('#catMenuBtn').addEventListener('click', () => {
     const b = e.target.closest('[data-a]'); if (!b) return;
     if (b.dataset.a === 'export'){ closeModal(); exportCSV(); }
     if (b.dataset.a === 'recount'){ closeModal(); await run(async () => { const snap = await getCountFromServer(query(qColl(), where('categoryId', '==', c.id), where('archived', '==', false))); await updateDoc(catRef(c.id), { questionCount: snap.data().count }); toast(`Recounted: ${snap.data().count} questions`); }); }
+    if (b.dataset.a === 'slashes'){ closeModal(); await run(() => cleanStraySlashes(c)); }
     if (b.dataset.a === 'archive' && PERM.archiveCategories){ closeModal(); await run(() => updateDoc(catRef(c.id), { archived: !c.archived, updatedAt: serverTimestamp() })); }
     if (b.dataset.a === 'delete' && PERM.deleteCategories){ closeModal(); askDeleteCategory(c); }
   });
 });
+
+// Takes a "/" (and any spaces before it) off the END of every text field on every question in a game — question, answer, other answers, options, bonus, notes, whispers.
+const SLASH_FIELDS = ['question','answer','songAltAnswers','altAnswers','optionA','optionB','optionC','optionD','bonusQuestion','notes','whisperQ','whisperA'];
+const stripEndSlash = v => typeof v === 'string' ? v.replace(/[ \t]*\/+[ \t]*$/gm, '').replace(/[ \t]+$/gm, '') : v;
+async function cleanStraySlashes(c){
+  const snap = await getDocs(query(qColl(), where('categoryId', '==', c.id)));
+  const fixes = [];
+  snap.docs.forEach(d => { const q = d.data(), patch = {}; SLASH_FIELDS.forEach(k => { if (typeof q[k] === 'string' && /\/[ \t]*$/m.test(q[k])){ const n = stripEndSlash(q[k]); if (n !== q[k]) patch[k] = n; } }); if (Object.keys(patch).length) fixes.push({ ref: d.ref, patch }); });
+  if (!fixes.length){ toast('No stray “/” found in “' + c.name + '”.'); return; }
+  if (!await confirmBox({ title: 'Remove stray “/”?', message: fixes.length + ' question' + (fixes.length === 1 ? '' : 's') + ' in “' + c.name + '” end with a “/”. It will be taken off — nothing else changes.', ok: 'Remove them' })) return;
+  for (let i = 0; i < fixes.length; i += 400){
+    const batch = writeBatch(db); fixes.slice(i, i + 400).forEach(f => batch.update(f.ref, { ...f.patch, updatedAt: serverTimestamp() })); await batch.commit();
+  }
+  toast('Cleaned ' + fixes.length + ' question' + (fixes.length === 1 ? '' : 's') + ' in “' + c.name + '”.');
+}
 
 // Deleting a Vault sheet only removes the sheet and its questions. The category stays in Trivia, the Planner and
 // the Venue Menu — it is just marked "no Vault sheet" so nothing re-creates a blank one.
@@ -3275,7 +3292,7 @@ async function openPlayable(){
   });
 }
 const BTAX_DEFAULT = (() => { const masters = ['Christmas Classics','Christmas Pop','Christmas Rock & Alternative','Christmas Country','Christmas R&B, Soul & Hip-Hop','Christmas Novelty & Comedy','Christmas Covers','Christmas Movie Music','Christmas Oldies','Christmas Sing-Alongs','Christmas Instrumentals','Winter & Seasonal Songs','Pop','Rock & Alternative','Hip-Hop & R&B','Country','Dance & Disco','Latin & World','Movie & TV Soundtracks','Throwbacks & Oldies','Novelty & Comedy']; return { masters, subs: [] }; })();
-const sBase = x => ({ t: x.t, a: x.a, m: x.m, c: x.c, sc: x.sc, g: x.g });
+const sBase = x => ({ t: x.t, a: x.a, m: x.m, c: x.c, sc: x.sc, g: x.g, w: x.w });
 /* ── Manage categories: master categories + their subcategories (one screen, used for trivia questions and for bingo songs) ── */
 const TXC = {
   trivia: {
@@ -4141,7 +4158,7 @@ function fixMovie(s){
   return m ? { ...s, t: m[1].trim(), a: m[2].trim(), m: String(s.t || '').trim() } : s;
 }
 const withKeys = s0 => { const s = fixMovie(s0); return { ...s, _k: songKey(s.t, s.a), _tk: titleKey(s.t), _kl: looseKey(s.t, s.a) }; };
-function cleanSongs(arr){ return (arr || []).filter(s => s && (s.t || s.a)).map(s => ({ t: String(s.t || '').trim(), a: String(s.a || '').trim(), ...(s.m && String(s.m).trim() ? { m: String(s.m).trim() } : {}), ...(s.c && String(s.c).trim() ? { c: String(s.c).trim() } : {}), ...(s.sc && String(s.sc).trim() ? { sc: String(s.sc).trim() } : {}), ...(Array.isArray(s.g) && s.g.length ? { g: s.g.map(x => String(x).trim()).filter(Boolean) } : {}) })); }
+function cleanSongs(arr){ return (arr || []).filter(s => s && (s.t || s.a)).map(s => ({ t: String(s.t || '').trim(), a: String(s.a || '').trim(), ...(s.m && String(s.m).trim() ? { m: String(s.m).trim() } : {}), ...(s.c && String(s.c).trim() ? { c: String(s.c).trim() } : {}), ...(s.sc && String(s.sc).trim() ? { sc: String(s.sc).trim() } : {}), ...(Array.isArray(s.g) && s.g.length ? { g: s.g.map(x => String(x).trim()).filter(Boolean) } : {}), ...(s.w && String(s.w).trim() ? { w: String(s.w).replace(/\s*\|\|\s*/g, ' ').replace(/\s*[\r\n]+\s*/g, ' ').trim() } : {}) })); }
 function listStats(l){
   const songs = l.songs || []; let have = 0;
   for (const s of songs) if (isOwned(s)) have++;
@@ -4177,7 +4194,7 @@ async function doUndo(){
   UNDO.replaying = false; updateUndoBtn();
 }
 const PUB = { sig: null, busy: false, warned: false, again: false };
-const pubSongs = l => (l.songs || []).map(x => ({ t: x.t, a: x.a || '', ...(x.m ? { m: x.m } : {}) }));
+const pubSongs = l => (l.songs || []).map(x => ({ t: x.t, a: x.a || '', ...(x.m ? { m: x.m } : {}), ...(x.w ? { w: x.w } : {}) }));
 const pubSig = l => hash53(JSON.stringify([l.name, !!l.archived, pubSongs(l)]));
 async function mirrorToPlayer(){
   if (!B.canBingo || !B.loaded) return;
@@ -4675,14 +4692,14 @@ function renderBingoAll(){
   if (!special && B.filter === 'missing') shown = shown.filter(r => !isOwned(r));
   if (!isCat && B.filter === 'tosearch') shown = shown.filter(r => !isOwned(r) && !B.searched.has(r._k));
   if (!isCat && B.filter === 'searched') shown = shown.filter(r => !isOwned(r) && B.searched.has(r._k));
-  if (qq) shown = shown.filter(r => (r.t + ' ' + r.a + ' ' + (r.m || '') + ' ' + (r.c || '') + ' ' + (r.sc || '') + ' ' + (r.g || []).join(' ')).toLowerCase().includes(qq));
+  if (qq) shown = shown.filter(r => (r.t + ' ' + r.a + ' ' + (r.m || '') + ' ' + (r.c || '') + ' ' + (r.sc || '') + ' ' + (r.g || []).join(' ') + ' ' + (r.w || '')).toLowerCase().includes(qq));
   const total = shown.length, capped = special && total > B.limit;
   if (capped) shown = shown.slice(0, B.limit);
   const wrap = $('#bGridWrap'), st = wrap.scrollTop;
   const BPM = '<th class="ck" title="Tick once you\u2019ve searched for this song on BPM Supreme \u2014 it ticks everywhere the song appears">BPM</th>';
   $('#bGrid thead').innerHTML = special
     ? `<tr><th>#</th>${isCat ? '' : '<th>In catalog</th>'}${isMissing ? BPM : ''}${isCat ? catSortTh() : '<th>Song</th><th>Artist</th>'}<th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
-    : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th class="on" data-rsort="1" style="cursor:pointer;color:var(--gold)" title="How many of your OTHER bingo lists also have this song \u2014 click to put the songs on the most lists first">On other lists${B.rowSort ? ' \u25bc' : ' \u21c5'}</th><th>Movie / show</th><th>Category</th><th>Subcategory</th><th>Tags</th><th></th></tr>`;
+    : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th class="on" data-rsort="1" style="cursor:pointer;color:var(--gold)" title="How many of your OTHER bingo lists also have this song \u2014 click to put the songs on the most lists first">On other lists${B.rowSort ? ' \u25bc' : ' \u21c5'}</th><th>Movie / show</th><th>Category</th><th>Subcategory</th><th>Tags</th><th title="Host-only tidbit shown under the song in the Bingo app. Never printed on cards.">Whisper</th><th></th></tr>`;
   const bpmMap = new Map();   // artist -> their songs that carry a BPM mark (searched tick, or a BPM file in the imported catalog)
   { const add = x => { const hit = B.searched.has(x._k) || isBpmFile(x) || x.bpm; if (!hit) return; const a = normSong(x.a); if (!a) return; for (const ak of new Set([a, ...artParts(x.a)])) (bpmMap.get(ak) || bpmMap.set(ak, []).get(ak)).push({ k: x._k, tk: x._tk }); }; for (const l of B.lists.values()) l.songs.forEach(add); B.catSongs.forEach(add); }
   const hasOtherBpm = r => [normSong(r.a), ...artParts(r.a)].some(ak => { const arr = bpmMap.get(ak); return !!arr && arr.some(e => e.k !== r._k && e.tk !== r._tk); });   /* "Marvin Gaye" counts for "Marvin Gaye & Tammi Terrell" and the other way round */
@@ -4704,7 +4721,7 @@ function renderBingoAll(){
       `<td class="artcell"><input type="text" data-f="a" value="${esc(r.a)}" spellcheck="false" autocomplete="off">${artIcons(r.a)}</td>` +
       `<td class="on" style="white-space:nowrap" title="${also ? esc('Also on:\n' + r.lists.join('\n')) : 'Not on any other list'}">${also ? `<b style="color:var(--gold2);font-size:1.05em">${also}</b> other list${also === 1 ? '' : 's'}` : '<span style="opacity:.5">none</span>'}</td>` +
       `<td><input type="text" data-f="m" value="${esc(r.m || '')}" placeholder="—" spellcheck="false" autocomplete="off"></td>` +
-      `<td><select data-f="c" class="bSel">${bPick('c', r.c)}</select></td><td><select data-f="sc" class="bSel">${bPick('sc', r.sc)}</select></td><td><input type="text" data-f="g" value="${esc((r.g || []).join(', '))}" spellcheck="false" autocomplete="off"></td>` +
+      `<td><select data-f="c" class="bSel">${bPick('c', r.c)}</select></td><td><select data-f="sc" class="bSel">${bPick('sc', r.sc)}</select></td><td><input type="text" data-f="g" value="${esc((r.g || []).join(', '))}" spellcheck="false" autocomplete="off"></td><td><input type="text" data-f="w" value="${esc(r.w || '')}" spellcheck="false" autocomplete="off"></td>` +
       `<td class="x"><button data-extra="${r.idx}" title="Move this song to Extras">⤓</button><button data-del="${r.idx}" title="Remove this song from the list">✕</button></td></tr>`;
   }).join('') || '';
   const none = !shown.length;
@@ -4720,7 +4737,7 @@ function renderBingoAll(){
 
 
 /* ── bingo grid: drag a column edge to resize (remembered); cut-off text shows on hover ── */
-const BCOL_DEF = { 'Category': 170, 'Subcategory': 170, 'Tags': 170, '#': 56, 'In catalog': 96, 'BPM': 110, 'Song': 300, 'Artist': 230, 'Movie / show': 210, 'On lists': 90, 'Not on': 90, 'Which lists': 320, 'Lists it’s on': 320, 'On other lists': 120, '': 84 };
+const BCOL_DEF = { 'Category': 170, 'Subcategory': 170, 'Tags': 170, 'Whisper': 300, '#': 56, 'In catalog': 96, 'BPM': 110, 'Song': 300, 'Artist': 230, 'Movie / show': 210, 'On lists': 90, 'Not on': 90, 'Which lists': 320, 'Lists it’s on': 320, 'On other lists': 120, '': 84 };
 const bColName = th => th.textContent.replace(/[▼▲⇅]/g, '').trim();
 const CAT_DEF = { '#': 56, 'Song': 425, 'Artist': 525, 'Movie / show': 210, 'On lists': 90, 'Lists it\u2019s on': 320 };   // default widths on the "My whole catalog" page
 const bColKey = th => (B.curId === CATALOG ? 'cat:' : '') + bColName(th);
