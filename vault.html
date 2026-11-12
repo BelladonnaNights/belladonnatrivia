@@ -2797,10 +2797,11 @@ const TGC = {
 };
 const normTag = t => parseTags(t)[0] || '';
 async function openTags(X){
-  const body = document.createElement('div'); let items = [], dict = [], q = '', sortBy = 'az', arm = '', limit = 300, busy = false;
+  const body = document.createElement('div'); let items = [], dict = [], q = '', sortBy = 'az', arm = '', limit = 300, busy = false, review = null;
   const stI = 'padding:8px 11px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none';
   const counts = () => { const m = new Map(); items.forEach(it => it.tags.forEach(t => m.set(t, (m.get(t) || 0) + 1))); dict.forEach(t => { if (!m.has(t)) m.set(t, 0); }); return m; };
-  const load = async () => { items = await X.load(); const d = await getDoc(X.dict()); dict = d.exists() && Array.isArray(d.data().list) ? d.data().list.map(normTag).filter(Boolean) : []; };
+  const load = async () => { items = await X.load(); const d = await getDoc(X.dict()); dict = d.exists() && Array.isArray(d.data().list) ? d.data().list.map(normTag).filter(Boolean) : [];
+    if (X === TGC.trivia){ const r = await getDoc(doc(db, 'triviaConfig', 'tagReview')); review = r.exists() && Array.isArray(r.data().checked) ? r.data().checked.map(normTag).filter(Boolean) : null; } };
   const saveDict = async list => { dict = [...new Set(list)].sort((a, b) => a.localeCompare(b)); await setDoc(X.dict(), { list: dict, updatedAt: serverTimestamp() }); };
   // apply a map old -> new (or null = delete) to every item and to the saved list
   const applyMap = async (map, addNew = []) => {
@@ -2816,7 +2817,7 @@ async function openTags(X){
     rows.sort(sortBy === 'used' ? (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]) : (a, b) => a[0].localeCompare(b[0]));
     const shown = rows.slice(0, limit);
     body.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><input type="text" id="tgQ" value="${esc(q)}" placeholder="" style="${stI};flex:1;min-width:180px" autocomplete="off" aria-label="Search tags"><select id="tgSort" style="${stI}"><option value="az" ${sortBy === 'az' ? 'selected' : ''}>A to Z</option><option value="used" ${sortBy === 'used' ? 'selected' : ''}>Most used first</option></select><button class="btn ghost" id="tgCopy">Copy whole list</button><button class="btn ghost" id="tgPasteBtn">Paste a list…</button></div>
-      <div class="hint" style="margin:0 0 8px">${total.toLocaleString()} tag${total === 1 ? '' : 's'}${q ? ' · ' + rows.length.toLocaleString() + ' match' : ''}. Rename a tag to change it everywhere; rename it to one that already exists to merge them.</div>
+      <div class="hint" style="margin:0 0 8px">${total.toLocaleString()} tag${total === 1 ? '' : 's'}${q ? ' · ' + rows.length.toLocaleString() + ' match' : ''}. Rename a tag to change it everywhere; rename it to one that already exists to merge them.</div>${X === TGC.trivia ? (review === null ? `<div class="hint" style="margin:0 0 10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px">When a brand-new tag appears, the Vault can look through your older questions and offer it to the ones that fit. Turn this on to start from the tags you have now.<br><button class="btn" id="tgTrack" style="margin-top:6px">Start watching for new tags</button></div>` : (() => { const n = [...c.keys()].filter(t => !review.includes(t)).length; return n ? `<div style="margin:0 0 10px;padding:10px 12px;border:1px solid var(--gold2);border-radius:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:200px"><b>${n.toLocaleString()} new tag${n === 1 ? '' : 's'}</b> your older questions haven’t been checked against.</span><button class="btn primary" id="tgCheck">Check new tags</button></div>` : ''; })()) : ''}
       <div style="display:flex;gap:6px;margin-bottom:10px"><input type="text" id="tgNew" style="${stI};flex:1" autocomplete="off" aria-label="New tag"><button class="btn" id="tgAdd">Add tag</button></div>
       <div id="tgPaste" class="hidden" style="margin-bottom:12px"><div class="hint" style="margin:0 0 6px">One tag per line. A plain line adds that tag. To change one, write <b>old tag =&gt; new tag</b>. To delete one, write <b>old tag =&gt;</b> with nothing after it.</div><textarea id="tgPasteTxt" style="${stI};width:100%;min-height:150px"></textarea><div style="margin-top:6px"><button class="btn primary" id="tgPasteGo">Apply</button> <span class="hint" id="tgPasteMsg"></span></div></div>
       <div style="max-height:46vh;overflow:auto">${shown.map(([t, n]) => `<div style="display:flex;gap:6px;align-items:center;margin:0 0 5px"><input type="text" data-tg="${esc(t)}" value="${esc(t)}" style="${stI};flex:1;min-width:0"><span class="hint" style="margin:0;min-width:74px;text-align:right">${n} use${n === 1 ? '' : 's'}</span><button class="btn ghost" data-tgren="${esc(t)}">Rename</button><button class="btn ${arm === t ? 'danger' : 'ghost'}" data-tgdel="${esc(t)}">${arm === t ? 'Remove from ' + n + '?' : 'Remove'}</button></div>`).join('') || '<div class="hint">No tags match.</div>'}${rows.length > limit ? `<div style="padding:8px 0"><button class="btn ghost sm" id="tgMore">Show 300 more</button></div>` : ''}</div>`;
@@ -2832,6 +2833,8 @@ async function openTags(X){
   body.addEventListener('click', async e => {
     const t = e.target; if (busy) return;
     if (t.id === 'tgMore'){ limit += 300; draw(); return; }
+    if (t.id === 'tgCheck'){ closeModal(); openTagBackfill(); return; }
+    if (t.id === 'tgTrack'){ busy = true; await run(async () => { review = [...counts().keys()]; await setDoc(doc(db, 'triviaConfig', 'tagReview'), { checked: review, updatedAt: serverTimestamp() }); toast('Watching for new tags'); }); busy = false; draw(); return; }
     if (t.id === 'tgPasteBtn'){ body.querySelector('#tgPaste').classList.toggle('hidden'); return; }
     if (t.id === 'tgCopy'){ const txt = [...counts().keys()].sort((a, b) => a.localeCompare(b)).join('\n'); try { await navigator.clipboard.writeText(txt); toast('Copied ' + counts().size.toLocaleString() + ' tags'); } catch (err){ const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Copied ' + counts().size.toLocaleString() + ' tags'); } catch (e2){ toast('Couldn’t copy — use Paste a list to see the text'); } ta.remove(); } return; }
     if (t.id === 'tgAdd'){ const v = normTag(body.querySelector('#tgNew').value); if (!v) return; if (counts().has(v)) return toast('That tag already exists'); busy = true; await run(async () => { await saveDict(dict.concat(v)); toast('Added'); }); busy = false; draw(); return; }
@@ -2842,6 +2845,114 @@ async function openTags(X){
     if (t.id === 'tgPasteGo'){ const lines = body.querySelector('#tgPasteTxt').value.split(/\r?\n/).map(x => x.trim()).filter(Boolean); if (!lines.length) return;
       const map = new Map(), add = []; for (const ln of lines){ const m = ln.match(/^(.*?)\s*(?:=>|->|→)\s*(.*)$/); if (m){ const o = normTag(m[1]), n = normTag(m[2]); if (o) map.set(o, n || null); } else { const a = normTag(ln); if (a) add.push(a); } }
       busy = true; await run(async () => { const n = await applyMap(map, add); toast('Done' + (n ? ' — ' + n.toLocaleString() + ' item' + (n === 1 ? '' : 's') + ' updated' : '')); }); busy = false; body.querySelector('#tgPasteTxt') && (q = ''); draw(); return; }
+  });
+}
+
+
+/* ── New-tag check: when a tag appears that older questions haven't been checked against, find the ones that fit (by the words in the question, or with a small ChatGPT batch) and let you approve ── */
+async function openTagBackfill(){
+  const body = document.createElement('div');
+  const stI = 'padding:8px 11px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none';
+  openModal({ title: 'Check new tags', body, wide: true, actions: [{ label: 'Back to tags', primary: true, onClick: () => { closeModal(); openTags(TGC.trivia); } }] });
+  body.textContent = 'Reading your questions…';
+  let qs = [], dict = [], checked = new Set();
+  try {
+    const snap = await getDocs(qColl());
+    qs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(q => !q.archived).map(q => ({ id: q.id, q: String(q.question || ''), a: String(q.answer || ''), alt: String(q.altAnswers || ''), game: (S.cats.get(q.categoryId) || {}).name || '', master: q.masterCat || '', tags: Array.isArray(q.tags) ? q.tags.map(normTag).filter(Boolean) : [] }));
+    const d = await getDoc(doc(db, 'triviaConfig', 'tagList')); dict = d.exists() && Array.isArray(d.data().list) ? d.data().list.map(normTag).filter(Boolean) : [];
+    const r = await getDoc(doc(db, 'triviaConfig', 'tagReview')); checked = new Set(r.exists() && Array.isArray(r.data().checked) ? r.data().checked.map(normTag).filter(Boolean) : []);
+  } catch (e){ body.textContent = 'Couldn’t read them: ' + (e && e.message || e); return; }
+  const flat = t => ' ' + String(t).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() + ' ';
+  qs.forEach(x => { x.txt = flat(x.q + ' ' + x.a + ' ' + x.alt); });
+  const allTags = () => { const m = new Map(); qs.forEach(x => x.tags.forEach(t => m.set(t, (m.get(t) || 0) + 1))); dict.forEach(t => { if (!m.has(t)) m.set(t, 0); }); return m; };
+  const newTags = () => [...allTags().keys()].filter(t => !checked.has(t)).sort((a, b) => a.localeCompare(b));
+  const hitsOf = tag => { const w = flat(tag).trimEnd(); return qs.filter(x => !x.tags.includes(tag) && (x.txt.includes(w + ' ') || x.txt.includes(w + 's '))); };
+  const saveChecked = () => setDoc(doc(db, 'triviaConfig', 'tagReview'), { checked: [...checked], updatedAt: serverTimestamp() });
+  const addTags = async (ids, tags) => {
+    const by = new Map(qs.map(x => [x.id, x])), list = [...new Set(ids)].map(i => by.get(i)).filter(Boolean); let n = 0;
+    for (let i = 0; i < list.length; i += 400){
+      const b = writeBatch(db);
+      list.slice(i, i + 400).forEach(x => { const nx = [...new Set([...x.tags, ...tags])]; if (nx.length !== x.tags.length){ b.update(doc(qColl(), x.id), { tags: nx, updatedAt: serverTimestamp() }); x.tags = nx; n++; } });
+      await b.commit();
+    }
+    return n;
+  };
+  const st = { open: '', pick: new Set(), batch: new Set(), prompt: '', msg: '', busy: false };
+  const draw = () => {
+    const nt = newTags(), cnt = allTags();
+    let h = `<p class="hint" style="margin-top:0">These tags are new, so your older questions have never been checked against them. For each one, <b>Review matches</b> finds the questions that mention it. You tick the ones you want, and nothing is added until you say so. Tags about a theme rather than a word can go in the ChatGPT batch at the bottom.</p>`;
+    if (!nt.length) h += '<p><b>You’re all caught up.</b> Every tag has been checked.</p>';
+    nt.forEach(t => {
+      const hits = hitsOf(t), open = st.open === t;
+      h += `<div style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin:0 0 8px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label style="display:flex;gap:6px;align-items:center;flex:1;min-width:180px" title="Include in the ChatGPT batch"><input type="checkbox" data-bt="${esc(t)}" ${st.batch.has(t) ? 'checked' : ''}><b>${esc(t)}</b></label><span class="hint" style="margin:0">${(cnt.get(t) || 0).toLocaleString()} use${cnt.get(t) === 1 ? '' : 's'} · ${hits.length.toLocaleString()} possible match${hits.length === 1 ? '' : 'es'}</span><button class="btn ghost sm" data-rv="${esc(t)}">${open ? 'Hide' : 'Review matches'}</button><button class="btn ghost sm" data-ck="${esc(t)}" title="Done with this tag. It won’t be offered again.">Mark checked</button></div>`;
+      if (open){
+        h += hits.length ? `<div style="margin-top:8px"><div style="max-height:220px;overflow:auto;font-size:13px">${hits.slice(0, 300).map(x => `<label style="display:flex;gap:8px;margin:0 0 5px;align-items:flex-start"><input type="checkbox" data-pk="${esc(x.id)}" ${st.pick.has(x.id) ? 'checked' : ''} style="margin-top:3px"><span><b>${esc(x.q)}</b> <span class="muted">— ${esc(x.a)} · ${esc(x.game)}</span></span></label>`).join('')}</div>${hits.length > 300 ? `<div class="hint">Showing the first 300 of ${hits.length.toLocaleString()}.</div>` : ''}<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary sm" data-addpk="${esc(t)}">Add “${esc(t)}” to ${st.pick.size.toLocaleString()} ticked</button><button class="btn ghost sm" data-pkall="1">Tick all</button><button class="btn ghost sm" data-pknone="1">Tick none</button></div></div>` : `<div class="hint" style="margin:6px 0 0">No question mentions this word. If it’s a theme, tick the box on the left and use the ChatGPT batch below.</div>`;
+      }
+      h += '</div>';
+    });
+    if (nt.length){
+      h += `<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px"><div style="font-weight:700;margin-bottom:4px">ChatGPT batch for theme-style tags</div><div class="hint" style="margin:0 0 8px">Tick the tags above that need judgment (the box to the left of each name), then make the prompt. It only includes questions in nearby categories, so it stays small.</div>
+        <button class="btn" data-mk="1" ${st.batch.size ? '' : 'disabled'}>Make the prompt (${st.batch.size} tag${st.batch.size === 1 ? '' : 's'})</button>`;
+      if (st.prompt) h += `<textarea id="btPrompt" readonly spellcheck="false" style="${stI};width:100%;height:110px;margin-top:8px;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace">${esc(st.prompt)}</textarea><button class="btn ghost" data-cp="1" style="margin-top:6px">Copy the prompt</button>
+        <div class="hint" style="margin:10px 0 4px">Paste ChatGPT’s reply here:</div><textarea id="btReply" style="${stI};width:100%;min-height:90px"></textarea><button class="btn primary" data-ap="1" style="margin-top:6px">Add these tags</button>`;
+      h += '</div>';
+    }
+    h += `<div class="msg ${st.msg && /^Done|^Added|^Copied/.test(st.msg) ? 'ok' : ''}" id="btMsg">${esc(st.msg)}</div>`;
+    const keepR = body.querySelector('#btReply') ? body.querySelector('#btReply').value : '';
+    body.innerHTML = h; const r = body.querySelector('#btReply'); if (r) r.value = keepR;
+  };
+  draw();
+  body.addEventListener('change', e => {
+    const t = e.target; if (t.dataset.bt !== undefined){ t.checked ? st.batch.add(t.dataset.bt) : st.batch.delete(t.dataset.bt); st.prompt = ''; draw(); }
+    if (t.dataset.pk !== undefined){ t.checked ? st.pick.add(t.dataset.pk) : st.pick.delete(t.dataset.pk); const b = body.querySelector('[data-addpk]'); if (b) b.textContent = b.textContent.replace(/to [\d,]+ ticked/, 'to ' + st.pick.size.toLocaleString() + ' ticked'); }
+  });
+  body.addEventListener('click', async e => {
+    const t = e.target.closest('button'); if (!t || st.busy) return; const d = t.dataset;
+    if (d.rv !== undefined){ st.open = st.open === d.rv ? '' : d.rv; st.pick = new Set(st.open ? hitsOf(st.open).slice(0, 300).map(x => x.id) : []); st.msg = ''; draw(); return; }
+    if (d.pkall){ st.pick = new Set(hitsOf(st.open).slice(0, 300).map(x => x.id)); draw(); return; }
+    if (d.pknone){ st.pick = new Set(); draw(); return; }
+    if (d.ck !== undefined){ st.busy = true; await run(async () => { checked.add(d.ck); st.batch.delete(d.ck); await saveChecked(); }); st.busy = false; if (st.open === d.ck) st.open = ''; st.msg = ''; draw(); return; }
+    if (d.addpk !== undefined){
+      if (!st.pick.size) return toast('Nothing is ticked');
+      st.busy = true; let n = 0; await run(async () => { n = await addTags([...st.pick], [d.addpk]); checked.add(d.addpk); await saveChecked(); }); st.busy = false;
+      st.msg = 'Added “' + d.addpk + '” to ' + n.toLocaleString() + ' question' + (n === 1 ? '' : 's') + '.'; st.open = ''; st.pick = new Set(); st.batch.delete(d.addpk); draw(); return;
+    }
+    if (d.mk){
+      const tags = [...st.batch], per = Math.max(60, Math.floor(400 / tags.length)), ids = new Set(), rows = [];
+      tags.forEach(tag => {
+        const using = new Map(); qs.forEach(x => { if (x.tags.includes(tag) && x.master) using.set(x.master, (using.get(x.master) || 0) + 1); });
+        const hit = new Set(hitsOf(tag).map(x => x.id));
+        const cands = qs.filter(x => !x.tags.includes(tag) && (hit.has(x.id) || !using.size || using.has(x.master)));
+        cands.slice(0, per).forEach(x => { if (!ids.has(x.id)){ ids.add(x.id); rows.push(x); } });
+      });
+      st.prompt = `I'm adding new tags to my trivia library. Below is a list of NEW TAGS and a list of questions. For each question, decide which of the new tags clearly apply to it. Judge by what the question is actually about, and only add a tag when it truly fits.
+
+NEW TAGS:
+${tags.join(', ')}
+
+Reply with ONLY a CSV in a code block with exactly two columns: Question ID, Tags. Include a row only for questions that get at least one of the new tags. In Tags, put only the matching new tags, ALL LOWERCASE, comma separated, in one quoted cell. Do not change or add anything else.
+
+QUESTIONS (Question ID | Game | Question | Answer | Current tags):
+` + rows.map(x => [x.id, x.game, x.q.replace(/\s+/g, ' '), x.a.replace(/\s+/g, ' '), x.tags.join(', ')].join(' | ')).join('\n');
+      st.msg = rows.length.toLocaleString() + ' questions in the prompt.'; draw(); return;
+    }
+    if (d.cp){
+      const ta = body.querySelector('#btPrompt'); ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
+      let ok = false; try { ok = document.execCommand('copy'); } catch (err) {}
+      if (!ok){ try { await navigator.clipboard.writeText(ta.value); ok = true; } catch (err) {} }
+      toast(ok ? 'Prompt copied' : 'Select the box and press Ctrl+C'); return;
+    }
+    if (d.ap){
+      const txt = body.querySelector('#btReply').value; if (!txt.trim()) return toast('Paste the reply first');
+      const rows = parseCSV(txt.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '')); if (rows.length < 2) return toast('That doesn’t look like a CSV');
+      const hdr = rows[0].map(norm), iI = hdr.indexOf('questionid'), iT = hdr.indexOf('tags'); if (iI < 0 || iT < 0) return toast('The reply needs “Question ID” and “Tags” columns');
+      const known = new Set(qs.map(x => x.id)); let rowsOk = 0; const per = new Map();
+      rows.slice(1).forEach(r => { const id = String(r[iI] || '').trim(), tg = String(r[iT] || '').split(/[,;|]/).map(normTag).filter(Boolean); if (!known.has(id) || !tg.length) return; rowsOk++; tg.forEach(x => { (per.get(x) || per.set(x, []).get(x)).push(id); }); });
+      if (!rowsOk) return toast('No matching Question IDs found');
+      st.busy = true; let n = 0; const usedTags = [...st.batch];
+      await run(async () => { for (const [tag, ids] of per) n += await addTags(ids, [tag]); usedTags.forEach(x => checked.add(x)); await saveChecked(); }); st.busy = false;
+      st.msg = 'Added tags to ' + rowsOk.toLocaleString() + ' questions. Those tags are now marked checked.'; st.batch = new Set(); st.prompt = ''; draw();
+    }
   });
 }
 
