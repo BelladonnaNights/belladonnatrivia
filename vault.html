@@ -594,6 +594,7 @@ textarea::placeholder{color:#8a8a8a !important}
             <div class="chips" id="pDiffChips"><button class="pill on" data-d="">All</button><button class="pill" data-d="easy">Easy</button><button class="pill" data-d="medium">Medium</button><button class="pill" data-d="hard">Hard</button><button class="pill" data-d="extra hard">Extra Hard</button></div>
             <select id="pFmtSel" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 10px;color:var(--text);font:13px var(--font);outline:none"></select>
             <button class="btn ghost" id="pBulk">Bulk add</button>
+            <button class="btn ghost" id="pOpts">Manage options</button>
             <button class="btn ghost" id="pDelSec">Delete section</button>
             <button class="btn primary" id="pAdd">+ Add question</button>
           </div>
@@ -2564,8 +2565,8 @@ function startBingo(){
    moth/connectionlists/_picsections/{id} = { name, order }
    moth/connectionlists/_pics/{id}        = { section, category, format, subject, diff, q, url, a, alts[], explain, rights, reveal }
    ═══════════════════════════════════════════════════════════ */
-const P = { secs: new Map(), qs: new Map(), cur: LS.get('picCur', 'all'), q: '', diff: '', fmt: '', secQ: '', listening: false, loaded: { s: false, q: false } };
-const PIC_SEC = 'moth/connectionlists/_picsections', PIC_Q = 'moth/connectionlists/_pics';
+const P = { opts: {}, secs: new Map(), qs: new Map(), cur: LS.get('picCur', 'all'), q: '', diff: '', fmt: '', secQ: '', listening: false, loaded: { s: false, q: false } };
+const PIC_OPT = 'moth/connectionlists/_picopts', PIC_SEC = 'moth/connectionlists/_picsections', PIC_Q = 'moth/connectionlists/_pics';
 const P_CATS = ['Visual Identification', 'Visual Puzzles', 'Visual Knowledge'];
 const P_FORMATS = ['Extreme Close-Up', 'Silhouettes', 'X-Ray Vision', "What's That Pattern?", 'Odd One Out', 'Spot the Difference', 'Rebus Puzzles', 'The Missing Piece', 'Picture Logic', 'What the Heck Is That?', 'Map It Out', 'Flagged for Review', 'Picture Connections'];
 const P_SUBJECTS = ['Geography', 'History', 'Science', 'Food & Drink', 'Music', 'Movies & TV', 'Nature', 'Holidays'];
@@ -2573,6 +2574,39 @@ const P_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['ext
 const P_RIGHTS = ['Original', 'Licensed', 'Public Domain'];
 const pDiffLabel = d => (P_DIFFS.find(x => x[0] === d) || ['', ''])[1];
 const pOkUrl = u => /^https:\/\/[^\s"'<>]{4,480}$/.test(String(u || '').trim());
+// The lists behind the Main category / Round format / Subject / Image rights dropdowns. Until you edit one it starts from the built-in list; values already used by questions always stay in it.
+const P_KINDS = [['category', 'Main category', P_CATS], ['format', 'Round format', P_FORMATS], ['subject', 'Subject', P_SUBJECTS], ['rights', 'Image rights', P_RIGHTS]];
+function pOpts(field){
+  const k = P_KINDS.find(x => x[0] === field), o = P.opts[field], base = o && o.set ? pList(o.items) : k[2].slice(), have = new Set(base.map(x => x.toLowerCase()));
+  const used = [...new Set([...P.qs.values()].map(q => String(q[field] || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  used.forEach(u => { if (!have.has(u.toLowerCase())) { have.add(u.toLowerCase()); base.push(u); } });
+  return base;
+}
+const pUsing = (field, v) => [...P.qs.entries()].filter(([, q]) => String(q[field] || '') === v);
+const pSel = (id, field, cur) => { const L = pOpts(field); if (cur && !L.includes(cur)) L.push(cur); return `<select id="${id}"><option value=""></option>${L.map(x => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`; };
+function openPicOptions(){
+  const body = document.createElement('div'); body.id = 'mgrBody'; P.mgr = true; P.mgrDel = '';
+  openModal({ title: 'Manage options', body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }], onClose: () => { P.mgr = false; } });
+  renderMgr();
+  body.addEventListener('click', async e => {
+    const b = e.target.closest('button[data-mg]'); if (!b) return; const field = b.dataset.f, i = Number(b.dataset.i), L = pOpts(field), save = items => rset(rref(rtdb, PIC_OPT + '/' + field), { set: true, items });
+    if (b.dataset.mg === 'add') { const inp = body.querySelector('input[data-new="' + field + '"]'), v = inp.value.trim(); if (!v) return; if (L.some(x => x.toLowerCase() === v.toLowerCase())) { toast('That one is already in the list'); return; } await run(async () => { await save(L.concat(v)); }); return; }
+    if (b.dataset.mg === 'ren') { const inp = body.querySelector('input[data-ren="' + field + ':' + i + '"]'), v = inp.value.trim(), old = L[i]; if (!v || v === old) return; if (L.some((x, j) => j !== i && x.toLowerCase() === v.toLowerCase())) { toast('That name is already in the list'); return; }
+      await run(async () => { const ups = { [PIC_OPT + '/' + field]: { set: true, items: L.map((x, j) => j === i ? v : x) } }; pUsing(field, old).forEach(([qid]) => { ups[PIC_Q + '/' + qid + '/' + field] = v; }); await rupdate(rref(rtdb), ups); toast('Renamed' + (pUsing(field, old).length ? ' — questions updated too' : '')); }); return; }
+    if (b.dataset.mg === 'del') { const old = L[i], n = pUsing(field, old).length, key = field + ':' + i;
+      if (n && P.mgrDel !== key) { P.mgrDel = key; renderMgr(); return; }
+      await run(async () => { const ups = { [PIC_OPT + '/' + field]: { set: true, items: L.filter((x, j) => j !== i) } }; pUsing(field, old).forEach(([qid]) => { ups[PIC_Q + '/' + qid + '/' + field] = null; }); P.mgrDel = ''; await rupdate(rref(rtdb), ups); toast('Removed'); }); return; }
+  });
+  body.addEventListener('keydown', e => { if (e.key !== 'Enter') return; const t = e.target; if (t.dataset.new) { e.preventDefault(); body.querySelector('button[data-mg="add"][data-f="' + t.dataset.new + '"]').click(); } else if (t.dataset.ren) { e.preventDefault(); const [f, i] = t.dataset.ren.split(':'); body.querySelector('button[data-mg="ren"][data-f="' + f + '"][data-i="' + i + '"]').click(); } });
+}
+function renderMgr(){
+  const el = $('#mgrBody'); if (!el) return; const keep = document.activeElement && document.activeElement.dataset && (document.activeElement.dataset.new || document.activeElement.dataset.ren);
+  el.innerHTML = `<p class="hint" style="margin-top:0">These lists fill the dropdowns when you add or edit a picture. Renaming changes it on every picture that uses it. Removing clears it from the pictures that use it (they keep everything else).</p>` + P_KINDS.map(([f, label]) => {
+    const L = pOpts(f);
+    return `<div style="margin:0 0 16px"><div style="font-weight:700;margin-bottom:6px">${esc(label)}</div>${L.map((x, i) => { const n = pUsing(f, x).length, arm = P.mgrDel === f + ':' + i;
+      return `<div style="display:flex;gap:6px;align-items:center;margin:0 0 5px"><input type="text" data-ren="${f}:${i}" value="${esc(x)}" style="flex:1;min-width:0;padding:8px 11px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none;"><span class="hint" style="margin:0;min-width:70px;text-align:right">${n} in use</span><button class="btn ghost" data-mg="ren" data-f="${f}" data-i="${i}">Rename</button><button class="btn ${arm ? 'danger' : 'ghost'}" data-mg="del" data-f="${f}" data-i="${i}">${arm ? 'Remove from ' + n + '?' : 'Remove'}</button></div>`; }).join('')}
+      <div style="display:flex;gap:6px;margin-top:6px"><input type="text" data-new="${f}" placeholder="" style="flex:1;min-width:0;padding:8px 11px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none;" autocomplete="off"><button class="btn" data-mg="add" data-f="${f}">Add</button></div></div>`; }).join('');
+}
 const pList = x => (Array.isArray(x) ? x : Object.values(x || {})).map(String);
 const pSplitAlts = t => String(t || '').split(/[\n,]/).map(x => x.trim()).filter(Boolean);
 const pCount = id => { let n = 0; for (const q of P.qs.values()) if (id === 'all' || (q.section || '') === id) n++; return n; };
@@ -2582,6 +2616,7 @@ function startPictures(){
   try {
     rtdb = rtdb || getDatabase(app);
     S.unsubs.push(ronValue(rref(rtdb, PIC_SEC), snap => { P.secs = new Map(Object.entries(snap.val() || {}).filter(([, v]) => v && typeof v === 'object')); P.loaded.s = true; if (B.mode === 'pictures') renderPicAll(); }, e => pErr(e)));
+    S.unsubs.push(ronValue(rref(rtdb, PIC_OPT), snap => { P.opts = snap.val() || {}; if (P.mgr) renderMgr(); }, e => pErr(e)));
     S.unsubs.push(ronValue(rref(rtdb, PIC_Q), snap => { P.qs = new Map(Object.entries(snap.val() || {}).filter(([, v]) => v && typeof v === 'object')); P.loaded.q = true; if (B.mode === 'pictures') renderPicAll(); }, e => pErr(e)));
   } catch (e) { pErr(e); }
 }
@@ -2657,11 +2692,11 @@ function picForm(q){
     <label class="fld">Correct answer<input type="text" id="pfA" value="${esc(q.a || '')}" autocomplete="off"></label>
     <label class="fld">Section<select id="pfSec">${secOpts}</select></label>
     <label class="fld wide">Accepted answers (separate with commas, or a new line if an answer has a comma in it)<textarea id="pfAlts" style="min-height:56px">${esc(pList(q.alts).join(', '))}</textarea></label>
-    <label class="fld">Main category<input type="text" id="pfCat" list="dlCat" value="${esc(q.category || '')}" autocomplete="off"></label>
-    <label class="fld">Round format<input type="text" id="pfFmt" list="dlFmt" value="${esc(q.format || '')}" autocomplete="off"></label>
-    <label class="fld">Subject<input type="text" id="pfSub" list="dlSub" value="${esc(q.subject || '')}" autocomplete="off"></label>
+    <label class="fld">Main category${pSel('pfCat', 'category', q.category || '')}</label>
+    <label class="fld">Round format${pSel('pfFmt', 'format', q.format || '')}</label>
+    <label class="fld">Subject${pSel('pfSub', 'subject', q.subject || '')}</label>
     <label class="fld">Difficulty<select id="pfDiff"><option value=""></option>${P_DIFFS.map(([v, l]) => `<option value="${v}" ${q.diff === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-    <label class="fld">Image rights<select id="pfRights"><option value=""></option>${P_RIGHTS.map(r => `<option ${q.rights === r ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
+    <label class="fld">Image rights${pSel('pfRights', 'rights', q.rights || '')}</label>
     <label class="fld wide">Explanation (optional host note, only you see it)<textarea id="pfExp">${esc(q.explain || '')}</textarea></label>
     ${dl('dlCat', P_CATS.concat(all.map(x => x.category).filter(Boolean)))}${dl('dlFmt', P_FORMATS.concat(all.map(x => x.format).filter(Boolean)))}${dl('dlSub', P_SUBJECTS.concat(all.map(x => x.subject).filter(Boolean)))}
   </div><div class="hint hidden" id="pfErr" style="color:var(--red);margin:0"></div>`;
@@ -2693,6 +2728,7 @@ function openPicEditor(id){
 }
 $('#pAdd').addEventListener('click', () => openPicEditor(null));
 $('#pGrid tbody').addEventListener('click', e => { const tr = e.target.closest('tr'); if (tr) openPicEditor(tr.dataset.id); });
+$('#pOpts').addEventListener('click', openPicOptions);
 $('#pBulk').addEventListener('click', () => {
   const secOpts = '<option value="">(No section)</option>' + pSecs().map(([id, v]) => `<option value="${esc(id)}" ${P.cur === id ? 'selected' : ''}>${esc(v.name)}</option>`).join('');
   const body = document.createElement('div');
@@ -2705,7 +2741,7 @@ $('#pBulk').addEventListener('click', () => {
     const sec = $('#pbSec').value, er = $('#pbErr'), bad = [], recs = [];
     $('#pbIn').value.split('\n').map(l => l.trim()).filter(Boolean).forEach((l, i) => {
       const x = l.split('|').map(v => v.trim()); if (/^image link\b/i.test(x[0])) return;
-      const d = { url: x[0], q: (x[1] || '').slice(0, 200), a: x[2] || '', alts: (x[3] || '').split(';').map(v => v.trim()).filter(Boolean), format: x[4] || '', subject: x[5] || '', diff: ((x[6] || '').toLowerCase().replace(/^extra[\s-]*hard$/, 'extra hard')), category: x[7] || '', rights: P_RIGHTS.find(r => r.toLowerCase() === (x[8] || '').toLowerCase()) || '', explain: x[9] || '', reveal: x[10] || '', section: sec };
+      const d = { url: x[0], q: (x[1] || '').slice(0, 200), a: x[2] || '', alts: (x[3] || '').split(';').map(v => v.trim()).filter(Boolean), format: x[4] || '', subject: x[5] || '', diff: ((x[6] || '').toLowerCase().replace(/^extra[\s-]*hard$/, 'extra hard')), category: x[7] || '', rights: pOpts('rights').find(r => r.toLowerCase() === (x[8] || '').toLowerCase()) || (x[8] || ''), explain: x[9] || '', reveal: x[10] || '', section: sec };
       if (!pOkUrl(d.url)) return bad.push(`Line ${i + 1}: the image link must start with https://`);
       if (!d.a) return bad.push(`Line ${i + 1}: the correct answer is missing`);
       if (d.diff && !P_DIFFS.some(p => p[0] === d.diff)) d.diff = '';
