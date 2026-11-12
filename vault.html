@@ -603,12 +603,14 @@ textarea::placeholder{color:#8a8a8a !important}
             <div class="chips" id="pDiffChips"><button class="pill on" data-d="">All</button><button class="pill" data-d="easy">Easy</button><button class="pill" data-d="medium">Medium</button><button class="pill" data-d="hard">Hard</button><button class="pill" data-d="extra hard">Extra Hard</button></div>
             <select id="pFmtSel" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 10px;color:var(--text);font:13px var(--font);outline:none"></select>
             <button class="btn ghost" id="pBulk">Bulk add</button>
+            <button class="btn ghost" id="pExport">Export CSV</button>
+            <button class="btn ghost" id="pImport">Import CSV</button>
             <button class="btn ghost" id="pOpts">Manage options</button>
             <button class="btn ghost" id="pDelSec">Delete section</button>
             <button class="btn primary" id="pAdd">+ Add question</button>
           </div>
         </div>
-        <div id="pGridWrap"><table id="pGrid"><thead><tr><th></th><th>Question</th><th>Correct answer</th><th>Round format</th><th>Subject</th><th>Difficulty</th><th>Image rights</th><th id="pSecTh">Section</th></tr></thead><tbody></tbody></table><div id="pNone" class="hidden" style="padding:30px;text-align:center;color:var(--text3);font-family:var(--serif);font-style:italic"></div></div>
+        <div id="pGridWrap"><table id="pGrid"><thead><tr><th></th><th>Question</th><th>Correct answer</th><th>Round format</th><th>Subject</th><th>Category</th><th>Tags</th><th>Difficulty</th><th>Image rights</th><th id="pSecTh">Section</th></tr></thead><tbody></tbody></table><div id="pNone" class="hidden" style="padding:30px;text-align:center;color:var(--text3);font-family:var(--serif);font-style:italic"></div></div>
       </div>
     </main>
   </div>
@@ -653,6 +655,7 @@ const BUILTIN = [
   { key:'tags',          label:'Tags',           exportLabel:'Tags',             type:'tags', w:200 },
   { key:'masterCat',     label:'Master category', exportLabel:'Master Category', type:'pick', list:'master', w:190 },
   { key:'subCat',        label:'Subcategory',    exportLabel:'Subcategory',      type:'pick', list:'sub',    w:190 },
+  { key:'topic',         label:'Topic',          exportLabel:'Topic',            type:'pick', list:'topic',  w:190 },
   { key:'lastUsedAt',    label:'Last used',      exportLabel:'Last Used',        type:'ro', fmt:'date',   w:110 },
   { key:'lastUsedVenue', label:'Last venue',     exportLabel:'Last Venue',       type:'ro', w:160 },
   { key:'timesUsed',     label:'Times used',     exportLabel:'Times Used',       type:'ro', w:90 },
@@ -681,7 +684,7 @@ const HEADER_MAP = {
   optiona:'optionA', optionb:'optionB', optionc:'optionC', optiond:'optionD',
   bonusquestion:'bonusQuestion', bonus:'bonusQuestion',
   tags:'tags', tag:'tags', notes:'notes', note:'notes',
-  mastercategory:'masterCat', maincategory:'masterCat', master:'masterCat', subcategory:'subCat', sub:'subCat',
+  mastercategory:'masterCat', maincategory:'masterCat', master:'masterCat', subcategory:'subCat', sub:'subCat', topic:'topic', subsubcategory:'topic',
   whisperduringquestion:'whisperQ', whisperquestion:'whisperQ', whisperq:'whisperQ', whisper1:'whisperQ', whisperduring:'whisperQ',
   whisperatreveal:'whisperA', whisperreveal:'whisperA', whispera:'whisperA', whisper2:'whisperA', whisperanswer:'whisperA'
 };
@@ -826,6 +829,7 @@ function recordsFromCSV(rows, ctx){
     for (const c of ctx.custom) rec[c.key] = defaultFor(c);
     map.forEach((c, i) => { if (!c) return; const v = convert(c, row[i]); if (c.dup && (v === '' || v == null || (Array.isArray(v) && !v.length))) return; rec[c.key] = v; });
     if (!rec.question){ out.noQ++; continue; }
+    if (rec.masterCat || rec.subCat || rec.topic){ const n = normPath(rec.masterCat, rec.subCat, rec.topic); rec.masterCat = n.m; rec.subCat = n.s; rec.topic = n.t; }
     out.records.push(rec);
   }
   return out;
@@ -1046,8 +1050,9 @@ function startListeners(){
   }, () => {}));
   S.unsubs.push(onSnapshot(doc(db, 'triviaConfig', 'taxonomy'), snap => {
     const d = snap.exists() ? snap.data() : null;
-    S.tax = d ? { masters: Array.isArray(d.masters) ? d.masters : [], subs: (Array.isArray(d.subs) ? d.subs : []).filter(x => x && x.m && x.n) } : null;
-    if (S.curId) renderAll(); if (S.taxOpen && S.taxCtx === TXC.trivia) renderTax();
+    const clean = (L, depth) => (Array.isArray(L) ? L : []).filter(x => x && x.n).map(x => ({ n: String(x.n), c: depth < 2 ? clean(x.c, depth + 1) : [] }));
+    S.tax = d && Array.isArray(d.tree) ? { tree: clean(d.tree, 0) } : null;
+    if (S.curId) renderAll(); if (S.taxOpen && S.taxTreeDraw) S.taxTreeDraw();
   }, () => {}));
   S.unsubs.push(onSnapshot(doc(db, 'triviaConfig', 'columns'), snap => {
     S.custom = snap.exists() ? (snap.data().custom || []) : [];
@@ -1446,23 +1451,32 @@ function usageVal(r, k){ const e = usageOf((r.data && r.data.categoryId) || S.cu
 const rowVal = (r, c) => USAGE_KEYS.has(c.key) ? usageVal(r, c.key) : r.data[c.key];
 function usageRefresh(){ try { for (const r of S.rows.values()) if (r.tr) try { updateRowDom(r); } catch (e) {} renderVenueSel(); applyFilter(); } catch (e) {} }
 /* Master category / Subcategory lists (Manage categories) and the read-only usage columns */
-const TAX_DEFAULT = (() => {
-  const M = { 'Christmas Movies': ['Christmas Comedy','Christmas Classics','Christmas Horror','Animated Christmas','Christmas Romance','Christmas Movie Quotes','Christmas Movie Locations','Christmas Movie Characters','Christmas Movie Soundtracks','Behind the Scenes'],
-    'Christmas Television': ['Animated Specials','Sitcom Episodes','Christmas Commercials','Holiday Variety Shows','Christmas Cartoons',"Children's Television",'Holiday Reality TV'],
-    'Christmas Music': ['Traditional Carols','Christmas Pop','Christmas Rock','Christmas Country','Holiday R&B','Novelty Christmas Songs','Christmas Song Lyrics','Cover Versions','Christmas Albums','Music History'],
-    'Christmas Around the World': ['European Christmas','Latin American Christmas','Scandinavian Traditions','Asian Christmas Celebrations','Christmas Foods by Country','Gift-Bringers Around the World','Unusual Customs'],
-    'Christmas History & Origins': ['History of Santa','Victorian Christmas','Ancient Winter Festivals','Christmas in America','History of Gift-Giving','Origins of Decorations','Historical Christmas Events'],
-    'Christmas Food & Drink': ['Christmas Desserts','Holiday Baking','Christmas Dinner','Holiday Candy','Festive Cocktails','Christmas Spices','Regional Holiday Foods','Historical Holiday Recipes'],
-    'Christmas Pop Culture': ['Celebrity Christmas','Holiday Advertising','Christmas Fashion','Famous Holiday Performances','Christmas Merchandise','Viral Christmas Moments'],
-    'Christmas Nostalgia': ['Christmas Toys','Retro Electronics','Christmas Catalogs','Childhood Traditions','Christmas Morning','Holiday Shopping','Retro Decorations','Christmas Commercials'],
-    'Christmas Literature & Folklore': ['A Christmas Carol','Christmas Fairy Tales','Christmas Books','Santa Legends','Winter Mythology','The Nutcracker','Christmas Ghost Stories'],
-    'Christmas Traditions & Decorations': ['Christmas Trees','Ornaments','Christmas Lights','Stockings','Christmas Cards','Gift Wrapping','Holiday Symbols','Seasonal Plants'],
+const TREE_DEFAULT = (() => {
+  const M = { 'Movies': ['Christmas Comedy','Christmas Classics','Christmas Horror','Animated Christmas','Christmas Romance','Christmas Movie Quotes','Christmas Movie Locations','Christmas Movie Characters','Christmas Movie Soundtracks','Behind the Scenes'],
+    'Television': ['Animated Specials','Sitcom Episodes','Christmas Commercials','Holiday Variety Shows','Christmas Cartoons',"Children's Television",'Holiday Reality TV'],
+    'Music': ['Traditional Carols','Christmas Pop','Christmas Rock','Christmas Country','Holiday R&B','Novelty Christmas Songs','Christmas Song Lyrics','Cover Versions','Christmas Albums','Music History'],
+    'Around the World': ['European Christmas','Latin American Christmas','Scandinavian Traditions','Asian Christmas Celebrations','Christmas Foods by Country','Gift-Bringers Around the World','Unusual Customs'],
+    'History & Origins': ['History of Santa','Victorian Christmas','Ancient Winter Festivals','Christmas in America','History of Gift-Giving','Origins of Decorations','Historical Christmas Events'],
+    'Food & Drink': ['Christmas Desserts','Holiday Baking','Christmas Dinner','Holiday Candy','Festive Cocktails','Christmas Spices','Regional Holiday Foods','Historical Holiday Recipes'],
+    'Pop Culture': ['Celebrity Christmas','Holiday Advertising','Christmas Fashion','Famous Holiday Performances','Christmas Merchandise','Viral Christmas Moments'],
+    'Nostalgia': ['Christmas Toys','Retro Electronics','Christmas Catalogs','Childhood Traditions','Christmas Morning','Holiday Shopping','Retro Decorations','Christmas Commercials'],
+    'Literature & Folklore': ['A Christmas Carol','Christmas Fairy Tales','Christmas Books','Santa Legends','Winter Mythology','The Nutcracker','Christmas Ghost Stories'],
+    'Traditions & Decorations': ['Christmas Trees','Ornaments','Christmas Lights','Stockings','Christmas Cards','Gift Wrapping','Holiday Symbols','Seasonal Plants'],
     'Winter & the Holidays': ['Winter Weather','Winter Solstice','Snow & Ice','Seasonal Astronomy','Winter Sports',"New Year's Traditions",'Winter Celebrations'],
-    'Christmas Curiosities': ['Strange Christmas Laws','Unusual Holiday Customs','Christmas World Records','Christmas Disasters','Bizarre Gifts','Christmas Myths','Weird Historical Facts'],
-    'Movies & Television': [], 'The 1990s': [], 'Food & Culinary': [], 'Cocktails & Spirits': [], 'Candy & Confections': [], 'Fairy Tales & Fantasy': [], 'Music Through the Decades': [] };
-  const subs = []; for (const m in M) M[m].forEach(n => subs.push({ m, n })); return { masters: Object.keys(M), subs };
+    'Curiosities': ['Strange Christmas Laws','Unusual Holiday Customs','Christmas World Records','Christmas Disasters','Bizarre Gifts','Christmas Myths','Weird Historical Facts'] };
+  const xmas = { n: 'Christmas', c: Object.keys(M).map(k => ({ n: k, c: M[k].map(t => ({ n: t, c: [] })) })) };
+  return [xmas, ...['Movies & Television', 'The 1990s', 'Food & Culinary', 'Cocktails & Spirits', 'Candy & Confections', 'Fairy Tales & Fantasy', 'Music Through the Decades'].map(n => ({ n, c: [] }))];
 })();
-const taxNow = () => S.tax || TAX_DEFAULT;
+/* The first layout had 12 separate "Christmas ___" master categories. They now live under one Christmas master. */
+const LEGACY = { 'Christmas Movies': 'Movies', 'Christmas Television': 'Television', 'Christmas Music': 'Music', 'Christmas Around the World': 'Around the World', 'Christmas History & Origins': 'History & Origins', 'Christmas Food & Drink': 'Food & Drink', 'Christmas Pop Culture': 'Pop Culture', 'Christmas Nostalgia': 'Nostalgia', 'Christmas Literature & Folklore': 'Literature & Folklore', 'Christmas Traditions & Decorations': 'Traditions & Decorations', 'Winter & the Holidays': 'Winter & the Holidays', 'Christmas Curiosities': 'Curiosities' };
+const taxTree = () => (S.tax && S.tax.tree && S.tax.tree.length) ? S.tax.tree : TREE_DEFAULT;
+const taxNow = () => ({ tree: taxTree() });
+function normPath(m, s_, t){
+  m = String(m || '').trim(); s_ = String(s_ || '').trim(); t = String(t || '').trim();
+  if (LEGACY[m] && !taxTree().some(x => x.n === m)) return { m: 'Christmas', s: LEGACY[m], t: t || s_ };
+  return { m, s: s_, t };
+}
+const groupsOf = () => [];
 const fmtDay = ms => { const n = Number(ms && ms.toMillis ? ms.toMillis() : ms); return n > 0 ? new Date(n).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : ''; };
 function roShow(c, v){
   if (c.fmt === 'date') return fmtDay(v);
@@ -1470,9 +1484,11 @@ function roShow(c, v){
   return v == null ? '' : String(v);
 }
 function pickOpts(c, v){
-  const T = taxNow(); let h = '<option value=""></option>', seen = new Set();
-  if (c.list === 'master') T.masters.forEach(m => { seen.add(m); h += `<option ${m === v ? 'selected' : ''}>${esc(m)}</option>`; });
-  else T.masters.forEach(m => { const L = T.subs.filter(x => x.m === m).map(x => x.n); if (!L.length) return; h += `<optgroup label="${esc(m)}">` + L.map(n => { seen.add(n); return `<option ${n === v ? 'selected' : ''}>${esc(n)}</option>`; }).join('') + '</optgroup>'; });
+  const tree = taxTree(); let h = '<option value=""></option>', seen = new Set();
+  const opt = n => { seen.add(n); return `<option ${n === v ? 'selected' : ''}>${esc(n)}</option>`; };
+  if (c.list === 'master') tree.forEach(m => { h += opt(m.n); });
+  else if (c.list === 'sub') tree.forEach(m => { if (m.c.length) h += `<optgroup label="${esc(m.n)}">` + m.c.map(x => opt(x.n)).join('') + '</optgroup>'; });
+  else tree.forEach(m => m.c.forEach(x => { if (x.c.length) h += `<optgroup label="${esc(m.n + ' › ' + x.n)}">` + x.c.map(t => opt(t.n)).join('') + '</optgroup>'; }));
   if (v && !seen.has(v)) h += `<option selected>${esc(v)}</option>`;
   return h;
 }
@@ -1759,7 +1775,7 @@ const QE_ORDER = [
   ['Difficulty', ['difficulty']],
   ['Multiple choice options', ['optionA', 'optionB', 'optionC', 'optionD']],
   ['Media', ['imgUrl', 'soundUrl']],
-  ['Library', ['masterCat', 'subCat']],
+  ['Library', ['masterCat', 'subCat', 'topic']],
   ['Extras', ['bonusQuestion', 'tags']],
   ['Usage (filled in by the Trivia app)', ['lastUsedAt', 'lastUsedVenue', 'timesUsed', 'usedAt']],
   ['Whispers', ['whisperQ', 'whisperA']],
@@ -2292,18 +2308,42 @@ const RC = { tq: '', open: new Set(), list: [], sel: '', qs: null, venue: '', di
 const rcNew = () => ({ id: 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: '', status: 'draft', life: 'evergreen', libs: [], subs: [], tags: [], needTag: false, never: [], diff: 'mixed', perGame: 15, rounds: [], excluded: [] });
 const rcCur = () => RC.list.find(x => x.id === RC.sel);
 const rcShuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const rcDropSubs = (rec, m) => rec.subs.filter(x => !(x.includes('||') ? x.startsWith(m + '||') : taxNow().subs.some(s => s.n === x && s.m === m)));
-const rcSubsFor = (rec, m) => (rec.subs || []).filter(x => x.includes('||') ? x.startsWith(m + '||') : taxNow().subs.some(s => s.n === x && s.m === m)).map(x => x.includes('||') ? x.split('||')[1] : x);
+const rcRoundOpts = rec => { const out = []; rec.libs.forEach(pth => { const n = rcFind(pth); if (pth.split('||').length === 1 && n && n.c.length) n.c.forEach(c => out.push(pth + '||' + c.n)); else out.push(pth); }); return [...new Set(out)]; };
+const qPath = q => [q.master, q.sub, q.topic].filter(Boolean).join('||');
+const pathHit = (paths, q) => { const qp = qPath(q); return paths.some(x => qp === x || qp.startsWith(x + '||')); };
+const rcFind = path => { let list = taxTree(), node = null; for (const part of path.split('||')){ node = list.find(x => x.n === part); if (!node) return null; list = node.c; } return node; };
+const rcSel = (rec, p) => rec.libs.some(x => p === x || p.startsWith(x + '||'));
+const rcPart = (rec, p) => rec.libs.some(x => x.startsWith(p + '||'));
+function rcToggle(rec, p, on){
+  const parts = p.split('||');
+  rec.libs = rec.libs.filter(x => x !== p && !x.startsWith(p + '||'));
+  if (on){ if (!rec.libs.some(x => p.startsWith(x + '||'))) rec.libs.push(p); return; }
+  const anc = rec.libs.find(x => p.startsWith(x + '||')); if (!anc) return;
+  rec.libs = rec.libs.filter(x => x !== anc);
+  for (let lv = anc.split('||').length; lv < parts.length + 0; lv++){
+    const cp = parts.slice(0, lv).join('||'), node = rcFind(cp), keep = parts.slice(0, lv + 1).join('||');
+    if (node) node.c.forEach(c => { const cpth = cp + '||' + c.n; if (cpth !== keep) rec.libs.push(cpth); });
+  }
+}
+/* Recipes saved with the first layout (12 separate Christmas masters, subs by name) are converted on load. */
+function rcUpgrade(rec){
+  const old = m => LEGACY[m] && !taxTree().some(x => x.n === m);
+  if (!(rec.subs && rec.subs.length) && !rec.libs.some(old) && !(rec.rounds || []).some(r => (r.libs || []).some(old))) return rec;
+  const conv = m => old(m) ? 'Christmas||' + LEGACY[m] : m, out = [];
+  rec.libs.forEach(m => { if (m.includes('||') && !old(m)) { out.push(m); return; } const ss = (rec.subs || []).filter(x => x.startsWith(m + '||')).map(x => x.split('||')[1]); if (ss.length) ss.forEach(n => out.push(conv(m) + '||' + n)); else out.push(conv(m)); });
+  rec.libs = [...new Set(out)]; rec.subs = [];
+  (rec.rounds || []).forEach(r => { r.libs = [...new Set((r.libs || []).map(conv))]; });
+  return rec;
+}
 function rcFilter(rec, round){
   const f = q => {
-    if (rec.libs.length && !rec.libs.includes(q.master)) return false;
+    if (rec.libs.length && !pathHit(rec.libs, q)) return false;
     if (!rec.libs.length && !(rec.needTag && rec.tags.length) && !q.master) return false;
-    if (rec.libs.includes(q.master)){ const ms = rcSubsFor(rec, q.master); if (ms.length && !ms.includes(q.sub)) return false; }
     if (rec.needTag && rec.tags.length && !rec.tags.some(t => q.tags.includes(t))) return false;
     if (rec.never.some(t => q.tags.includes(t))) return false;
     if (rec.diff !== 'mixed' && String(q.diff) !== rec.diff) return false;
     if (rec.excluded.includes(q.id)) return false;
-    if (round){ if ((round.libs || []).length && !round.libs.includes(q.master)) return false; if ((round.tags || []).length && !round.tags.some(t => q.tags.includes(t))) return false; }
+    if (round){ if ((round.libs || []).length && !pathHit(round.libs, q)) return false; if ((round.tags || []).length && !round.tags.some(t => q.tags.includes(t))) return false; }
     return true;
   };
   return (RC.qs || []).filter(f);
@@ -2325,9 +2365,9 @@ async function openPlayable(){
   body.style.cssText = 'display:flex;gap:16px;min-height:60vh'; body.innerHTML = 'Reading your questions…';
   openModal({ title: 'Playable categories', body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }] });
   try {
-    const d = await getDoc(doc(db, 'triviaConfig', 'recipes')); RC.list = d.exists() && Array.isArray(d.data().list) ? d.data().list.map(x => ({ ...rcNew(), ...x })) : [];
+    const d = await getDoc(doc(db, 'triviaConfig', 'recipes')); RC.list = d.exists() && Array.isArray(d.data().list) ? d.data().list.map(x => rcUpgrade({ ...rcNew(), ...x })) : [];
     const snap = await getDocs(qColl());
-    RC.qs = snap.docs.map(x => { const q = x.data(), cat = S.cats.get(q.categoryId) || {}; return { id: x.id, catId: q.categoryId, q: String(q.question || ''), a: String(q.answer || ''), diff: Math.min(3, Math.max(1, parseInt(q.difficulty) || 1)), master: q.masterCat || '', sub: q.subCat || '', tags: Array.isArray(q.tags) ? q.tags : [], archived: !!q.archived || !!cat.archived }; }).filter(q => !q.archived && q.q.trim() && q.a.trim());
+    RC.qs = snap.docs.map(x => { const q = x.data(), cat = S.cats.get(q.categoryId) || {}; return { id: x.id, catId: q.categoryId, q: String(q.question || ''), a: String(q.answer || ''), diff: Math.min(3, Math.max(1, parseInt(q.difficulty) || 1)), ...(() => { const n = normPath(q.masterCat, q.subCat, q.topic); return { master: n.m, sub: n.s, topic: n.t }; })(), tags: Array.isArray(q.tags) ? q.tags : [], archived: !!q.archived || !!cat.archived }; }).filter(q => !q.archived && q.q.trim() && q.a.trim());
   } catch (e){ body.textContent = 'Couldn’t read the library: ' + (e && e.message || e); return; }
   if (!RC.list.some(x => x.id === RC.sel)) RC.sel = RC.list.length ? RC.list[0].id : ''; RC.dirty = false; RC.sample = null;
   const T = () => taxNow(), chip = (v, label, on, attr) => `<label style="display:inline-flex;gap:6px;align-items:center;margin:0 12px 6px 0;font-size:13px;text-transform:none;letter-spacing:0"><input type="checkbox" ${attr}="${esc(v)}" ${on ? 'checked' : ''} style="width:15px;height:15px;margin:0"> ${esc(label || v)}</label>`;
@@ -2337,7 +2377,7 @@ async function openPlayable(){
     const pool = rcFilter(rec), per = rec.rounds.length ? rec.rounds.reduce((n, x) => n + (Number(x.count) || 0), 0) : rec.perGame;
     const rp = rec.rounds.map(x => ({ x, n: rcFilter(rec, x).length })), sets = rec.rounds.length ? Math.min(...rp.map(y => y.x.count ? Math.floor(y.n / y.x.count) : 0)) : (per ? Math.floor(pool.length / per) : 0);
     const dc = [1, 2, 3].map(d => pool.filter(q => q.diff === d).length), prefN = rec.tags.length ? pool.filter(q => rec.tags.some(t => q.tags.includes(t))).length : null, fresh = RC.venue ? pool.filter(rcFresh).length : null;
-    const warn = []; if (!rec.libs.length && !(rec.needTag && rec.tags.length) && !rec.subs.length) warn.push('Pick at least one library or tag, or this uses every categorized question.');
+    const warn = []; if (!rec.libs.length && !(rec.needTag && rec.tags.length)) warn.push('Pick at least one category or tag, or this uses every categorized question.');
     if (pool.length < per) warn.push(`Only ${pool.length} question${pool.length === 1 ? '' : 's'} match — a ${per}-question game needs at least ${per}.`);
     rp.forEach(y => { if (y.x.count && y.n < y.x.count) warn.push(`Round “${y.x.name || 'Untitled'}” has ${y.n} matching, needs ${y.x.count}.`); });
     if (fresh != null && fresh < per) warn.push(`Only ${fresh} haven’t been played at that venue in the last ${S.usedWin || 6} months.`);
@@ -2357,29 +2397,31 @@ async function openPlayable(){
   };
   const drawTree = () => {
     const rec = rcCur(), el = body.querySelector('#rcTree'), pk = body.querySelector('#rcPicked'); if (!rec || !el) return;
-    const T_ = taxNow(), qs = RC.qs || [], q = String(RC.tq || '').trim().toLowerCase();
-    const cm = {}, cs = {}; qs.forEach(x => { if (!x.master) return; cm[x.master] = (cm[x.master] || 0) + 1; const k = x.master + '||' + x.sub; cs[k] = (cs[k] || 0) + 1; });
-    const row = (inner, pad) => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0 4px ${pad}px">${inner}</div>`;
+    const qs = RC.qs || [], q = String(RC.tq || '').trim().toLowerCase(), cnt = {};
+    qs.forEach(x => { if (!x.master) return; const parts = [x.master, x.sub, x.topic].filter(Boolean); for (let i = 1; i <= parts.length; i++){ const k = parts.slice(0, i).join('||'); cnt[k] = (cnt[k] || 0) + 1; } });
+    const arrow = (key, open) => `<button type="button" class="btn ghost sm" data-tx="${esc(key)}" style="padding:1px 8px;min-width:26px" aria-label="Open or close">${open ? '▾' : '▸'}</button>`;
+    const hit = (node, path) => !q || node.n.toLowerCase().includes(q) || path.toLowerCase().includes(q);
+    const anyHit = (node, path) => hit(node, path) || node.c.some(c => anyHit(c, path + '||' + c.n));
     let h = '';
-    T_.masters.forEach(m => {
-      const subs = T_.subs.filter(x => x.m === m), mHit = !q || m.toLowerCase().includes(q), subHits = q ? subs.filter(x => x.n.toLowerCase().includes(q)) : subs;
-      if (q && !mHit && !subHits.length) return;
-      const on = rec.libs.includes(m), ps = rcSubsFor(rec, m), open = q ? true : RC.open.has(m), show = q && !mHit ? subHits : subs;
-      h += row(`${subs.length ? `<button type="button" class="btn ghost sm" data-tx="${esc(m)}" style="padding:1px 8px;min-width:26px" aria-label="Open or close ${esc(m)}">${open ? '▾' : '▸'}</button>` : '<span style="width:26px"></span>'}<label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer"><input type="checkbox" data-tlib="${esc(m)}" ${on && !ps.length ? 'checked' : ''}> <span style="font-weight:600">${esc(m)}</span></label><span class="hint" style="margin:0">${on && ps.length ? ps.length + ' of ' + subs.length + ' subs · ' : ''}${(cm[m] || 0).toLocaleString()} q</span>`, 0);
-      if (open) h += show.map(x => { const k = m + '||' + x.n; return row(`<label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer"><input type="checkbox" data-tsub="${esc(k)}" ${on && ps.includes(x.n) ? 'checked' : ''}> <span>${esc(x.n)}</span></label><span class="hint" style="margin:0">${(cs[k] || 0).toLocaleString()} q</span>`, 38); }).join('');
-    });
+    const walk = (node, path, depth, ancHit) => {
+      const mine = !q || node.n.toLowerCase().includes(q); if (q && !ancHit && !mine && !node.c.some(c => anyHit(c, path + '||' + c.n))) return;
+      const open = q ? true : RC.open.has(path), on = rcSel(rec, path), part = !on && rcPart(rec, path);
+      h += `<div style="display:flex;align-items:center;gap:8px;padding:4px 0 4px ${depth * 30}px">${node.c.length ? arrow(path, open) : '<span style="width:26px;flex:none"></span>'}<label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer"><input type="checkbox" data-tpath="${esc(path)}" data-ind="${part ? 1 : ''}" ${on ? 'checked' : ''}> <span style="${depth === 0 ? 'font-weight:700;font-size:15px' : depth === 1 ? 'font-weight:600' : ''}">${esc(node.n)}</span></label><span class="hint" style="margin:0">${(cnt[path] || 0).toLocaleString()} q</span></div>`;
+      if (open) node.c.forEach(c => walk(c, path + '||' + c.n, depth + 1, ancHit || mine));
+    };
+    taxTree().forEach(m => walk(m, m.n, 0, false));
     el.innerHTML = h || '<div class="hint">Nothing matches that search.</div>';
-    pk.innerHTML = rec.libs.length ? '<span class="hint" style="margin:0">Using:</span> ' + rec.libs.map(m => { const ps = rcSubsFor(rec, m); return `<span style="display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 4px 2px 10px;margin:2px 4px 2px 0;font-size:12px">${esc(m)}${ps.length ? ': ' + esc(ps.join(', ')) : ' (all)'} <button type="button" class="linkbtn" data-tdrop="${esc(m)}" aria-label="Remove ${esc(m)}">✕</button></span>`; }).join('') + ` <button type="button" class="linkbtn" data-tclear="1">clear all</button>` : '<span class="hint" style="margin:0">Nothing picked — this will use every categorized question.</span>';
+    el.querySelectorAll('input[data-ind="1"]').forEach(i => { i.indeterminate = true; });
+    pk.innerHTML = rec.libs.length ? '<span class="hint" style="margin:0">Using:</span> ' + rec.libs.map(pth => `<span style="display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 4px 2px 10px;margin:2px 4px 2px 0;font-size:12px">${esc(pth.split('||').join(' › '))} <button type="button" class="linkbtn" data-tdrop="${esc(pth)}" aria-label="Remove">✕</button></span>`).join('') + ' <button type="button" class="linkbtn" data-tclear="1">clear all</button>' : '<span class="hint" style="margin:0">Nothing picked — this will use every categorized question.</span>';
   };
   let drawForm = () => {
     const rec = rcCur(), el = body.querySelector('#rcForm'); if (!el) return;
     if (!rec){ el.innerHTML = '<div class="hint">Make a playable category — a saved set of rules that pulls questions from your library. Questions are never copied; fix one and it’s fixed everywhere.</div>'; return; }
-    const masters = T().masters;
     el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><label class="fld" style="flex:2;min-width:200px">Name<input type="text" data-rf="name" value="${esc(rec.name)}" style="${st}" autocomplete="off"></label>
       <label class="fld">Status<select data-rf="status" style="${st}"><option value="active" ${rec.status === 'active' ? 'selected' : ''}>Active</option><option value="draft" ${rec.status === 'draft' ? 'selected' : ''}>Draft</option><option value="archived" ${rec.status === 'archived' ? 'selected' : ''}>Archived</option></select></label>
       <label class="fld">Lasts<select data-rf="life" style="${st}"><option value="evergreen" ${rec.life === 'evergreen' ? 'selected' : ''}>Evergreen</option><option value="event" ${rec.life === 'event' ? 'selected' : ''}>Event-specific</option></select></label></div>
-      <div style="font-weight:700;margin:6px 0 4px">Pull questions from these libraries</div><div class="hint" style="margin:0 0 6px">Open a library to pick specific subcategories, or tick the library to take all of it. Add or rename libraries in <strong>Manage categories</strong> (toolbar).</div>
-      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.65;margin:0 0 3px">Search libraries &amp; subcategories</div><input type="search" id="rcTreeQ" value="${esc(RC.tq || '')}" autocomplete="off" style="${st};width:100%;margin-bottom:6px" aria-label="Search libraries and subcategories">
+      <div style="font-weight:700;margin:6px 0 4px">Pull questions from</div><div class="hint" style="margin:0 0 6px">Open a category (like Christmas) to see its subcategories, and those to see their topics. Tick any level to take everything under it. Add, rename or move things in <strong>Manage categories</strong> (toolbar).</div>
+      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.65;margin:0 0 3px">Search categories, subcategories &amp; topics</div><input type="search" id="rcTreeQ" value="${esc(RC.tq || '')}" autocomplete="off" style="${st};width:100%;margin-bottom:6px" aria-label="Search libraries and subcategories">
       <div id="rcPicked" style="margin-bottom:6px"></div><div id="rcTree" style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:6px 8px"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0"><label class="fld" style="flex:1;min-width:220px">Tags to prefer (comma separated)<input type="text" data-rf="tags" value="${esc(rec.tags.join(', '))}" style="${st}" autocomplete="off"></label><label class="fld" style="flex:1;min-width:200px">Never use questions tagged<input type="text" data-rf="never" value="${esc(rec.never.join(', '))}" style="${st}" autocomplete="off"></label></div>
       <label class="chk" style="margin:0 0 8px"><input type="checkbox" data-rf="needTag" ${rec.needTag ? 'checked' : ''}> Only use questions that have at least one of the preferred tags</label>
@@ -2387,7 +2429,7 @@ async function openPlayable(){
         <label class="fld">Questions per game<input type="number" min="1" max="200" data-rf="perGame" value="${rec.perGame}" style="${st};width:110px" ${rec.rounds.length ? 'disabled title="Set by the rounds below"' : ''}></label></div>
       <div style="font-weight:700;margin:14px 0 4px">Rounds <span class="hint" style="font-weight:400">(optional — each round pulls from its own part of the library)</span></div>
       ${rec.rounds.map((x, i) => `<div style="border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin:0 0 8px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end"><label class="fld" style="flex:2;min-width:160px">Round name<input type="text" data-rr="${i}:name" value="${esc(x.name)}" style="${st}" autocomplete="off"></label><label class="fld">Questions<input type="number" min="1" max="100" data-rr="${i}:count" value="${x.count}" style="${st};width:90px"></label><label class="fld" style="flex:1;min-width:160px">Tags (any)<input type="text" data-rr="${i}:tags" value="${esc((x.tags || []).join(', '))}" style="${st}" autocomplete="off"></label><button class="btn ghost sm" data-rrdel="${i}">Remove</button></div>
-        ${rec.libs.length ? `<div style="margin-top:6px">${rec.libs.map(m => chip(i + ':' + m, m, (x.libs || []).includes(m), 'data-rrlib')).join('')}</div>` : ''}</div>`).join('')}
+        ${rec.libs.length ? `<div style="margin-top:6px">${rcRoundOpts(rec).map(m => chip(i + ':' + m, m.split('||').pop(), (x.libs || []).includes(m), 'data-rrlib')).join('')}</div>` : ''}</div>`).join('')}
       <button class="btn ghost" id="rcAddRound">+ Add a round</button>
       <div style="display:flex;gap:8px;align-items:center;margin-top:16px;border-top:1px solid var(--border);padding-top:12px"><button class="btn primary" id="rcSave">Save</button><button class="btn ghost" id="rcDup">Duplicate</button><button class="btn ghost" id="rcDel">Delete</button><span class="hint" id="rcMsg" style="margin:0">${RC.dirty ? 'Unsaved changes' : ''}</span></div>`;
   };
@@ -2399,8 +2441,7 @@ async function openPlayable(){
   const edit = e => {
     const rec = rcCur(), t = e.target; if (!rec) return; let redraw = false;
     if (t.dataset.rf){ const f = t.dataset.rf, v = t.type === 'checkbox' ? t.checked : t.value; if (f === 'tags') rec.tags = parseTags(v); else if (f === 'never') rec.never = parseTags(v); else if (f === 'perGame') rec.perGame = Math.max(1, parseInt(v) || 1); else rec[f] = v; if (f === 'name' || f === 'status') drawList(); }
-    else if (t.dataset.tlib !== undefined){ const m = t.dataset.tlib; rec.subs = rcDropSubs(rec, m); toggle(rec.libs, m, t.checked); if (rec.rounds.length) redraw = true; else drawTree(); }
-    else if (t.dataset.tsub !== undefined){ const k = t.dataset.tsub, m = k.split('||')[0], set = new Set(rcSubsFor(rec, m).map(n => m + '||' + n)); rec.subs = rcDropSubs(rec, m); if (t.checked) set.add(k); else set.delete(k); set.forEach(x => rec.subs.push(x)); toggle(rec.libs, m, set.size > 0); if (rec.rounds.length) redraw = true; else drawTree(); }
+    else if (t.dataset.tpath !== undefined){ rcToggle(rec, t.dataset.tpath, t.checked); if (rec.rounds.length) redraw = true; else drawTree(); }
     else if (t.dataset.rr){ const [i, f] = t.dataset.rr.split(':'), rd = rec.rounds[Number(i)]; if (rd) rd[f] = f === 'count' ? Math.max(1, parseInt(t.value) || 1) : f === 'tags' ? parseTags(t.value) : t.value; }
     else if (t.dataset.rrlib !== undefined){ const k = t.dataset.rrlib, i = Number(k.slice(0, k.indexOf(':'))), m = k.slice(k.indexOf(':') + 1), rd = rec.rounds[i]; if (rd){ rd.libs = rd.libs || []; toggle(rd.libs, m, t.checked); } }
     else return;
@@ -2412,7 +2453,7 @@ async function openPlayable(){
   body.addEventListener('click', e => {
     const t = e.target.closest('[data-tx],[data-tdrop],[data-tclear]'), rec = rcCur(); if (!t || !rec) return;
     if (t.dataset.tx !== undefined){ const m = t.dataset.tx; if (RC.open.has(m)) RC.open.delete(m); else RC.open.add(m); drawTree(); return; }
-    if (t.dataset.tdrop !== undefined){ const m = t.dataset.tdrop; rec.libs = rec.libs.filter(x => x !== m); rec.subs = rcDropSubs(rec, m); } else { rec.libs = []; rec.subs = []; }
+    if (t.dataset.tdrop !== undefined) rec.libs = rec.libs.filter(x => x !== t.dataset.tdrop); else rec.libs = [];
     dirty(); RC.sample = null; drawTree(); drawPrev();
   });
   body.addEventListener('click', async e => {
@@ -2435,8 +2476,8 @@ const sBase = x => ({ t: x.t, a: x.a, m: x.m, c: x.c, sc: x.sc, g: x.g });
 /* ── Manage categories: master categories + their subcategories (one screen, used for trivia questions and for bingo songs) ── */
 const TXC = {
   trivia: {
-    title: 'Manage categories', get: () => S.tax || TAX_DEFAULT, f: { m: 'masterCat', s: 'subCat' },
-    save: (M, SB) => setDoc(doc(db, 'triviaConfig', 'taxonomy'), { masters: M, subs: SB, updatedAt: serverTimestamp() }),
+    title: 'Manage categories', get: () => ({ masters: [], subs: [] }), f: { m: 'masterCat', s: 'subCat' },
+    save: () => Promise.resolve(),
     async find(field, v, master){ const snap = await getDocs(query(qColl(), where(field, '==', v))); return snap.docs.filter(d => !master || (d.data().masterCat || '') === master).map(d => ({ ref: d.ref })); },
     count: items => items.length,
     async apply(items, patch){ const p = {}; for (const k in patch) p[k] = patch[k] == null ? deleteField() : patch[k]; for (let i = 0; i < items.length; i += 400){ const b = writeBatch(db); items.slice(i, i + 400).forEach(it => b.update(it.ref, p)); await b.commit(); } }
@@ -2452,38 +2493,148 @@ const TXC = {
 function openTax(X){
   const body = document.createElement('div'); body.id = 'taxBody'; S.taxOpen = true; S.taxCtx = X; S.taxMaster = ''; S.taxArm = '';
   openModal({ title: X.title, body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }], onClose: () => { S.taxOpen = false; } });
-  renderTax();
+  renderTax(); if (X.groups) taxGroupEvents(body, X);
   body.addEventListener('change', e => { if (e.target.id === 'taxMasterSel'){ S.taxMaster = e.target.value; S.taxArm = ''; renderTax(); } });
   body.addEventListener('keydown', e => { if (e.key !== 'Enter') return; const t = e.target; if (t.dataset.new) { e.preventDefault(); body.querySelector('button[data-tx="add"][data-w="' + t.dataset.new + '"]').click(); } else if (t.dataset.ren) { e.preventDefault(); body.querySelector('button[data-tx="ren"][data-w="' + t.dataset.w + '"][data-i="' + t.dataset.i + '"]').click(); } });
   body.addEventListener('click', async e => {
-    const b = e.target.closest('button[data-tx]'); if (!b) return; const T = X.get(), w = b.dataset.w, i = Number(b.dataset.i), M = T.masters.slice(), SB = T.subs.map(x => ({ ...x }));
+    const b = e.target.closest('button[data-tx]'); if (!b) return; const T = X.get(), w = b.dataset.w, i = Number(b.dataset.i), M = T.masters.slice(), SB = T.subs.map(x => ({ ...x })), G = X.groups ? X.groups() : null;
     const subsOf = m => SB.filter(x => x.m === m), fm = X.f.m, fs = X.f.s;
     if (b.dataset.tx === 'add'){ const v = body.querySelector('input[data-new="' + w + '"]').value.trim(); if (!v) return;
-      if (w === 'm'){ if (M.some(x => x.toLowerCase() === v.toLowerCase())) return toast('That one is already in the list'); await run(() => X.save(M.concat(v), SB)); }
-      else { if (!S.taxMaster) return toast('Pick a master category first'); if (subsOf(S.taxMaster).some(x => x.n.toLowerCase() === v.toLowerCase())) return toast('That one is already in the list'); await run(() => X.save(M, SB.concat({ m: S.taxMaster, n: v }))); } return; }
+      if (w === 'm'){ if (M.some(x => x.toLowerCase() === v.toLowerCase())) return toast('That one is already in the list'); await run(() => X.save(M.concat(v), SB, G)); }
+      else { if (!S.taxMaster) return toast('Pick a master category first'); if (subsOf(S.taxMaster).some(x => x.n.toLowerCase() === v.toLowerCase())) return toast('That one is already in the list'); await run(() => X.save(M, SB.concat({ m: S.taxMaster, n: v }), G)); } return; }
     if (b.dataset.tx === 'ren'){ const inp = body.querySelector('input[data-ren][data-w="' + w + '"][data-i="' + i + '"]'), v = inp.value.trim();
       if (w === 'm'){ const old = M[i]; if (!v || v === old) return; if (M.some((x, j) => j !== i && x.toLowerCase() === v.toLowerCase())) return toast('That name is already in the list');
-        await run(async () => { const its = await X.find(fm, old); M[i] = v; SB.forEach(x => { if (x.m === old) x.m = v; }); await X.save(M, SB); await X.apply(its, { [fm]: v }); if (S.taxMaster === old) S.taxMaster = v; const n = X.count(its); toast('Renamed' + (n ? ' on ' + n + ' item' + (n === 1 ? '' : 's') : '')); }); }
+        await run(async () => { const its = await X.find(fm, old); M[i] = v; SB.forEach(x => { if (x.m === old) x.m = v; }); if (G) G.forEach(g => { g.masters = g.masters.map(x => x === old ? v : x); }); await X.save(M, SB, G); await X.apply(its, { [fm]: v }); if (S.taxMaster === old) S.taxMaster = v; const n = X.count(its); toast('Renamed' + (n ? ' on ' + n + ' item' + (n === 1 ? '' : 's') : '')); }); }
       else { const L = subsOf(S.taxMaster), item = L[i]; if (!item || !v || v === item.n) return; if (L.some((x, j) => j !== i && x.n.toLowerCase() === v.toLowerCase())) return toast('That name is already in the list');
-        await run(async () => { const its = await X.find(fs, item.n, S.taxMaster); SB.find(x => x.m === item.m && x.n === item.n).n = v; await X.save(M, SB); await X.apply(its, { [fs]: v }); const n = X.count(its); toast('Renamed' + (n ? ' on ' + n + ' item' + (n === 1 ? '' : 's') : '')); }); } return; }
+        await run(async () => { const its = await X.find(fs, item.n, S.taxMaster); SB.find(x => x.m === item.m && x.n === item.n).n = v; await X.save(M, SB, G); await X.apply(its, { [fs]: v }); const n = X.count(its); toast('Renamed' + (n ? ' on ' + n + ' item' + (n === 1 ? '' : 's') : '')); }); } return; }
     if (b.dataset.tx === 'del'){
       const isM = w === 'm', item = isM ? M[i] : subsOf(S.taxMaster)[i] && subsOf(S.taxMaster)[i].n; if (!item) return;
       await run(async () => { const its = isM ? await X.find(fm, item) : await X.find(fs, item, S.taxMaster), n = X.count(its), key = w + ':' + i;
         if (n && S.taxArm !== key){ S.taxArm = key; S.taxCount = n; renderTax(); return; }
         S.taxArm = '';
-        if (isM) await X.save(M.filter((x, j) => j !== i), SB.filter(x => x.m !== item)); else await X.save(M, SB.filter(x => !(x.m === S.taxMaster && x.n === item)));
+        if (isM) await X.save(M.filter((x, j) => j !== i), SB.filter(x => x.m !== item), G && G.map(g => ({ name: g.name, masters: g.masters.filter(x => x !== item) }))); else await X.save(M, SB.filter(x => !(x.m === S.taxMaster && x.n === item)), G);
         await X.apply(its, isM ? { [fm]: null, [fs]: null } : { [fs]: null }); toast('Removed'); });
     }
+  });
+}
+/* ── Manage categories (trivia): one tree — Category → Subcategory → Topic ── */
+async function openTree(){
+  const body = document.createElement('div'); body.id = 'treeBody';
+  const TS = { q: '', open: new Set(['Christmas']), docs: [], busy: false };
+  S.taxOpen = true;
+  openModal({ title: 'Manage categories', body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }], onClose: () => { S.taxOpen = false; S.taxTreeDraw = null; } });
+  body.textContent = 'Reading your questions…';
+  try { const snap = await getDocs(qColl()); TS.docs = snap.docs.map(d => ({ ref: d.ref, d: d.data() })); }
+  catch (e){ body.textContent = 'Couldn’t read the questions: ' + (e && e.message || e); return; }
+  const tri = x => normPath(x.d.masterCat, x.d.subCat, x.d.topic);
+  const clone = () => JSON.parse(JSON.stringify(taxTree()));
+  const nodeAt = (T, parts) => { let list = T, node = null; for (const p_ of parts){ node = list.find(x => x.n === p_); if (!node) return null; list = node.c; } return node; };
+  const listAt = (T, parts) => parts.length ? (nodeAt(T, parts) || { c: [] }).c : T;
+  const saveTree = T => run(() => setDoc(doc(db, 'triviaConfig', 'taxonomy'), { tree: T, updatedAt: serverTimestamp() }));
+  const stale = () => TS.docs.filter(x => { const n = tri(x); return n.m && (n.m !== (x.d.masterCat || '') || n.s !== (x.d.subCat || '') || n.t !== (x.d.topic || '')); });
+  const writeTri = async (items, fn) => {   // fn(triArray) mutates the three levels; writes them to each question
+    for (let i = 0; i < items.length; i += 400){
+      const b = writeBatch(db);
+      items.slice(i, i + 400).forEach(x => { const n = tri(x), a = [n.m, n.s, n.t]; fn(a); const patch = { masterCat: a[0] || deleteField(), subCat: a[1] || deleteField(), topic: a[2] || deleteField(), updatedAt: serverTimestamp() }; b.update(x.ref, patch); x.d = { ...x.d, masterCat: a[0], subCat: a[1], topic: a[2] }; });
+      await b.commit();
+    }
+  };
+  const under = parts => TS.docs.filter(x => { const n = tri(x), a = [n.m, n.s, n.t]; return parts.every((p_, i) => a[i] === p_); });
+  const toText = (L, d = 0) => L.map(x => '  '.repeat(d) + x.n + '\n' + toText(x.c, d + 1)).join('');
+  const fromText = txt => { const root = [], stack = [{ ind: -1, list: root }]; txt.split(/\r?\n/).forEach(line => { if (!line.trim()) return; const ind = line.match(/^[\t ]*/)[0].replace(/\t/g, '  ').length, n = line.trim(); while (stack.length > 1 && stack[stack.length - 1].ind >= ind) stack.pop(); const node = { n, c: [] }; const top = stack[stack.length - 1]; if (stack.length > 3) return; if (!top.list.some(x => x.n.toLowerCase() === n.toLowerCase())) top.list.push(node); stack.push({ ind, list: node.c }); }); return root; };
+  const st = 'padding:8px 11px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none';
+  const bs = 'padding:3px 10px;font-size:11px;letter-spacing:.04em';
+  const draw = () => {
+    const T = taxTree(), q = TS.q.trim().toLowerCase(), cnt = {};
+    TS.docs.forEach(x => { if (x.d.archived) return; const n = tri(x), a = [n.m, n.s, n.t].filter(Boolean); for (let i = 1; i <= a.length; i++){ const k = a.slice(0, i).join('||'); cnt[k] = (cnt[k] || 0) + 1; } });
+    const old = stale().length;
+    const anyHit = (node) => node.n.toLowerCase().includes(q) || node.c.some(anyHit);
+    let h = '';
+    const editRow = (depth, val, label) => `<div style="display:flex;gap:6px;align-items:center;padding:6px 0 6px ${depth * 26}px"><input type="text" id="trIn" value="${esc(val)}" autocomplete="off" style="${st};flex:1;min-width:0"><button class="btn primary" data-ta="ok">${label}</button><button class="btn ghost" data-ta="cancel">Cancel</button></div>`;
+    if (TS.edit && TS.edit.act === 'add' && !TS.edit.path) h += editRow(0, '', 'Add category');
+    const walk = (node, path, depth, ancHit) => {
+      const mine = !q || node.n.toLowerCase().includes(q); if (q && !ancHit && !mine && !node.c.some(anyHit)) return;
+      const open = q ? true : TS.open.has(path), kids = node.c.length;
+      h += `<div style="display:flex;align-items:center;gap:8px;padding:5px 0 5px ${depth * 26}px;border-bottom:1px solid var(--border)">${depth < 2 || kids ? `<button type="button" class="btn ghost sm" data-ta="open" data-p="${esc(path)}" style="padding:1px 8px;min-width:26px;${kids ? '' : 'opacity:.35'}" aria-label="Open or close">${kids ? (open ? '▾' : '▸') : '·'}</button>` : '<span style="width:26px;flex:none"></span>'}<span style="flex:1;min-width:0;${depth === 0 ? 'font-weight:700;font-size:15px;color:var(--gold2)' : depth === 1 ? 'font-weight:600' : ''}">${esc(node.n)}</span><span class="hint" style="margin:0;white-space:nowrap">${(cnt[path] || 0).toLocaleString()} q</span>${depth < 2 ? `<button class="btn ghost" style="${bs}" data-ta="add" data-p="${esc(path)}">+ ${depth === 0 ? 'Subcategory' : 'Topic'}</button>` : ''}<button class="btn ghost" style="${bs}" data-ta="ren" data-p="${esc(path)}">Rename</button><button class="btn ${TS.arm === path ? 'danger' : 'ghost'}" style="${bs}" data-ta="del" data-p="${esc(path)}">${TS.arm === path ? 'Really remove' + (cnt[path] ? ' (' + cnt[path] + ' q lose it)' : '') + '?' : 'Remove'}</button></div>`;
+      if (TS.edit && TS.edit.act === 'ren' && TS.edit.path === path) h += editRow(depth + 1, node.n, 'Save');
+      if (TS.edit && TS.edit.act === 'add' && TS.edit.path === path) h += editRow(depth + 1, '', 'Add ' + (depth === 0 ? 'subcategory' : 'topic'));
+      if (open) node.c.forEach(c => walk(c, path + '||' + c.n, depth + 1, ancHit || mine));
+    };
+    T.forEach(m => walk(m, m.n, 0, false));
+    body.innerHTML = `<p class="hint" style="margin-top:0">Three levels: <strong>Category</strong> (like Christmas) → <strong>Subcategory</strong> (Movies, Music…) → <strong>Topic</strong> (Comedy, Carols…). Each question gets one of each. Renaming changes it on every question that uses it.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:0 0 10px"><label class="fld" style="flex:1;min-width:220px">Search<input type="search" id="trQ" value="${esc(TS.q)}" autocomplete="off" style="${st}"></label><button class="btn" data-ta="addtop">+ New category</button><button class="btn ghost" data-ta="expand">Open all</button><button class="btn ghost" data-ta="collapse">Close all</button><button class="btn ghost" data-ta="text">Copy / paste whole list</button></div>
+      ${old ? `<div style="border:1px solid var(--gold2);border-radius:10px;padding:10px 12px;margin:0 0 10px"><b>${old.toLocaleString()}</b> question${old === 1 ? '' : 's'} still use the earlier layout (for example “Christmas Movies” as its own master category). <button class="btn primary" data-ta="migrate" style="margin-left:8px">Move them into this layout</button></div>` : ''}
+      <div>${h || '<div class="hint">Nothing matches that search.</div>'}</div>`;
+    const qi = body.querySelector('#trQ'); if (TS.focus){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
+    const ti = body.querySelector('#trIn'); if (ti && !TS.focus){ ti.focus(); ti.select(); }
+  };
+  S.taxTreeDraw = draw; draw();
+  body.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'trIn'){ e.preventDefault(); const ok = body.querySelector('button[data-ta="ok"]'); if (ok) ok.click(); } if (e.key === 'Escape' && e.target.id === 'trIn'){ e.stopPropagation(); const c = body.querySelector('button[data-ta="cancel"]'); if (c) c.click(); } });
+  body.addEventListener('input', e => { if (e.target.id === 'trQ'){ TS.q = e.target.value; TS.focus = true; draw(); } });
+  body.addEventListener('click', async e => {
+    const b = e.target.closest('button[data-ta]'); if (!b || TS.busy) return; TS.focus = false;
+    const act = b.dataset.ta, path = b.dataset.p || '', parts = path ? path.split('||') : [];
+    if (act === 'open'){ if (TS.open.has(path)) TS.open.delete(path); else TS.open.add(path); return draw(); }
+    if (act === 'expand'){ const all = (L, pre) => L.forEach(x => { const pth = pre ? pre + '||' + x.n : x.n; TS.open.add(pth); all(x.c, pth); }); all(taxTree(), ''); return draw(); }
+    if (act === 'collapse'){ TS.open.clear(); return draw(); }
+    TS.busy = true;
+    try {
+      if (act === 'addtop' || act === 'add'){ TS.edit = { act: 'add', path: act === 'addtop' ? '' : path }; TS.arm = ''; TS.busy = false; return draw(); }
+      else if (act === 'ren'){ TS.edit = { act: 'ren', path }; TS.arm = ''; TS.busy = false; return draw(); }
+      else if (act === 'cancel'){ TS.edit = null; TS.arm = ''; TS.busy = false; return draw(); }
+      else if (act === 'ok'){
+        const ed = TS.edit, v = (body.querySelector('#trIn') || {}).value; const val = String(v || '').trim(); if (!ed || !val){ TS.edit = null; TS.busy = false; return draw(); }
+        const eparts = ed.path ? ed.path.split('||') : [];
+        if (ed.act === 'add'){
+          const T = clone(), L = listAt(T, eparts); if (L.some(x => x.n.toLowerCase() === val.toLowerCase())){ toast('That name is already there'); return; }
+          L.push({ n: val, c: [] }); if (ed.path) TS.open.add(ed.path); TS.edit = null; await saveTree(T);
+        } else {
+          const old = eparts[eparts.length - 1]; if (val === old){ TS.edit = null; TS.busy = false; return draw(); }
+          const T = clone(), L = listAt(T, eparts.slice(0, -1)); if (L.some(x => x.n.toLowerCase() === val.toLowerCase() && x.n !== old)){ toast('That name is already there'); return; }
+          L.find(x => x.n === old).n = val; TS.edit = null;
+          await run(async () => { const its = under(eparts); await writeTri(its, a => { a[eparts.length - 1] = val; }); await setDoc(doc(db, 'triviaConfig', 'taxonomy'), { tree: T, updatedAt: serverTimestamp() }); toast('Renamed' + (its.length ? ' on ' + its.length + ' question' + (its.length === 1 ? '' : 's') : '')); });
+          const newKey = eparts.slice(0, -1).concat(val).join('||'); [...TS.open].forEach(k => { if (k === ed.path || k.startsWith(ed.path + '||')){ TS.open.delete(k); TS.open.add(newKey + k.slice(ed.path.length)); } });
+        }
+      } else if (act === 'del'){
+        const its = under(parts), name = parts[parts.length - 1];
+        if (TS.arm !== path){ TS.arm = path; TS.busy = false; return draw(); }
+        TS.arm = '';
+        const T = clone(), L = listAt(T, parts.slice(0, -1)), i = L.findIndex(x => x.n === name); if (i >= 0) L.splice(i, 1);
+        await run(async () => { await writeTri(its, a => { for (let k = parts.length - 1; k < 3; k++) a[k] = ''; }); await setDoc(doc(db, 'triviaConfig', 'taxonomy'), { tree: T, updatedAt: serverTimestamp() }); toast('Removed'); });
+      } else if (act === 'migrate'){
+        await run(async () => { const its = stale(); await writeTri(its, () => {}); toast(its.length.toLocaleString() + ' questions moved'); });
+      } else if (act === 'text'){
+        const area = document.createElement('div'); area.innerHTML = `<p class="hint" style="margin-top:0">One per line. Indent with two spaces: Category, then Subcategory, then Topic. Copy this to keep a backup, or edit it and click “Use this list” to replace the whole list. Questions are not changed.</p><textarea id="trTxt" rows="16" style="${st};width:100%;font-family:monospace"></textarea>`;
+        const ta = area.querySelector('textarea'); ta.value = toText(taxTree());
+        openModal({ title: 'Copy / paste whole list', body: area, wide: true, actions: [{ label: 'Cancel', onClick: () => { closeModal(); openTree(); } },
+          { label: 'Copy to clipboard', onClick: async () => { try { await navigator.clipboard.writeText(ta.value); toast('Copied'); } catch (e2){ ta.select(); toast('Press Ctrl/Cmd+C to copy'); } } },
+          { label: 'Use this list', primary: true, onClick: async () => { const T = fromText(ta.value); if (!T.length) return toast('The list is empty'); await saveTree(T); closeModal(); openTree(); } }] });
+        return;
+      }
+    } finally { TS.busy = false; }
+    draw();
+  });
+}
+function taxGroupEvents(body, X){
+  const saveG = G => run(() => setDoc(doc(db, 'triviaConfig', 'taxonomy'), { masters: taxNow().masters, subs: taxNow().subs, groups: G, updatedAt: serverTimestamp() }));
+  body.addEventListener('change', e => { const t = e.target; if (t.dataset.mg === undefined) return; const m = t.dataset.mg, G = X.groups(); G.forEach(g => { g.masters = g.masters.filter(x => x !== m); }); const g = G.find(x => x.name === t.value); if (g) g.masters.push(m); saveG(G); });
+  body.addEventListener('click', e => {
+    const b = e.target.closest('button[data-gx]'); if (!b) return; const G = X.groups(), i = Number(b.dataset.i);
+    if (b.dataset.gx === 'add'){ const v = body.querySelector('input[data-gnew]').value.trim(); if (!v) return; if (G.some(g => g.name.toLowerCase() === v.toLowerCase())) return toast('That group already exists'); G.push({ name: v, masters: [] }); saveG(G); }
+    else if (b.dataset.gx === 'ren'){ const v = body.querySelector('input[data-gname="' + i + '"]').value.trim(); if (!v || !G[i] || v === G[i].name) return; if (G.some((g, j) => j !== i && g.name.toLowerCase() === v.toLowerCase())) return toast('That group already exists'); G[i].name = v; saveG(G); }
+    else if (b.dataset.gx === 'del'){ if (!G[i]) return; if (b.dataset.arm !== '1'){ b.dataset.arm = '1'; b.textContent = 'Really remove?'; return; } G.splice(i, 1); saveG(G); }
   });
 }
 function renderTax(){
   const el = $('#taxBody'), X = S.taxCtx; if (!el || !X) return; const T = X.get(), M = T.masters;
   if (S.taxMaster && !M.includes(S.taxMaster)) S.taxMaster = '';
   const st = 'flex:1;min-width:0;padding:8px 11px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none';
-  const row = (w, i, name, arm) => `<div style="display:flex;gap:6px;align-items:center;margin:0 0 5px"><input type="text" data-ren="1" data-w="${w}" data-i="${i}" value="${esc(name)}" style="${st}"><button class="btn ghost" data-tx="ren" data-w="${w}" data-i="${i}">Rename</button><button class="btn ${arm ? 'danger' : 'ghost'}" data-tx="del" data-w="${w}" data-i="${i}">${arm ? 'Clear from ' + S.taxCount + '?' : 'Remove'}</button></div>`;
+  const GR = X.groups ? groupsOf(T) : [];
+  const row = (w, i, name, arm) => `<div style="display:flex;gap:6px;align-items:center;margin:0 0 5px"><input type="text" data-ren="1" data-w="${w}" data-i="${i}" value="${esc(name)}" style="${st}">${w === 'm' && X.groups ? `<select data-mg="${esc(name)}" aria-label="Group for ${esc(name)}" style="padding:6px 8px;max-width:150px"><option value="">(no group)</option>${GR.filter(g => !g.auto).map(g => `<option ${g.masters.includes(name) ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}</select>` : ''}<button class="btn ghost" data-tx="ren" data-w="${w}" data-i="${i}">Rename</button><button class="btn ${arm ? 'danger' : 'ghost'}" data-tx="del" data-w="${w}" data-i="${i}">${arm ? 'Clear from ' + S.taxCount + '?' : 'Remove'}</button></div>`;
   const add = w => `<div style="display:flex;gap:6px;margin-top:6px"><input type="text" data-new="${w}" style="${st}" autocomplete="off"><button class="btn" data-tx="add" data-w="${w}">Add</button></div>`;
   const subs = T.subs.filter(x => x.m === S.taxMaster);
-  el.innerHTML = `<p class="hint" style="margin-top:0">Each item has one master category and one subcategory (plus tags for anything else). Renaming changes it everywhere it is used. Removing clears it from the items that use it.</p>
+  const grpBlock = X.groups ? `<div style="font-weight:700;margin-bottom:6px">Groups <span class="hint" style="font-weight:400">(the top level, like Christmas — each master category below can sit in one)</span></div>${X.groups().map((g, i) => `<div style="display:flex;gap:6px;align-items:center;margin:0 0 5px"><input type="text" data-gname="${i}" value="${esc(g.name)}" style="${st}"><span class="hint" style="margin:0;white-space:nowrap">${g.masters.length} libraries</span><button class="btn ghost" data-gx="ren" data-i="${i}">Rename</button><button class="btn ghost" data-gx="del" data-i="${i}">Remove</button></div>`).join('')}<div style="display:flex;gap:6px;margin:6px 0 18px"><input type="text" data-gnew="1" style="${st}" autocomplete="off"><button class="btn" data-gx="add">Add group</button></div>` : '';
+  el.innerHTML = grpBlock + `<p class="hint" style="margin-top:0">Each item has one master category and one subcategory (plus tags for anything else). Renaming changes it everywhere it is used. Removing clears it from the items that use it.</p>
     <div style="font-weight:700;margin-bottom:6px">Master categories</div>${M.map((m, i) => row('m', i, m, S.taxArm === 'm:' + i)).join('')}${add('m')}
     <div style="font-weight:700;margin:18px 0 6px">Subcategories of <select id="taxMasterSel" style="padding:6px 10px"><option value="">pick a master category…</option>${M.map(m => `<option ${m === S.taxMaster ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div>
     ${S.taxMaster ? subs.map((x, i) => row('s', i, x.n, S.taxArm === 's:' + i)).join('') + add('s') : ''}`;
@@ -2501,7 +2652,7 @@ async function openSorter(kind){
     const scope = body.querySelector('input[name=sortScope]:checked').value, items = [];
     if (isT){
       const snap = await getDocs(scope === 'here' ? query(qColl(), where('categoryId', '==', S.curId)) : qColl());
-      snap.docs.forEach(d => { const q = d.data(); if (q.archived) return; const cn = (S.cats.get(q.categoryId) || {}).name || ''; const res = sortQuestion(q, cn); items.push({ ref: d.ref, d: q, res, label: String(q.question || '').slice(0, 90) }); });
+      snap.docs.forEach(d => { const q = d.data(); if (q.archived) return; const cn = (S.cats.get(q.categoryId) || {}).name || ''; const res = sortQuestion(q, cn); items.push({ ref: d.ref, d: q, res: res && (() => { const n = normPath(res.master, res.sub, ''); return { ...res, master: n.m, sub: n.s, topic: n.t }; })(), label: String(q.question || '').slice(0, 90) }); });
     } else {
       for (const l of B.lists.values()){ if (scope === 'here' && l.id !== B.curId) continue; l.songs.forEach((x, i) => { items.push({ listId: l.id, i, d: x, res: sortSong(x, l.name), label: x.t + ' — ' + x.a }); }); }
     }
@@ -2510,7 +2661,7 @@ async function openSorter(kind){
   const mk = (it) => {   // what would change for one item
     if (!it.res) return null; const d = it.d, r = it.res, m = isT ? r.master : r.cat, patch = {};
     const fm = isT ? 'masterCat' : 'c', fs = isT ? 'subCat' : 'sc', ft = isT ? 'tags' : 'g';
-    if (m && !d[fm]){ patch[fm] = m; if (r.sub && !d[fs]) patch[fs] = r.sub; }
+    if (m && !d[fm]){ patch[fm] = m; if (r.sub && !d[fs]) patch[fs] = r.sub; if (isT && r.topic && !d.topic) patch.topic = r.topic; }
     else if (m && d[fm] === m && r.sub && !d[fs]) patch[fs] = r.sub;
     const have = new Set((d[ft] || []).map(x => String(x).toLowerCase())), add = r.tags.filter(t => !have.has(t));
     if (add.length) patch[ft] = [...(d[ft] || []), ...add];
@@ -2533,7 +2684,7 @@ async function openSorter(kind){
       await run(async () => {
         const before = [];
         if (isT){
-          const fields = ['masterCat', 'subCat', 'tags'];
+          const fields = ['masterCat', 'subCat', 'topic', 'tags'];
           for (let i = 0; i < plan.length; i += 400){ const b = writeBatch(db); plan.slice(i, i + 400).forEach(x => { b.update(x.it.ref, { ...x.patch, updatedAt: serverTimestamp() }); before.push({ ref: x.it.ref, prev: Object.fromEntries(fields.map(f => [f, x.it.d[f] === undefined ? null : x.it.d[f]])) }); }); await b.commit(); }
           undo = async () => { for (let i = 0; i < before.length; i += 400){ const b = writeBatch(db); before.slice(i, i + 400).forEach(u => { const p = {}; for (const f in u.prev) p[f] = u.prev[f] == null ? deleteField() : u.prev[f]; b.update(u.ref, p); }); await b.commit(); } };
         } else {
@@ -2550,7 +2701,7 @@ async function openSorter(kind){
   });
   openModal({ title: isT ? 'Sort my questions' : 'Sort my songs', body, wide: true, actions: [{ label: 'Close', primary: true, onClick: closeModal }] });
 }
-$('#taxBtn').addEventListener('click', () => openTax(TXC.trivia));
+$('#taxBtn').addEventListener('click', () => openTree());
 $('#sortBtn').addEventListener('click', () => openSorter('trivia'));
 $('#tagsBtn').addEventListener('click', () => openTags(TGC.trivia));
 $('#playBtn').addEventListener('click', openPlayable);
@@ -2670,7 +2821,7 @@ function openImport(){
         seen.set(key, { set, idm, done: new Set(), used: false });
       }
       const g = seen.get(key);
-      for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)){ en.dupCount++; const ex = g.idm.get(k); if (ex && !g.done.has(k) && (rec.masterCat || rec.subCat || (rec.tags && rec.tags.length))){ g.done.add(k); en.toUpd.push({ id: ex.__id, ex, rec }); } } else { g.set.add(k); en.toAdd.push(rec); } }
+      for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)){ en.dupCount++; const ex = g.idm.get(k); if (ex && !g.done.has(k) && (rec.masterCat || rec.subCat || rec.topic || (rec.tags && rec.tags.length))){ g.done.add(k); en.toUpd.push({ id: ex.__id, ex, rec }); } } else { g.set.add(k); en.toAdd.push(rec); } }
       en.status = badName(en) ? 'Needs a real category name' : destCat ? `Adds to “${destCat.name}”` : cat ? `Adds to existing` : g.used ? 'Merges with file above' : 'New category';
       if (en.parsed.layout) en.status += ' · ' + en.parsed.layout;
       g.used = true;
@@ -2740,6 +2891,7 @@ function openImport(){
             const patch = { updatedAt: serverTimestamp() };
             if (u.rec.masterCat) patch.masterCat = u.rec.masterCat;
             if (u.rec.subCat) patch.subCat = u.rec.subCat;
+            if (u.rec.topic) patch.topic = u.rec.topic;
             if (u.rec.tags && u.rec.tags.length) patch.tags = [...new Set([...(Array.isArray(u.ex.tags) ? u.ex.tags : []), ...u.rec.tags])];
             batch.update(doc(qColl(), u.id), patch);
           });
@@ -3198,7 +3350,7 @@ const pInView = q => {
   if (P.diff && (q.diff || '') !== P.diff) return false;
   if (P.fmt && (q.format || '') !== P.fmt) return false;
   const t = P.q.trim().toLowerCase();
-  return !t || [q.q, q.a, q.format, q.category, q.subject, q.explain, ...pList(q.alts)].join(' ').toLowerCase().includes(t);
+  return !t || [q.q, q.a, q.format, q.category, q.subject, q.explain, q.masterCat, q.subCat, q.topic, ...pList(q.tags), ...pList(q.alts)].join(' ').toLowerCase().includes(t);
 };
 function renderPicMain(){
   const has = P.cur === 'all' || P.cur === 'none' || P.secs.has(P.cur);
@@ -3219,7 +3371,7 @@ function renderPicMain(){
   const rows = [...P.qs.entries()].filter(([, q]) => pInView(q)).sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
   $('#pStats').textContent = rows.length === all.length ? `${all.length} question${all.length === 1 ? '' : 's'}` : `${rows.length} of ${all.length} shown`;
   $$('#pDiffChips button').forEach(b => b.classList.toggle('on', b.dataset.d === P.diff));
-  $('#pGrid tbody').innerHTML = rows.map(([id, q]) => `<tr data-id="${esc(id)}"><td class="th">${q.url ? `<img loading="lazy" referrerpolicy="no-referrer" src="${esc(q.url)}" alt="">` : ''}</td><td><div class="q">${esc(q.q || '')}</div></td><td>${esc(q.a || '')}${pList(q.alts).length ? `<div class="m" style="font-size:11.5px;color:var(--text3)">also: ${esc(pList(q.alts).join(', '))}</div>` : ''}</td><td class="m">${esc(q.format || '')}</td><td class="m">${esc(q.subject || '')}</td><td>${q.diff ? `<span class="pDiff ${q.diff.split(' ')[0]}">${esc(pDiffLabel(q.diff))}</span>` : ''}</td><td class="m">${esc(q.rights || '')}</td>${real ? '' : `<td class="m">${esc(pSecName(q.section || ''))}</td>`}</tr>`).join('');
+  $('#pGrid tbody').innerHTML = rows.map(([id, q]) => `<tr data-id="${esc(id)}"><td class="th">${q.url ? `<img loading="lazy" referrerpolicy="no-referrer" src="${esc(q.url)}" alt="">` : ''}</td><td><div class="q">${esc(q.q || '')}</div></td><td>${esc(q.a || '')}${pList(q.alts).length ? `<div class="m" style="font-size:11.5px;color:var(--text3)">also: ${esc(pList(q.alts).join(', '))}</div>` : ''}</td><td class="m">${esc(q.format || '')}</td><td class="m">${esc(q.subject || '')}</td><td class="m">${esc([q.masterCat, q.subCat, q.topic].filter(Boolean).join(' › '))}</td><td class="m" style="max-width:200px">${esc(pList(q.tags).join(', '))}</td><td>${q.diff ? `<span class="pDiff ${q.diff.split(' ')[0]}">${esc(pDiffLabel(q.diff))}</span>` : ''}</td><td class="m">${esc(q.rights || '')}</td>${real ? '' : `<td class="m">${esc(pSecName(q.section || ''))}</td>`}</tr>`).join('');
   const none = $('#pNone'); none.classList.toggle('hidden', rows.length > 0);
   none.textContent = all.length ? 'No questions match.' : (real ? 'No questions in this section yet. Press “+ Add question” or “Bulk add”.' : 'No picture questions yet. Make a section, then add questions.');
 }
@@ -3258,16 +3410,20 @@ function picForm(q){
     <label class="fld">Subject${pSel('pfSub', 'subject', q.subject || '')}</label>
     <label class="fld">Difficulty<select id="pfDiff"><option value=""></option>${P_DIFFS.map(([v, l]) => `<option value="${v}" ${q.diff === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label class="fld">Image rights${pSel('pfRights', 'rights', q.rights || '')}</label>
+    <label class="fld">Master category<select id="pfM">${pickOpts({ list: 'master' }, q.masterCat || '')}</select></label>
+    <label class="fld">Subcategory<select id="pfS">${pickOpts({ list: 'sub' }, q.subCat || '')}</select></label>
+    <label class="fld">Topic<select id="pfT">${pickOpts({ list: 'topic' }, q.topic || '')}</select></label>
+    <label class="fld wide">Tags (comma separated)<input type="text" id="pfTags" value="${esc(pList(q.tags).join(', '))}" autocomplete="off"></label>
     <label class="fld wide">Explanation (optional host note, only you see it)<textarea id="pfExp">${esc(q.explain || '')}</textarea></label>
     ${dl('dlCat', P_CATS.concat(all.map(x => x.category).filter(Boolean)))}${dl('dlFmt', P_FORMATS.concat(all.map(x => x.format).filter(Boolean)))}${dl('dlSub', P_SUBJECTS.concat(all.map(x => x.subject).filter(Boolean)))}
   </div><div class="hint hidden" id="pfErr" style="color:var(--red);margin:0"></div>`;
 }
 function readPicForm(){
   const v = id => ($('#' + id).value || '');
-  return { url: v('pfUrl').trim(), q: v('pfQ').replace(/\r\n?/g, '\n').trim(), a: v('pfA').trim(), section: v('pfSec'), alts: pSplitAlts(v('pfAlts')), category: v('pfCat').trim(), format: v('pfFmt').trim(), subject: v('pfSub').trim(), diff: v('pfDiff'), rights: v('pfRights'), explain: v('pfExp').replace(/\r\n?/g, '\n').trim(), reveal: v('pfRev').trim() };
+  return { url: v('pfUrl').trim(), q: v('pfQ').replace(/\r\n?/g, '\n').trim(), a: v('pfA').trim(), section: v('pfSec'), alts: pSplitAlts(v('pfAlts')), category: v('pfCat').trim(), format: v('pfFmt').trim(), subject: v('pfSub').trim(), diff: v('pfDiff'), rights: v('pfRights'), masterCat: v('pfM'), subCat: v('pfS'), topic: v('pfT'), tags: parseTags(v('pfTags')), explain: v('pfExp').replace(/\r\n?/g, '\n').trim(), reveal: v('pfRev').trim() };
 }
 const picRec = (d, old) => { const o = { url: d.url, a: d.a, section: d.section || null, updatedAt: Date.now(), createdAt: (old && old.createdAt) || Date.now() };
-  o.q = d.q || null; o.alts = d.alts.length ? d.alts : null; o.category = d.category || null; o.format = d.format || null; o.subject = d.subject || null; o.diff = d.diff || null; o.rights = d.rights || null; o.explain = d.explain || null; o.reveal = pOkUrl(d.reveal) ? d.reveal : null; return o; };
+  o.q = d.q || null; o.alts = d.alts.length ? d.alts : null; o.category = d.category || null; o.format = d.format || null; o.subject = d.subject || null; o.diff = d.diff || null; o.rights = d.rights || null; { const n = normPath(d.masterCat, d.subCat, d.topic); o.masterCat = n.m || null; o.subCat = n.s || null; o.topic = n.t || null; } o.tags = d.tags && d.tags.length ? d.tags : null; o.explain = d.explain || null; o.reveal = pOkUrl(d.reveal) ? d.reveal : null; return o; };
 function openPicEditor(id){
   const old = id ? P.qs.get(id) : null, base = old || { section: P.secs.has(P.cur) ? P.cur : '' };
   const body = document.createElement('div'); body.innerHTML = picForm(base);
@@ -3289,12 +3445,77 @@ function openPicEditor(id){
 }
 $('#pAdd').addEventListener('click', () => openPicEditor(null));
 $('#pGrid tbody').addEventListener('click', e => { const tr = e.target.closest('tr'); if (tr) openPicEditor(tr.dataset.id); });
+const PIC_COLS = [['Image URL', 'url'], ['Question', 'q'], ['Correct Answer', 'a'], ['Accepted Answers', 'alts'], ['Round Format', 'format'], ['Subject', 'subject'], ['Difficulty', 'diff'], ['Main Category', 'category'], ['Image Rights', 'rights'], ['Explanation', 'explain'], ['Reveal Image URL', 'reveal'], ['Section', 'section'], ['Master Category', 'masterCat'], ['Subcategory', 'subCat'], ['Topic', 'topic'], ['Tags', 'tags']];
+const PIC_HDR = { imageurl: 'url', url: 'url', image: 'url', imagelink: 'url', question: 'q', correctanswer: 'a', answer: 'a', acceptedanswers: 'alts', variableanswers: 'alts', roundformat: 'format', format: 'format', subject: 'subject', difficulty: 'diff', maincategory: 'category', category: 'category', imagerights: 'rights', rights: 'rights', explanation: 'explain', revealimageurl: 'reveal', revealimage: 'reveal', section: 'section', mastercategory: 'masterCat', subcategory: 'subCat', topic: 'topic', tags: 'tags' };
+$('#pExport').addEventListener('click', () => {
+  const items = [...P.qs.entries()].filter(([, q]) => P.cur === 'all' ? true : P.cur === 'none' ? (!q.section || !P.secs.has(q.section)) : q.section === P.cur).sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
+  if (!items.length) return toast('Nothing to export here');
+  const cell = (q, k) => k === 'alts' ? pList(q.alts).join('; ') : k === 'tags' ? pList(q.tags).join(', ') : k === 'section' ? ((P.secs.get(q.section) || {}).name || '') : (q[k] == null ? '' : q[k]);
+  const csv = '﻿' + [PIC_COLS.map(c => csvEscape(c[0])).join(',')].concat(items.map(([, q]) => PIC_COLS.map(c => csvEscape(cell(q, c[1]))).join(','))).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = (P.cur === 'all' ? 'All pictures' : pSecName(P.cur)).replace(/[^\w\- ]+/g, '') + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast('Exported ' + items.length + ' question' + (items.length === 1 ? '' : 's'));
+});
+$('#pImport').addEventListener('click', () => {
+  const body = document.createElement('div'); let plan = null;
+  body.innerHTML = `<p class="hint" style="margin-top:0">Drop a picture CSV (the one from <strong>Export CSV</strong>, after ChatGPT has filled in the categories and tags). Each row is matched to your existing question by its <strong>Image URL</strong>, so nothing is duplicated. Existing questions get their Master Category, Subcategory, Topic and Tags filled in (existing tags are kept), plus any Round Format, Subject, Difficulty, Main Category or Image Rights that are still empty. Nothing else is changed.</p>
+    <div class="drop" id="piDrop"><input type="file" id="piFile" accept=".csv,text/csv"><div class="muted" style="margin-top:8px;font-size:12px">…or drag a CSV onto this box</div></div>
+    <label class="chk" style="margin:10px 0"><input type="checkbox" id="piNew" checked> Also add rows whose image isn’t in the Vault yet (into the Section named in the CSV, or the one open now)</label>
+    <div id="piNote" class="hint"></div><div class="msg" id="piMsg"></div>`;
+  const actions = [{ label: 'Cancel', onClick: closeModal }, { label: 'Import', primary: true, onClick: () => go() }];
+  openModal({ title: 'Import picture CSV', body, wide: true, actions }); const btn = actions[1].el; btn.disabled = true;
+  const byUrl = new Map([...P.qs.entries()].map(([id, q]) => [String(q.url || '').trim(), [id, q]]));
+  const build = () => {
+    if (!plan) return; const withNew = $('#piNew').checked; plan.upd = plan.rows.filter(r => r.hit); plan.add = withNew ? plan.rows.filter(r => !r.hit && pOkUrl(r.d.url) && r.d.a) : [];
+    plan.skip = plan.rows.length - plan.upd.length - plan.add.length;
+    $('#piNote').innerHTML = `<strong>${plan.upd.length.toLocaleString()}</strong> existing question${plan.upd.length === 1 ? '' : 's'} will be updated · <strong>${plan.add.length.toLocaleString()}</strong> new · ${plan.skip.toLocaleString()} skipped`;
+    btn.disabled = !plan.upd.length && !plan.add.length;
+  };
+  const read = async f => {
+    const rows = parseCSV(await f.text()); if (rows.length < 2){ $('#piNote').textContent = 'That file looks empty.'; return; }
+    const map = rows[0].map(h => PIC_HDR[norm(h)] || null), keys = new Map();   // later copy of a repeated column only fills a blank
+    plan = { rows: [] };
+    rows.slice(1).forEach(r => {
+      if (r.every(x => !String(x).trim())) return; const d = {};
+      map.forEach((k, i) => { if (!k) return; const v = String(r[i] == null ? '' : r[i]).trim(); if (v || d[k] === undefined) d[k] = d[k] || v; });
+      d.url = (d.url || '').trim(); const hit = byUrl.get(d.url);
+      plan.rows.push({ d, hit: hit || null });
+    });
+    build();
+  };
+  $('#piFile').addEventListener('change', e => { if (e.target.files[0]) read(e.target.files[0]); });
+  const drop = $('#piDrop'); ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); })); ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => { if (e.dataTransfer.files[0]) read(e.dataTransfer.files[0]); });
+  $('#piNew').addEventListener('change', build);
+  async function go(){
+    btn.disabled = true; const msg = $('#piMsg'); msg.className = 'msg ok'; msg.textContent = 'Saving…';
+    try {
+      const ups = {}, now = Date.now();
+      plan.upd.forEach(({ d, hit: [id, q] }) => {
+        const n = normPath(d.masterCat, d.subCat, d.topic), base = PIC_Q + '/' + id;
+        if (n.m) ups[base + '/masterCat'] = n.m; if (n.s) ups[base + '/subCat'] = n.s; if (n.t) ups[base + '/topic'] = n.t;
+        const tags = [...new Set([...pList(q.tags), ...parseTags(d.tags || '')])]; if (tags.length) ups[base + '/tags'] = tags;
+        ['format', 'subject', 'category', 'rights'].forEach(k => { if (d[k] && !q[k]) ups[base + '/' + k] = d[k]; });
+        const df = String(d.diff || '').toLowerCase().replace(/^extra[\s-]*hard$/, 'extra hard'); if (df && !q.diff && P_DIFFS.some(x => x[0] === df)) ups[base + '/diff'] = df;
+        ups[base + '/updatedAt'] = now;
+      });
+      const secByName = new Map([...P.secs.entries()].map(([id, v]) => [String(v.name || '').trim().toLowerCase(), id]));
+      plan.add.forEach(({ d }, i) => {
+        const key = rpush(rref(rtdb, PIC_Q)).key, sid = secByName.get(String(d.section || '').trim().toLowerCase()) || (P.secs.has(P.cur) ? P.cur : '');
+        const rec = picRec({ url: d.url, q: (d.q || '').slice(0, 200), a: d.a, section: sid, alts: String(d.alts || '').split(/[;\n]/).map(v => v.trim()).filter(Boolean), category: d.category || '', format: d.format || '', subject: d.subject || '', diff: String(d.diff || '').toLowerCase().replace(/^extra[\s-]*hard$/, 'extra hard'), rights: d.rights || '', explain: d.explain || '', reveal: d.reveal || '', masterCat: d.masterCat || '', subCat: d.subCat || '', topic: d.topic || '', tags: parseTags(d.tags || '') }, null);
+        ups[PIC_Q + '/' + key] = { ...rec, createdAt: now + i };
+      });
+      for (const [k, v] of Object.entries(ups)) if (v === undefined) delete ups[k];
+      await rupdate(rref(rtdb), ups);
+      msg.textContent = `Done — ${plan.upd.length.toLocaleString()} updated, ${plan.add.length.toLocaleString()} added.`; btn.textContent = 'Close'; btn.disabled = false; btn.onclick = closeModal;
+    } catch (e){ btn.disabled = false; pErr(e); }
+  }
+});
 $('#pOpts').addEventListener('click', openPicOptions);
 $('#pBulk').addEventListener('click', () => {
   const secOpts = '<option value="">(No section)</option>' + pSecs().map(([id, v]) => `<option value="${esc(id)}" ${P.cur === id ? 'selected' : ''}>${esc(v.name)}</option>`).join('');
   const body = document.createElement('div');
   body.innerHTML = `<p class="hint" style="margin-top:0">One question per line, parts separated by a vertical bar ( | ). Only the image link and the correct answer are needed; leave the rest empty if you like (keep the bars). Several accepted answers are separated by semicolons.</p>
-    <pre class="hint" style="margin:0 0 12px;padding:10px;border:1px solid var(--border);border-radius:9px;white-space:pre-wrap;color:var(--gold2)">image link | question | correct answer | accepted answers | round format | subject | difficulty | main category | image rights | explanation | reveal image</pre>
+    <pre class="hint" style="margin:0 0 12px;padding:10px;border:1px solid var(--border);border-radius:9px;white-space:pre-wrap;color:var(--gold2)">image link | question | correct answer | accepted answers | round format | subject | difficulty | main category | image rights | explanation | reveal image | master category | subcategory | topic | tags (commas)</pre>
     <label class="fld">Add them to<select id="pbSec">${secOpts}</select></label>
     <label class="fld">Questions<textarea id="pbIn" style="min-height:220px;width:100%;padding:10px 13px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none"></textarea></label>
     <div class="hint" id="pbErr" style="color:var(--red);white-space:pre-line;margin:0"></div>`;
@@ -3302,7 +3523,7 @@ $('#pBulk').addEventListener('click', () => {
     const sec = $('#pbSec').value, er = $('#pbErr'), bad = [], recs = [];
     $('#pbIn').value.split('\n').map(l => l.trim()).filter(Boolean).forEach((l, i) => {
       const x = l.split('|').map(v => v.trim()); if (/^image link\b/i.test(x[0])) return;
-      const d = { url: x[0], q: (x[1] || '').slice(0, 200), a: x[2] || '', alts: (x[3] || '').split(';').map(v => v.trim()).filter(Boolean), format: x[4] || '', subject: x[5] || '', diff: ((x[6] || '').toLowerCase().replace(/^extra[\s-]*hard$/, 'extra hard')), category: x[7] || '', rights: pOpts('rights').find(r => r.toLowerCase() === (x[8] || '').toLowerCase()) || (x[8] || ''), explain: x[9] || '', reveal: x[10] || '', section: sec };
+      const d = { url: x[0], q: (x[1] || '').slice(0, 200), a: x[2] || '', alts: (x[3] || '').split(';').map(v => v.trim()).filter(Boolean), format: x[4] || '', subject: x[5] || '', diff: ((x[6] || '').toLowerCase().replace(/^extra[\s-]*hard$/, 'extra hard')), category: x[7] || '', rights: pOpts('rights').find(r => r.toLowerCase() === (x[8] || '').toLowerCase()) || (x[8] || ''), explain: x[9] || '', reveal: x[10] || '', masterCat: x[11] || '', subCat: x[12] || '', topic: x[13] || '', tags: parseTags(x[14] || ''), section: sec };
       if (!pOkUrl(d.url)) return bad.push(`Line ${i + 1}: the image link must start with https://`);
       if (!d.a) return bad.push(`Line ${i + 1}: the correct answer is missing`);
       if (d.diff && !P_DIFFS.some(p => p[0] === d.diff)) d.diff = '';
