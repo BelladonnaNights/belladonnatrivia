@@ -2589,7 +2589,7 @@ const existingCache = new Map();
 async function ensureExisting(catId){
   if (!existingCache.has(catId)){
     const snap = await getDocs(query(qColl(), where('categoryId', '==', catId)));
-    existingCache.set(catId, snap.docs.map(d => d.data()));
+    existingCache.set(catId, snap.docs.map(d => ({ ...d.data(), __id: d.id })));
   }
   return existingCache.get(catId);
 }
@@ -2605,6 +2605,7 @@ function openImport(){
       <select id="impDest"><option value="">Each file becomes its own category (name from the file)</option>${[...S.cats.values()].filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => `<option value="${esc(c.id)}">Add to: ${esc(c.name)}</option>`).join('')}</select></label>
     <label class="fld" style="max-width:300px">Type for new categories
       <select id="impType">${typeList().map(t => `<option ${S.cats.get(S.curId)?.type === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+    <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="impUpd" checked> <span>Also <strong>update questions I already have</strong> — fill in Master Category, Subcategory and Tags from the CSV (matches by question text; nothing else is changed, existing tags are kept)</span></label>
     <div id="impPv"></div><div id="impNote" class="hint"></div><div class="msg" id="impMsg"></div>`;
   const actions = [{ label: 'Cancel', onClick: closeModal }, { label: 'Import', primary: true, onClick: () => doImport() }];
   openModal({ title: 'Import CSVs', body, wide: true, actions });
@@ -2624,6 +2625,7 @@ function openImport(){
   ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
   ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
   drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
+  $('#impUpd').addEventListener('change', () => recompute());
   $('#impDest').addEventListener('change', e => { st.entries.forEach(en => { en.dest = e.target.value; }); recompute(); });
   const badName = en => !en.dest && isGenericName(en.name);
   $('#impType').addEventListener('change', e => { st.entries.forEach(en => { if (!en.dest && !catByNorm(en.name)) en.type = e.target.value; }); recompute(); });
@@ -2631,18 +2633,18 @@ function openImport(){
   async function recompute(){
     const my = ++st.ver, seen = new Map();
     for (const en of st.entries){
-      en.toAdd = []; en.dupCount = 0; en.status = '';
+      en.toAdd = []; en.toUpd = []; en.dupCount = 0; en.status = '';
       if (en.parsed.error){ en.status = en.parsed.error; continue; }
       const destCat = en.dest ? S.cats.get(en.dest) : null;
       if (en.dest && !destCat){ en.status = 'That category no longer exists'; en.parsed = Object.assign({}, en.parsed, { error: en.status }); continue; }
       const key = en.dest ? 'id:' + en.dest : normName(en.name), cat = destCat || catByNorm(en.name);
       if (!seen.has(key)){
-        const set = new Set();
-        if (cat){ const ex = await ensureExisting(cat.id); ex.forEach(q => set.add(normQ(q.question))); if (my !== st.ver) return; }
-        seen.set(key, { set, used: false });
+        const set = new Set(), idm = new Map();
+        if (cat){ const ex = await ensureExisting(cat.id); ex.forEach(q => { set.add(normQ(q.question)); idm.set(normQ(q.question), q); }); if (my !== st.ver) return; }
+        seen.set(key, { set, idm, used: false });
       }
       const g = seen.get(key);
-      for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)) en.dupCount++; else { g.set.add(k); en.toAdd.push(rec); } }
+      for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)){ en.dupCount++; const ex = g.idm.get(k); if (ex && !ex.__seen && (rec.masterCat || rec.subCat || (rec.tags && rec.tags.length))){ ex.__seen = 1; en.toUpd.push({ id: ex.__id, ex, rec }); } } else { g.set.add(k); en.toAdd.push(rec); } }
       en.status = badName(en) ? 'Needs a real category name' : destCat ? `Adds to “${destCat.name}”` : cat ? `Adds to existing` : g.used ? 'Merges with file above' : 'New category';
       if (en.parsed.layout) en.status += ' · ' + en.parsed.layout;
       g.used = true;
@@ -2675,7 +2677,9 @@ function openImport(){
       (newCols.length ? `<br>Extra columns found: ${newCols.map(c => `<strong>${esc(c.label)}</strong>`).join(', ')} — they'll be added as custom columns.` : '') +
       (merging ? `<br><span style="color:var(--gold2)">${merging} file${merging === 1 ? '' : 's'} share a category name with another file and will be merged into it. If that's not what you want, rename them.</span>` : '') +
       (generic ? `<br><span style="color:var(--danger)">${generic} file${generic === 1 ? ' has' : 's have'} a generic name like "Sheet1". Type the real category name before importing.</span>` : '') : '';
-    importBtn.disabled = (!newQ && !newCols.length) || generic > 0;
+    const updN = $('#impUpd') && $('#impUpd').checked ? ok.reduce((n, e) => n + (e.toUpd ? e.toUpd.length : 0), 0) : 0;
+    if (updN) $('#impNote').innerHTML += `<br><strong>${updN.toLocaleString()}</strong> existing questions will get their Master Category / Subcategory / Tags updated.`;
+    importBtn.disabled = (!newQ && !newCols.length && !updN) || generic > 0;
     if (keep){ const el = $(`#impPv input[data-f="name"][data-i="${keep.i}"]`); if (el){ el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} } }
   }
   $('#impPv').addEventListener('input', e => { const i = e.target.dataset.i; if (i === undefined) return; if (e.target.dataset.f === 'name') { st.entries[i].name = e.target.value; clearTimeout(st.t); st.t = setTimeout(recompute, 450); } });
@@ -2690,8 +2694,8 @@ function openImport(){
       const newCols = [...new Map(ok.flatMap(e => e.parsed.newCols).map(c => [c.key, c])).values()].map(({ key, label, type }) => ({ key, label, type }));
       if (newCols.length) await saveCustom([...S.custom, ...newCols]);
       const groups = new Map();
-      ok.forEach(e => { const dc = e.dest ? S.cats.get(e.dest) : null; const k = e.dest ? 'id:' + e.dest : normName(e.name); if (!groups.has(k)) groups.set(k, { name: (dc ? dc.name : e.name).trim(), type: e.type, dest: e.dest || '', adds: [] }); groups.get(k).adds.push(...e.toAdd); });
-      let done = 0, total = 0;
+      ok.forEach(e => { const dc = e.dest ? S.cats.get(e.dest) : null; const k = e.dest ? 'id:' + e.dest : normName(e.name); if (!groups.has(k)) groups.set(k, { name: (dc ? dc.name : e.name).trim(), type: e.type, dest: e.dest || '', adds: [], upds: [] }); groups.get(k).adds.push(...e.toAdd); if ($('#impUpd').checked) groups.get(k).upds.push(...(e.toUpd || [])); });
+      let done = 0, total = 0, updated = 0;
       for (const [k, g] of groups){
         msg.textContent = `Importing ${++done} of ${groups.size}: ${g.name}…`;
         let cat = g.dest ? S.cats.get(g.dest) : catByNorm(g.name), id, order = 1;
@@ -2704,8 +2708,19 @@ function openImport(){
         }
         if (g.adds.length) await updateDoc(catRef(id), { questionCount: increment(g.adds.length), archived: false, updatedAt: serverTimestamp() });
         total += g.adds.length;
+        for (let i = 0; i < g.upds.length; i += 400){
+          const batch = writeBatch(db);
+          g.upds.slice(i, i + 400).forEach(u => {
+            const patch = { updatedAt: serverTimestamp() };
+            if (u.rec.masterCat) patch.masterCat = u.rec.masterCat;
+            if (u.rec.subCat) patch.subCat = u.rec.subCat;
+            if (u.rec.tags && u.rec.tags.length) patch.tags = [...new Set([...(Array.isArray(u.ex.tags) ? u.ex.tags : []), ...u.rec.tags])];
+            batch.update(doc(qColl(), u.id), patch);
+          });
+          await batch.commit(); updated += Math.min(400, g.upds.length - i);
+        }
       }
-      msg.textContent = `Done — ${total.toLocaleString()} questions imported into ${groups.size} categor${groups.size === 1 ? 'y' : 'ies'}.`;
+      msg.textContent = `Done — ${updated ? updated.toLocaleString() + ' existing questions updated, ' : ''}${total.toLocaleString()} new questions imported into ${groups.size} categor${groups.size === 1 ? 'y' : 'ies'}.`;
       importBtn.textContent = 'Close'; importBtn.disabled = false; importBtn.onclick = closeModal;
       if (S.curId) { const cur = S.curId; S.curId = null; selectCategory(cur); }
     } catch (err){
