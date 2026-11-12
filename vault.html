@@ -1504,6 +1504,454 @@ const TREE_SPEC = {
   'Wordplay & Puzzles': { 'Riddles': [], 'Anagrams & Scrambles': [], 'Finish the Phrase': [], 'Rebus & Emoji': [], 'Common Sayings': [], 'Brain Teasers': [], 'Fill in the Blank': [], 'Name That ___': [], 'Odd One Out': [], 'Math & Logic': [], 'Acronyms & Initials': [], 'Alphabet Games': [] },
   'Everyday Life': { 'Home & Garden': [], 'Health & Fitness': [], 'Jobs & Careers': [], 'Money': [], 'Etiquette & Manners': [], 'Hobbies & Crafts': [], 'School & Education': [], 'Weddings & Relationships': [] }
 };
+/* Tailored to the Vault's real category list */
+delete TREE_SPEC['Music & Artists'];
+Object.assign(TREE_SPEC, {
+ "Music": {
+  "Music by Decade": [
+   "2000s Music",
+   "2020s Hits",
+   "60s Hits",
+   "70s Hits",
+   "60s & 70s Music",
+   "80s Hits",
+   "90s Hits",
+   "Hits from '85 to '95"
+  ],
+  "Music by Genre": [
+   "Alternative Rock",
+   "90s Alt Rock",
+   "90s Grunge",
+   "Classic Rock",
+   "Motown & R&B",
+   "Power Ballads",
+   "Musicals & Showtunes",
+   "Disney Songs",
+   "Arena Anthems",
+   "Cover Songs",
+   "Love Songs"
+  ],
+  "Songs by Theme": [
+   "Action Songs",
+   "Air & Space Songs",
+   "Angel & Devil Songs",
+   "Animal Bands & Songs",
+   "Astronomy Songs",
+   "Color Songs",
+   "Comedy Songs",
+   "Commercial Songs",
+   "Crime Songs",
+   "Crush Songs",
+   "Death Songs",
+   "Drinking Songs",
+   "Drug Songs",
+   "Emotions Songs",
+   "Fighting Songs",
+   "God Songs",
+   "Water Songs",
+   "Hookup Songs",
+   "Location Songs",
+   "Naughty Songs",
+   "Numbers in Artists or Songs",
+   "Spooky & Horror Songs",
+   "Villain Songs",
+   "Weapons Songs",
+   "Women's Name Songs",
+   "Winning Songs",
+   "Songs About Time",
+   "Made in the USA",
+   "Baseball Team Name Songs",
+   "Basketball Team Name Songs"
+  ],
+  "Artists & Bands": [
+   "Artists Who Died",
+   "On-Screen Talent (Musicians)",
+   "Local Bands & Artists",
+   "Worst Songs & Bands Ever",
+   "Music Legends",
+   "Band Names & Origins"
+  ],
+  "Music on Screen": [
+   "TV Theme Songs",
+   "Video Game Music",
+   "Movie & TV Soundtracks",
+   "Broadway Cast Albums"
+  ],
+  "Music Mini Games": [
+   "Among Us: Band Edition",
+   "Cover Song Origins",
+   "Dead or Alive",
+   "Finish the Lyrics",
+   "Lords & Lyrics",
+   "Music Geography",
+   "Musical Synopsis",
+   "Name That Collab",
+   "Name That Noise",
+   "Level Up",
+   "Before They Were Famous"
+  ]
+ },
+ "Movies & Television": {
+  "Action & Adventure": [
+   "Action Movies",
+   "Adventure Movies",
+   "Fists, Fury & Firepower",
+   "Adrenaline on Screen"
+  ],
+  "Comedy & Rom-Coms": [
+   "Rom-Coms",
+   "Chick Flicks",
+   "Comedians",
+   "Comedy Actors"
+  ],
+  "Horror & Thrillers": [
+   "Scary Movies",
+   "Creature Features",
+   "Vampire Movies",
+   "Thrillers",
+   "Witchcore"
+  ],
+  "Sci-Fi, Space & Aliens": [
+   "Sci-Fi",
+   "Space Movies",
+   "Alien Movies",
+   "Galactic Battles",
+   "Dystopia",
+   "Chronological Confusion (Time Travel)"
+  ],
+  "Animated & Family": [
+   "Disney Movies",
+   "Disney General",
+   "Adult Animation",
+   "Anime",
+   "Animal Movies"
+  ],
+  "Superheroes & Comics": [
+   "Comic Book Movies & Shows",
+   "Batman",
+   "Movie Villains"
+  ],
+  "Coming of Age & High School": [
+   "High School Movies",
+   "Coming of Age Movies",
+   "Competitive Movies"
+  ],
+  "Crime & Mob on Screen": [
+   "Crime Movies",
+   "Crime Shows",
+   "Mob & Gangsters",
+   "The Art of Murder"
+  ],
+  "Westerns": [
+   "Western Round-Up"
+  ],
+  "Sports Movies": [
+   "Football Movies",
+   "Sports Movies"
+  ],
+  "Romance & Tearjerkers": [
+   "Reel Heartbreak",
+   "Rom-Coms"
+  ],
+  "Water, Weather & Disaster": [
+   "Underwater Movies",
+   "Water Movies",
+   "Storms on Screen"
+  ],
+  "Movie Business & Lists": [
+   "Box Office Hits",
+   "Worst Movies",
+   "Be Kind, Rewind",
+   "Number Movies",
+   "Location Movies",
+   "High Life Movies",
+   "Book-to-Screen Adaptations"
+  ],
+  "Sitcoms": [
+   "90s Sitcoms",
+   "Workplace Sitcoms",
+   "Mockumentary Madness",
+   "CW Shows"
+  ],
+  "Dramas & Teen TV": [
+   "Medical TV & Movies",
+   "Monsters, Magic & Melodrama (Teen Fantasy)",
+   "Mystery & Crime TV"
+  ],
+  "TV History & Culture": [
+   "Channel Surfers",
+   "Reality TV",
+   "Game Shows",
+   "Late Night",
+   "TV Commercials"
+  ],
+  "Actors & Talent": [
+   "On-Screen Talent",
+   "Actors & Actresses",
+   "Before They Were Famous"
+  ]
+ },
+ "Fandoms & Themed Trivia": {
+  "TV Comedy Fandoms": [
+   "Friends",
+   "The Office",
+   "Schitt's Creek",
+   "New Girl",
+   "Golden Girls",
+   "Will & Grace",
+   "The Big Bang Theory",
+   "Bob's Burgers",
+   "South Park",
+   "That 70's Show",
+   "Gilmore Girls",
+   "Sex and the City",
+   "Psych",
+   "Glee"
+  ],
+  "TV Drama & Fantasy Fandoms": [
+   "Game of Thrones",
+   "Stranger Things",
+   "Buffy the Vampire Slayer",
+   "The Vampire Diaries",
+   "Teen Wolf",
+   "Supernatural",
+   "Charmed",
+   "Grimm",
+   "American Horror Story",
+   "Walking Dead",
+   "Yellowstone",
+   "Sons of Anarchy",
+   "Grey's Anatomy",
+   "Bridgerton",
+   "Once Upon a Time",
+   "The Witcher"
+  ],
+  "Movie & Book Fandoms": [
+   "Harry Potter",
+   "Lord of the Rings",
+   "Star Wars",
+   "Hunger Games",
+   "The Princess Bride",
+   "Batman",
+   "Grease",
+   "Shrek",
+   "The Wizard of Oz",
+   "Pirates of the Caribbean",
+   "Hocus Pocus",
+   "Mean Girls",
+   "Wicked",
+   "Twilight",
+   "Stephen King"
+  ],
+  "Artist Tributes": [
+   "Taylor Swift",
+   "Lady Gaga",
+   "Dolly Parton",
+   "Ozzy Osbourne",
+   "Grateful Dead"
+  ],
+  "Sports Fandoms": [
+   "WWE"
+  ]
+ },
+ "Decades & Nostalgia": {
+  "1960s & 1970s": [
+   "60s & 70s Trivia",
+   "Woodstock & Moon Landing",
+   "Disco Era"
+  ],
+  "1980s": [
+   "80s Trivia",
+   "MTV & Arcades"
+  ],
+  "1990s": [
+   "90s Trivia",
+   "90s Sitcoms",
+   "90s Alt Rock",
+   "Video Store Era"
+  ],
+  "2000s": [
+   "2000s Trivia",
+   "Flip Phones & iPods"
+  ]
+ },
+ "Books & Literature": {
+  "Bestsellers & Authors": [
+   "Bestsellers",
+   "Authors",
+   "Stephen King"
+  ],
+  "Banned & Challenged Books": [
+   "Banned Books"
+  ],
+  "Mystery & Thriller Books": [
+   "Thriller & Mystery Books"
+  ],
+  "Romance & Spicy Books": [
+   "Spicy Book Trivia",
+   "Romantasy & BookTok"
+  ],
+  "Fantasy & Dystopian Books": [
+   "Fantasy Books",
+   "Dystopia"
+  ],
+  "Book-to-Screen": [
+   "Print to Premiere"
+  ],
+  "General Book Knowledge": [
+   "General Knowledge Book Trivia",
+   "Famous Opening Lines",
+   "Literary Awards"
+  ]
+ },
+ "Crime & Mystery": {
+  "True Crime": [
+   "Famous Cases",
+   "Serial Killers",
+   "Forensics & DNA",
+   "Heists"
+  ],
+  "Mob & Gangsters": [
+   "Organized Crime",
+   "Famous Gangsters"
+  ],
+  "Whodunits & Detectives": [
+   "Murder Mysteries",
+   "Famous Detectives"
+  ],
+  "Crime & Punishment": [
+   "Famous Trials",
+   "Prisons & Punishment"
+  ],
+  "Firearms & Western Outlaws": [
+   "Bang Bang",
+   "Outlaws & Gunslingers"
+  ]
+ },
+ "Science & Nature": {
+  "Space & Astronomy": [
+   "Across the Cosmos",
+   "Planets & Stars",
+   "Space Exploration"
+  ],
+  "Animals & Wildlife": [
+   "Animal Planet",
+   "Ocean Life",
+   "Birds",
+   "Insects"
+  ],
+  "Plants & Botany": [
+   "Deadly or Delicious?",
+   "Beautiful but Deadly",
+   "Poison in History",
+   "The Witch's Garden",
+   "Don't Touch That!",
+   "Plants That Eat Things",
+   "Plants with Criminal Records",
+   "The Deadly Dinner Party",
+   "The Victorian Poison Garden",
+   "Nature's Weirdest Defenses",
+   "Real or Made Up?",
+   "A Bouquet of Bad Omens",
+   "Classic Botanical Horror",
+   "Plants in Pop Culture"
+  ],
+  "Dinosaurs & Prehistory": [],
+  "Human Body": [],
+  "Weather": [],
+  "Chemistry": [],
+  "Physics": [],
+  "Earth Science": [],
+  "Technology & Inventions": [],
+  "Math & Numbers": [],
+  "Medicine": []
+ },
+ "Geography & History": {
+  "Around the World": [
+   "World Capitals",
+   "Countries & Continents",
+   "Landmarks",
+   "Flags",
+   "Languages"
+  ],
+  "Pacific Northwest Knowledge": [
+   "Mount Rainier & Puget Sound",
+   "Seattle",
+   "Tacoma",
+   "Local Landmarks",
+   "Local History"
+  ],
+  "U.S. History & Fun Facts": [
+   "Presidents",
+   "State Nicknames",
+   "The Constitution",
+   "Symbols & Landmarks"
+  ],
+  "Military History": [
+   "Branches & Ranks",
+   "D-Day & World Wars",
+   "Military Equipment"
+  ],
+  "Ancient & World History": [
+   "Ancient History",
+   "Medieval Times",
+   "Royalty",
+   "Explorers"
+  ]
+ },
+ "Games & Pop Culture": {
+  "Video Games": [
+   "Pixel Quest",
+   "Nintendo",
+   "PlayStation & Xbox",
+   "Minecraft"
+  ],
+  "Pop Culture": [
+   "Celebrities",
+   "Internet Trends & Memes",
+   "Iconic Ads",
+   "Viral Fads"
+  ],
+  "Worst of the Worst": [
+   "Spectacular Failures",
+   "Awards-Show Mishaps"
+  ],
+  "World of Color": [
+   "Colors in Science & Art",
+   "Colors in Pop Culture"
+  ],
+  "Fairy Tales & Myths": [
+   "Magic & Myth",
+   "Once Upon a Trivia Time",
+   "Greek Myths",
+   "King Arthur"
+  ],
+  "Wordplay & Mini Games": [
+   "Riddles",
+   "Finish the Phrase",
+   "Name That ___",
+   "Odd One Out"
+  ]
+ },
+ "Sports": {
+  "Football": [],
+  "Super Bowl": [
+   "Halftime Shows",
+   "Super Bowl Commercials",
+   "Famous Upsets"
+  ],
+  "Basketball": [],
+  "Baseball": [],
+  "Hockey": [],
+  "Soccer": [],
+  "Olympics": [],
+  "Famous Athletes": [],
+  "Pacific Northwest Sports": []
+ },
+ "General Knowledge": {
+  "General Knowledge": []
+ }
+});
 const TREE_DEFAULT = Object.entries(TREE_SPEC).map(([m, subs]) => ({ n: m, c: Object.entries(subs).map(([sn, topics]) => ({ n: sn, c: topics.map(t => ({ n: t, c: [] })) })) }));
 /* Adds anything in `add` that `cur` doesn't have yet (by name, any case), never removing or renaming. Returns how many nodes were added. */
 function mergeTree(cur, add){ let n = 0; add.forEach(a => { let m = cur.find(x => x.n.toLowerCase() === a.n.toLowerCase()); if (!m){ cur.push({ n: a.n, c: [] }); m = cur[cur.length - 1]; n++; } n += mergeTree(m.c, a.c); }); return n; }
