@@ -1957,18 +1957,51 @@ const TREE_RAW = Object.entries(TREE_SPEC).map(([m, subs]) => ({ n: m, c: Object
 
 /* Overlapping categories merged into one each. mapPath() turns an old Category/Subcategory/Topic path into the merged one (longest matching rule wins). */
 const MERGE_RULES = [[["Geography & Travel"], ["Geography & History"]], [["History"], ["Geography & History"]], [["Geography & History", "Around the World"], ["Geography & History"]], [["Geography & History", "Around the World", "Landmarks"], ["Geography & History", "Famous Landmarks"]], [["Geography & History", "Around the World", "Languages"], ["Geography & History", "Languages of the World"]], [["Geography & History", "Pacific Northwest Knowledge"], ["Pacific Northwest"]], [["Geography & History", "Pacific Northwest Knowledge", "Mount Rainier & Puget Sound"], ["Pacific Northwest", "Nature & Parks"]], [["Geography & History", "Pacific Northwest Knowledge", "Tacoma"], ["Pacific Northwest", "Tacoma & South Sound"]], [["Geography & History", "Pacific Northwest Knowledge", "Local Landmarks"], ["Pacific Northwest", "Local History"]], [["Geography & History", "U.S. History & Fun Facts"], ["Geography & History"]], [["Geography & History", "U.S. History & Fun Facts", "Presidents"], ["Geography & History", "U.S. Presidents"]], [["Geography & History", "U.S. History & Fun Facts", "State Nicknames"], ["Geography & History", "U.S. States & Capitals"]], [["Geography & History", "U.S. History & Fun Facts", "The Constitution"], ["Geography & History", "American History"]], [["Geography & History", "U.S. History & Fun Facts", "Symbols & Landmarks"], ["Geography & History", "Famous Landmarks"]], [["Geography & History", "Ancient & World History"], ["Geography & History"]], [["Literature & Language"], ["Books & Literature"]], [["Books & Literature", "Bestsellers & Authors"], ["Books & Literature", "Authors"]], [["Books & Literature", "Bestsellers & Authors", "Authors"], ["Books & Literature", "Authors"]], [["Books & Literature", "Bestsellers & Authors", "Stephen King"], ["Fandoms & Themed Trivia", "Movie & Book Fandoms", "Stephen King"]], [["Books & Literature", "Fantasy & Dystopian Books", "Dystopia"], ["Books & Literature", "Fantasy & Dystopian Books", "Dystopian Books"]], [["Games & Pop Culture"], ["Pop Culture & Celebrities"]], [["Games & Pop Culture", "Pop Culture"], ["Pop Culture & Celebrities"]], [["Games & Pop Culture", "Pop Culture", "Celebrities"], ["Pop Culture & Celebrities", "Celebrity Trivia"]], [["Games & Pop Culture", "Pop Culture", "Internet Trends & Memes"], ["Pop Culture & Celebrities", "Memes & Viral Moments"]], [["Games & Pop Culture", "Pop Culture", "Iconic Ads"], ["Pop Culture & Celebrities", "Advertising & Slogans"]], [["Games & Pop Culture", "Pop Culture", "Viral Fads"], ["Pop Culture & Celebrities", "Fads & Trends"]], [["Games & Pop Culture", "Video Games"], ["Video Games & Toys"]], [["Games & Pop Culture", "Worst of the Worst"], ["Pop Culture & Celebrities", "Worst of the Worst"]], [["Games & Pop Culture", "World of Color"], ["Pop Culture & Celebrities", "World of Color"]], [["Games & Pop Culture", "Fairy Tales & Myths"], ["Fairy Tales & Fantasy"]], [["Games & Pop Culture", "Fairy Tales & Myths", "Magic & Myth"], ["Fairy Tales & Fantasy", "Wizards & Magic"]], [["Games & Pop Culture", "Fairy Tales & Myths", "Once Upon a Trivia Time"], ["Fairy Tales & Fantasy", "Classic Fairy Tales"]], [["Games & Pop Culture", "Fairy Tales & Myths", "Greek Myths"], ["Fairy Tales & Fantasy", "Mythology & Legends", "Greek Myths"]], [["Games & Pop Culture", "Fairy Tales & Myths", "King Arthur"], ["Fairy Tales & Fantasy", "Mythology & Legends", "King Arthur"]], [["Games & Pop Culture", "Wordplay & Mini Games"], ["Wordplay & Puzzles"]], [["The 1990s"], ["Decades & Nostalgia", "1990s"]], [["The 1990s", "90s Movies"], ["Decades & Nostalgia", "1990s", "Movies"]], [["The 1990s", "90s Television"], ["Decades & Nostalgia", "1990s", "Television"]], [["The 1990s", "90s Music"], ["Decades & Nostalgia", "1990s", "Music"]], [["The 1990s", "90s Fashion"], ["Decades & Nostalgia", "1990s", "Fashion"]], [["The 1990s", "90s Toys & Games"], ["Decades & Nostalgia", "1990s", "Toys & Games"]], [["The 1990s", "90s Technology"], ["Decades & Nostalgia", "1990s", "Technology"]], [["The 1990s", "90s Slang & Catchphrases"], ["Decades & Nostalgia", "1990s", "Slang & Catchphrases"]], [["The 1990s", "90s Events & News"], ["Decades & Nostalgia", "1990s", "Events & News"]], [["The 1990s", "90s Cartoons"], ["Decades & Nostalgia", "1990s", "Cartoons"]], [["The 1990s", "90s Food & Drink"], ["Decades & Nostalgia", "1990s", "Food & Drink"]], [["Music Through the Decades"], ["Decades & Nostalgia"]], [["Music Through the Decades", "1950s"], ["Decades & Nostalgia", "1950s", "Music"]], [["Music Through the Decades", "1960s"], ["Decades & Nostalgia", "1960s", "Music"]], [["Music Through the Decades", "1970s"], ["Decades & Nostalgia", "1970s", "Music"]], [["Music Through the Decades", "1980s"], ["Decades & Nostalgia", "1980s", "Music"]], [["Music Through the Decades", "1990s"], ["Decades & Nostalgia", "1990s", "Music"]], [["Music Through the Decades", "2000s"], ["Decades & Nostalgia", "2000s", "Music"]], [["Music Through the Decades", "2010s"], ["Decades & Nostalgia", "2010s", "Music"]], [["Music Through the Decades", "2020s"], ["Decades & Nostalgia", "2020s", "Music"]], [["Decades & Nostalgia", "1960s & 1970s"], ["Decades & Nostalgia", "1970s"]], [["Decades & Nostalgia", "1960s & 1970s", "60s & 70s Trivia"], ["Decades & Nostalgia", "1960s"]], [["Decades & Nostalgia", "1960s & 1970s", "Woodstock & Moon Landing"], ["Decades & Nostalgia", "1960s", "Woodstock & Moon Landing"]], [["Decades & Nostalgia", "1960s & 1970s", "Disco Era"], ["Decades & Nostalgia", "1970s", "Disco Era"]], [["Decades & Nostalgia", "1980s", "80s Trivia"], ["Decades & Nostalgia", "1980s"]], [["Decades & Nostalgia", "1990s", "90s Trivia"], ["Decades & Nostalgia", "1990s"]], [["Decades & Nostalgia", "1990s", "90s Sitcoms"], ["Decades & Nostalgia", "1990s", "Sitcoms"]], [["Decades & Nostalgia", "1990s", "90s Alt Rock"], ["Decades & Nostalgia", "1990s", "Alt Rock"]], [["Decades & Nostalgia", "2000s", "2000s Trivia"], ["Decades & Nostalgia", "2000s"]], [["Movies & Television", "Superheroes & Comics", "Batman"], ["Fandoms & Themed Trivia", "Movie & Book Fandoms", "Batman"]], [["Movies & Television", "Romance & Tearjerkers", "Rom-Coms"], ["Movies & Television", "Comedy & Rom-Coms", "Rom-Coms"]], [["Music", "Music Mini Games", "Before They Were Famous"], ["Movies & Television", "Actors & Talent", "Before They Were Famous"]]];
-function mapPath(path){
+function mapPath(path, rules = MERGE_RULES){
   let best = null;
-  for (const [from, to] of MERGE_RULES){ if (from.length <= path.length && from.every((x, i) => x === path[i]) && (!best || from.length > best[0].length)) best = [from, to]; }
+  for (const [from, to] of rules){ if (from.length <= path.length && from.every((x, i) => x === path[i]) && (!best || from.length > best[0].length)) best = [from, to]; }
   if (!best) return path;
   const out = [...best[1], ...path.slice(best[0].length)];
   return out.slice(0, 3);
 }
-function applyMerges(tree){
+function applyMerges(tree, rules = MERGE_RULES){
   const out = [];
-  const walk = (L, pre) => L.forEach(x => { const path = [...pre, x.n]; const m = mapPath(path); mergeTree(out, [m.reduceRight((acc, n) => ({ n, c: acc ? [acc] : [] }), null)]); walk(x.c, path); });
+  const walk = (L, pre) => L.forEach(x => { const path = [...pre, x.n]; const m = mapPath(path, rules); mergeTree(out, [m.reduceRight((acc, n) => ({ n, c: acc ? [acc] : [] }), null)]); walk(x.c, path); });
   walk(tree, []);
   return out;
+}
+/* Which review group each merge rule belongs to */
+const MERGE_GROUPS = [
+  ['geo', 'Geography & Travel → Geography & History', 'Geography & Travel becomes part of Geography & History.'],
+  ['hist', 'History → Geography & History', 'History becomes part of Geography & History, so history and geography live together.'],
+  ['geo2', 'Tidy up inside Geography & History', 'The old "Around the World" and "U.S. History & Fun Facts" subcategories are folded into the main list, and the Pacific Northwest items move to the Pacific Northwest category.'],
+  ['lit', 'Literature & Language → Books & Literature', 'Literature & Language becomes part of Books & Literature.'],
+  ['lit2', 'Tidy up inside Books & Literature', 'Bestsellers & Authors becomes Authors, Stephen King moves to Fandoms, and Dystopia becomes Dystopian Books.'],
+  ['pop', 'Games & Pop Culture → Pop Culture & Celebrities', 'Its Pop Culture items, Worst of the Worst and World of Color move into Pop Culture & Celebrities.'],
+  ['vg', 'Games & Pop Culture › Video Games → Video Games & Toys', 'Its video games move into Video Games & Toys.'],
+  ['ft', 'Games & Pop Culture › Fairy Tales & Myths → Fairy Tales & Fantasy', 'Its fairy tales and myths move into Fairy Tales & Fantasy.'],
+  ['wp', 'Games & Pop Culture › Wordplay → Wordplay & Puzzles', 'Its wordplay items move into Wordplay & Puzzles.'],
+  ['d90', 'The 1990s → Decades & Nostalgia › 1990s', 'The 1990s becomes the 1990s subcategory of Decades & Nostalgia (90s Movies becomes the topic Movies, and so on).'],
+  ['dmus', 'Music Through the Decades → Decades & Nostalgia', 'Each decade becomes a subcategory of Decades & Nostalgia, with the topic Music.'],
+  ['dtidy', 'Tidy up inside Decades & Nostalgia', '"1960s & 1970s" is split into 1960s and 1970s, and the "90s Trivia"-style topics are simplified.'],
+  ['bat', 'Batman → Fandoms & Themed Trivia', 'Batman lives only under Fandoms, not under Superheroes & Comics.'],
+  ['rom', 'Rom-Coms → Comedy & Rom-Coms', 'Rom-Coms lives only under Comedy & Rom-Coms, not under Romance & Tearjerkers.'],
+  ['bfw', 'Before They Were Famous → Actors & Talent', 'Before They Were Famous lives only under Actors & Talent, not in Music Mini Games.']
+];
+function mergeGroupOf(from){
+  const [a, b] = from;
+  if (a === 'Geography & Travel') return 'geo';
+  if (a === 'History') return 'hist';
+  if (a === 'Geography & History') return 'geo2';
+  if (a === 'Literature & Language') return 'lit';
+  if (a === 'Books & Literature') return 'lit2';
+  if (a === 'Games & Pop Culture') return b === 'Video Games' ? 'vg' : b === 'Fairy Tales & Myths' ? 'ft' : b === 'Wordplay & Mini Games' ? 'wp' : 'pop';
+  if (a === 'The 1990s') return 'd90';
+  if (a === 'Music Through the Decades') return 'dmus';
+  if (a === 'Decades & Nostalgia') return 'dtidy';
+  if (a === 'Movies & Television' && from[2] === 'Batman') return 'bat';
+  if (a === 'Movies & Television') return 'rom';
+  return 'bfw';
 }
 const TREE_DEFAULT = applyMerges(TREE_RAW);
 /* Adds anything in `add` that `cur` doesn't have yet (by name, any case), never removing or renaming. Returns how many nodes were added. */
@@ -3137,6 +3170,39 @@ async function openTree(){
       await b.commit();
     }
   };
+
+  function mergeReview(){
+    const byG = new Map(MERGE_GROUPS.map(g => [g[0], { g, rules: [], qs: [], seen: new Set(), nodes: 0 }]));
+    MERGE_RULES.forEach(r => byG.get(mergeGroupOf(r[0])).rules.push(r));
+    const flat = []; (function w(L, pre){ L.forEach(x => { const pa = [...pre, x.n]; flat.push(pa); w(x.c, pa); }); })(taxTree(), []);
+    byG.forEach(o => {
+      o.nodes = flat.filter(pa => { const b = mapPath(pa, o.rules); return b.join('||') !== pa.join('||'); }).length;
+      const cnt = new Map();
+      TS.docs.forEach(x => { const n = tri(x), a = [n.m, n.s, n.t].filter(Boolean); if (!a.length) return; const b = mapPath(a, o.rules); if (b.join('||') === a.join('||')) return; const k = a.join(' › ') + '  →  ' + b.join(' › '); cnt.set(k, (cnt.get(k) || 0) + 1); });
+      o.cnt = cnt; o.total = [...cnt.values()].reduce((n, v) => n + v, 0);
+    });
+    const live = [...byG.values()].filter(o => o.nodes || o.total);
+    const body = document.createElement('div');
+    if (!live.length){ body.innerHTML = '<p class="hint">Nothing left to merge. Your categories already match.</p>'; openModal({ title: 'Merge overlapping categories', body, actions: [{ label: 'Back', primary: true, onClick: () => { closeModal(); openTree(); } }] }); return; }
+    body.innerHTML = `<p class="hint" style="margin-top:0">Tick the merges you want and untick the ones you don’t. Nothing changes until you press <b>Merge checked</b>. Only the category labels on your questions are updated. No question leaves its game.</p>` +
+      live.map(o => `<label style="display:block;border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:0 0 8px;cursor:pointer"><span style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" data-g="${o.g[0]}" checked style="margin-top:4px"><span style="flex:1;min-width:0"><b>${esc(o.g[1])}</b><br><span class="hint" style="margin:2px 0 0;display:block">${esc(o.g[2])}</span><span class="hint" style="margin:4px 0 0;display:block"><b>${o.total.toLocaleString()}</b> question${o.total === 1 ? '' : 's'} would be relabeled</span>${o.total ? `<details style="margin-top:4px" onclick="event.stopPropagation()"><summary style="cursor:pointer;font-size:12px;color:var(--text3)">See what moves</summary><div style="font-size:12px;max-height:150px;overflow:auto;margin-top:4px">${[...o.cnt.entries()].sort((a, b) => b[1] - a[1]).slice(0, 40).map(([k, v]) => `<div>${esc(k)} <b>(${v})</b></div>`).join('')}</div></details>` : ''}</span></span></label>`).join('') + '<div class="msg" id="mgMsg"></div>';
+    const actions = [{ label: 'Cancel', onClick: () => { closeModal(); openTree(); } }, { label: 'Merge checked', primary: true, onClick: () => go() }];
+    openModal({ title: 'Merge overlapping categories', body, wide: true, actions });
+    const goBtn = actions[1].el, cancelBtn = actions[0].el;
+    async function go(){
+      const keys = [...body.querySelectorAll('input[data-g]:checked')].map(i => i.dataset.g);
+      if (!keys.length) return toast('Nothing is ticked');
+      const rules = keys.flatMap(k => byG.get(k).rules);
+      goBtn.disabled = true; cancelBtn.disabled = true; const msg = body.querySelector('#mgMsg'); msg.className = 'msg ok'; msg.textContent = 'Merging…';
+      try {
+        const T = applyMerges(clone(), rules);
+        const its = TS.docs.filter(x => { const n = tri(x), a = [n.m, n.s, n.t].filter(Boolean), b = mapPath(a, rules); return a.length && b.join('||') !== a.join('||'); });
+        await setDoc(doc(db, 'triviaConfig', 'taxonomy'), { tree: T, updatedAt: serverTimestamp() });
+        await writeTri(its, a => { const b = mapPath(a.filter(Boolean), rules); a[0] = b[0] || ''; a[1] = b[1] || ''; a[2] = b[2] || ''; });
+        toast('Merged — ' + its.length.toLocaleString() + ' questions updated'); closeModal(); openTree();
+      } catch (err){ console.error(err); msg.className = 'msg'; msg.textContent = 'Stopped: ' + err.message; goBtn.disabled = false; cancelBtn.disabled = false; }
+    }
+  }
   const under = parts => TS.docs.filter(x => { const n = tri(x), a = [n.m, n.s, n.t]; return parts.every((p_, i) => a[i] === p_); });
   const toText = (L, d = 0) => L.map(x => '  '.repeat(d) + x.n + '\n' + toText(x.c, d + 1)).join('');
   const fromText = txt => { const root = [], stack = [{ ind: -1, list: root }]; txt.split(/\r?\n/).forEach(line => { if (!line.trim()) return; const ind = line.match(/^[\t ]*/)[0].replace(/\t/g, '  ').length, n = line.trim(); while (stack.length > 1 && stack[stack.length - 1].ind >= ind) stack.pop(); const node = { n, c: [] }; const top = stack[stack.length - 1]; if (stack.length > 3) return; if (!top.list.some(x => x.n.toLowerCase() === n.toLowerCase())) top.list.push(node); stack.push({ ind, list: node.c }); }); return root; };
@@ -3175,17 +3241,7 @@ async function openTree(){
     if (act === 'open'){ if (TS.open.has(path)) TS.open.delete(path); else TS.open.add(path); return draw(); }
     if (act === 'expand'){ const all = (L, pre) => L.forEach(x => { const pth = pre ? pre + '||' + x.n : x.n; TS.open.add(pth); all(x.c, pth); }); all(taxTree(), ''); return draw(); }
     if (act === 'collapse'){ TS.open.clear(); return draw(); }
-    if (act === 'merge'){
-      if (!TS.mergeArm){ TS.mergeArm = true; e.target.textContent = 'Click again to merge'; setTimeout(() => { TS.mergeArm = false; if (e.target.isConnected) e.target.textContent = 'Merge overlapping categories'; }, 6000); return; }
-      TS.mergeArm = false; TS.busy = true;
-      try {
-        const cur = clone(), T = applyMerges(cur); mergeTree(T, TREE_DEFAULT);
-        const its = TS.docs.filter(x => { const n = tri(x), a = [n.m, n.s, n.t].filter(Boolean), b = mapPath(a); return a.length && b.join('||') !== a.join('||'); });
-        await run(async () => { await setDoc(doc(db, 'triviaConfig', 'taxonomy'), { tree: T, updatedAt: serverTimestamp() }); await writeTri(its, a => { const b = mapPath(a.filter(Boolean)); a[0] = b[0] || ''; a[1] = b[1] || ''; a[2] = b[2] || ''; }); });
-        toast('Merged — ' + its.length.toLocaleString() + ' questions updated');
-      } finally { TS.busy = false; }
-      return;
-    }
+    if (act === 'merge'){ mergeReview(); return; }
     if (act === 'suggest'){ const T = clone(), n = mergeTree(T, TREE_DEFAULT); if (!n) return toast('You already have all of them'); TS.busy = true; try { await saveTree(T); toast(n + ' added'); } finally { TS.busy = false; } return; }
     TS.busy = true;
     try {
