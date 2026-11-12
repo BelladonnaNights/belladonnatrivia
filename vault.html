@@ -356,6 +356,7 @@ table#bGrid{border-collapse:separate;border-spacing:0;width:100%;min-width:560px
 #bGrid td.ck{width:92px;text-align:center}
 #bGrid td.ck input{width:18px;height:18px;accent-color:var(--gold);cursor:pointer;vertical-align:middle}
 #bGrid td input[type=text]{display:block;width:100%;background:transparent;border:0;color:var(--text);font:14px/1.35 var(--font);padding:9px 10px;outline:none}
+#bGrid td select{display:block;width:100%;background:transparent;border:0;color:var(--text);font:14px/1.35 var(--font);padding:9px 6px;outline:none}
 #bGrid td input[type=text]:focus{background:var(--focusbg);box-shadow:inset 0 0 0 1px var(--gold-glow2)}
 #bGrid td.txt{padding:9px 10px;font-size:14px;color:var(--text)}
 #bGrid td.on{width:120px;padding:0 10px;font-size:12px;color:var(--text3);white-space:nowrap}
@@ -508,8 +509,11 @@ textarea::placeholder{color:#8a8a8a !important}
             <div class="chips" id="diffChips">
               <button class="pill on" data-d="0">All</button><button class="pill" data-d="1">1</button><button class="pill" data-d="2">2</button><button class="pill" data-d="3">3</button>
             </div>
+            <label class="chk" title="Hide questions this venue has had recently">Not used at <select id="venueSel" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:5px 8px;font:13px var(--font)"><option value="">any venue</option></select> in the last <select id="usedWin" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:5px 8px;font:13px var(--font)"><option value="3">3 months</option><option value="6" selected>6 months</option><option value="9">9 months</option><option value="12">12 months</option></select></label>
             <label class="chk"><input type="checkbox" id="showArch"> Archived</label>
             <button class="btn ghost hidden" id="resetOrderBtn" title="Put the columns back in their saved order">Reset column order</button>
+            <button class="btn ghost" id="sortBtn" title="Fill in empty master categories, subcategories and tags from keywords — you review first">Sort for me</button>
+            <button class="btn ghost" id="taxBtn" title="Add, rename or remove the master categories and subcategories">Manage categories</button>
             <button class="btn ghost" id="colsBtn">Columns</button>
             <button class="btn ghost" id="qListBtn" title="A plain list of every question and answer, to paste into your AI so it doesn't repeat any">Question list</button>
             <button class="btn ghost" id="catListBtn" title="A list of every trivia category with its About notes">Category list</button>
@@ -557,6 +561,8 @@ textarea::placeholder{color:#8a8a8a !important}
             <button class="btn ghost hidden" id="bExportMissing">Export CSV</button>
             <button class="btn ghost" id="bUndo" title="Nothing to undo" disabled style="opacity:.45">↶ Undo</button>
             <button class="btn ghost" id="bIndexLink" title="Link this list to a category in the Bingo index — or create one">Bingo index</button>
+            <button class="btn ghost" id="bSort" title="Fill in empty categories, subcategories and tags on the songs — you review first">Sort for me</button>
+            <button class="btn ghost" id="bTax" title="Add, rename or remove the song categories and subcategories">Categories</button>
             <button class="btn ghost" id="bExtras" title="Extra songs for this list — ones that didn’t make the cut, saved here to use later">Extras</button>
             <button class="btn ghost" id="bEditText" title="Edit this text list" aria-label="Edit this text list">✎</button>
             <button class="btn ghost" id="bMore">More ⋯</button>
@@ -642,6 +648,12 @@ const BUILTIN = [
   { key:'altAnswers',    label:'Variable Answers', exportLabel:'Variable Answers', type:'long', w:240 },
   { key:'difficulty',    label:'Diff',           exportLabel:'Difficulty (1-3)', type:'diff', w:70  },
   { key:'tags',          label:'Tags',           exportLabel:'Tags',             type:'tags', w:200 },
+  { key:'masterCat',     label:'Master category', exportLabel:'Master Category', type:'pick', list:'master', w:190 },
+  { key:'subCat',        label:'Subcategory',    exportLabel:'Subcategory',      type:'pick', list:'sub',    w:190 },
+  { key:'lastUsedAt',    label:'Last used',      exportLabel:'Last Used',        type:'ro', fmt:'date',   w:110 },
+  { key:'lastUsedVenue', label:'Last venue',     exportLabel:'Last Venue',       type:'ro', w:160 },
+  { key:'timesUsed',     label:'Times used',     exportLabel:'Times Used',       type:'ro', w:90 },
+  { key:'usedAt',        label:'Used at (every venue)', exportLabel:'Used At',   type:'ro', fmt:'venues', w:260 },
   { key:'optionA',       label:'Option A',       exportLabel:'Option A',         type:'long', w:160 },
   { key:'optionB',       label:'Option B',       exportLabel:'Option B',         type:'long', w:160 },
   { key:'optionC',       label:'Option C',       exportLabel:'Option C',         type:'long', w:160 },
@@ -666,6 +678,7 @@ const HEADER_MAP = {
   optiona:'optionA', optionb:'optionB', optionc:'optionC', optiond:'optionD',
   bonusquestion:'bonusQuestion', bonus:'bonusQuestion',
   tags:'tags', tag:'tags', notes:'notes', note:'notes',
+  mastercategory:'masterCat', maincategory:'masterCat', master:'masterCat', subcategory:'subCat', sub:'subCat',
   whisperduringquestion:'whisperQ', whisperquestion:'whisperQ', whisperq:'whisperQ', whisper1:'whisperQ', whisperduring:'whisperQ',
   whisperatreveal:'whisperA', whisperreveal:'whisperA', whispera:'whisperA', whisper2:'whisperA', whisperanswer:'whisperA'
 };
@@ -729,7 +742,7 @@ function guessType(label){
   return 'text';
 }
 function defaultFor(c){
-  return c.type === 'diff' || c.type === 'number' ? null : c.type === 'check' ? false : c.type === 'tags' ? [] : '';
+  return c.type === 'diff' || c.type === 'number' || c.type === 'ro' ? null : c.type === 'check' ? false : c.type === 'tags' ? [] : '';
 }
 function convert(c, raw){
   const v = String(raw ?? '').trim();
@@ -806,7 +819,7 @@ function recordsFromCSV(rows, ctx){
     const row = rows[r];
     if (row.every(x => !String(x).trim())){ out.blank++; continue; }
     const rec = {};
-    for (const c of BUILTIN) rec[c.key] = defaultFor(c);
+    for (const c of BUILTIN) if (c.type !== 'ro') rec[c.key] = defaultFor(c);
     for (const c of ctx.custom) rec[c.key] = defaultFor(c);
     map.forEach((c, i) => { if (c) rec[c.key] = convert(c, row[i]); });
     if (!rec.question){ out.noQ++; continue; }
@@ -1026,13 +1039,20 @@ function startListeners(){
     S.types = snap.exists() ? (snap.data().list || []) : null;
     renderSide(); renderHead();
   }, () => {}));
+  S.unsubs.push(onSnapshot(doc(db, 'triviaConfig', 'taxonomy'), snap => {
+    const d = snap.exists() ? snap.data() : null;
+    S.tax = d ? { masters: Array.isArray(d.masters) ? d.masters : [], subs: (Array.isArray(d.subs) ? d.subs : []).filter(x => x && x.m && x.n) } : null;
+    if (S.curId) renderAll(); if (S.taxOpen && S.taxCtx === TXC.trivia) renderTax();
+  }, () => {}));
   S.unsubs.push(onSnapshot(doc(db, 'triviaConfig', 'columns'), snap => {
     S.custom = snap.exists() ? (snap.data().custom || []) : [];
     const d = snap.exists() ? snap.data() : {};
     S.order = d.order || null; S.orderM = d.orderMusic || null;
     // Option A-D are off by default everywhere; what you tick in Columns is saved for everyone, separately for music and the rest
-    S.hiddenG = new Set(Array.isArray(d.hidden) ? d.hidden : ['optionA','optionB','optionC','optionD']);
-    S.hiddenM = new Set(Array.isArray(d.hiddenMusic) ? d.hiddenMusic : ['optionA','optionB','optionC','optionD']);
+    // the usage and sorting columns start hidden (until someone saves their own Columns choice); Option A-D too
+    const nk = d.taxV ? [] : ['usedAt', 'lastUsedVenue', 'timesUsed'];
+    S.hiddenG = new Set((Array.isArray(d.hidden) ? d.hidden : ['optionA','optionB','optionC','optionD']).concat(nk));
+    S.hiddenM = new Set((Array.isArray(d.hiddenMusic) ? d.hiddenMusic : ['optionA','optionB','optionC','optionD']).concat(nk));
     if (S.curId) renderAll();
   }, () => {}));
 }
@@ -1404,9 +1424,42 @@ thead.addEventListener('click', e => {
   renderAll();
 });
 
+/* Master category / Subcategory lists (Manage categories) and the read-only usage columns */
+const TAX_DEFAULT = (() => {
+  const M = { 'Christmas Movies': ['Christmas Comedy','Christmas Classics','Christmas Horror','Animated Christmas','Christmas Romance','Christmas Movie Quotes','Christmas Movie Locations','Christmas Movie Characters','Christmas Movie Soundtracks','Behind the Scenes'],
+    'Christmas Television': ['Animated Specials','Sitcom Episodes','Christmas Commercials','Holiday Variety Shows','Christmas Cartoons',"Children's Television",'Holiday Reality TV'],
+    'Christmas Music': ['Traditional Carols','Christmas Pop','Christmas Rock','Christmas Country','Holiday R&B','Novelty Christmas Songs','Christmas Song Lyrics','Cover Versions','Christmas Albums','Music History'],
+    'Christmas Around the World': ['European Christmas','Latin American Christmas','Scandinavian Traditions','Asian Christmas Celebrations','Christmas Foods by Country','Gift-Bringers Around the World','Unusual Customs'],
+    'Christmas History & Origins': ['History of Santa','Victorian Christmas','Ancient Winter Festivals','Christmas in America','History of Gift-Giving','Origins of Decorations','Historical Christmas Events'],
+    'Christmas Food & Drink': ['Christmas Desserts','Holiday Baking','Christmas Dinner','Holiday Candy','Festive Cocktails','Christmas Spices','Regional Holiday Foods','Historical Holiday Recipes'],
+    'Christmas Pop Culture': ['Celebrity Christmas','Holiday Advertising','Christmas Fashion','Famous Holiday Performances','Christmas Merchandise','Viral Christmas Moments'],
+    'Christmas Nostalgia': ['Christmas Toys','Retro Electronics','Christmas Catalogs','Childhood Traditions','Christmas Morning','Holiday Shopping','Retro Decorations','Christmas Commercials'],
+    'Christmas Literature & Folklore': ['A Christmas Carol','Christmas Fairy Tales','Christmas Books','Santa Legends','Winter Mythology','The Nutcracker','Christmas Ghost Stories'],
+    'Christmas Traditions & Decorations': ['Christmas Trees','Ornaments','Christmas Lights','Stockings','Christmas Cards','Gift Wrapping','Holiday Symbols','Seasonal Plants'],
+    'Winter & the Holidays': ['Winter Weather','Winter Solstice','Snow & Ice','Seasonal Astronomy','Winter Sports',"New Year's Traditions",'Winter Celebrations'],
+    'Christmas Curiosities': ['Strange Christmas Laws','Unusual Holiday Customs','Christmas World Records','Christmas Disasters','Bizarre Gifts','Christmas Myths','Weird Historical Facts'],
+    'Movies & Television': [], 'The 1990s': [], 'Food & Culinary': [], 'Cocktails & Spirits': [], 'Candy & Confections': [], 'Fairy Tales & Fantasy': [], 'Music Through the Decades': [] };
+  const subs = []; for (const m in M) M[m].forEach(n => subs.push({ m, n })); return { masters: Object.keys(M), subs };
+})();
+const taxNow = () => S.tax || TAX_DEFAULT;
+const fmtDay = ms => { const n = Number(ms && ms.toMillis ? ms.toMillis() : ms); return n > 0 ? new Date(n).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : ''; };
+function roShow(c, v){
+  if (c.fmt === 'date') return fmtDay(v);
+  if (c.fmt === 'venues') return Object.values(v || {}).filter(x => x && x.t).sort((a, b) => b.t - a.t).map(x => (x.n || 'Venue') + ' ' + fmtDay(x.t)).join(' · ');
+  return v == null ? '' : String(v);
+}
+function pickOpts(c, v){
+  const T = taxNow(); let h = '<option value=""></option>', seen = new Set();
+  if (c.list === 'master') T.masters.forEach(m => { seen.add(m); h += `<option ${m === v ? 'selected' : ''}>${esc(m)}</option>`; });
+  else T.masters.forEach(m => { const L = T.subs.filter(x => x.m === m).map(x => x.n); if (!L.length) return; h += `<optgroup label="${esc(m)}">` + L.map(n => { seen.add(n); return `<option ${n === v ? 'selected' : ''}>${esc(n)}</option>`; }).join('') + '</optgroup>'; });
+  if (v && !seen.has(v)) h += `<option selected>${esc(v)}</option>`;
+  return h;
+}
 function cellHTML(c, v){
   const key = `data-key="${c.key}"`;
   switch (c.type){
+    case 'pick':   return `<select ${key}>${pickOpts(c, v)}</select>`;
+    case 'ro':     return `<input type="text" ${key} value="${esc(roShow(c, v))}" readonly tabindex="-1" style="opacity:.75">`;
     case 'long':   return `<textarea rows="1" ${key} spellcheck="true">${esc(v)}</textarea>`;
     case 'diff':   return `<select ${key} class="d${v || 0}"><option value=""></option>${[1,2,3].map(n => `<option value="${n}" ${Number(v) === n ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
     case 'thumbs': return `<button type="button" class="thumb" ${key} data-v="${esc(v || '')}">${v === 'up' ? '👍' : v === 'down' ? '👎' : '·'}</button>`;
@@ -1592,6 +1645,7 @@ function updateRowDom(r){
     else if (c.type === 'check') el.checked = !!v;
     else if (c.type === 'thumbs'){ el.dataset.v = v || ''; el.textContent = v === 'up' ? '👍' : v === 'down' ? '👎' : '·'; }
     else if (c.type === 'diff'){ el.value = v ?? ''; el.className = 'd' + (v || 0); }
+    else if (c.type === 'ro'){ el.value = roShow(c, v); }
     else { const nv = v ?? ''; if (el.value !== String(nv)){ el.value = nv; if (el.tagName === 'TEXTAREA') autosize(el); } }
   }
 }
@@ -1684,7 +1738,9 @@ const QE_ORDER = [
   ['Difficulty', ['difficulty']],
   ['Multiple choice options', ['optionA', 'optionB', 'optionC', 'optionD']],
   ['Media', ['imgUrl', 'soundUrl']],
+  ['Library', ['masterCat', 'subCat']],
   ['Extras', ['bonusQuestion', 'tags']],
+  ['Usage (filled in by the Trivia app)', ['lastUsedAt', 'lastUsedVenue', 'timesUsed', 'usedAt']],
   ['Whispers', ['whisperQ', 'whisperA']],
   ['Notes', ['notes']]
 ];
@@ -1712,6 +1768,8 @@ function openQuestionEditor(r){
       case 'tags':   return `<label class="fld">${lab}<input type="text" ${k} value="${esc((v || []).join(', '))}" autocomplete="off" placeholder="tag, tag…">${help}</label>`;
       case 'check':  return `<label class="fld"><span class="qeChk"><input type="checkbox" ${k} ${v ? 'checked' : ''}> ${lab}</span></label>`;
       case 'thumbs': return `<div class="fld">${lab}<div class="qeSeg" ${k} data-v="${esc(v || '')}"><button type="button" data-n="up" class="${v === 'up' ? 'on' : ''}">👍</button><button type="button" data-n="down" class="${v === 'down' ? 'on' : ''}">👎</button><button type="button" data-n="" class="${v ? '' : 'on'}">–</button></div></div>`;
+      case 'pick':   return `<label class="fld">${lab}<select ${k}>${pickOpts(c, v)}</select></label>`;
+      case 'ro':     return `<label class="fld">${lab}<input type="text" value="${esc(roShow(c, v))}" readonly style="opacity:.75"></label>`;
       case 'number': return `<label class="fld">${lab}<input type="number" ${k} value="${esc(v ?? '')}" autocomplete="off"></label>`;
       default:       return `<label class="fld">${lab}<input type="text" ${k} value="${esc(v)}" autocomplete="off">${help}</label>`;
     }
@@ -1737,7 +1795,7 @@ function openQuestionEditor(r){
     const h = $('#modal h2'); if (h) h.textContent = 'Question ' + numberOf();
   };
   body.addEventListener('focusout', e => { const el = e.target; if (el.matches('input,textarea') && !el.classList.contains('qeSeg')) commit(el); });
-  body.addEventListener('change', e => { const el = e.target; if (el.matches('input[type=checkbox]')) commit(el); });
+  body.addEventListener('change', e => { const el = e.target; if (el.matches('input[type=checkbox],select[data-qe]')) commit(el); });
   body.addEventListener('input', e => { if (e.target.matches('textarea')) autosize(e.target); });
   body.addEventListener('click', e => {
     const b = e.target.closest('.qeSeg button'); if (!b) return;
@@ -1819,13 +1877,20 @@ $('#tagBar').addEventListener('click', e => {
 });
 
 /* filters + dupes --------------------------------------------- */
+function renderVenueSel(){
+  const m = new Map(); for (const r of S.rows.values()) for (const [k, u] of Object.entries((r.data && r.data.usedAt) || {})) if (u && u.n) m.set(k, u.n);
+  const sig = [...m.entries()].sort().join('|'), sel = $('#venueSel'); if (!sel || sel.dataset.sig === sig) return; sel.dataset.sig = sig;
+  sel.innerHTML = '<option value="">any venue</option>' + [...m.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([k, n]) => `<option value="${esc(k)}" ${k === S.venue ? 'selected' : ''}>${esc(n)}</option>`).join('');
+}
 function applyFilter(){
+  renderVenueSel();
   const q = S.filter.q.toLowerCase(), d = S.filter.diff;
   for (const r of S.rows.values()){
     if (!r.tr) continue;
     let vis = true;
     if (r.persisted){
       if (d && Number(r.data.difficulty) !== d) vis = false;
+      if (vis && S.venue){ const u = (r.data.usedAt || {})[S.venue]; if (u && u.t && Date.now() - u.t < S.usedWin * 30.44 * 864e5) vis = false; }
       if (vis && S.filter.tags.size){ const have = r.data.tags || []; for (const t of S.filter.tags) if (!have.includes(t)) vis = false; }
       if (vis && q){ const hay = [r.data.question, r.data.answer, r.data.optionA, r.data.optionB, r.data.optionC, r.data.optionD, r.data.bonusQuestion, r.data.notes, (r.data.tags || []).join(' ')].join(' ').toLowerCase(); if (!hay.includes(q)) vis = false; }
     }
@@ -1846,6 +1911,9 @@ function refreshDupes(){
     r.tr.classList.toggle('dup', isDup); r.tr.firstElementChild.title = isDup ? 'Possible duplicate question' : '';
   }
 }
+S.venue = ''; S.usedWin = Number(LS.get('usedWin', '6')) || 6; $('#usedWin').value = String(S.usedWin);
+$('#venueSel').addEventListener('change', e => { S.venue = e.target.value; applyFilter(); });
+$('#usedWin').addEventListener('change', e => { S.usedWin = Number(e.target.value) || 6; LS.set('usedWin', String(S.usedWin)); applyFilter(); });
 $('#q').addEventListener('input', e => { S.filter.q = e.target.value.trim(); applyFilter(); });
 $('#diffChips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.filter.diff = Number(b.dataset.d); $$('#diffChips button').forEach(x => x.classList.toggle('on', x === b)); applyFilter(); });
 $('#showArch').addEventListener('change', e => { document.body.classList.toggle('showArch', e.target.checked); applyFilter(); });
@@ -2000,15 +2068,262 @@ function askDeleteCategory(c){
 function exportCSV(){
   const c = S.cats.get(S.curId); if (!c) return;
   const items = [...S.rows.values()].filter(r => r.persisted && !r.data.archived).sort((a, b) => (Number(a.data.order) || 0) - (Number(b.data.order) || 0)).map(r => r.data);
-  const blob = new Blob([toCSV(allCols(), items)], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob([toCSV(allCols().filter(c => c.type !== 'ro'), items)], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = c.name.replace(/[\/\\:*?"<>|]+/g, '-') + '.csv';
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
 async function saveCustom(list){ await setDoc(doc(db, 'triviaConfig', 'columns'), { custom: list, updatedAt: serverTimestamp() }, { merge: true }); }
 async function saveOrder(keys){ const m = isMusicCat(); if (m) S.orderM = keys; else S.order = keys; await setDoc(doc(db, 'triviaConfig', 'columns'), { [m ? 'orderMusic' : 'order']: keys, updatedAt: serverTimestamp() }, { merge: true }); }
-async function saveHidden(){ const m = isMusicCat(); await setDoc(doc(db, 'triviaConfig', 'columns'), { [m ? 'hiddenMusic' : 'hidden']: [...S.hidden], updatedAt: serverTimestamp() }, { merge: true }); }
+async function saveHidden(){ const m = isMusicCat(); await setDoc(doc(db, 'triviaConfig', 'columns'), { [m ? 'hiddenMusic' : 'hidden']: [...S.hidden], taxV: 1, updatedAt: serverTimestamp() }, { merge: true }); }
 
+/* <sort-rules> — plain keyword rules (no AI, nothing leaves the page). The first rule that matches picks the master category + subcategory. */
+const RX = s => new RegExp(s, 'i');
+const SORT_Q = [
+  // [master, subcategory, pattern, tags]
+  ['Christmas Movies', 'Animated Christmas', RX('\\b(grinch|polar express|nightmare before christmas|klaus|arthur christmas|the snowman|rise of the guardians|santa clause|frozen)\\b'), ['movies', 'animated']],
+  ['Christmas Movies', 'Christmas Comedy', RX('\\b(elf|buddy the elf|home alone|christmas vacation|griswold|jingle all the way|bad santa|deck the halls|four christmases|fred claus|surviving christmas|scrooged|the santa clause)\\b'), ['movies', 'comedy']],
+  ['Christmas Movies', 'Christmas Classics', RX("\\b(it'?s a wonderful life|miracle on 34th|white christmas|holiday inn|a christmas story|ralphie|bumpus|george bailey|clarence)\\b"), ['movies', 'classic']],
+  ['Christmas Movies', 'Christmas Romance', RX('\\b(love actually|the holiday|hallmark|last christmas|christmas prince|falling for christmas)\\b'), ['movies', 'romance']],
+  ['Christmas Movies', 'Christmas Horror', RX('\\b(krampus|gremlins|black christmas|silent night, deadly night|rare exports)\\b'), ['movies', 'horror']],
+  ['Christmas Television', 'Animated Specials', RX("\\b(charlie brown|rudolph|frosty the snowman|how the grinch stole|claymation|year without a santa|heat miser|snow miser|garfield christmas)\\b"), ['television', 'animated special']],
+  ['Christmas Television', 'Sitcom Episodes', RX('\\b(christmas episode|holiday episode|friends|seinfeld|festivus|the office|parks and rec|saturday night live|snl)\\b'), ['television', 'sitcom']],
+  ['Christmas Television', 'Christmas Commercials', RX('\\b(commercial|ad campaign|coca-?cola polar bear|budweiser clydesdale|hershey|kay jewelers)\\b'), ['television', 'commercials']],
+  ['Christmas Music', 'Traditional Carols', RX("\\b(carol|silent night|o holy night|hark the herald|joy to the world|o come all ye faithful|away in a manger|we three kings|good king wenceslas|deck the halls|the first noel|o christmas tree|o tannenbaum)\\b"), ['music', 'carol']],
+  ['Christmas Music', 'Christmas Pop', RX('\\b(mariah carey|all i want for christmas|last christmas|wham|ariana grande|justin bieber|kelly clarkson|michael bubl[eé]|carpenters|jackson 5)\\b'), ['music', 'pop']],
+  ['Christmas Music', 'Novelty Christmas Songs', RX('\\b(grandma got run over|santa baby|chipmunk|dogs barking|feliz navidad|i saw mommy|red-nosed|blue christmas|twelve days|12 days)\\b'), ['music', 'novelty']],
+  ['Christmas Music', 'Christmas Song Lyrics', RX('\\b(lyric|lyrics|next line|which song|what song|sung by|recorded by|songwriter|written by)\\b'), ['music', 'lyrics']],
+  ['Christmas Music', '', RX('\\b(song|album|singer|bing crosby|nat king cole|brenda lee|bobby helms|burl ives|trans-siberian)\\b'), ['music']],
+  ['Christmas Around the World', 'Gift-Bringers Around the World', RX('\\b(sinterklaas|befana|la befana|father frost|ded moroz|st\\.? nicholas|saint nicholas|yule lads|tomte|nisse|julenisse|three kings|epiphany|christkind|pere noel|papa noel|babbo natale)\\b'), ['international', 'gift-bringers']],
+  ['Christmas Around the World', 'Unusual Customs', RX('\\b(krampus|kfc|roller[- ]skat|giant lantern|gävle|gavle goat|spider web|christmas pickle|yule cat|jólabókaflóð|jolabokaflod)\\b'), ['international', 'customs']],
+  ['Christmas Around the World', 'Scandinavian Traditions', RX('\\b(sweden|swedish|norway|norwegian|denmark|danish|finland|finnish|iceland|icelandic|lucia)\\b'), ['international', 'scandinavian']],
+  ['Christmas Around the World', 'Latin American Christmas', RX('\\b(mexico|mexican|las posadas|posada|nochebuena|brazil|argentina|colombia|puerto rico|parranda|cuba|venezuela|filipino|philippines)\\b'), ['international', 'latin america']],
+  ['Christmas Around the World', 'European Christmas', RX('\\b(germany|german|austria|france|french|italy|italian|spain|spanish|netherlands|dutch|england|british|uk|ireland|irish|poland|polish|ukraine|ukrainian|christmas market)\\b'), ['international', 'europe']],
+  ['Christmas Around the World', 'Asian Christmas Celebrations', RX('\\b(japan|japanese|china|chinese|korea|korean|india|indian|thailand|vietnam)\\b'), ['international', 'asia']],
+  ['Christmas Around the World', '', RX('\\b(around the world|in australia|australian|south africa|which country|what country|international)\\b'), ['international']],
+  ['Christmas History & Origins', 'History of Santa', RX('\\b(thomas nast|saint nicholas|st\\.? nick|santa claus (origin|history)|history of santa|coca-?cola santa|haddon sundblom|clement c?\\.? moore)\\b'), ['history', 'santa']],
+  ['Christmas History & Origins', 'Victorian Christmas', RX('\\b(victorian|prince albert|queen victoria|charles dickens|christmas card|first christmas card|henry cole)\\b'), ['history', 'victorian']],
+  ['Christmas History & Origins', 'Ancient Winter Festivals', RX('\\b(saturnalia|yule|pagan|winter solstice festival|sol invictus|norse|druid|roman festival)\\b'), ['history', 'ancient']],
+  ['Christmas History & Origins', '', RX('\\b(origin of|origins of|first christmas|history of|puritan|banned christmas|outlawed|before the 1900s|in the 1800s|in the 1700s)\\b'), ['history']],
+  ['Christmas Food & Drink', 'Festive Cocktails', RX('\\b(eggnog|wassail|mulled|hot toddy|cocktail|gin|whiskey|bourbon|rum|brandy|champagne|schnapps|mimosa|martini)\\b'), ['drinks', 'cocktails']],
+  ['Christmas Food & Drink', 'Holiday Candy', RX('\\b(candy cane|peppermint|toffee|fudge|chocolate|gumdrop|marzipan|sugar plum|nougat|gingerbread candy)\\b'), ['food', 'candy']],
+  ['Christmas Food & Drink', 'Holiday Baking', RX('\\b(cookie|gingerbread|fruitcake|stollen|panettone|yule log|b[uû]che de no[eë]l|shortbread|baking|bake|pie|pudding|figgy|mince)\\b'), ['food', 'baking']],
+  ['Christmas Food & Drink', 'Christmas Spices', RX('\\b(cinnamon|nutmeg|clove|ginger|allspice|cardamom|anise|spice)\\b'), ['food', 'spices']],
+  ['Christmas Food & Drink', 'Christmas Dinner', RX('\\b(turkey|ham|goose|roast|cranberry|stuffing|brussels sprout|mashed|gravy|christmas dinner|christmas eve dinner)\\b'), ['food', 'dinner']],
+  ['Christmas Pop Culture', 'Holiday Advertising', RX('\\b(super bowl|advert|advertising|slogan|mascot|jingle)\\b'), ['pop culture', 'advertising']],
+  ['Christmas Pop Culture', 'Celebrity Christmas', RX('\\b(celebrity|taylor swift|kardashian|oprah|ellen|ugly sweater|saturday night live|tiktok|viral|meme)\\b'), ['pop culture', 'celebrity']],
+  ['Christmas Nostalgia', 'Christmas Toys', RX('\\b(tickle me elmo|cabbage patch|furby|tamagotchi|beanie baby|barbie|lego|easy-bake|etch a sketch|rubik|g\\.?i\\.? joe|transformers|my little pony|teddy ruxpin|red ryder|toy)\\b'), ['nostalgia', 'toys']],
+  ['Christmas Nostalgia', 'Retro Electronics', RX('\\b(nintendo|game boy|atari|sega|walkman|polaroid|vhs|cassette|commodore|tape|playstation|n64|super nintendo)\\b'), ['nostalgia', 'electronics']],
+  ['Christmas Nostalgia', 'Christmas Catalogs', RX('\\b(sears|wish book|catalog|catalogue|jc penney|toys r us|montgomery ward)\\b'), ['nostalgia', 'catalogs']],
+  ['Christmas Literature & Folklore', 'A Christmas Carol', RX('\\b(a christmas carol|scrooge|marley|tiny tim|cratchit|fezziwig|ghost of christmas)\\b'), ['literature', 'dickens']],
+  ['Christmas Literature & Folklore', 'The Nutcracker', RX('\\b(nutcracker|sugar plum fairy|tchaikovsky|mouse king|clara)\\b'), ['literature', 'nutcracker']],
+  ['Christmas Literature & Folklore', 'Santa Legends', RX("\\b(night before christmas|twas the night|visit from st|reindeer names|dasher|dancer|prancer|vixen|comet|cupid|donner|blitzen|santa'?s workshop|elf on the shelf)\\b"), ['folklore', 'santa']],
+  ['Christmas Literature & Folklore', 'Christmas Fairy Tales', RX('\\b(hans christian andersen|little match girl|grimm|fairy tale|snow queen|legend of|folklore|myth)\\b'), ['folklore']],
+  ['Christmas Traditions & Decorations', 'Christmas Trees', RX('\\b(christmas tree|evergreen|fir|spruce|pine|tinsel|rockefeller|tree topper)\\b'), ['traditions', 'trees']],
+  ['Christmas Traditions & Decorations', 'Christmas Lights', RX('\\b(lights|string lights|led|twinkle|bulb)\\b'), ['traditions', 'lights']],
+  ['Christmas Traditions & Decorations', 'Seasonal Plants', RX('\\b(mistletoe|holly|poinsettia|ivy|amaryllis|christmas cactus)\\b'), ['traditions', 'plants']],
+  ['Christmas Traditions & Decorations', 'Stockings', RX('\\b(stocking|chimney|hearth|fireplace)\\b'), ['traditions', 'stockings']],
+  ['Christmas Traditions & Decorations', 'Ornaments', RX('\\b(ornament|bauble|glass ornament|pickle)\\b'), ['traditions', 'ornaments']],
+  ['Christmas Traditions & Decorations', '', RX('\\b(advent|wreath|nativity|manger|gift[- ]giving|wrapping|candle|yule log|tradition)\\b'), ['traditions']],
+  ['Winter & the Holidays', "New Year's Traditions", RX("\\b(new year|auld lang syne|times square|ball drop|resolution|hogmanay)\\b"), ['new years']],
+  ['Winter & the Holidays', 'Winter Solstice', RX('\\b(solstice|longest night|equinox)\\b'), ['winter', 'solstice']],
+  ['Winter & the Holidays', 'Winter Sports', RX('\\b(ski|skiing|snowboard|hockey|ice skating|curling|luge|bobsled|sled)\\b'), ['winter', 'sports']],
+  ['Winter & the Holidays', 'Snow & Ice', RX('\\b(snow|snowflake|blizzard|ice|frost|glacier|avalanche)\\b'), ['winter', 'snow']],
+  ['Winter & the Holidays', '', RX('\\b(winter|hanukkah|kwanzaa|menorah|dreidel|diwali|boxing day|twelfth night)\\b'), ['winter']],
+  ['Christmas Curiosities', 'Christmas World Records', RX('\\b(world record|guinness|largest|tallest|longest|biggest|most expensive)\\b'), ['curiosities', 'records']],
+  ['Christmas Curiosities', 'Christmas Myths', RX('\\b(myth|true or false|is it true|misconception|actually)\\b'), ['curiosities', 'myths']],
+  ['Christmas Curiosities', 'Strange Christmas Laws', RX('\\b(illegal|law|banned|outlaw|forbidden|fined)\\b'), ['curiosities', 'laws']],
+  ['Christmas Curiosities', '', RX('\\b(weird|strange|bizarre|unusual|odd|quirky|fun fact)\\b'), ['curiosities']],
+  ['Cocktails & Spirits', '', RX('\\b(gin|whiskey|whisky|bourbon|scotch|vodka|tequila|mezcal|rum|margarita|old fashioned|negroni|martini|bartend|cocktail|spirit|liqueur|vermouth)\\b'), ['cocktails']],
+  ['Candy & Confections', '', RX('\\b(candy|chocolate|gummy|lollipop|licorice|hershey|reese|snickers|skittles|jelly bean|marshmallow|caramel|truffle)\\b'), ['candy']],
+  ['Food & Culinary', '', RX('\\b(recipe|chef|cuisine|ingredient|pasta|pizza|sushi|bread|cheese|coffee|espresso|baking|dessert|sauce|soup|cooking|cook)\\b'), ['food']],
+  ['Fairy Tales & Fantasy', '', RX("\\b(witch|wizard|dragon|fairy|hobbit|middle[- ]earth|harry potter|hogwarts|narnia|elf|elves|gnome|goblin|troll|unicorn|mermaid|fairy tale|gingerbread house|hansel)\\b"), ['fantasy']],
+  ['Movies & Television', '', RX('\\b(film|movie|actor|actress|directed|director|sitcom|tv show|television|episode|sequel|oscar|emmy|box office|cast)\\b'), ['movies & tv']],
+  ['Music Through the Decades', '', RX('\\b(band|singer|album|billboard|hit single|number one hit|grammy|rapper|guitarist|lead vocalist|song)\\b'), ['music']],
+  ['The 1990s', '', RX('\\b(199\\d|nineties|90s|tamagotchi|dial-up|blockbuster video|spice girls|backstreet boys|nsync|seinfeld|friends|pogs|y2k)\\b'), ['90s']]
+];
+/* a Vault category called "Christmas Movies" is itself a strong hint, used only when the question text itself matched nothing */
+function decadeTags(t){
+  const out = [], ys = [...new Set((String(t).match(/\b(19[2-9]\d|20[0-2]\d)\b/g) || []))];
+  for (const y of ys) { const d = y.slice(2, 3) + '0s'; const dec = Number(y) >= 2000 ? (Number(y) >= 2010 ? '2010s' : '2000s') : d; if (!out.includes(dec)) out.push(dec); }
+  if (ys.length === 1) out.push(ys[0]);
+  return out;
+}
+const XMAS_CTX = RX('christmas|xmas|holiday|santa|yule|advent|nativity|noel|festive|winter|new year|hanukkah|kwanzaa|reindeer|north pole|elves|stocking|gingerbread|eggnog|mistletoe');
+const UNGATED = new Set(['Christmas Movies', 'Christmas Literature & Folklore']);
+const isGated = m => /^Christmas /.test(m) && !UNGATED.has(m) || m === 'Winter & the Holidays';
+function sortQuestion(q, catName){
+  const text = ((q.question || '') + ' ' + (q.answer || '') + ' ' + (Array.isArray(q.altAnswers) ? q.altAnswers.join(' ') : (q.altAnswers || ''))).toLowerCase();
+  const ctx = XMAS_CTX.test(text) || XMAS_CTX.test(String(catName || '')), ok = r => !isGated(r[0]) || ctx;
+  let hit = SORT_Q.find(r => ok(r) && r[2].test(text)), from = 'text';
+  if (!hit && catName){ hit = SORT_Q.find(r => r[2].test(String(catName))); from = 'category'; }
+  if (!hit) return null;
+  const tags = [...(hit[3] || []), ...decadeTags(text)];
+  return { master: hit[0], sub: hit[1] || '', tags: [...new Set(tags)].slice(0, 6), from };
+}
+const SORT_S = [
+  // songs: [category, subcategory, pattern, tags, which text: 'all' = list name + title + artist + movie]
+  ['Christmas Movie Music', '', RX('\\b(elf|home alone|polar express|grinch|love actually|nightmare before christmas|muppet christmas|the santa clause)\\b'), ['movie']],
+  ['Christmas Sing-Alongs', '', RX("\\b(jingle bells|deck the halls|joy to the world|silent night|hark the herald|o come all ye faithful|we wish you a merry christmas|twelve days|12 days of christmas|let it snow|frosty the snowman|rudolph|winter wonderland|sleigh ride|jingle bell rock|rockin' around|santa claus is comin|little drummer boy|feliz navidad)\\b"), ['sing-along']],
+  ['Christmas Novelty & Comedy', '', RX('\\b(grandma got run over|santa baby|chipmunk|dogs? (barking|bark)|i saw mommy|please come home|fairytale of new york|wonderful christmastime|stan\\b.*christmas|dominick|donkey|alvin|bob and doug|kevin|silent night.*sandler|chanukah song)\\b'), ['novelty']],
+  ['Christmas R&B, Soul & Hip-Hop', '', RX('\\b(stevie wonder|temptations|boyz ii men|run-?d\\.?m\\.?c|ne-?yo|aretha|otis redding|donny hathaway|luther vandross|mary j|gladys knight|jackson 5|christmas.*(soul|r&b|hip.?hop))\\b'), ['r&b']],
+  ['Christmas Country', '', RX('\\b(brad paisley|blake shelton|reba|dolly parton|kenny rogers|willie nelson|alan jackson|garth brooks|carrie underwood|george strait|brenda lee.*country|christmas.*country)\\b'), ['country']],
+  ['Christmas Rock & Alternative', '', RX("\\b(brandon flowers|trans-siberian|darlene love|pretenders|chris rea|eagles|bruce springsteen|blink-182|weezer|twisted sister|bon jovi|christmas.*(rock|alternative|punk))\\b"), ['rock']],
+  ['Christmas Instrumentals', '', RX('\\b(instrumental|nutcracker|carol of the bells|vince guaraldi|charlie brown christmas|trans-siberian|orchestra)\\b'), ['instrumental']],
+  ['Christmas Covers', '', RX('\\b(cover|version of)\\b'), ['cover']],
+  ['Christmas Oldies', '', RX('\\b(bing crosby|nat king cole|frank sinatra|dean martin|andy williams|perry como|bobby helms|brenda lee|burl ives|elvis|ella fitzgerald|ray conniff|eartha kitt|gene autry|ronettes|vintage christmas|christmas oldies)\\b'), ['oldies']],
+  ['Christmas Pop', '', RX('\\b(mariah carey|ariana grande|justin bieber|kelly clarkson|michael bubl[eé]|wham|last christmas|all i want for christmas|taylor swift|meghan trainor|pentatonix|jonas brothers|christmas pop)\\b'), ['pop']],
+  ['Winter & Seasonal Songs', '', RX("\\b(winter|snow|baby,? it'?s cold outside|auld lang syne|new year|hanukkah|dreidel|sleigh)\\b"), ['winter']],
+  ['Christmas Classics', '', RX('\\b(christmas|xmas|holiday|santa|noel|navidad|yule|merry|reindeer|mistletoe)\\b'), ['christmas']],
+  ['Movie & TV Soundtracks', '', RX('\\b(soundtrack|movie|film|disney|musical|theme from)\\b'), ['soundtrack']],
+  ['Hip-Hop & R&B', '', RX('\\b(hip.?hop|rap|r&b|rnb|drake|kendrick|jay-?z|eminem|snoop|tupac|biggie|nelly|usher|beyonc[eé]|rihanna|outkast|50 cent|ludacris|cardi b|nicki minaj|lizzo|destiny.s child|tlc|boyz ii men|neo soul)\\b'), ['hip-hop']],
+  ['Country', '', RX('\\b(country|luke (bryan|combs)|morgan wallen|dolly parton|johnny cash|garth brooks|shania|tim mcgraw|keith urban|kenny chesney|florida georgia|zach bryan|chris stapleton|lainey wilson)\\b'), ['country']],
+  ['Rock & Alternative', '', RX('\\b(rock|punk|metal|grunge|alternative|indie|emo|nirvana|foo fighters|led zeppelin|ac/dc|queen|guns n.? roses|green day|metallica|pearl jam|red hot chili|u2|aerosmith|bon jovi|journey|van halen|the killers|linkin park|paramore)\\b'), ['rock']],
+  ['Dance & Disco', '', RX('\\b(disco|dance|edm|house|club|techno|donna summer|bee gees|daft punk|calvin harris|david guetta|avicii|kool & the gang|chic|village people)\\b'), ['dance']],
+  ['Latin & World', '', RX('\\b(latin|reggaeton|salsa|bad bunny|shakira|j balvin|daddy yankee|enrique iglesias|ricky martin|selena|karol g|k-?pop|bts|blackpink|afrobeats)\\b'), ['latin']],
+  ['Novelty & Comedy', '', RX('\\b(novelty|comedy|parody|weird al|lonely island|ylvis|baby shark|macarena)\\b'), ['novelty']],
+  ['Throwbacks & Oldies', '', RX("\\b(oldies|motown|throwback|50s|60s|70s|80s|90s|[5-9]0'?s|elvis|beatles|supremes|four tops|beach boys|fleetwood mac|abba|madonna|michael jackson|prince|whitney)\\b"), ['throwback']],
+  ['Pop', '', RX('\\b(pop|taylor swift|britney|ariana|dua lipa|katy perry|lady gaga|justin timberlake|harry styles|bruno mars|ed sheeran|adele|billie eilish|olivia rodrigo|backstreet|nsync|spice girls|miley|selena gomez|the weeknd|doja cat|sabrina carpenter)\\b'), ['pop']]
+];
+function listDecade(name){
+  const t = String(name || '').toLowerCase(), out = [];
+  const m = t.match(/\b((19)?[5-9]0|(20)?[0-2]0)'?s\b/); if (m){ let d = m[1]; d = d.length === 4 ? d : (/^[0-2]0$/.test(d) ? '20' + d : d); out.push(d + 's'); }
+  if (/oldies/.test(t)) out.push('oldies');
+  return out;
+}
+function sortSong(s, listName){
+  const mine = ((s.t || '') + ' ' + (s.a || '') + ' ' + (s.m || '')).toLowerCase(), withList = mine + ' ' + String(listName || '').toLowerCase();
+  let hit = SORT_S.find(r => r[2].test(mine)), from = 'song';
+  if (!hit && s.m && String(s.m).trim()){ hit = SORT_S.find(r => r[0] === 'Movie & TV Soundtracks'); from = 'movie'; }
+  if (!hit){ hit = SORT_S.find(r => r[2].test(withList)); from = 'list'; }
+  const tags = [...(hit ? hit[3] : []), ...listDecade(listName)]; if (s.m) tags.push('movie');
+  if (!hit && !tags.length) return null;
+  return { cat: hit ? hit[0] : '', sub: hit ? hit[1] : '', tags: [...new Set(tags)].slice(0, 6), from: hit ? from : '' };
+}
+/* </sort-rules> */
+
+const BTAX_DEFAULT = (() => { const masters = ['Christmas Classics','Christmas Pop','Christmas Rock & Alternative','Christmas Country','Christmas R&B, Soul & Hip-Hop','Christmas Novelty & Comedy','Christmas Covers','Christmas Movie Music','Christmas Oldies','Christmas Sing-Alongs','Christmas Instrumentals','Winter & Seasonal Songs','Pop','Rock & Alternative','Hip-Hop & R&B','Country','Dance & Disco','Latin & World','Movie & TV Soundtracks','Throwbacks & Oldies','Novelty & Comedy']; return { masters, subs: [] }; })();
+const sBase = x => ({ t: x.t, a: x.a, m: x.m, c: x.c, sc: x.sc, g: x.g });
+/* ── Manage categories: master categories + their subcategories (one screen, used for trivia questions and for bingo songs) ── */
+const TXC = {
+  trivia: {
+    title: 'Manage categories', get: () => S.tax || TAX_DEFAULT, f: { m: 'masterCat', s: 'subCat' },
+    save: (M, SB) => setDoc(doc(db, 'triviaConfig', 'taxonomy'), { masters: M, subs: SB, updatedAt: serverTimestamp() }),
+    async find(field, v, master){ const snap = await getDocs(query(qColl(), where(field, '==', v))); return snap.docs.filter(d => !master || (d.data().masterCat || '') === master).map(d => ({ ref: d.ref })); },
+    count: items => items.length,
+    async apply(items, patch){ const p = {}; for (const k in patch) p[k] = patch[k] == null ? deleteField() : patch[k]; for (let i = 0; i < items.length; i += 400){ const b = writeBatch(db); items.slice(i, i + 400).forEach(it => b.update(it.ref, p)); await b.commit(); } }
+  },
+  bingo: {
+    title: 'Manage song categories', get: () => B.tax || BTAX_DEFAULT, f: { m: 'c', s: 'sc' },
+    save: (M, SB) => setDoc(doc(db, 'bingoConfig', 'taxonomy'), { masters: M, subs: SB, updatedAt: serverTimestamp() }),
+    async find(field, v, master){ const out = []; for (const l of B.lists.values()){ const idx = []; l.songs.forEach((x, i) => { if ((x[field] || '') === v && (!master || (x.c || '') === master)) idx.push(i); }); if (idx.length) out.push({ listId: l.id, idx }); } return out; },
+    count: items => items.reduce((n, x) => n + x.idx.length, 0),
+    async apply(items, patch){ for (const it of items){ const l = B.lists.get(it.listId); if (!l) continue; const songs = l.songs.map(sBase); it.idx.forEach(i => { for (const k in patch){ if (patch[k] == null) delete songs[i][k]; else songs[i][k] = patch[k]; } }); await updateDoc(bListRef(it.listId), { songs: cleanSongs(songs), updatedAt: serverTimestamp() }); } }
+  }
+};
+function openTax(X){
+  const body = document.createElement('div'); body.id = 'taxBody'; S.taxOpen = true; S.taxCtx = X; S.taxMaster = ''; S.taxArm = '';
+  openModal({ title: X.title, body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }], onClose: () => { S.taxOpen = false; } });
+  renderTax();
+  body.addEventListener('change', e => { if (e.target.id === 'taxMasterSel'){ S.taxMaster = e.target.value; S.taxArm = ''; renderTax(); } });
+  body.addEventListener('keydown', e => { if (e.key !== 'Enter') return; const t = e.target; if (t.dataset.new) { e.preventDefault(); body.querySelector('button[data-tx="add"][data-w="' + t.dataset.new + '"]').click(); } else if (t.dataset.ren) { e.preventDefault(); body.querySelector('button[data-tx="ren"][data-w="' + t.dataset.w + '"][data-i="' + t.dataset.i + '"]').click(); } });
+  body.addEventListener('click', async e => {
+    const b = e.target.closest('button[data-tx]'); if (!b) return; const T = X.get(), w = b.dataset.w, i = Number(b.dataset.i), M = T.masters.slice(), SB = T.subs.map(x => ({ ...x }));
+    const subsOf = m => SB.filter(x => x.m === m), fm = X.f.m, fs = X.f.s;
+    if (b.dataset.tx === 'add'){ const v = body.querySelector('input[data-new="' + w + '"]').value.trim(); if (!v) return;
+      if (w === 'm'){ if (M.some(x => x.toLowerCase() === v.toLowerCase())) return toast('That one is already in the list'); await run(() => X.save(M.concat(v), SB)); }
+      else { if (!S.taxMaster) return toast('Pick a master category first'); if (subsOf(S.taxMaster).some(x => x.n.toLowerCase() === v.toLowerCase())) return toast('That one is already in the list'); await run(() => X.save(M, SB.concat({ m: S.taxMaster, n: v }))); } return; }
+    if (b.dataset.tx === 'ren'){ const inp = body.querySelector('input[data-ren][data-w="' + w + '"][data-i="' + i + '"]'), v = inp.value.trim();
+      if (w === 'm'){ const old = M[i]; if (!v || v === old) return; if (M.some((x, j) => j !== i && x.toLowerCase() === v.toLowerCase())) return toast('That name is already in the list');
+        await run(async () => { const its = await X.find(fm, old); M[i] = v; SB.forEach(x => { if (x.m === old) x.m = v; }); await X.save(M, SB); await X.apply(its, { [fm]: v }); if (S.taxMaster === old) S.taxMaster = v; const n = X.count(its); toast('Renamed' + (n ? ' on ' + n + ' item' + (n === 1 ? '' : 's') : '')); }); }
+      else { const L = subsOf(S.taxMaster), item = L[i]; if (!item || !v || v === item.n) return; if (L.some((x, j) => j !== i && x.n.toLowerCase() === v.toLowerCase())) return toast('That name is already in the list');
+        await run(async () => { const its = await X.find(fs, item.n, S.taxMaster); SB.find(x => x.m === item.m && x.n === item.n).n = v; await X.save(M, SB); await X.apply(its, { [fs]: v }); const n = X.count(its); toast('Renamed' + (n ? ' on ' + n + ' item' + (n === 1 ? '' : 's') : '')); }); } return; }
+    if (b.dataset.tx === 'del'){
+      const isM = w === 'm', item = isM ? M[i] : subsOf(S.taxMaster)[i] && subsOf(S.taxMaster)[i].n; if (!item) return;
+      await run(async () => { const its = isM ? await X.find(fm, item) : await X.find(fs, item, S.taxMaster), n = X.count(its), key = w + ':' + i;
+        if (n && S.taxArm !== key){ S.taxArm = key; S.taxCount = n; renderTax(); return; }
+        S.taxArm = '';
+        if (isM) await X.save(M.filter((x, j) => j !== i), SB.filter(x => x.m !== item)); else await X.save(M, SB.filter(x => !(x.m === S.taxMaster && x.n === item)));
+        await X.apply(its, isM ? { [fm]: null, [fs]: null } : { [fs]: null }); toast('Removed'); });
+    }
+  });
+}
+function renderTax(){
+  const el = $('#taxBody'), X = S.taxCtx; if (!el || !X) return; const T = X.get(), M = T.masters;
+  if (S.taxMaster && !M.includes(S.taxMaster)) S.taxMaster = '';
+  const st = 'flex:1;min-width:0;padding:8px 11px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none';
+  const row = (w, i, name, arm) => `<div style="display:flex;gap:6px;align-items:center;margin:0 0 5px"><input type="text" data-ren="1" data-w="${w}" data-i="${i}" value="${esc(name)}" style="${st}"><button class="btn ghost" data-tx="ren" data-w="${w}" data-i="${i}">Rename</button><button class="btn ${arm ? 'danger' : 'ghost'}" data-tx="del" data-w="${w}" data-i="${i}">${arm ? 'Clear from ' + S.taxCount + '?' : 'Remove'}</button></div>`;
+  const add = w => `<div style="display:flex;gap:6px;margin-top:6px"><input type="text" data-new="${w}" style="${st}" autocomplete="off"><button class="btn" data-tx="add" data-w="${w}">Add</button></div>`;
+  const subs = T.subs.filter(x => x.m === S.taxMaster);
+  el.innerHTML = `<p class="hint" style="margin-top:0">Each item has one master category and one subcategory (plus tags for anything else). Renaming changes it everywhere it is used. Removing clears it from the items that use it.</p>
+    <div style="font-weight:700;margin-bottom:6px">Master categories</div>${M.map((m, i) => row('m', i, m, S.taxArm === 'm:' + i)).join('')}${add('m')}
+    <div style="font-weight:700;margin:18px 0 6px">Subcategories of <select id="taxMasterSel" style="padding:6px 10px"><option value="">pick a master category…</option>${M.map(m => `<option ${m === S.taxMaster ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div>
+    ${S.taxMaster ? subs.map((x, i) => row('s', i, x.n, S.taxArm === 's:' + i)).join('') + add('s') : ''}`;
+}
+/* ── Sort for me: fills EMPTY category / subcategory fields and adds tags, from keywords. Nothing already filled in is changed; you see a preview first. ── */
+async function openSorter(kind){
+  const body = document.createElement('div'); const isT = kind === 'trivia'; let plan = [], undo = null, busy = false;
+  const curName = isT ? ((S.cats.get(S.curId) || {}).name || '') : ((B.lists.get(B.curId) || {}).name || '');
+  const canHere = isT ? !!S.curId : B.lists.has(B.curId);
+  body.innerHTML = `<p class="hint" style="margin-top:0">Reads each ${isT ? 'question' : 'song'} and, using keywords${isT ? ' and the name of its category' : ' and the name of its list'}, suggests a ${isT ? 'master category, subcategory' : 'category, subcategory'} and tags. It only fills what is empty and only <b>adds</b> tags — nothing you typed is changed. You review the result before anything is saved.</p>
+    <div style="display:flex;gap:16px;margin:8px 0"><label class="chk"><input type="radio" name="sortScope" value="here" ${canHere ? 'checked' : 'disabled'}> Just ${isT ? 'this category' : 'this list'}${curName ? ' (' + esc(curName) + ')' : ''}</label><label class="chk"><input type="radio" name="sortScope" value="all" ${canHere ? '' : 'checked'}> Everything</label></div>
+    <button class="btn" id="sortGo">Look it over</button><div id="sortOut" style="margin-top:12px"></div>`;
+  const out = () => body.querySelector('#sortOut');
+  const gather = async () => {
+    const scope = body.querySelector('input[name=sortScope]:checked').value, items = [];
+    if (isT){
+      const snap = await getDocs(scope === 'here' ? query(qColl(), where('categoryId', '==', S.curId)) : qColl());
+      snap.docs.forEach(d => { const q = d.data(); if (q.archived) return; const cn = (S.cats.get(q.categoryId) || {}).name || ''; const res = sortQuestion(q, cn); items.push({ ref: d.ref, d: q, res, label: String(q.question || '').slice(0, 90) }); });
+    } else {
+      for (const l of B.lists.values()){ if (scope === 'here' && l.id !== B.curId) continue; l.songs.forEach((x, i) => { items.push({ listId: l.id, i, d: x, res: sortSong(x, l.name), label: x.t + ' — ' + x.a }); }); }
+    }
+    return items;
+  };
+  const mk = (it) => {   // what would change for one item
+    if (!it.res) return null; const d = it.d, r = it.res, m = isT ? r.master : r.cat, patch = {};
+    const fm = isT ? 'masterCat' : 'c', fs = isT ? 'subCat' : 'sc', ft = isT ? 'tags' : 'g';
+    if (m && !d[fm]){ patch[fm] = m; if (r.sub && !d[fs]) patch[fs] = r.sub; }
+    else if (m && d[fm] === m && r.sub && !d[fs]) patch[fs] = r.sub;
+    const have = new Set((d[ft] || []).map(x => String(x).toLowerCase())), add = r.tags.filter(t => !have.has(t));
+    if (add.length) patch[ft] = [...(d[ft] || []), ...add];
+    return Object.keys(patch).length ? patch : null;
+  };
+  body.addEventListener('click', async e => {
+    if (e.target.id === 'sortGo'){
+      e.target.disabled = true; out().textContent = 'Reading…';
+      try { const items = await gather(); plan = items.map(it => ({ it, patch: mk(it) })).filter(x => x.patch); const sorted = plan.filter(x => x.patch[isT ? 'masterCat' : 'c']).length, left = items.filter(it => !(it.d[isT ? 'masterCat' : 'c']) && !(plan.find(x => x.it === it && x.patch[isT ? 'masterCat' : 'c']))).length;
+        const by = new Map(); plan.forEach(x => { const k = x.patch[isT ? 'masterCat' : 'c']; if (k) by.set(k, (by.get(k) || 0) + 1); });
+        out().innerHTML = `<p><b>${items.length.toLocaleString()}</b> ${isT ? 'questions' : 'songs'} read. <b>${sorted.toLocaleString()}</b> would get a category, <b>${plan.length.toLocaleString()}</b> would change in some way, and <b>${left.toLocaleString()}</b> have no category and nothing matched them (you can sort those by hand).</p>
+          <div style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px">${[...by.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `<div style="display:flex;justify-content:space-between"><span>${esc(k)}</span><b>${n.toLocaleString()}</b></div>`).join('') || 'Nothing to fill in.'}</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--text3)">A few examples:</div><div style="font-size:13px">${plan.slice(0, 6).map(x => `<div style="margin:3px 0">“${esc(x.it.label)}” → <b>${esc(x.patch[isT ? 'masterCat' : 'c'] || (x.it.d[isT ? 'masterCat' : 'c'] || ''))}</b>${x.patch[isT ? 'subCat' : 'sc'] ? ' / ' + esc(x.patch[isT ? 'subCat' : 'sc']) : ''}</div>`).join('')}</div>
+          ${plan.length ? '<button class="btn primary" id="sortApply" style="margin-top:12px">Save these changes</button>' : ''}`;
+      } catch (err){ out().textContent = 'Couldn’t read them: ' + (err && err.message || err); }
+      e.target.disabled = false; return;
+    }
+    if (e.target.id === 'sortApply' && !busy){
+      busy = true; e.target.disabled = true; e.target.textContent = 'Saving…';
+      await run(async () => {
+        const before = [];
+        if (isT){
+          const fields = ['masterCat', 'subCat', 'tags'];
+          for (let i = 0; i < plan.length; i += 400){ const b = writeBatch(db); plan.slice(i, i + 400).forEach(x => { b.update(x.it.ref, { ...x.patch, updatedAt: serverTimestamp() }); before.push({ ref: x.it.ref, prev: Object.fromEntries(fields.map(f => [f, x.it.d[f] === undefined ? null : x.it.d[f]])) }); }); await b.commit(); }
+          undo = async () => { for (let i = 0; i < before.length; i += 400){ const b = writeBatch(db); before.slice(i, i + 400).forEach(u => { const p = {}; for (const f in u.prev) p[f] = u.prev[f] == null ? deleteField() : u.prev[f]; b.update(u.ref, p); }); await b.commit(); } };
+        } else {
+          const byList = new Map(); plan.forEach(x => { (byList.get(x.it.listId) || byList.set(x.it.listId, []).get(x.it.listId)).push(x); });
+          const prior = new Map();
+          for (const [lid, xs] of byList){ const l = B.lists.get(lid); if (!l) continue; prior.set(lid, l.songs.map(sBase)); const songs = l.songs.map(sBase); xs.forEach(x => Object.assign(songs[x.it.i], x.patch)); await updateDoc(bListRef(lid), { songs: cleanSongs(songs), updatedAt: serverTimestamp() }); }
+          undo = async () => { for (const [lid, songs] of prior) await updateDoc(bListRef(lid), { songs: cleanSongs(songs), updatedAt: serverTimestamp() }); };
+        }
+        out().innerHTML = `<p><b>Saved.</b> ${plan.length.toLocaleString()} ${isT ? 'questions' : 'songs'} updated.</p><button class="btn ghost" id="sortUndo">Undo this</button>`;
+      });
+      busy = false; return;
+    }
+    if (e.target.id === 'sortUndo' && undo){ e.target.disabled = true; await run(async () => { await undo(); undo = null; out().innerHTML = '<p>Put back the way it was.</p>'; }); }
+  });
+  openModal({ title: isT ? 'Sort my questions' : 'Sort my songs', body, wide: true, actions: [{ label: 'Close', primary: true, onClick: closeModal }] });
+}
+$('#taxBtn').addEventListener('click', () => openTax(TXC.trivia));
+$('#sortBtn').addEventListener('click', () => openSorter('trivia'));
 $('#colsBtn').addEventListener('click', openColumns);
 function openColumns(){
   const body = document.createElement('div');
@@ -2446,7 +2761,7 @@ function fixMovie(s){
   return m ? { ...s, t: m[1].trim(), a: m[2].trim(), m: String(s.t || '').trim() } : s;
 }
 const withKeys = s0 => { const s = fixMovie(s0); return { ...s, _k: songKey(s.t, s.a), _tk: titleKey(s.t), _kl: looseKey(s.t, s.a) }; };
-function cleanSongs(arr){ return (arr || []).filter(s => s && (s.t || s.a)).map(s => ({ t: String(s.t || '').trim(), a: String(s.a || '').trim(), ...(s.m && String(s.m).trim() ? { m: String(s.m).trim() } : {}) })); }
+function cleanSongs(arr){ return (arr || []).filter(s => s && (s.t || s.a)).map(s => ({ t: String(s.t || '').trim(), a: String(s.a || '').trim(), ...(s.m && String(s.m).trim() ? { m: String(s.m).trim() } : {}), ...(s.c && String(s.c).trim() ? { c: String(s.c).trim() } : {}), ...(s.sc && String(s.sc).trim() ? { sc: String(s.sc).trim() } : {}), ...(Array.isArray(s.g) && s.g.length ? { g: s.g.map(x => String(x).trim()).filter(Boolean) } : {}) })); }
 function listStats(l){
   const songs = l.songs || []; let have = 0;
   for (const s of songs) if (isOwned(s)) have++;
@@ -2533,11 +2848,12 @@ function startBingo(){
     $('#bList').innerHTML = `<p class="hint" style="padding:12px">Can't read the bingo lists yet.<br>${/permission/i.test(err.message) ? 'Publish the updated Firestore rules, then refresh.' : esc(err.message)}</p>`;
   }));
   B.unsubs.push(onSnapshot(collection(db, 'bingoConfig'), snap => {
-    B.catChunks = new Map(); B.owned = new Set(); B.removed = new Set(); B.searched = new Set(); B.catMode = 'exact'; B.catCount = 0; B.catUpdated = null; B.newTxt = '';
+    B.tax = null; B.catChunks = new Map(); B.owned = new Set(); B.removed = new Set(); B.searched = new Set(); B.catMode = 'exact'; B.catCount = 0; B.catUpdated = null; B.newTxt = '';
     const songChunks = [];
     for (const d of snap.docs){
       const v = d.data();
       if (d.id === 'catalog'){ B.owned = new Set(Object.keys(v.owned || {})); B.removed = new Set(Object.keys(v.removed || {})); B.searched = new Set(Object.keys(v.searched || {})); }
+      else if (d.id === 'taxonomy'){ B.tax = { masters: Array.isArray(v.masters) ? v.masters : [], subs: (Array.isArray(v.subs) ? v.subs : []).filter(x => x && x.m && x.n) }; }
       else if (d.id === 'catalogNew'){ B.newTxt = v.txt || ''; }
       else if (d.id === 'catalogMeta'){ B.catMode = v.mode === 'title' ? 'title' : 'exact'; B.catCount = v.count || 0; B.catUpdated = v.updatedAtMs || null; }
       else if (d.id.startsWith('full_')) B.catChunks.set(d.id, v.s || '');       // older imports: keys only
@@ -2864,6 +3180,13 @@ $('#bGrid').addEventListener('click', e => {
   const k = th.dataset.csort; CAT_SORT = CAT_SORT.k === k ? { k, d: -CAT_SORT.d } : { k, d: 1 };
   renderBingoAll();
 });
+function bPick(f, cur){
+  const T = (B.tax || BTAX_DEFAULT); let h = '<option value=""></option>', seen = new Set();
+  if (f === 'c') T.masters.forEach(m => { seen.add(m); h += `<option ${m === cur ? 'selected' : ''}>${esc(m)}</option>`; });
+  else T.masters.forEach(m => { const L = T.subs.filter(x => x.m === m); if (!L.length) return; h += `<optgroup label="${esc(m)}">` + L.map(x => { seen.add(x.n); return `<option ${x.n === cur ? 'selected' : ''}>${esc(x.n)}</option>`; }).join('') + '</optgroup>'; });
+  if (cur && !seen.has(cur)) h += `<option selected>${esc(cur)}</option>`;
+  return h;
+}
 function renderBingoAll(){
   renderBingoSide();
   const isMissing = B.curId === MISSING, isCat = B.curId === CATALOG, special = isMissing || isCat, l = B.lists.get(B.curId);
@@ -2903,14 +3226,14 @@ function renderBingoAll(){
   if (!special && B.filter === 'missing') shown = shown.filter(r => !isOwned(r));
   if (!isCat && B.filter === 'tosearch') shown = shown.filter(r => !isOwned(r) && !B.searched.has(r._k));
   if (!isCat && B.filter === 'searched') shown = shown.filter(r => !isOwned(r) && B.searched.has(r._k));
-  if (qq) shown = shown.filter(r => (r.t + ' ' + r.a + ' ' + (r.m || '')).toLowerCase().includes(qq));
+  if (qq) shown = shown.filter(r => (r.t + ' ' + r.a + ' ' + (r.m || '') + ' ' + (r.c || '') + ' ' + (r.sc || '') + ' ' + (r.g || []).join(' ')).toLowerCase().includes(qq));
   const total = shown.length, capped = special && total > B.limit;
   if (capped) shown = shown.slice(0, B.limit);
   const wrap = $('#bGridWrap'), st = wrap.scrollTop;
   const BPM = '<th class="ck" title="Tick once you\u2019ve searched for this song on BPM Supreme \u2014 it ticks everywhere the song appears">BPM</th>';
   $('#bGrid thead').innerHTML = special
     ? `<tr><th>#</th>${isCat ? '' : '<th>In catalog</th>'}${isMissing ? BPM : ''}${isCat ? catSortTh() : '<th>Song</th><th>Artist</th>'}<th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
-    : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th class="on" data-rsort="1" style="cursor:pointer;color:var(--gold)" title="How many of your OTHER bingo lists also have this song \u2014 click to put the songs on the most lists first">On other lists${B.rowSort ? ' \u25bc' : ' \u21c5'}</th><th>Movie / show</th><th></th></tr>`;
+    : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th class="on" data-rsort="1" style="cursor:pointer;color:var(--gold)" title="How many of your OTHER bingo lists also have this song \u2014 click to put the songs on the most lists first">On other lists${B.rowSort ? ' \u25bc' : ' \u21c5'}</th><th>Movie / show</th><th>Category</th><th>Subcategory</th><th>Tags</th><th></th></tr>`;
   const bpmMap = new Map();   // artist -> their songs that carry a BPM mark (searched tick, or a BPM file in the imported catalog)
   { const add = x => { const hit = B.searched.has(x._k) || isBpmFile(x) || x.bpm; if (!hit) return; const a = normSong(x.a); if (!a) return; for (const ak of new Set([a, ...artParts(x.a)])) (bpmMap.get(ak) || bpmMap.set(ak, []).get(ak)).push({ k: x._k, tk: x._tk }); }; for (const l of B.lists.values()) l.songs.forEach(add); B.catSongs.forEach(add); }
   const hasOtherBpm = r => [normSong(r.a), ...artParts(r.a)].some(ak => { const arr = bpmMap.get(ak); return !!arr && arr.some(e => e.k !== r._k && e.tk !== r._tk); });   /* "Marvin Gaye" counts for "Marvin Gaye & Tammi Terrell" and the other way round */
@@ -2932,6 +3255,7 @@ function renderBingoAll(){
       `<td class="artcell"><input type="text" data-f="a" value="${esc(r.a)}" spellcheck="false" autocomplete="off">${artIcons(r.a)}</td>` +
       `<td class="on" style="white-space:nowrap" title="${also ? esc('Also on:\n' + r.lists.join('\n')) : 'Not on any other list'}">${also ? `<b style="color:var(--gold2);font-size:1.05em">${also}</b> other list${also === 1 ? '' : 's'}` : '<span style="opacity:.5">none</span>'}</td>` +
       `<td><input type="text" data-f="m" value="${esc(r.m || '')}" placeholder="—" spellcheck="false" autocomplete="off"></td>` +
+      `<td><select data-f="c" class="bSel">${bPick('c', r.c)}</select></td><td><select data-f="sc" class="bSel">${bPick('sc', r.sc)}</select></td><td><input type="text" data-f="g" value="${esc((r.g || []).join(', '))}" spellcheck="false" autocomplete="off"></td>` +
       `<td class="x"><button data-extra="${r.idx}" title="Move this song to Extras">⤓</button><button data-del="${r.idx}" title="Remove this song from the list">✕</button></td></tr>`;
   }).join('') || '';
   const none = !shown.length;
@@ -2947,7 +3271,7 @@ function renderBingoAll(){
 
 
 /* ── bingo grid: drag a column edge to resize (remembered); cut-off text shows on hover ── */
-const BCOL_DEF = { '#': 56, 'In catalog': 96, 'BPM': 110, 'Song': 300, 'Artist': 230, 'Movie / show': 210, 'On lists': 90, 'Not on': 90, 'Which lists': 320, 'Lists it’s on': 320, 'On other lists': 120, '': 84 };
+const BCOL_DEF = { 'Category': 170, 'Subcategory': 170, 'Tags': 170, '#': 56, 'In catalog': 96, 'BPM': 110, 'Song': 300, 'Artist': 230, 'Movie / show': 210, 'On lists': 90, 'Not on': 90, 'Which lists': 320, 'Lists it’s on': 320, 'On other lists': 120, '': 84 };
 const bColName = th => th.textContent.replace(/[▼▲⇅]/g, '').trim();
 const CAT_DEF = { '#': 56, 'Song': 425, 'Artist': 525, 'Movie / show': 210, 'On lists': 90, 'Lists it\u2019s on': 320 };   // default widths on the "My whole catalog" page
 const bColKey = th => (B.curId === CATALOG ? 'cat:' : '') + bColName(th);
@@ -2964,6 +3288,8 @@ function setupBingoCols(){
   });
   tbl.insertBefore(cg, tbl.firstChild); tbl.style.width = total + 'px';
 }
+$('#bSort').addEventListener('click', () => openSorter('bingo'));
+$('#bTax').addEventListener('click', () => openTax(TXC.bingo));
 $('#bGrid thead').addEventListener('mousedown', e => {
   const h = e.target.closest('.rz'); if (!h) return;
   e.preventDefault(); e.stopPropagation();
@@ -3109,7 +3435,7 @@ $('#bGrid').addEventListener('change', e => {
 /* ── song edits ── */
 async function saveSongs(listId, songs){
   const l = B.lists.get(listId); if (!l) return;
-  if (!UNDO.replaying){ const before = l.songs.map(x => ({ t: x.t, a: x.a, ...(x.m ? { m: x.m } : {}) })); pushUndo('Song change on “' + l.name + '”', () => saveSongs(listId, before)); }
+  if (!UNDO.replaying){ const before = l.songs.map(x => sBase(x)); pushUndo('Song change on “' + l.name + '”', () => saveSongs(listId, before)); }
   l.songs = songs.map(withKeys);   // optimistic
   renderBingoAll();
   let ok = false; SAVEERR = '';
@@ -3118,19 +3444,19 @@ async function saveSongs(listId, songs){
 }
 let SAVEERR = '';
 $('#bGrid').addEventListener('change', e => {
-  const inp = e.target.closest('input[type=text][data-f]'); if (!inp) return;
+  const inp = e.target.closest('input[type=text][data-f], select[data-f]'); if (!inp) return;
   const tr = inp.closest('tr'), i = Number(tr.dataset.i), l = B.lists.get(B.curId); if (!l) return;
-  const songs = l.songs.map(s => ({ t: s.t, a: s.a, m: s.m }));
-  songs[i][inp.dataset.f] = inp.value.trim();
+  const songs = l.songs.map(sBase);
+  if (inp.dataset.f === 'g') songs[i].g = parseTags(inp.value); else songs[i][inp.dataset.f] = inp.value.trim();
   saveSongs(l.id, songs);
 });
 $('#bGrid').addEventListener('click', e => {
   const d = e.target.closest('[data-del]'); if (!d) return;
   const l = B.lists.get(B.curId); if (!l) return;
   const i = Number(d.dataset.del), s = l.songs[i];
-  const songs = l.songs.map(x => ({ t: x.t, a: x.a, m: x.m })); songs.splice(i, 1);
+  const songs = l.songs.map(x => sBase(x)); songs.splice(i, 1);
   saveSongs(l.id, songs);
-  toast('Removed “' + s.t + '”.', { label: 'Undo', fn: () => { const cur = B.lists.get(l.id); if (!cur) return; const back = cur.songs.map(x => ({ t: x.t, a: x.a, m: x.m })); back.splice(i, 0, { t: s.t, a: s.a, m: s.m }); saveSongs(l.id, back); } });
+  toast('Removed “' + s.t + '”.', { label: 'Undo', fn: () => { const cur = B.lists.get(l.id); if (!cur) return; const back = cur.songs.map(x => sBase(x)); back.splice(i, 0, sBase(s)); saveSongs(l.id, back); } });
 });
 $('#bGrid').addEventListener('click', e => { if (e.target.closest('[data-rsort]')){ B.rowSort = !B.rowSort; renderBingoAll(); } });
 $('#bQ').addEventListener('input', e => { B.songQ = e.target.value; B.limit = 500; renderBingoAll(); });
@@ -3154,7 +3480,7 @@ $('#bAdd').addEventListener('click', () => {
   body.innerHTML = `<label class="fld">Song title<input type="text" id="bsT" autocomplete="off"></label><label class="fld">Artist<input type="text" id="bsA" autocomplete="off"></label><p class="hint" id="bsMsg" style="margin:0">Press Enter to add it and keep going.</p>`;
   const add = () => {
     const t = $('#bsT').value.trim(), a = $('#bsA').value.trim(); if (!t) { $('#bsT').focus(); return; }
-    const cur = B.lists.get(l.id); const songs = cur.songs.map(x => ({ t: x.t, a: x.a, m: x.m }));
+    const cur = B.lists.get(l.id); const songs = cur.songs.map(x => sBase(x));
     if (songs.some(x => songKey(x.t, x.a) === songKey(t, a))){ $('#bsMsg').textContent = '“' + t + '” is already on this list.'; return; }
     songs.push({ t, a }); saveSongs(l.id, songs);
     $('#bsMsg').textContent = 'Added “' + t + '” ✓ — ' + songs.length + ' songs now.'; $('#bsT').value = ''; $('#bsA').value = ''; $('#bsT').focus();
@@ -3252,7 +3578,7 @@ function openBingoImport(addTo){
     for (const s of songs){ const k = songKey(s.t, s.a); if (seen.has(k)) continue; seen.add(k); uniq.push({ t: s.t, a: s.a, m: s.m }); }
     if (l){
       closeModal();
-      await saveSongs(l.id, [...l.songs.map(x => ({ t: x.t, a: x.a, m: x.m })), ...uniq]);
+      await saveSongs(l.id, [...l.songs.map(x => sBase(x)), ...uniq]);
       toast('Added ' + uniq.length + ' song' + (uniq.length === 1 ? '' : 's') + ' to ' + l.name + '.');
     } else {
       const name = $('#biName').value.trim(); if (!name){ toast('Give the list a name.'); $('#biName').focus(); return; }
@@ -3488,7 +3814,7 @@ $('#bGrid').addEventListener('click', e => {
   const d = e.target.closest('[data-extra]'); if (!d) return;
   const l = B.lists.get(B.curId); if (!l) return;
   const i = Number(d.dataset.extra), s = l.songs[i]; if (!s) return;
-  const songs = l.songs.map(x => ({ t: x.t, a: x.a, m: x.m })); songs.splice(i, 1);
+  const songs = l.songs.map(x => sBase(x)); songs.splice(i, 1);
   const ex = cleanExtras(l.extras); if (!ex.some(x => songKey(x.t, x.a) === s._k)) ex.push({ t: s.t, a: s.a, ...(s.m ? { m: s.m } : {}) });
   saveSongs(l.id, songs); saveExtras(l.id, ex);
   toast('Moved “' + s.t + '” to Extras.');
@@ -3511,7 +3837,7 @@ function openExtras(listId){
     const cur = B.lists.get(l.id), have = new Set(cur.songs.map(x => x._k)), add = [];
     for (const x of n){ const k = songKey(x.t, x.a); if (!have.has(k)){ have.add(k); add.push(x); } }
     closeModal();
-    await saveSongs(l.id, [...cur.songs.map(x => ({ t: x.t, a: x.a, m: x.m })), ...add]);
+    await saveSongs(l.id, [...cur.songs.map(x => sBase(x)), ...add]);
     await saveExtras(l.id, []);
     toast('Moved ' + add.length + ' song' + (add.length === 1 ? '' : 's') + ' back onto “' + l.name + '”.');
   };
