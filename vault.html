@@ -2641,10 +2641,10 @@ function openImport(){
       if (!seen.has(key)){
         const set = new Set(), idm = new Map();
         if (cat){ const ex = await ensureExisting(cat.id); ex.forEach(q => { set.add(normQ(q.question)); idm.set(normQ(q.question), q); }); if (my !== st.ver) return; }
-        seen.set(key, { set, idm, used: false });
+        seen.set(key, { set, idm, done: new Set(), used: false });
       }
       const g = seen.get(key);
-      for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)){ en.dupCount++; const ex = g.idm.get(k); if (ex && !ex.__seen && (rec.masterCat || rec.subCat || (rec.tags && rec.tags.length))){ ex.__seen = 1; en.toUpd.push({ id: ex.__id, ex, rec }); } } else { g.set.add(k); en.toAdd.push(rec); } }
+      for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)){ en.dupCount++; const ex = g.idm.get(k); if (ex && !g.done.has(k) && (rec.masterCat || rec.subCat || (rec.tags && rec.tags.length))){ g.done.add(k); en.toUpd.push({ id: ex.__id, ex, rec }); } } else { g.set.add(k); en.toAdd.push(rec); } }
       en.status = badName(en) ? 'Needs a real category name' : destCat ? `Adds to “${destCat.name}”` : cat ? `Adds to existing` : g.used ? 'Merges with file above' : 'New category';
       if (en.parsed.layout) en.status += ' · ' + en.parsed.layout;
       g.used = true;
