@@ -796,7 +796,7 @@ function mapHeaders(headerRow, ctx, extraMap){
         ctx.pending.set(n, col);
       }
     }
-    if (seen.has(col.key)){ map[i] = null; return; }
+    if (seen.has(col.key)){ map[i] = col.isNew ? null : { ...col, dup: true }; return; }
     seen.add(col.key); map[i] = col;
   });
   return map;
@@ -824,7 +824,7 @@ function recordsFromCSV(rows, ctx){
     const rec = {};
     for (const c of BUILTIN) if (c.type !== 'ro') rec[c.key] = defaultFor(c);
     for (const c of ctx.custom) rec[c.key] = defaultFor(c);
-    map.forEach((c, i) => { if (c) rec[c.key] = convert(c, row[i]); });
+    map.forEach((c, i) => { if (!c) return; const v = convert(c, row[i]); if (c.dup && (v === '' || v == null || (Array.isArray(v) && !v.length))) return; rec[c.key] = v; });
     if (!rec.question){ out.noQ++; continue; }
     out.records.push(rec);
   }
