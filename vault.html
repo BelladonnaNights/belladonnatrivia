@@ -512,6 +512,8 @@ textarea::placeholder{color:#8a8a8a !important}
             <label class="chk" title="Hide questions this venue has had recently">Not used at <select id="venueSel" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:5px 8px;font:13px var(--font)"><option value="">any venue</option></select> in the last <select id="usedWin" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:5px 8px;font:13px var(--font)"><option value="3">3 months</option><option value="6" selected>6 months</option><option value="9">9 months</option><option value="12">12 months</option></select></label>
             <label class="chk"><input type="checkbox" id="showArch"> Archived</label>
             <button class="btn ghost hidden" id="resetOrderBtn" title="Put the columns back in their saved order">Reset column order</button>
+            <button class="btn ghost" id="playBtn" title="Saved sets of rules that pull questions from the library — with a preview of how many questions match">Playable categories</button>
+            <button class="btn ghost" id="tagsBtn" title="Search, rename, merge, add and delete every tag — or copy / paste the whole list">Tags</button>
             <button class="btn ghost" id="sortBtn" title="Fill in empty master categories, subcategories and tags from keywords — you review first">Sort for me</button>
             <button class="btn ghost" id="taxBtn" title="Add, rename or remove the master categories and subcategories">Manage categories</button>
             <button class="btn ghost" id="colsBtn">Columns</button>
@@ -561,6 +563,7 @@ textarea::placeholder{color:#8a8a8a !important}
             <button class="btn ghost hidden" id="bExportMissing">Export CSV</button>
             <button class="btn ghost" id="bUndo" title="Nothing to undo" disabled style="opacity:.45">↶ Undo</button>
             <button class="btn ghost" id="bIndexLink" title="Link this list to a category in the Bingo index — or create one">Bingo index</button>
+            <button class="btn ghost" id="bTags" title="Search, rename, merge, add and delete every song tag — or copy / paste the whole list">Tags</button>
             <button class="btn ghost" id="bSort" title="Fill in empty categories, subcategories and tags on the songs — you review first">Sort for me</button>
             <button class="btn ghost" id="bTax" title="Add, rename or remove the song categories and subcategories">Categories</button>
             <button class="btn ghost" id="bExtras" title="Extra songs for this list — ones that didn’t make the cut, saved here to use later">Extras</button>
@@ -1017,6 +1020,8 @@ function startListeners(){
   startFeedback();
   try {
     rtdb = rtdb || getDatabase(app);
+    S.unsubs.push(ronValue(rref(rtdb, 'trivia/planner/venues'), snap => { U.names = new Map(Object.entries(snap.val() || {}).map(([id, v]) => [id, (v && v.name) || id])); rebuildUsage(); usageRefresh(); }, () => {}));
+    S.unsubs.push(ronValue(rref(rtdb, 'trivia/questionPlays'), snap => { U.plays = snap.val() || {}; rebuildUsage(); usageRefresh(); }, () => {}));
     S.unsubs.push(ronValue(rref(rtdb, 'trivia/categories'), snap => {
       PLAN.byId = new Map(); PLAN.byName = new Map();
       for (const t of Object.values(snap.val() || {})){
@@ -1424,6 +1429,22 @@ thead.addEventListener('click', e => {
   renderAll();
 });
 
+/* Usage: the live Trivia app records every question a venue plays at trivia/questionPlays/<venue>/vault__<category>__<question>
+   ({ lastPlayed, plays }); the Vault only reads it. Venue names come from trivia/planner/venues. */
+const U = { plays: {}, names: new Map(), idx: new Map() };
+const USAGE_KEYS = new Set(['lastUsedAt', 'lastUsedVenue', 'timesUsed', 'usedAt']);
+function rebuildUsage(){
+  const idx = new Map();
+  for (const [vid, byKey] of Object.entries(U.plays || {})) for (const [key, p] of Object.entries(byKey || {})){
+    if (!p || !p.lastPlayed) continue; let e = idx.get(key); if (!e){ e = { last: 0, venue: '', times: 0, usedAt: {} }; idx.set(key, e); }
+    const nm = U.names.get(vid) || vid; e.times += Number(p.plays) || 1; e.usedAt[vid] = { n: nm, t: p.lastPlayed }; if (p.lastPlayed > e.last){ e.last = p.lastPlayed; e.venue = nm; }
+  }
+  U.idx = idx;
+}
+const usageOf = (catId, qid) => U.idx.get('vault__' + catId + '__' + qid);
+function usageVal(r, k){ const e = usageOf((r.data && r.data.categoryId) || S.curId, r.id); if (!e) return k === 'usedAt' ? {} : null; return k === 'lastUsedAt' ? e.last : k === 'lastUsedVenue' ? e.venue : k === 'timesUsed' ? e.times : e.usedAt; }
+const rowVal = (r, c) => USAGE_KEYS.has(c.key) ? usageVal(r, c.key) : r.data[c.key];
+function usageRefresh(){ try { for (const r of S.rows.values()) if (r.tr) try { updateRowDom(r); } catch (e) {} renderVenueSel(); applyFilter(); } catch (e) {} }
 /* Master category / Subcategory lists (Manage categories) and the read-only usage columns */
 const TAX_DEFAULT = (() => {
   const M = { 'Christmas Movies': ['Christmas Comedy','Christmas Classics','Christmas Horror','Animated Christmas','Christmas Romance','Christmas Movie Quotes','Christmas Movie Locations','Christmas Movie Characters','Christmas Movie Soundtracks','Behind the Scenes'],
@@ -1624,7 +1645,7 @@ function buildRow(r){
   if (r.data.archived) tr.classList.add('arch');
   let h = '<td class="num"><button class="rowx rowedit" data-act="rowedit" tabindex="-1" title="Open this question as a form (edit every column)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.4" r="2.6"/><path d="M2.8 14c.5-2.9 2.6-4.4 5.2-4.4s4.7 1.5 5.2 4.4"/></svg></button><button class="rowx" data-act="rowdelete" tabindex="-1" title="Delete this question">\u2715</button><span class="dot"></span><span class="n"></span></td><td class="fb">' + fbHTML(r) + '</td>';
   { const vc = visibleCols(), ax = mcAnchor(vc);
-    for (const c of vc){ h += `<td class="c-${c.type}${c.key === 'question' ? ' stickyQ' : ''}">${cellHTML(c, r.data[c.key])}</td>`; if (c.key === ax) h += mcCells(r); } }
+    for (const c of vc){ h += `<td class="c-${c.type}${c.key === 'question' ? ' stickyQ' : ''}">${cellHTML(c, rowVal(r, c))}</td>`; if (c.key === ax) h += mcCells(r); } }
   h += r.data.archived
     ? '<td class="act"><button class="ico" data-act="restore" tabindex="-1" title="Restore">↺</button><button class="ico del" data-act="delete" tabindex="-1" title="Delete forever">🗑</button></td>'
     : '<td class="act"><button class="ico" data-act="archive" tabindex="-1" title="Archive this question">✕</button></td>';
@@ -1640,7 +1661,7 @@ function updateRowDom(r){
   }
   for (const c of visibleCols()){
     const el = tr.querySelector(`[data-key="${c.key}"]`); if (!el || el === act) continue;
-    const v = r.data[c.key];
+    const v = rowVal(r, c);
     if (c.type === 'tags') el.value = (v || []).join(', ');
     else if (c.type === 'check') el.checked = !!v;
     else if (c.type === 'thumbs'){ el.dataset.v = v || ''; el.textContent = v === 'up' ? '👍' : v === 'down' ? '👎' : '·'; }
@@ -1790,7 +1811,7 @@ function openQuestionEditor(r){
   const rowIds = () => [...tbody.children].filter(tr => !tr.hidden && tr.offsetParent !== null).map(tr => tr.dataset.id);
   const numberOf = () => { const i = rowIds().indexOf(cur.id); return i >= 0 ? i + 1 : '–'; };
   const draw = () => {
-    body.innerHTML = colsFor().map(([t, cs]) => `<div class="qeSec">${esc(t)}</div>` + cs.map(c => fieldHTML(c, cur.data[c.key])).join('')).join('');
+    body.innerHTML = colsFor().map(([t, cs]) => `<div class="qeSec">${esc(t)}</div>` + cs.map(c => fieldHTML(c, rowVal(cur, c))).join('')).join('');
     $$('textarea', body).forEach(autosize);
     const h = $('#modal h2'); if (h) h.textContent = 'Question ' + numberOf();
   };
@@ -1878,7 +1899,7 @@ $('#tagBar').addEventListener('click', e => {
 
 /* filters + dupes --------------------------------------------- */
 function renderVenueSel(){
-  const m = new Map(); for (const r of S.rows.values()) for (const [k, u] of Object.entries((r.data && r.data.usedAt) || {})) if (u && u.n) m.set(k, u.n);
+  const m = new Map(); for (const r of S.rows.values()) for (const [k, u] of Object.entries(usageVal(r, 'usedAt') || {})) if (u && u.n) m.set(k, u.n);
   const sig = [...m.entries()].sort().join('|'), sel = $('#venueSel'); if (!sel || sel.dataset.sig === sig) return; sel.dataset.sig = sig;
   sel.innerHTML = '<option value="">any venue</option>' + [...m.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([k, n]) => `<option value="${esc(k)}" ${k === S.venue ? 'selected' : ''}>${esc(n)}</option>`).join('');
 }
@@ -1890,7 +1911,7 @@ function applyFilter(){
     let vis = true;
     if (r.persisted){
       if (d && Number(r.data.difficulty) !== d) vis = false;
-      if (vis && S.venue){ const u = (r.data.usedAt || {})[S.venue]; if (u && u.t && Date.now() - u.t < S.usedWin * 30.44 * 864e5) vis = false; }
+      if (vis && S.venue){ const u = (usageVal(r, 'usedAt') || {})[S.venue]; if (u && u.t && Date.now() - u.t < S.usedWin * 30.44 * 864e5) vis = false; }
       if (vis && S.filter.tags.size){ const have = r.data.tags || []; for (const t of S.filter.tags) if (!have.includes(t)) vis = false; }
       if (vis && q){ const hay = [r.data.question, r.data.answer, r.data.optionA, r.data.optionB, r.data.optionC, r.data.optionD, r.data.bonusQuestion, r.data.notes, (r.data.tags || []).join(' ')].join(' ').toLowerCase(); if (!hay.includes(q)) vis = false; }
     }
@@ -2202,6 +2223,187 @@ function sortSong(s, listName){
 }
 /* </sort-rules> */
 
+
+/* ── Tags: every tag in use (trivia questions or bingo songs), searchable; rename / merge / delete everywhere, add tags that aren't used yet, copy or paste the whole list ── */
+const TGC = {
+  trivia: {
+    title: 'Tags — trivia questions', dict: () => doc(db, 'triviaConfig', 'tagList'),
+    async load(){ const snap = await getDocs(qColl()); return snap.docs.map(d => ({ id: d.id, ref: d.ref, tags: Array.isArray(d.data().tags) ? d.data().tags : [] })); },
+    async save(ch){ const arr = [...ch.entries()]; for (let i = 0; i < arr.length; i += 400){ const b = writeBatch(db); arr.slice(i, i + 400).forEach(([, c]) => b.update(c.it.ref, { tags: c.tags, updatedAt: serverTimestamp() })); await b.commit(); } }
+  },
+  bingo: {
+    title: 'Tags — bingo songs', dict: () => doc(db, 'bingoConfig', 'tagList'),
+    async load(){ const out = []; for (const l of B.lists.values()) l.songs.forEach((x, i) => out.push({ id: l.id + ':' + i, listId: l.id, i, tags: Array.isArray(x.g) ? x.g : [] })); return out; },
+    async save(ch){ const by = new Map(); for (const [, c] of ch) (by.get(c.it.listId) || by.set(c.it.listId, []).get(c.it.listId)).push(c); for (const [lid, cs] of by){ const l = B.lists.get(lid); if (!l) continue; const songs = l.songs.map(sBase); cs.forEach(c => { songs[c.it.i].g = c.tags; }); await updateDoc(bListRef(lid), { songs: cleanSongs(songs), updatedAt: serverTimestamp() }); } }
+  }
+};
+const normTag = t => parseTags(t)[0] || '';
+async function openTags(X){
+  const body = document.createElement('div'); let items = [], dict = [], q = '', sortBy = 'az', arm = '', limit = 300, busy = false;
+  const stI = 'padding:8px 11px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none';
+  const counts = () => { const m = new Map(); items.forEach(it => it.tags.forEach(t => m.set(t, (m.get(t) || 0) + 1))); dict.forEach(t => { if (!m.has(t)) m.set(t, 0); }); return m; };
+  const load = async () => { items = await X.load(); const d = await getDoc(X.dict()); dict = d.exists() && Array.isArray(d.data().list) ? d.data().list.map(normTag).filter(Boolean) : []; };
+  const saveDict = async list => { dict = [...new Set(list)].sort((a, b) => a.localeCompare(b)); await setDoc(X.dict(), { list: dict, updatedAt: serverTimestamp() }); };
+  // apply a map old -> new (or null = delete) to every item and to the saved list
+  const applyMap = async (map, addNew = []) => {
+    const ch = new Map();
+    for (const it of items){ const out = []; for (const t of it.tags){ const n = map.has(t) ? map.get(t) : t; if (n && !out.includes(n)) out.push(n); } if (JSON.stringify(out) !== JSON.stringify(it.tags)) ch.set(it.id, { it, tags: out }); }
+    if (ch.size) await X.save(ch);
+    const nd = []; for (const t of dict){ const n = map.has(t) ? map.get(t) : t; if (n) nd.push(n); } addNew.forEach(t => nd.push(t));
+    await saveDict(nd); await load(); return ch.size;
+  };
+  const draw = () => {
+    const c = counts(); let rows = [...c.entries()]; const total = rows.length;
+    if (q) rows = rows.filter(([t]) => t.includes(q.toLowerCase()));
+    rows.sort(sortBy === 'used' ? (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]) : (a, b) => a[0].localeCompare(b[0]));
+    const shown = rows.slice(0, limit);
+    body.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><input type="text" id="tgQ" value="${esc(q)}" placeholder="" style="${stI};flex:1;min-width:180px" autocomplete="off" aria-label="Search tags"><select id="tgSort" style="${stI}"><option value="az" ${sortBy === 'az' ? 'selected' : ''}>A to Z</option><option value="used" ${sortBy === 'used' ? 'selected' : ''}>Most used first</option></select><button class="btn ghost" id="tgCopy">Copy whole list</button><button class="btn ghost" id="tgPasteBtn">Paste a list…</button></div>
+      <div class="hint" style="margin:0 0 8px">${total.toLocaleString()} tag${total === 1 ? '' : 's'}${q ? ' · ' + rows.length.toLocaleString() + ' match' : ''}. Rename a tag to change it everywhere; rename it to one that already exists to merge them.</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px"><input type="text" id="tgNew" style="${stI};flex:1" autocomplete="off" aria-label="New tag"><button class="btn" id="tgAdd">Add tag</button></div>
+      <div id="tgPaste" class="hidden" style="margin-bottom:12px"><div class="hint" style="margin:0 0 6px">One tag per line. A plain line adds that tag. To change one, write <b>old tag =&gt; new tag</b>. To delete one, write <b>old tag =&gt;</b> with nothing after it.</div><textarea id="tgPasteTxt" style="${stI};width:100%;min-height:150px"></textarea><div style="margin-top:6px"><button class="btn primary" id="tgPasteGo">Apply</button> <span class="hint" id="tgPasteMsg"></span></div></div>
+      <div style="max-height:46vh;overflow:auto">${shown.map(([t, n]) => `<div style="display:flex;gap:6px;align-items:center;margin:0 0 5px"><input type="text" data-tg="${esc(t)}" value="${esc(t)}" style="${stI};flex:1;min-width:0"><span class="hint" style="margin:0;min-width:74px;text-align:right">${n} use${n === 1 ? '' : 's'}</span><button class="btn ghost" data-tgren="${esc(t)}">Rename</button><button class="btn ${arm === t ? 'danger' : 'ghost'}" data-tgdel="${esc(t)}">${arm === t ? 'Remove from ' + n + '?' : 'Remove'}</button></div>`).join('') || '<div class="hint">No tags match.</div>'}${rows.length > limit ? `<div style="padding:8px 0"><button class="btn ghost sm" id="tgMore">Show 300 more</button></div>` : ''}</div>`;
+  };
+  openModal({ title: X.title, body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }] });
+  body.textContent = 'Reading all the tags…';
+  try { await load(); } catch (e){ body.textContent = 'Couldn’t read them: ' + (e && e.message || e); return; }
+  draw();
+  const keepFocus = fn => { const id = document.activeElement && document.activeElement.id; fn(); if (id){ const el = body.querySelector('#' + id); if (el){ el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} } } };
+  body.addEventListener('input', e => { if (e.target.id === 'tgQ'){ q = e.target.value.trim(); limit = 300; keepFocus(draw); } });
+  body.addEventListener('change', e => { if (e.target.id === 'tgSort'){ sortBy = e.target.value; draw(); } });
+  body.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (e.target.id === 'tgNew'){ e.preventDefault(); body.querySelector('#tgAdd').click(); } else if (e.target.dataset.tg !== undefined){ e.preventDefault(); const b = [...body.querySelectorAll('button[data-tgren]')].find(x => x.dataset.tgren === e.target.dataset.tg); if (b) b.click(); } });
+  body.addEventListener('click', async e => {
+    const t = e.target; if (busy) return;
+    if (t.id === 'tgMore'){ limit += 300; draw(); return; }
+    if (t.id === 'tgPasteBtn'){ body.querySelector('#tgPaste').classList.toggle('hidden'); return; }
+    if (t.id === 'tgCopy'){ const txt = [...counts().keys()].sort((a, b) => a.localeCompare(b)).join('\n'); try { await navigator.clipboard.writeText(txt); toast('Copied ' + counts().size.toLocaleString() + ' tags'); } catch (err){ const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Copied ' + counts().size.toLocaleString() + ' tags'); } catch (e2){ toast('Couldn’t copy — use Paste a list to see the text'); } ta.remove(); } return; }
+    if (t.id === 'tgAdd'){ const v = normTag(body.querySelector('#tgNew').value); if (!v) return; if (counts().has(v)) return toast('That tag already exists'); busy = true; await run(async () => { await saveDict(dict.concat(v)); toast('Added'); }); busy = false; draw(); return; }
+    if (t.dataset && t.dataset.tgren !== undefined){ const old = t.dataset.tgren, inp = [...body.querySelectorAll('input[data-tg]')].find(x => x.dataset.tg === old), nv = normTag(inp.value); if (!nv || nv === old) return;
+      const merge = counts().has(nv); busy = true; await run(async () => { const n = await applyMap(new Map([[old, nv]])); toast((merge ? 'Merged into “' + nv + '”' : 'Renamed') + (n ? ' on ' + n.toLocaleString() + ' item' + (n === 1 ? '' : 's') : '')); }); busy = false; arm = ''; draw(); return; }
+    if (t.dataset && t.dataset.tgdel !== undefined){ const old = t.dataset.tgdel, n = counts().get(old) || 0; if (n && arm !== old){ arm = old; draw(); return; }
+      busy = true; await run(async () => { await applyMap(new Map([[old, null]])); toast('Removed'); }); busy = false; arm = ''; draw(); return; }
+    if (t.id === 'tgPasteGo'){ const lines = body.querySelector('#tgPasteTxt').value.split(/\r?\n/).map(x => x.trim()).filter(Boolean); if (!lines.length) return;
+      const map = new Map(), add = []; for (const ln of lines){ const m = ln.match(/^(.*?)\s*(?:=>|->|→)\s*(.*)$/); if (m){ const o = normTag(m[1]), n = normTag(m[2]); if (o) map.set(o, n || null); } else { const a = normTag(ln); if (a) add.push(a); } }
+      busy = true; await run(async () => { const n = await applyMap(map, add); toast('Done' + (n ? ' — ' + n.toLocaleString() + ' item' + (n === 1 ? '' : 's') + ' updated' : '')); }); busy = false; body.querySelector('#tgPasteTxt') && (q = ''); draw(); return; }
+  });
+}
+
+/* ── Playable categories: saved rules that pull questions from the library (saved in Firestore: triviaConfig/recipes) ── */
+const RC = { list: [], sel: '', qs: null, venue: '', dirty: false, sample: null };
+const rcNew = () => ({ id: 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: '', status: 'draft', life: 'evergreen', libs: [], subs: [], tags: [], needTag: false, never: [], diff: 'mixed', perGame: 15, rounds: [], excluded: [] });
+const rcCur = () => RC.list.find(x => x.id === RC.sel);
+const rcShuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+function rcFilter(rec, round){
+  const f = q => {
+    if (rec.libs.length && !rec.libs.includes(q.master)) return false;
+    if (!rec.libs.length && !(rec.needTag && rec.tags.length) && !rec.subs.length && !q.master) return false;
+    if (rec.subs.length && !rec.subs.includes(q.sub)) return false;
+    if (rec.needTag && rec.tags.length && !rec.tags.some(t => q.tags.includes(t))) return false;
+    if (rec.never.some(t => q.tags.includes(t))) return false;
+    if (rec.diff !== 'mixed' && String(q.diff) !== rec.diff) return false;
+    if (rec.excluded.includes(q.id)) return false;
+    if (round){ if ((round.libs || []).length && !round.libs.includes(q.master)) return false; if ((round.tags || []).length && !round.tags.some(t => q.tags.includes(t))) return false; }
+    return true;
+  };
+  return (RC.qs || []).filter(f);
+}
+const rcFresh = q => { if (!RC.venue) return true; const e = usageOf(q.catId, q.id), u = e && e.usedAt[RC.venue]; return !(u && u.t && Date.now() - u.t < (S.usedWin || 6) * 30.44 * 864e5); };
+function rcDraw(rec){
+  const pref = q => rec.tags.some(t => q.tags.includes(t)) ? 0 : 1, rank = arr => rcShuffle(arr).sort((a, b) => (Number(rcFresh(b)) - Number(rcFresh(a))) || (pref(a) - pref(b)));
+  const groups = rec.rounds.length ? rec.rounds.map(x => ({ name: x.name, count: x.count, pool: rcFilter(rec, x) })) : [{ name: '', count: rec.perGame, pool: rcFilter(rec) }];
+  const picked = new Set(), out = [];
+  for (const g of groups){
+    const by = { 1: [], 2: [], 3: [] }; rank(g.pool).forEach(q => (by[q.diff] || by[1]).push(q));
+    let n = 0, d = 1, empty = 0;
+    while (n < g.count && empty < 3){ const q = by[d].find(x => !picked.has(x.id)); if (q){ picked.add(q.id); out.push({ ...q, round: g.name }); n++; empty = 0; } else empty++; d = d % 3 + 1; }
+  }
+  return out;
+}
+async function openPlayable(){
+  const body = document.createElement('div'); const st = 'padding:8px 11px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none';
+  body.style.cssText = 'display:flex;gap:16px;min-height:60vh'; body.innerHTML = 'Reading your questions…';
+  openModal({ title: 'Playable categories', body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }] });
+  try {
+    const d = await getDoc(doc(db, 'triviaConfig', 'recipes')); RC.list = d.exists() && Array.isArray(d.data().list) ? d.data().list.map(x => ({ ...rcNew(), ...x })) : [];
+    const snap = await getDocs(qColl());
+    RC.qs = snap.docs.map(x => { const q = x.data(), cat = S.cats.get(q.categoryId) || {}; return { id: x.id, catId: q.categoryId, q: String(q.question || ''), a: String(q.answer || ''), diff: Math.min(3, Math.max(1, parseInt(q.difficulty) || 1)), master: q.masterCat || '', sub: q.subCat || '', tags: Array.isArray(q.tags) ? q.tags : [], archived: !!q.archived || !!cat.archived }; }).filter(q => !q.archived && q.q.trim() && q.a.trim());
+  } catch (e){ body.textContent = 'Couldn’t read the library: ' + (e && e.message || e); return; }
+  if (!RC.list.some(x => x.id === RC.sel)) RC.sel = RC.list.length ? RC.list[0].id : ''; RC.dirty = false; RC.sample = null;
+  const T = () => taxNow(), chip = (v, label, on, attr) => `<label style="display:inline-flex;gap:6px;align-items:center;margin:0 12px 6px 0;font-size:13px;text-transform:none;letter-spacing:0"><input type="checkbox" ${attr}="${esc(v)}" ${on ? 'checked' : ''} style="width:15px;height:15px;margin:0"> ${esc(label || v)}</label>`;
+  const drawList = () => { const el = body.querySelector('#rcList'); if (!el) return; el.innerHTML = RC.list.map(x => `<button class="btn ${x.id === RC.sel ? 'primary' : 'ghost'}" data-rcsel="${x.id}" style="display:block;width:100%;text-align:left;margin:0 0 6px"><span>${esc(x.name || 'Untitled')}</span> <small style="opacity:.7">${x.status === 'active' ? '' : x.status}</small></button>`).join('') || '<div class="hint">None yet.</div>'; };
+  const drawPrev = () => {
+    const rec = rcCur(), el = body.querySelector('#rcPrev'); if (!el || !rec) return;
+    const pool = rcFilter(rec), per = rec.rounds.length ? rec.rounds.reduce((n, x) => n + (Number(x.count) || 0), 0) : rec.perGame;
+    const rp = rec.rounds.map(x => ({ x, n: rcFilter(rec, x).length })), sets = rec.rounds.length ? Math.min(...rp.map(y => y.x.count ? Math.floor(y.n / y.x.count) : 0)) : (per ? Math.floor(pool.length / per) : 0);
+    const dc = [1, 2, 3].map(d => pool.filter(q => q.diff === d).length), prefN = rec.tags.length ? pool.filter(q => rec.tags.some(t => q.tags.includes(t))).length : null, fresh = RC.venue ? pool.filter(rcFresh).length : null;
+    const warn = []; if (!rec.libs.length && !(rec.needTag && rec.tags.length) && !rec.subs.length) warn.push('Pick at least one library or tag, or this uses every categorized question.');
+    if (pool.length < per) warn.push(`Only ${pool.length} question${pool.length === 1 ? '' : 's'} match — a ${per}-question game needs at least ${per}.`);
+    rp.forEach(y => { if (y.x.count && y.n < y.x.count) warn.push(`Round “${y.x.name || 'Untitled'}” has ${y.n} matching, needs ${y.x.count}.`); });
+    if (fresh != null && fresh < per) warn.push(`Only ${fresh} haven’t been played at that venue in the last ${S.usedWin || 6} months.`);
+    const venues = [...U.names.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    el.innerHTML = `<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px"><div><b style="font-size:26px;color:var(--gold2)">${pool.length.toLocaleString()}</b><div class="hint" style="margin:0">eligible questions</div></div><div><b style="font-size:26px">${per}</b><div class="hint" style="margin:0">per game</div></div><div><b style="font-size:26px">${sets}</b><div class="hint" style="margin:0">non-overlapping games</div></div></div>
+      <div class="hint" style="margin:0 0 6px">Easy ${dc[0]} · Medium ${dc[1]} · Hard ${dc[2]}${prefN != null ? ' · ' + prefN + ' with a preferred tag' : ''}</div>
+      <label class="chk" style="margin:4px 0">Check against venue <select id="rcVenue" style="${st};padding:4px 8px"><option value="">(none)</option>${venues.map(([id, n]) => `<option value="${esc(id)}" ${id === RC.venue ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>${fresh != null ? ` — <b>${fresh}</b> not played there in ${S.usedWin || 6} months` : ''}</label>
+      ${warn.map(w => `<div style="color:var(--red, #e07a7a);font-size:13px;margin:4px 0">⚠ ${esc(w)}</div>`).join('')}
+      <div style="margin-top:10px"><button class="btn" id="rcDraw">Draw a sample game</button></div><div id="rcSample" style="margin-top:8px;font-size:13px"></div>`;
+    drawSample();
+  };
+  const drawSample = () => {
+    const el = body.querySelector('#rcSample'), rec = rcCur(); if (!el || !rec) return; if (!RC.sample){ el.innerHTML = ''; return; }
+    let last = null; el.innerHTML = RC.sample.map((q, i) => { const head = q.round !== last && q.round ? `<div style="font-weight:700;margin:8px 0 3px">${esc(q.round)}</div>` : ''; last = q.round; const cat = (S.cats.get(q.catId) || {}).name || '';
+      return head + `<div style="display:flex;gap:8px;align-items:flex-start;margin:0 0 4px"><span style="flex:1"><b>${i + 1}.</b> ${esc(q.q)} <span style="opacity:.65">→ ${esc(q.a)}</span> <small style="opacity:.55">(${['', 'easy', 'medium', 'hard'][q.diff]}${cat ? ' · ' + esc(cat) : ''}${q.master ? ' · ' + esc(q.master) : ''})</small></span><button class="btn ghost sm" data-rcex="${esc(q.id)}">Leave out</button></div>`; }).join('')
+      + (rec.excluded.length ? `<div class="hint" style="margin-top:8px">${rec.excluded.length} left out of this category. <button class="btn ghost sm" id="rcRestore">Put them all back</button></div>` : '');
+  };
+  const drawForm = () => {
+    const rec = rcCur(), el = body.querySelector('#rcForm'); if (!el) return;
+    if (!rec){ el.innerHTML = '<div class="hint">Make a playable category — a saved set of rules that pulls questions from your library. Questions are never copied; fix one and it’s fixed everywhere.</div>'; return; }
+    const masters = T().masters, subs = T().subs.filter(x => rec.libs.includes(x.m));
+    el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><label class="fld" style="flex:2;min-width:200px">Name<input type="text" data-rf="name" value="${esc(rec.name)}" style="${st}" autocomplete="off"></label>
+      <label class="fld">Status<select data-rf="status" style="${st}"><option value="active" ${rec.status === 'active' ? 'selected' : ''}>Active</option><option value="draft" ${rec.status === 'draft' ? 'selected' : ''}>Draft</option><option value="archived" ${rec.status === 'archived' ? 'selected' : ''}>Archived</option></select></label>
+      <label class="fld">Lasts<select data-rf="life" style="${st}"><option value="evergreen" ${rec.life === 'evergreen' ? 'selected' : ''}>Evergreen</option><option value="event" ${rec.life === 'event' ? 'selected' : ''}>Event-specific</option></select></label></div>
+      <div style="font-weight:700;margin:6px 0 4px">Pull questions from these libraries</div><div>${masters.map(m => chip(m, m, rec.libs.includes(m), 'data-rlib')).join('') || '<span class="hint">Add master categories first (Manage categories).</span>'}</div>
+      ${subs.length ? `<details style="margin:6px 0"><summary style="cursor:pointer">Narrow to subcategories${rec.subs.length ? ' (' + rec.subs.length + ')' : ''}</summary><div style="margin-top:6px">${subs.map(x => chip(x.n, x.n + ' · ' + x.m, rec.subs.includes(x.n), 'data-rsub')).join('')}</div></details>` : ''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0"><label class="fld" style="flex:1;min-width:220px">Tags to prefer (comma separated)<input type="text" data-rf="tags" value="${esc(rec.tags.join(', '))}" style="${st}" autocomplete="off"></label><label class="fld" style="flex:1;min-width:200px">Never use questions tagged<input type="text" data-rf="never" value="${esc(rec.never.join(', '))}" style="${st}" autocomplete="off"></label></div>
+      <label class="chk" style="margin:0 0 8px"><input type="checkbox" data-rf="needTag" ${rec.needTag ? 'checked' : ''}> Only use questions that have at least one of the preferred tags</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="fld">Difficulty<select data-rf="diff" style="${st}">${[['mixed', 'Mixed'], ['1', 'Easy'], ['2', 'Medium'], ['3', 'Hard']].map(([v, l]) => `<option value="${v}" ${rec.diff === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="fld">Questions per game<input type="number" min="1" max="200" data-rf="perGame" value="${rec.perGame}" style="${st};width:110px" ${rec.rounds.length ? 'disabled title="Set by the rounds below"' : ''}></label></div>
+      <div style="font-weight:700;margin:14px 0 4px">Rounds <span class="hint" style="font-weight:400">(optional — each round pulls from its own part of the library)</span></div>
+      ${rec.rounds.map((x, i) => `<div style="border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin:0 0 8px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end"><label class="fld" style="flex:2;min-width:160px">Round name<input type="text" data-rr="${i}:name" value="${esc(x.name)}" style="${st}" autocomplete="off"></label><label class="fld">Questions<input type="number" min="1" max="100" data-rr="${i}:count" value="${x.count}" style="${st};width:90px"></label><label class="fld" style="flex:1;min-width:160px">Tags (any)<input type="text" data-rr="${i}:tags" value="${esc((x.tags || []).join(', '))}" style="${st}" autocomplete="off"></label><button class="btn ghost sm" data-rrdel="${i}">Remove</button></div>
+        ${rec.libs.length ? `<div style="margin-top:6px">${rec.libs.map(m => chip(i + ':' + m, m, (x.libs || []).includes(m), 'data-rrlib')).join('')}</div>` : ''}</div>`).join('')}
+      <button class="btn ghost" id="rcAddRound">+ Add a round</button>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:16px;border-top:1px solid var(--border);padding-top:12px"><button class="btn primary" id="rcSave">Save</button><button class="btn ghost" id="rcDup">Duplicate</button><button class="btn ghost" id="rcDel">Delete</button><span class="hint" id="rcMsg" style="margin:0">${RC.dirty ? 'Unsaved changes' : ''}</span></div>`;
+  };
+  const drawAll = () => { body.innerHTML = `<div style="width:220px;flex:none;position:sticky;top:0;align-self:flex-start"><button class="btn primary" id="rcNew" style="width:100%;margin-bottom:10px">+ New playable category</button><div id="rcList"></div></div><div style="flex:1;min-width:0;display:flex;gap:16px;flex-wrap:wrap"><div id="rcForm" style="flex:1.3;min-width:320px"></div><div id="rcPrev" style="flex:1;min-width:260px;border-left:1px solid var(--border);padding-left:16px;position:sticky;top:0;align-self:flex-start"></div></div>`; drawList(); drawForm(); drawPrev(); };
+  drawAll();
+  const dirty = () => { RC.dirty = true; const m = body.querySelector('#rcMsg'); if (m) m.textContent = 'Unsaved changes'; };
+  const toggle = (arr, v, on) => { const i = arr.indexOf(v); if (on && i < 0) arr.push(v); if (!on && i >= 0) arr.splice(i, 1); };
+  const edit = e => {
+    const rec = rcCur(), t = e.target; if (!rec) return; let redraw = false;
+    if (t.dataset.rf){ const f = t.dataset.rf, v = t.type === 'checkbox' ? t.checked : t.value; if (f === 'tags') rec.tags = parseTags(v); else if (f === 'never') rec.never = parseTags(v); else if (f === 'perGame') rec.perGame = Math.max(1, parseInt(v) || 1); else rec[f] = v; if (f === 'name' || f === 'status') drawList(); }
+    else if (t.dataset.rlib !== undefined){ toggle(rec.libs, t.dataset.rlib, t.checked); rec.subs = rec.subs.filter(n => T().subs.some(x => x.n === n && rec.libs.includes(x.m))); redraw = true; }
+    else if (t.dataset.rsub !== undefined) toggle(rec.subs, t.dataset.rsub, t.checked);
+    else if (t.dataset.rr){ const [i, f] = t.dataset.rr.split(':'), rd = rec.rounds[Number(i)]; if (rd) rd[f] = f === 'count' ? Math.max(1, parseInt(t.value) || 1) : f === 'tags' ? parseTags(t.value) : t.value; }
+    else if (t.dataset.rrlib !== undefined){ const k = t.dataset.rrlib, i = Number(k.slice(0, k.indexOf(':'))), m = k.slice(k.indexOf(':') + 1), rd = rec.rounds[i]; if (rd){ rd.libs = rd.libs || []; toggle(rd.libs, m, t.checked); } }
+    else return;
+    dirty(); RC.sample = null; if (redraw) drawForm(); drawPrev();
+  };
+  body.addEventListener('input', e => { if (e.target.type !== 'checkbox' && e.target.tagName !== 'SELECT') edit(e); });
+  body.addEventListener('change', e => { if (e.target.id === 'rcVenue'){ RC.venue = e.target.value; drawPrev(); return; } if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') edit(e); });
+  const save = async () => { const rec = rcCur(); if (rec && !String(rec.name).trim()){ toast('Give it a name first'); return false; } return await run(async () => { await setDoc(doc(db, 'triviaConfig', 'recipes'), { list: RC.list, updatedAt: serverTimestamp() }); RC.dirty = false; const m = body.querySelector('#rcMsg'); if (m) m.textContent = 'Saved'; toast('Saved'); }); };
+  body.addEventListener('click', async e => {
+    const t = e.target, rec = rcCur();
+    if (t.id === 'rcNew'){ const n = rcNew(); RC.list.push(n); RC.sel = n.id; RC.dirty = true; RC.sample = null; drawList(); drawForm(); drawPrev(); return; }
+    if (t.dataset.rcsel){ RC.sel = t.dataset.rcsel; RC.sample = null; drawList(); drawForm(); drawPrev(); return; }
+    if (!rec) return;
+    if (t.id === 'rcAddRound'){ rec.rounds.push({ name: '', count: 5, libs: [], tags: [] }); dirty(); drawForm(); drawPrev(); return; }
+    if (t.dataset.rrdel !== undefined){ rec.rounds.splice(Number(t.dataset.rrdel), 1); dirty(); RC.sample = null; drawForm(); drawPrev(); return; }
+    if (t.id === 'rcDraw'){ RC.sample = rcDraw(rec); drawSample(); return; }
+    if (t.dataset.rcex){ rec.excluded.push(t.dataset.rcex); dirty(); RC.sample = rcDraw(rec); drawPrev(); return; }
+    if (t.id === 'rcRestore'){ rec.excluded = []; dirty(); RC.sample = null; drawPrev(); return; }
+    if (t.id === 'rcSave'){ await save(); drawList(); return; }
+    if (t.id === 'rcDup'){ const c = JSON.parse(JSON.stringify(rec)); c.id = rcNew().id; c.name = (rec.name || 'Untitled') + ' copy'; c.status = 'draft'; RC.list.push(c); RC.sel = c.id; dirty(); RC.sample = null; drawList(); drawForm(); drawPrev(); return; }
+    if (t.id === 'rcDel'){ if (t.dataset.arm !== '1'){ t.dataset.arm = '1'; t.textContent = 'Really delete?'; return; } RC.list = RC.list.filter(x => x.id !== rec.id); RC.sel = RC.list.length ? RC.list[0].id : ''; RC.sample = null; await save(); drawList(); drawForm(); drawPrev(); return; }
+  });
+}
 const BTAX_DEFAULT = (() => { const masters = ['Christmas Classics','Christmas Pop','Christmas Rock & Alternative','Christmas Country','Christmas R&B, Soul & Hip-Hop','Christmas Novelty & Comedy','Christmas Covers','Christmas Movie Music','Christmas Oldies','Christmas Sing-Alongs','Christmas Instrumentals','Winter & Seasonal Songs','Pop','Rock & Alternative','Hip-Hop & R&B','Country','Dance & Disco','Latin & World','Movie & TV Soundtracks','Throwbacks & Oldies','Novelty & Comedy']; return { masters, subs: [] }; })();
 const sBase = x => ({ t: x.t, a: x.a, m: x.m, c: x.c, sc: x.sc, g: x.g });
 /* ── Manage categories: master categories + their subcategories (one screen, used for trivia questions and for bingo songs) ── */
@@ -2324,6 +2526,8 @@ async function openSorter(kind){
 }
 $('#taxBtn').addEventListener('click', () => openTax(TXC.trivia));
 $('#sortBtn').addEventListener('click', () => openSorter('trivia'));
+$('#tagsBtn').addEventListener('click', () => openTags(TGC.trivia));
+$('#playBtn').addEventListener('click', openPlayable);
 $('#colsBtn').addEventListener('click', openColumns);
 function openColumns(){
   const body = document.createElement('div');
@@ -3289,6 +3493,7 @@ function setupBingoCols(){
   tbl.insertBefore(cg, tbl.firstChild); tbl.style.width = total + 'px';
 }
 $('#bSort').addEventListener('click', () => openSorter('bingo'));
+$('#bTags').addEventListener('click', () => openTags(TGC.bingo));
 $('#bTax').addEventListener('click', () => openTax(TXC.bingo));
 $('#bGrid thead').addEventListener('mousedown', e => {
   const h = e.target.closest('.rz'); if (!h) return;
