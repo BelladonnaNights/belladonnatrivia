@@ -474,17 +474,17 @@ textarea::placeholder{color:#8a8a8a !important}
   <div class="shell" id="triviaShell">
     <aside>
       <div class="sideTop">
-        <button class="btn primary" id="newCatBtn">+ New category</button>
-        <input id="catSearch" placeholder="Search categories…" autocomplete="off">
-        <button class="linkbtn" id="tagSearchBtn">Search all categories by tag…</button>
+        <button class="btn primary" id="newCatBtn">+ New game</button>
+        <input id="catSearch" placeholder="Search games…" autocomplete="off">
+        <button class="linkbtn" id="tagSearchBtn">Search all games by tag…</button>
       </div>
       <div id="catList"></div>
-      <div class="sideFoot" style="display:flex;flex-direction:column;gap:8px"><label><input type="checkbox" id="showArchCats"> Show archived categories</label><button class="linkbtn" id="manageTypesBtn">Manage category types…</button></div>
+      <div class="sideFoot" style="display:flex;flex-direction:column;gap:8px"><label><input type="checkbox" id="showArchCats"> Show archived games</label><button class="linkbtn" id="manageTypesBtn">Manage game types…</button></div>
     </aside>
 
     <main>
       <div id="empty">
-        <h3>Pick a category</h3>
+        <h3>Pick a game</h3>
         <div>Choose one on the left, create a new one, or import your CSVs.</div>
         <div style="margin-top:18px"><button class="btn ghost" id="emptyImport">Import CSVs</button></div>
       </div>
@@ -493,34 +493,34 @@ textarea::placeholder{color:#8a8a8a !important}
         <div class="top">
           <div class="titleBlock">
             <input id="catName" class="catTitle" spellcheck="false" autocomplete="off" title="Click to rename — it renames everywhere">
-            <input id="catName2" class="catTitle catTitle2 hidden" spellcheck="false" autocomplete="off" placeholder="Secondary name…" title="Secondary name — this is the title shown in the sidebar for Featured categories">
-            <select id="catType" title="Category type"></select>
+            <input id="catName2" class="catTitle catTitle2 hidden" spellcheck="false" autocomplete="off" placeholder="Secondary name…" title="Secondary name — this is the title shown in the sidebar for Featured games">
+            <select id="catType" title="Game type"></select>
             <span id="catCount"></span>
             <span id="catArchTag" class="tag hidden">Archived</span>
             <button class="btn ghost sm" id="catMenuBtn">More ⋯</button>
           </div>
           <div class="aboutRow" id="aboutRow">
-            <button class="btn ghost sm" id="aboutBtn" type="button" title="Open the full About notes for this category">About</button>
+            <button class="btn ghost sm" id="aboutBtn" type="button" title="Open the full About notes for this game">About</button>
             <input id="aboutHdr" type="text" autocomplete="off" spellcheck="true" placeholder="Header: keywords or a one-sentence description\u2026" title="Short description shown under the About button">
             <textarea id="catAbout" spellcheck="true" style="display:none"></textarea>
           </div>
           <div class="tools">
-            <input id="q" placeholder="Search this category…" autocomplete="off">
+            <input id="q" placeholder="Search this game…" autocomplete="off">
             <div class="chips" id="diffChips">
               <button class="pill on" data-d="0">All</button><button class="pill" data-d="1">1</button><button class="pill" data-d="2">2</button><button class="pill" data-d="3">3</button>
             </div>
             <label class="chk" title="Hide questions this venue has had recently">Not used at <select id="venueSel" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:5px 8px;font:13px var(--font)"><option value="">any venue</option></select> in the last <select id="usedWin" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:5px 8px;font:13px var(--font)"><option value="3">3 months</option><option value="6" selected>6 months</option><option value="9">9 months</option><option value="12">12 months</option></select></label>
             <label class="chk"><input type="checkbox" id="showArch"> Archived</label>
             <button class="btn ghost hidden" id="resetOrderBtn" title="Put the columns back in their saved order">Reset column order</button>
-            <button class="btn ghost" id="playBtn" title="Saved sets of rules that pull questions from the library — with a preview of how many questions match">Playable categories</button>
+            <button class="btn ghost" id="playBtn" title="Saved sets of rules that pull questions from the library — with a preview of how many questions match">Playable games</button>
             <button class="btn ghost" id="tagsBtn" title="Search, rename, merge, add and delete every tag — or copy / paste the whole list">Tags</button>
-            <button class="btn ghost" id="sortBtn" title="Fill in empty master categories, subcategories and tags from keywords — you review first">Sort for me</button>
-            <button class="btn ghost" id="taxBtn" title="Add, rename or remove the master categories and subcategories">Manage categories</button>
+            <button class="btn ghost" id="sortBtn" title="Fill in empty categories, subcategories and tags from keywords — you review first">Sort for me</button>
+            <button class="btn ghost" id="taxBtn" title="Add, rename or remove the categories, subcategories and topics">Manage categories</button>
             <button class="btn ghost" id="colsBtn">Columns</button>
             <button class="btn ghost" id="qListBtn" title="A plain list of every question and answer, to paste into your AI so it doesn't repeat any">Question list</button>
-            <button class="btn ghost" id="catListBtn" title="A list of every trivia category with its About notes">Category list</button>
+            <button class="btn ghost" id="catListBtn" title="A list of every game with its About notes">Game list</button>
             <button class="btn ghost" id="importBtn">Import CSVs</button>
-            <button class="btn ghost" id="recatBtn" title="Export every question, have AI re-sort them, and import the results back">Re-sort all questions</button>
+            <button class="btn ghost" id="recatBtn" title="Export every question, have AI add categories and tags, and import them back. Questions stay in their sheets.">Add tags &amp; categories</button>
             <button class="btn primary" id="addBtn">+ Add question</button>
           </div>
         </div>
@@ -654,7 +654,7 @@ const BUILTIN = [
   { key:'altAnswers',    label:'Variable Answers', exportLabel:'Variable Answers', type:'long', w:240 },
   { key:'difficulty',    label:'Diff',           exportLabel:'Difficulty (1-3)', type:'diff', w:70  },
   { key:'tags',          label:'Tags',           exportLabel:'Tags',             type:'tags', w:200 },
-  { key:'masterCat',     label:'Master category', exportLabel:'Master Category', type:'pick', list:'master', w:190 },
+  { key:'masterCat',     label:'Category', exportLabel:'Category', type:'pick', list:'master', w:190 },
   { key:'subCat',        label:'Subcategory',    exportLabel:'Subcategory',      type:'pick', list:'sub',    w:190 },
   { key:'topic',         label:'Topic',          exportLabel:'Topic',            type:'pick', list:'topic',  w:190 },
   { key:'lastUsedAt',    label:'Last used',      exportLabel:'Last Used',        type:'ro', fmt:'date',   w:110 },
@@ -685,7 +685,7 @@ const HEADER_MAP = {
   optiona:'optionA', optionb:'optionB', optionc:'optionC', optiond:'optionD',
   bonusquestion:'bonusQuestion', bonus:'bonusQuestion',
   tags:'tags', tag:'tags', notes:'notes', note:'notes',
-  mastercategory:'masterCat', maincategory:'masterCat', master:'masterCat', subcategory:'subCat', sub:'subCat', topic:'topic', subsubcategory:'topic',
+  mastercategory:'masterCat', category:'masterCat', maincategory:'masterCat', master:'masterCat', subcategory:'subCat', sub:'subCat', topic:'topic', subsubcategory:'topic',
   whisperduringquestion:'whisperQ', whisperquestion:'whisperQ', whisperq:'whisperQ', whisper1:'whisperQ', whisperduring:'whisperQ',
   whisperatreveal:'whisperA', whisperreveal:'whisperA', whispera:'whisperA', whisper2:'whisperA', whisperanswer:'whisperA'
 };
@@ -1043,7 +1043,7 @@ function startListeners(){
     renderSide(); renderHead();
     if (!S.curId){ const last = LS.get('lastCat', null); if (last && S.cats.has(last)) selectCategory(last); }
   }, err => {
-    $('#catList').innerHTML = `<p class="hint" style="padding:12px">Can't read categories yet.<br>${/permission/i.test(err.message) ? 'Publish the updated Firestore rules, then refresh.' : esc(err.message)}</p>`;
+    $('#catList').innerHTML = `<p class="hint" style="padding:12px">Can't read games yet.<br>${/permission/i.test(err.message) ? 'Publish the updated Firestore rules, then refresh.' : esc(err.message)}</p>`;
   }));
   S.unsubs.push(onSnapshot(doc(db, 'triviaConfig', 'types'), snap => {
     S.types = snap.exists() ? (snap.data().list || []) : null;
@@ -1144,7 +1144,7 @@ function renderSide(){
       list.map(c => `<button class="cat ${c.id === S.curId ? 'active' : ''} ${c.archived ? 'arch' : ''}" data-id="${c.id}"><span class="nm" ${isFeatType(c.type) && secName(c) ? `title="${esc(c.name)}"` : ''}>${esc(sideName(c))}</span><span class="ct">${c.questionCount ?? ''}</span></button>`).join('') +
       `</div></div>`;
   }
-  $('#catList').innerHTML = html || '<p class="hint" style="padding:12px">No categories yet — create one or import your CSVs.</p>';
+  $('#catList').innerHTML = html || '<p class="hint" style="padding:12px">No games yet — create one or import your CSVs.</p>';
 }
 $('#catList').addEventListener('click', e => {
   const sb = e.target.closest('.sortBtn');
@@ -1176,7 +1176,7 @@ $('#catName').addEventListener('change', async e => {
   const c = S.cats.get(S.curId); if (!c) return;
   const v = e.target.value.trim();
   const dupe = catByNorm(v);
-  if (!v || (dupe && dupe.id !== c.id)){ toast(!v ? 'A category needs a name.' : 'Another category already has that name.'); e.target.value = c.name; return; }
+  if (!v || (dupe && dupe.id !== c.id)){ toast(!v ? 'A game needs a name.' : 'Another game already has that name.'); e.target.value = c.name; return; }
   if (v === c.name) return;
   const oldName = c.name;
   await run(() => updateDoc(catRef(c.id), { name: v, updatedAt: serverTimestamp() }));
@@ -1312,7 +1312,7 @@ async function aboutLoad(id){
     });
   } catch (e){ console.warn('About blurb link unavailable:', e && e.message); }
 }
-function aboutFit(){ const b = $('#aboutBtn'); if (!b) return; const has = !!$('#catAbout').value.trim(); b.textContent = has ? 'About \u25CF' : 'About'; b.title = has ? 'Open the About notes (this category has notes)' : 'Open the About notes \u2014 none written yet'; }
+function aboutFit(){ const b = $('#aboutBtn'); if (!b) return; const has = !!$('#catAbout').value.trim(); b.textContent = has ? 'About \u25CF' : 'About'; b.title = has ? 'Open the About notes (this game has notes)' : 'Open the About notes \u2014 none written yet'; }
 async function aboutSave(){
   const id = ABOUT.forId, ta = $('#catAbout'); if (!id) return;
   const v = ta.value.trim(); if (v === ABOUT.lastSaved.trim()) return;
@@ -1327,8 +1327,8 @@ async function aboutSave(){
 $('#aboutBtn').addEventListener('click', () => {
   const store = $('#catAbout');
   const body = document.createElement('div');
-  body.innerHTML = `<p class="hint" style="margin-top:0">The full notes on what’s in this category. The first sentence shows on this category in the Trivia admin app. It saves as you type.</p><textarea id="aboutModalTa" spellcheck="true" style="width:100%;min-height:50vh;resize:vertical;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:12px;color:var(--text);font:inherit;font-size:14px;line-height:1.5"></textarea>`;
-  openModal({ title: 'About — ' + ((S.cats.get(S.curId) || {}).name || 'category'), body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }], onClose: () => { clearTimeout(ABOUT.timer); aboutSave(); aboutFit(); } });
+  body.innerHTML = `<p class="hint" style="margin-top:0">The full notes on what’s in this game. The first sentence shows on this game in the Trivia admin app. It saves as you type.</p><textarea id="aboutModalTa" spellcheck="true" style="width:100%;min-height:50vh;resize:vertical;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:12px;color:var(--text);font:inherit;font-size:14px;line-height:1.5"></textarea>`;
+  openModal({ title: 'About — ' + ((S.cats.get(S.curId) || {}).name || 'game'), body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }], onClose: () => { clearTimeout(ABOUT.timer); aboutSave(); aboutFit(); } });
   const ta = $('#aboutModalTa'); ta.value = store.value;
   ta.addEventListener('input', () => { store.value = ta.value; clearTimeout(ABOUT.timer); ABOUT.timer = setTimeout(aboutSave, 900); aboutFit(); });
   ta.addEventListener('blur', () => { clearTimeout(ABOUT.timer); aboutSave(); });
@@ -2459,12 +2459,12 @@ function openTypes(){
   const body = document.createElement('div');
   const draw = () => {
     const counts = new Map(); for (const c of S.cats.values()) if (c.type) counts.set(c.type, (counts.get(c.type) || 0) + 1);
-    body.innerHTML = `<p class="hint" style="margin:0 0 10px">Types group your categories in the sidebar, in this order — drag the ⠿ handle to rearrange. Renaming a type renames it on every category that uses it.</p>
+    body.innerHTML = `<p class="hint" style="margin:0 0 10px">Types group your games in the sidebar, in this order — drag the ⠿ handle to rearrange. Renaming a type renames it on every game that uses it.</p>
       <div id="typeRows" class="tlist">${typeList().map((t, i) => `<div class="trow" draggable="true" data-drag="${i}">
         <span class="tgrab" title="Drag to reorder">⠿</span>
         <input type="text" value="${esc(t)}" data-i="${i}" data-old="${esc(t)}" autocomplete="off" draggable="false">
-        <span class="tcount">${counts.get(t) || 0} categor${(counts.get(t) || 0) === 1 ? 'y' : 'ies'}</span>
-        <button class="btn ghost sm" data-del="${i}" ${(counts.get(t) || 0) ? 'disabled title="Move or delete its categories first"' : ''}>Delete</button></div>`).join('')}</div>
+        <span class="tcount">${counts.get(t) || 0} game${(counts.get(t) || 0) === 1 ? '' : 's'}</span>
+        <button class="btn ghost sm" data-del="${i}" ${(counts.get(t) || 0) ? 'disabled title="Move or delete its games first"' : ''}>Delete</button></div>`).join('')}</div>
       <div class="fld" style="display:flex;gap:8px;margin-top:14px"><input type="text" id="newTypeIn" placeholder="New type name (for example: Holiday)" style="flex:1" autocomplete="off"><button class="btn primary sm" id="newTypeAdd">Add type</button></div>
       <div class="msg" id="typeMsg"></div>`;
   };
@@ -2502,17 +2502,17 @@ function openTypes(){
     if (e.target.id === 'newTypeAdd'){ add(); return; }
     const d = e.target.closest('[data-del]'); if (!d || d.disabled) return;
     const t = typeList()[+d.dataset.del];
-    if (!await confirmBox({ title: 'Delete type', message: `Delete the type “${t}”? No categories use it.`, ok: 'Delete', danger: true })) return;
+    if (!await confirmBox({ title: 'Delete type', message: `Delete the type “${t}”? No games use it.`, ok: 'Delete', danger: true })) return;
     await run(() => saveTypes(typeList().filter(x => x !== t))); setTimeout(draw, 300); 
   });
   body.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'newTypeIn') add(); });
-  openModal({ title: 'Category types', body, actions: [{ label: 'Done', primary: true, onClick: closeModal }] });
+  openModal({ title: 'Game types', body, actions: [{ label: 'Done', primary: true, onClick: closeModal }] });
 }
 $('#manageTypesBtn').addEventListener('click', openTypes);
 
 $('#newCatBtn').addEventListener('click', () => {
   const body = document.createElement('div');
-  body.innerHTML = `<label class="fld">Category name<input type="text" id="ncName" autocomplete="off"></label>
+  body.innerHTML = `<label class="fld">Game name<input type="text" id="ncName" autocomplete="off"></label>
     <label class="fld">Type<select id="ncType">${typeList().map(t => `<option>${esc(t)}</option>`).join('')}<option value="__new">＋ New type…</option></select></label>
     <label class="fld hidden" id="ncNewWrap">New type name<input type="text" id="ncNew" autocomplete="off"></label>
     <div class="msg" id="ncMsg"></div>`;
@@ -2522,11 +2522,11 @@ $('#newCatBtn').addEventListener('click', () => {
     if (type && type !== '__new') await run(async () => { type = await addType(type) || type; });
     if (!name) return $('#ncMsg').textContent = 'Give it a name.';
     if (!type) return $('#ncMsg').textContent = 'Pick or name a type.';
-    if (catByNorm(name)) return $('#ncMsg').textContent = 'A category with that name already exists.';
+    if (catByNorm(name)) return $('#ncMsg').textContent = 'A game with that name already exists.';
     closeModal();
     await run(async () => { const ref = await addDoc(collection(db, 'triviaCategories'), { name, type, questionCount: 0, archived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); selectCategory(ref.id); mirrorNewVaultCategory(ref.id, name, type); });
   };
-  openModal({ title: 'New category', body, actions: [{ label: 'Cancel', onClick: closeModal }, { label: 'Create', primary: true, onClick: submit }] });
+  openModal({ title: 'New game', body, actions: [{ label: 'Cancel', onClick: closeModal }, { label: 'Create', primary: true, onClick: submit }] });
   $('#ncType').addEventListener('change', e => $('#ncNewWrap').classList.toggle('hidden', e.target.value !== '__new'));
   $('#ncName').focus(); body.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
 });
@@ -2534,10 +2534,10 @@ $('#newCatBtn').addEventListener('click', () => {
 $('#catMenuBtn').addEventListener('click', () => {
   const c = S.cats.get(S.curId); if (!c) return;
   const body = document.createElement('div'); body.className = 'menuList';
-  body.innerHTML = `<button class="btn" data-a="export">Export this category as CSV</button>
+  body.innerHTML = `<button class="btn" data-a="export">Export this game as CSV</button>
     <button class="btn" data-a="recount">Recount questions</button>
-    ${PERM.archiveCategories ? `<button class="btn" data-a="archive">${c.archived ? 'Restore this category' : 'Archive this category'}</button>
-    <p class="hint" style="margin:0 0 6px">Archiving hides the category from the list. Its questions are kept.</p>` : ''}
+    ${PERM.archiveCategories ? `<button class="btn" data-a="archive">${c.archived ? 'Restore this game' : 'Archive this game'}</button>
+    <p class="hint" style="margin:0 0 6px">Archiving hides the game from the list. Its questions are kept.</p>` : ''}
     ${PERM.deleteCategories ? `<button class="btn danger" data-a="delete">Delete this sheet<br>and all its questions…</button>` : ''}`;
   openModal({ title: c.name, body, actions: [{ label: 'Close', onClick: closeModal }] });
   body.addEventListener('click', async e => {
@@ -2561,11 +2561,11 @@ async function unlinkDeletedSheet(vaultId){
 function askDeleteCategory(c){
   const body = document.createElement('div');
   body.innerHTML = `<p class="hint">This permanently deletes this <strong style="color:var(--text)">${esc(c.name)}</strong> Vault sheet and <strong style="color:var(--text)">every question in it</strong>, including archived ones. It can’t be undone.</p>
-    <p class="hint">The category itself stays in Trivia, the Planner and the Venue Menu — only the question sheet goes.</p>
-    <label class="fld">Type the category name to confirm<input type="text" id="delConfirm" autocomplete="off"></label>
+    <p class="hint">The game itself stays in Trivia, the Planner and the Venue Menu — only the question sheet goes.</p>
+    <label class="fld">Type the game name to confirm<input type="text" id="delConfirm" autocomplete="off"></label>
     <div class="msg" id="delMsg"></div>`;
   const actions = [{ label: 'Cancel', onClick: closeModal }, { label: 'Delete forever', danger: true, onClick: () => go() }];
-  openModal({ title: 'Delete category?', body, actions });
+  openModal({ title: 'Delete game?', body, actions });
   const cancel = actions[0].el, btn = actions[1].el; btn.disabled = true;
   $('#delConfirm').focus();
   $('#delConfirm').addEventListener('input', e => { btn.disabled = normName(e.target.value) !== normName(c.name); });
@@ -2584,7 +2584,7 @@ function askDeleteCategory(c){
       }
       await deleteDoc(catRef(c.id));
       await unlinkDeletedSheet(c.id);
-      msg.textContent = `Done — removed the category and ${n.toLocaleString()} question${n === 1 ? '' : 's'}.`;
+      msg.textContent = `Done — removed the game and ${n.toLocaleString()} question${n === 1 ? '' : 's'}.`;
       btn.textContent = 'Close'; btn.classList.remove('danger'); btn.classList.add('primary'); btn.disabled = false; btn.onclick = closeModal;
     } catch (err){
       console.error(err); msg.className = 'msg';
@@ -2859,7 +2859,7 @@ function rcDraw(rec){
 }
 function rcTreeText(L, d = 0){ return L.map(x => '  '.repeat(d) + x.n + '\n' + rcTreeText(x.c, d + 1)).join(''); }
 function rcAIPrompt(){
-  return `I'm building a trivia category for this theme: [DESCRIBE THE THEME HERE]
+  return `I'm building a trivia game for this theme: [DESCRIBE THE THEME HERE]
 
 Below are ALL of my categories (Category, then indented Subcategory, then indented Topic) and ALL of my tags. Choose everything that fits the theme, using ONLY names from these lists, spelled exactly as written. Do not invent new names.
 
@@ -2919,7 +2919,7 @@ async function rcAIClick(b, rec, body, fn){
 async function openPlayable(){
   const body = document.createElement('div'); const st = 'padding:8px 11px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none';
   body.style.cssText = 'display:flex;gap:16px;min-height:60vh'; body.innerHTML = 'Reading your questions…';
-  openModal({ title: 'Playable categories', body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }] });
+  openModal({ title: 'Playable games', body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }] });
   try {
     const d = await getDoc(doc(db, 'triviaConfig', 'recipes')); RC.list = d.exists() && Array.isArray(d.data().list) ? d.data().list.map(x => rcUpgrade({ ...rcNew(), ...x, match: x.match || (x.needTag ? 'both' : 'prefer') })) : [];
     const snap = await getDocs(qColl());
@@ -2951,7 +2951,7 @@ async function openPlayable(){
     const el = body.querySelector('#rcSample'), rec = rcCur(); if (!el || !rec) return; if (!RC.sample){ el.innerHTML = ''; return; }
     let last = null; el.innerHTML = RC.sample.map((q, i) => { const head = q.round !== last && q.round ? `<div style="font-weight:700;margin:8px 0 3px">${esc(q.round)}</div>` : ''; last = q.round; const cat = (S.cats.get(q.catId) || {}).name || '';
       return head + `<div style="display:flex;gap:8px;align-items:flex-start;margin:0 0 4px"><span style="flex:1"><b>${i + 1}.</b> ${esc(q.q)} <span style="opacity:.65">→ ${esc(q.a)}</span> <small style="opacity:.55">(${['', 'easy', 'medium', 'hard'][q.diff]}${cat ? ' · ' + esc(cat) : ''}${q.master ? ' · ' + esc(q.master) : ''})</small></span><button class="btn ghost sm" data-rcex="${esc(q.id)}">Leave out</button></div>`; }).join('')
-      + (rec.excluded.length ? `<div class="hint" style="margin-top:8px">${rec.excluded.length} left out of this category. <button class="btn ghost sm" id="rcRestore">Put them all back</button></div>` : '');
+      + (rec.excluded.length ? `<div class="hint" style="margin-top:8px">${rec.excluded.length} left out of this game. <button class="btn ghost sm" id="rcRestore">Put them all back</button></div>` : '');
   };
   const drawTree = () => {
     const rec = rcCur(), el = body.querySelector('#rcTree'), pk = body.querySelector('#rcPicked'); if (!rec || !el) return;
@@ -2982,7 +2982,7 @@ async function openPlayable(){
   };
   let drawForm = () => {
     const rec = rcCur(), el = body.querySelector('#rcForm'); if (!el) return;
-    if (!rec){ el.innerHTML = '<div class="hint">Make a playable category — a saved set of rules that pulls questions from your library. Questions are never copied; fix one and it’s fixed everywhere.</div>'; return; }
+    if (!rec){ el.innerHTML = '<div class="hint">Make a playable game — a saved set of rules that pulls questions from your library. Questions are never copied; fix one and it’s fixed everywhere.</div>'; return; }
     el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><label class="fld" style="flex:2;min-width:200px">Name<input type="text" data-rf="name" value="${esc(rec.name)}" style="${st}" autocomplete="off"></label>
       <label class="fld">Status<select data-rf="status" style="${st}"><option value="active" ${rec.status === 'active' ? 'selected' : ''}>Active</option><option value="draft" ${rec.status === 'draft' ? 'selected' : ''}>Draft</option><option value="archived" ${rec.status === 'archived' ? 'selected' : ''}>Archived</option></select></label>
       <label class="fld">Lasts<select data-rf="life" style="${st}"><option value="evergreen" ${rec.life === 'evergreen' ? 'selected' : ''}>Evergreen</option><option value="event" ${rec.life === 'event' ? 'selected' : ''}>Event-specific</option></select></label></div>
@@ -3009,7 +3009,7 @@ async function openPlayable(){
       <button class="btn ghost" id="rcAddRound">+ Add a round</button>
       <div style="display:flex;gap:8px;align-items:center;margin-top:16px;border-top:1px solid var(--border);padding-top:12px"><button class="btn primary" id="rcSave">Save</button><button class="btn ghost" id="rcDup">Duplicate</button><button class="btn ghost" id="rcDel">Delete</button><span class="hint" id="rcMsg" style="margin:0">${RC.dirty ? 'Unsaved changes' : ''}</span></div>`;
   };
-  const drawAll = () => { body.innerHTML = `<div style="width:230px;flex:none;position:sticky;top:0;align-self:flex-start"><button class="btn primary" id="rcNew" style="width:100%;margin-bottom:10px;white-space:normal;line-height:1.25;letter-spacing:.04em;font-size:12px;padding:9px 10px;text-align:center">+ New playable category</button><div id="rcList"></div></div><div style="flex:1;min-width:0;display:flex;gap:16px;flex-wrap:wrap"><div id="rcForm" style="flex:1.3;min-width:320px"></div><div id="rcPrev" style="flex:1;min-width:260px;border-left:1px solid var(--border);padding-left:16px;position:sticky;top:0;align-self:flex-start"></div></div>`; drawList(); drawForm(); drawPrev(); };
+  const drawAll = () => { body.innerHTML = `<div style="width:230px;flex:none;position:sticky;top:0;align-self:flex-start"><button class="btn primary" id="rcNew" style="width:100%;margin-bottom:10px;white-space:normal;line-height:1.25;letter-spacing:.04em;font-size:12px;padding:9px 10px;text-align:center">+ New playable game</button><div id="rcList"></div></div><div style="flex:1;min-width:0;display:flex;gap:16px;flex-wrap:wrap"><div id="rcForm" style="flex:1.3;min-width:320px"></div><div id="rcPrev" style="flex:1;min-width:260px;border-left:1px solid var(--border);padding-left:16px;position:sticky;top:0;align-self:flex-start"></div></div>`; drawList(); drawForm(); drawPrev(); };
   const _df = drawForm; drawForm = () => { _df(); drawTree(); drawTags(); };
   drawAll();
   const dirty = () => { RC.dirty = true; const m = body.querySelector('#rcMsg'); if (m) m.textContent = 'Unsaved changes'; };
@@ -3097,9 +3097,11 @@ function openTax(X){
   });
 }
 /* ── Manage categories (trivia): one tree — Category → Subcategory → Topic ── */
+/* Which branches are open in the category manager; kept until the page is refreshed */
+const TS_OPEN = new Set();
 async function openTree(){
   const body = document.createElement('div'); body.id = 'treeBody';
-  const TS = { q: '', open: new Set(['Christmas']), docs: [], busy: false };
+  const TS = { q: '', open: TS_OPEN, docs: [], busy: false };
   S.taxOpen = true;
   openModal({ title: 'Manage categories', body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }], onClose: () => { S.taxOpen = false; S.taxTreeDraw = null; } });
   body.textContent = 'Reading your questions…';
@@ -3141,7 +3143,7 @@ async function openTree(){
     };
     T.forEach(m => walk(m, m.n, 0, false));
     body.innerHTML = `<p class="hint" style="margin-top:0">Three levels: <strong>Category</strong> (like Christmas) → <strong>Subcategory</strong> (Movies, Music…) → <strong>Topic</strong> (Comedy, Carols…). Each question gets one of each. Renaming changes it on every question that uses it.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:0 0 10px"><label class="fld" style="flex:1;min-width:220px">Search<input type="search" id="trQ" value="${esc(TS.q)}" autocomplete="off" style="${st}"></label><button class="btn" data-ta="addtop">+ New category</button><button class="btn ghost" data-ta="suggest" title="Adds the built-in categories, subcategories and topics that you don't have yet. Nothing is removed or renamed.">Add suggested ones</button><button class="btn ghost" data-ta="expand">Open all</button><button class="btn ghost" data-ta="collapse">Close all</button><button class="btn ghost" data-ta="text">Copy / paste whole list</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:0 0 10px"><label class="fld" style="flex:1;min-width:220px">Search<input type="search" id="trQ" value="${esc(TS.q)}" autocomplete="off" style="${st}"></label><button class="btn" data-ta="addtop">+ New game</button><button class="btn ghost" data-ta="suggest" title="Adds the built-in categories, subcategories and topics that you don't have yet. Nothing is removed or renamed.">Add suggested ones</button><button class="btn ghost" data-ta="expand">Open all</button><button class="btn ghost" data-ta="collapse">Close all</button><button class="btn ghost" data-ta="text">Copy / paste whole list</button></div>
       ${old ? `<div style="border:1px solid var(--gold2);border-radius:10px;padding:10px 12px;margin:0 0 10px"><b>${old.toLocaleString()}</b> question${old === 1 ? '' : 's'} still use the earlier layout (for example “Christmas Movies” as its own master category). <button class="btn primary" data-ta="migrate" style="margin-left:8px">Move them into this layout</button></div>` : ''}
       <div>${h || '<div class="hint">Nothing matches that search.</div>'}</div>`;
     const qi = body.querySelector('#trQ'); if (TS.focus){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
@@ -3224,8 +3226,8 @@ async function openSorter(kind){
   const body = document.createElement('div'); const isT = kind === 'trivia'; let plan = [], undo = null, busy = false;
   const curName = isT ? ((S.cats.get(S.curId) || {}).name || '') : ((B.lists.get(B.curId) || {}).name || '');
   const canHere = isT ? !!S.curId : B.lists.has(B.curId);
-  body.innerHTML = `<p class="hint" style="margin-top:0">Reads each ${isT ? 'question' : 'song'} and, using keywords${isT ? ' and the name of its category' : ' and the name of its list'}, suggests a ${isT ? 'master category, subcategory' : 'category, subcategory'} and tags. It only fills what is empty and only <b>adds</b> tags — nothing you typed is changed. You review the result before anything is saved.</p>
-    <div style="display:flex;gap:16px;margin:8px 0"><label class="chk"><input type="radio" name="sortScope" value="here" ${canHere ? 'checked' : 'disabled'}> Just ${isT ? 'this category' : 'this list'}${curName ? ' (' + esc(curName) + ')' : ''}</label><label class="chk"><input type="radio" name="sortScope" value="all" ${canHere ? '' : 'checked'}> Everything</label></div>
+  body.innerHTML = `<p class="hint" style="margin-top:0">Reads each ${isT ? 'question' : 'song'} and, using keywords${isT ? ' and the name of its game' : ' and the name of its list'}, suggests a ${isT ? 'category, subcategory' : 'category, subcategory'} and tags. It only fills what is empty and only <b>adds</b> tags — nothing you typed is changed. You review the result before anything is saved.</p>
+    <div style="display:flex;gap:16px;margin:8px 0"><label class="chk"><input type="radio" name="sortScope" value="here" ${canHere ? 'checked' : 'disabled'}> Just ${isT ? 'this game' : 'this list'}${curName ? ' (' + esc(curName) + ')' : ''}</label><label class="chk"><input type="radio" name="sortScope" value="all" ${canHere ? '' : 'checked'}> Everything</label></div>
     <button class="btn" id="sortGo">Look it over</button><div id="sortOut" style="margin-top:12px"></div>`;
   const out = () => body.querySelector('#sortOut');
   const gather = async () => {
@@ -3291,7 +3293,7 @@ function openColumns(){
   const draw = () => {
     body.innerHTML = `<p class="hint">Tick the columns you want to see. Custom columns you add here become a field on every question.</p>
       ${tmpOrder() ? `<div class="hint" style="margin:0 0 10px;padding:8px 10px;border:1px solid var(--gold-glow);border-radius:8px">You've rearranged the columns on the main page for now. <button class="linkbtn" id="makePerm">Make this arrangement permanent</button></div>` : ''}
-      <p class="hint" style="margin-top:0"><b>${isMusicCat() ? 'Music trivia categories' : 'General Knowledge, Evergreen, Mini Games and Trivia categories'}</b> \u2014 this order and these ticks apply only to ${isMusicCat() ? 'music categories' : 'the non-music categories'}. Open a category of the other kind to set that one. Drag ⠿ or use ▲ ▼ to set the order; it's saved for everyone and every device. The first column stays first.</p>
+      <p class="hint" style="margin-top:0"><b>${isMusicCat() ? 'Music trivia games' : 'General Knowledge, Evergreen, Mini Games and Trivia games'}</b> \u2014 this order and these ticks apply only to ${isMusicCat() ? 'music games' : 'the non-music games'}. Open a game of the other kind to set that one. Drag ⠿ or use ▲ ▼ to set the order; it's saved for everyone and every device. The first column stays first.</p>
       <div class="list" id="colList">` + orderCols(curOrder()).map((c, i, arr) => {
         const custom = S.custom.some(x => x.key === c.key) && !BUILTIN.some(b => b.key === c.key);
         const pinned = c.key === 'question';
@@ -3356,13 +3358,13 @@ function openImport(){
   const st = { entries: [], ctx: { custom: S.custom, pending: new Map() }, ver: 0, busy: false };
   const body = document.createElement('div');
   body.innerHTML = `
-    <p class="hint">In Google Sheets, open a category tab → <strong>File → Download → Comma-separated values (.csv)</strong>. Download as many as you like, then drop them all here. The category name comes from the file name — fix any that look off. Duplicates of questions already in a category are skipped.</p>
+    <p class="hint">In Google Sheets, open a game tab → <strong>File → Download → Comma-separated values (.csv)</strong>. Download as many as you like, then drop them all here. The game name comes from the file name — fix any that look off. Duplicates of questions already in a game are skipped.</p>
     <div class="drop" id="impDrop"><input type="file" id="impFiles" multiple accept=".csv,text/csv"><div class="muted" style="margin-top:8px;font-size:12px">…or drag CSV files onto this box</div></div>
     <label class="fld" style="max-width:420px">Where should these questions go?
-      <select id="impDest"><option value="">Each file becomes its own category (name from the file)</option>${[...S.cats.values()].filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => `<option value="${esc(c.id)}">Add to: ${esc(c.name)}</option>`).join('')}</select></label>
-    <label class="fld" style="max-width:300px">Type for new categories
+      <select id="impDest"><option value="">Each file becomes its own game (name from the file)</option>${[...S.cats.values()].filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => `<option value="${esc(c.id)}">Add to: ${esc(c.name)}</option>`).join('')}</select></label>
+    <label class="fld" style="max-width:300px">Type for new games
       <select id="impType">${typeList().map(t => `<option ${S.cats.get(S.curId)?.type === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
-    <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="impUpd" checked> <span>Also <strong>update questions I already have</strong> — fill in Master Category, Subcategory and Tags from the CSV (matches by question text; nothing else is changed, existing tags are kept)</span></label>
+    <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="impUpd" checked> <span>Also <strong>update questions I already have</strong> — fill in Category, Subcategory and Tags from the CSV (matches by question text; nothing else is changed, existing tags are kept)</span></label>
     <div id="impPv"></div><div id="impNote" class="hint"></div><div class="msg" id="impMsg"></div>`;
   const actions = [{ label: 'Cancel', onClick: closeModal }, { label: 'Import', primary: true, onClick: () => doImport() }];
   openModal({ title: 'Import CSVs', body, wide: true, actions });
@@ -3393,7 +3395,7 @@ function openImport(){
       en.toAdd = []; en.toUpd = []; en.dupCount = 0; en.status = '';
       if (en.parsed.error){ en.status = en.parsed.error; continue; }
       const destCat = en.dest ? S.cats.get(en.dest) : null;
-      if (en.dest && !destCat){ en.status = 'That category no longer exists'; en.parsed = Object.assign({}, en.parsed, { error: en.status }); continue; }
+      if (en.dest && !destCat){ en.status = 'That game no longer exists'; en.parsed = Object.assign({}, en.parsed, { error: en.status }); continue; }
       const key = en.dest ? 'id:' + en.dest : normName(en.name), cat = destCat || catByNorm(en.name);
       if (!seen.has(key)){
         const set = new Set(), idm = new Map();
@@ -3402,7 +3404,7 @@ function openImport(){
       }
       const g = seen.get(key);
       for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)){ en.dupCount++; const ex = g.idm.get(k); if (ex && !g.done.has(k) && (rec.masterCat || rec.subCat || rec.topic || (rec.tags && rec.tags.length))){ g.done.add(k); en.toUpd.push({ id: ex.__id, ex, rec }); } } else { g.set.add(k); en.toAdd.push(rec); } }
-      en.status = badName(en) ? 'Needs a real category name' : destCat ? `Adds to “${destCat.name}”` : cat ? `Adds to existing` : g.used ? 'Merges with file above' : 'New category';
+      en.status = badName(en) ? 'Needs a real game name' : destCat ? `Adds to “${destCat.name}”` : cat ? `Adds to existing` : g.used ? 'Merges with file above' : 'New game';
       if (en.parsed.layout) en.status += ' · ' + en.parsed.layout;
       g.used = true;
     }
@@ -3416,7 +3418,7 @@ function openImport(){
     const destOpts = [...S.cats.values()].filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
     const ok = st.entries.filter(e => !e.parsed.error);
     const newQ = ok.reduce((n, e) => n + e.toAdd.length, 0), dups = ok.reduce((n, e) => n + e.dupCount, 0);
-    $('#impPv').innerHTML = st.entries.length ? `<table class="pv"><thead><tr><th>File</th><th>Category name</th><th style="width:200px">Add to</th><th style="width:140px">Type</th><th>New</th><th title="New questions with an IMG URL">Img</th><th title="New questions with a SOUND URL">Sound</th><th>Skipped</th><th>Status</th><th></th></tr></thead><tbody>` +
+    $('#impPv').innerHTML = st.entries.length ? `<table class="pv"><thead><tr><th>File</th><th>Game name</th><th style="width:200px">Add to</th><th style="width:140px">Type</th><th>New</th><th title="New questions with an IMG URL">Img</th><th title="New questions with a SOUND URL">Sound</th><th>Skipped</th><th>Status</th><th></th></tr></thead><tbody>` +
       st.entries.map((e, i) => `<tr><td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.file)}">${esc(e.file)}</td>
         <td><input data-i="${i}" data-f="name" class="${badName(e) ? 'bad' : ''}" value="${esc(e.dest && S.cats.get(e.dest) ? S.cats.get(e.dest).name : e.name)}" ${e.dest ? 'disabled' : ''}></td>
         <td><select data-i="${i}" data-f="dest"><option value="">New / by name</option>${destOpts.replace(`value="${esc(e.dest)}"`, `value="${esc(e.dest)}" selected`)}</select></td>
@@ -3432,10 +3434,10 @@ function openImport(){
     const merging = ok.filter(e => e.status === 'Merges with file above').length;
     $('#impNote').innerHTML = st.entries.length ? `<strong>${ok.length}</strong> file${ok.length === 1 ? '' : 's'} · <strong>${newQ.toLocaleString()}</strong> new questions · ${dups.toLocaleString()} duplicates skipped` +
       (newCols.length ? `<br>Extra columns found: ${newCols.map(c => `<strong>${esc(c.label)}</strong>`).join(', ')} — they'll be added as custom columns.` : '') +
-      (merging ? `<br><span style="color:var(--gold2)">${merging} file${merging === 1 ? '' : 's'} share a category name with another file and will be merged into it. If that's not what you want, rename them.</span>` : '') +
-      (generic ? `<br><span style="color:var(--danger)">${generic} file${generic === 1 ? ' has' : 's have'} a generic name like "Sheet1". Type the real category name before importing.</span>` : '') : '';
+      (merging ? `<br><span style="color:var(--gold2)">${merging} file${merging === 1 ? '' : 's'} share a game name with another file and will be merged into it. If that's not what you want, rename them.</span>` : '') +
+      (generic ? `<br><span style="color:var(--danger)">${generic} file${generic === 1 ? ' has' : 's have'} a generic name like "Sheet1". Type the real game name before importing.</span>` : '') : '';
     const updN = $('#impUpd') && $('#impUpd').checked ? ok.reduce((n, e) => n + (e.toUpd ? e.toUpd.length : 0), 0) : 0;
-    if (updN) $('#impNote').innerHTML += `<br><strong>${updN.toLocaleString()}</strong> existing questions will get their Master Category / Subcategory / Tags updated.`;
+    if (updN) $('#impNote').innerHTML += `<br><strong>${updN.toLocaleString()}</strong> existing questions will get their Category / Subcategory / Tags updated.`;
     importBtn.disabled = (!newQ && !newCols.length && !updN) || generic > 0;
     if (keep){ const el = $(`#impPv input[data-f="name"][data-i="${keep.i}"]`); if (el){ el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} } }
   }
@@ -3491,7 +3493,7 @@ function openImport(){
 
 
 /* ═══════════════════════════════════════════════════════════
-   RE-SORT ALL QUESTIONS — export everything with its Question ID, let AI assign categories/tags, import back by ID
+   ADD TAGS & CATEGORIES TO ALL QUESTIONS — export everything with its Question ID, let AI assign categories/tags, import back by ID
    ═══════════════════════════════════════════════════════════ */
 $('#recatBtn').addEventListener('click', () => openRecat());
 function openRecat(){
@@ -3505,11 +3507,11 @@ function openRecat(){
     <p class="hint"><strong>Step 2.</strong> Give each file to ChatGPT with the prompt. Keep the Question ID column in what it sends back.</p>
     <p class="hint"><strong>Step 3.</strong> Drop the finished CSVs here. Each row is matched to its question by Question ID.</p>
     <div class="drop" id="rcDrop"><input type="file" id="rcFiles" multiple accept=".csv,text/csv"><div class="muted" style="margin-top:8px;font-size:12px">…or drag CSV files onto this box</div></div>
-    <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="rcRep" checked> <span>Replace the Master Category, Subcategory and Topic I have now (turn off to only fill empty ones)</span></label>
+    <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="rcRep" checked> <span>Replace the Category, Subcategory and Topic I have now (turn off to only fill empty ones)</span></label>
     <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="rcKeep" checked> <span>Keep the tags I already have and add the new ones (turn off to replace them)</span></label>
     <div id="rcPv" class="hint"></div><div class="msg" id="rcMsg"></div>`;
   const actions = [{ label: 'Close', onClick: closeModal }, { label: 'Save changes', primary: true, onClick: () => apply() }];
-  openModal({ title: 'Re-sort all questions', body, wide: true, actions });
+  openModal({ title: 'Add tags & categories to all questions', body, wide: true, actions });
   const go = actions[1].el; go.disabled = true;
   const msg = $('#rcMsg', body);
   const load = async () => {
@@ -3529,8 +3531,8 @@ function openRecat(){
     try {
       const qs = await load(), per = Math.max(50, Number($('#rcN', body).value) || 300), full = $('#rcFull', body).checked;
       const items = [...qs.values()].map(q => ({ ...q, __cat: (S.cats.get(q.categoryId) || {}).name || '' })).sort((a, b) => a.__cat.localeCompare(b.__cat) || (Number(a.order) || 0) - (Number(b.order) || 0));
-      const cols = [{ key: '__id', exportLabel: 'Question ID' }, { key: '__cat', exportLabel: 'Category' }, ...(full ? baseCols().filter(c => c.type !== 'ro' && !['masterCat', 'subCat', 'topic', 'tags', 'question', 'answer'].includes(c.key)) : [])];
-      const pre = [{ key: 'question', exportLabel: 'Question' }, { key: 'answer', exportLabel: 'Answer' }, { key: 'masterCat', exportLabel: 'Master Category' }, { key: 'subCat', exportLabel: 'Subcategory' }, { key: 'topic', exportLabel: 'Topic' }, { key: 'tags', exportLabel: 'Tags' }];
+      const cols = [{ key: '__id', exportLabel: 'Question ID' }, { key: '__cat', exportLabel: 'Game' }, ...(full ? baseCols().filter(c => c.type !== 'ro' && !['masterCat', 'subCat', 'topic', 'tags', 'question', 'answer'].includes(c.key)) : [])];
+      const pre = [{ key: 'question', exportLabel: 'Question' }, { key: 'answer', exportLabel: 'Answer' }, { key: 'masterCat', exportLabel: 'Category' }, { key: 'subCat', exportLabel: 'Subcategory' }, { key: 'topic', exportLabel: 'Topic' }, { key: 'tags', exportLabel: 'Tags' }];
       const all = [cols[0], cols[1], ...pre, ...cols.slice(2)];
       const parts = Math.max(1, Math.ceil(items.length / per));
       for (let i = 0; i < parts; i++){
@@ -3543,24 +3545,24 @@ function openRecat(){
   });
   $('#rcCopy', body).addEventListener('click', async () => {
     let tags = []; try { tags = await tagSet(); } catch (e) {}
-    const t = `I'm going to give you a CSV of trivia questions. Re-sort every row into my category list and give it tags.
+    const t = `I'm going to give you a CSV of trivia questions. Fill in a Category, Subcategory, Topic and Tags for every row. This is labeling only: the questions stay where they are and nothing gets moved.
 
-COLUMNS: Question ID, Category, Question, Answer, Master Category, Subcategory, Topic, Tags (there may be more columns after those; ignore them and leave them out of your reply).
+COLUMNS: Question ID, Game, Question, Answer, Category, Subcategory, Topic, Tags (there may be more columns after those; ignore them and leave them out of your reply).
 
 FOR EVERY ROW, FILL IN:
-- Master Category (required): pick ONE from the list below, spelled exactly as written.
-- Subcategory: pick ONE that sits under that Master Category.
+- Category (required): pick ONE from the list below, spelled exactly as written.
+- Subcategory: pick ONE that sits under that Category.
 - Topic: pick ONE that sits under that Subcategory, only if one fits. Otherwise leave it blank.
 - Tags: 3 to 8 tags, separated by commas. Use tags from my tag list below whenever they fit. You may add new ones when something important is missing: short, specific, Title Case (people, shows, franchises, places, decades, themes, song or movie genres).
 
 RULES:
-- Judge by what the question is actually about, not by the Category column (the old category is often too broad). A question can belong to a different master category than the sheet it lives on.
-- If nothing fits, choose the closest Master Category and leave Subcategory and Topic blank. Never invent a new Master Category, Subcategory or Topic.
+- Judge by what the question is actually about. The Game column is only the sheet (game) it lives on, so use it as a hint, but the labels can differ from it.
+- If nothing fits, choose the closest Category and leave Subcategory and Topic blank. Never invent a new Category, Subcategory or Topic.
 - Keep Christmas questions under Christmas, in the matching "Christmas ___" subcategory.
 - Do not change the Question ID, Question or Answer. Return every row, in the same order.
-- Reply with ONLY a CSV (a code block I can copy) with exactly these columns: Question ID, Question, Answer, Master Category, Subcategory, Topic, Tags. Put quotes around any cell that contains a comma.
+- Reply with ONLY a CSV (a code block I can copy) with exactly these columns: Question ID, Question, Answer, Category, Subcategory, Topic, Tags. Put quotes around any cell that contains a comma.
 
-MY CATEGORIES (Master Category, then indented Subcategory, then indented Topic):
+MY CATEGORIES (Category, then indented Subcategory, then indented Topic):
 ${rcTreeText(taxTree())}
 MY TAGS:
 ${tags.join(', ')}`;
@@ -3592,7 +3594,7 @@ ${tags.join(', ')}`;
       if (!/\.csv$/i.test(f.name) && f.type !== 'text/csv') continue;
       const rows = parseCSV(await f.text()); if (!rows.length) continue;
       const hdr = rows[0].map(norm), ix = k => hdr.indexOf(k);
-      const iId = ix('questionid'), iM = ['mastercategory', 'master', 'maincategory'].map(ix).find(i => i >= 0) ?? -1, iS = ['subcategory', 'sub'].map(ix).find(i => i >= 0) ?? -1, iT = ['topic', 'subsubcategory'].map(ix).find(i => i >= 0) ?? -1, iG = ['tags', 'tag'].map(ix).find(i => i >= 0) ?? -1;
+      const iId = ix('questionid'), iM = ['category', 'mastercategory', 'master', 'maincategory'].map(ix).find(i => i >= 0) ?? -1, iS = ['subcategory', 'sub'].map(ix).find(i => i >= 0) ?? -1, iT = ['topic', 'subsubcategory'].map(ix).find(i => i >= 0) ?? -1, iG = ['tags', 'tag'].map(ix).find(i => i >= 0) ?? -1;
       if (iId < 0){ toast(f.name + ' has no Question ID column'); continue; }
       const out = [], cell = (r, i) => i >= 0 ? String(r[i] || '').trim() : '';
       rows.slice(1).forEach(r => { const id = cell(r, iId); if (id) out.push({ id, m: cell(r, iM), s: cell(r, iS), t: cell(r, iT), tags: splitTags(cell(r, iG)) }); });
@@ -3628,17 +3630,17 @@ ${tags.join(', ')}`;
    ═══════════════════════════════════════════════════════════ */
 $('#catListBtn').addEventListener('click', () => {
   const body = document.createElement('div');
-  body.innerHTML = `<p class="hint">Every trivia category with its About notes, to copy or download.</p>
+  body.innerHTML = `<p class="hint">Every game with its About notes, to copy or download.</p>
     <div class="fld" style="margin:6px 0 2px">Types<div id="clTypes" style="display:flex;flex-wrap:wrap;gap:4px 16px;text-transform:none;letter-spacing:0"></div></div>
-    <div class="fld" style="margin:8px 0 2px">Categories
+    <div class="fld" style="margin:8px 0 2px">Games
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px;text-transform:none;letter-spacing:0">
-        <input id="clFind" placeholder="Find a category\u2026" autocomplete="off" style="flex:1 1 160px;min-width:120px">
+        <input id="clFind" placeholder="Find a game\u2026" autocomplete="off" style="flex:1 1 160px;min-width:120px">
         <button class="btn ghost sm" type="button" id="clAll">Select all shown</button><button class="btn ghost sm" type="button" id="clNone">Clear shown</button>
       </div>
       <div id="clPick" style="max-height:170px;overflow-y:auto;border:1px solid var(--border2);border-radius:var(--radius);padding:6px 10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 14px;text-transform:none;letter-spacing:0;font-family:var(--font);font-size:13px"></div>
     </div>
-    <label class="chk"><input type="checkbox" id="clArch"> Include archived categories</label>
-    <label class="chk"><input type="checkbox" id="clType" checked> Group by category type</label>
+    <label class="chk"><input type="checkbox" id="clArch"> Include archived games</label>
+    <label class="chk"><input type="checkbox" id="clType" checked> Group by game type</label>
     <label class="chk"><input type="checkbox" id="clSongs"> Include the songs already on each music list</label>
     <label class="fld" style="margin-top:10px">List<textarea id="clOut" rows="16" readonly style="width:100%;font-size:12px"></textarea></label>
     <div id="clCount" class="hint"></div>`;
@@ -3650,7 +3652,7 @@ $('#catListBtn').addEventListener('click', () => {
   const cats = () => shown().filter(c => !offCats.has(c.id));
   const drawPick = () => {
     const q = $('#clFind').value.trim().toLowerCase();
-    $('#clPick').innerHTML = shown().filter(c => !q || String(c.name).toLowerCase().includes(q)).map(c => `<label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-cid="${esc(c.id)}" ${offCats.has(c.id) ? '' : 'checked'}> <span>${esc(c.name)}</span></label>`).join('') || '<span class="hint">No categories match.</span>';
+    $('#clPick').innerHTML = shown().filter(c => !q || String(c.name).toLowerCase().includes(q)).map(c => `<label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-cid="${esc(c.id)}" ${offCats.has(c.id) ? '' : 'checked'}> <span>${esc(c.name)}</span></label>`).join('') || '<span class="hint">No games match.</span>';
   };
   const drawTypes = () => { $('#clTypes').innerHTML = allTypes.map(t => `<label class="chk" style="margin:0"><input type="checkbox" data-t="${esc(t)}" ${offTypes.has(t) ? '' : 'checked'}> ${esc(t)}</label>`).join(''); };
   const catsOld = () => [...S.cats.values()].filter(c => $('#clArch').checked || !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }));
@@ -3662,14 +3664,14 @@ $('#catListBtn').addEventListener('click', () => {
     const list = cats(); let out;
     if ($('#clType').checked){ const by = new Map(); list.forEach(c => { const t = c.type || 'No type'; if (!by.has(t)) by.set(t, []); by.get(t).push(c); }); out = [...by].map(([t, cs]) => '== ' + t.toUpperCase() + ' ==\n\n' + cs.map(fmt).join('\n\n')).join('\n\n\n'); }
     else out = list.map(fmt).join('\n\n');
-    $('#clOut').value = out; $('#clCount').textContent = list.length.toLocaleString() + ' categories';
+    $('#clOut').value = out; $('#clCount').textContent = list.length.toLocaleString() + ' games';
   };
   const copy = async () => { const t = $('#clOut').value; if (!t) return; try { await navigator.clipboard.writeText(t); } catch (e) { $('#clOut').select(); document.execCommand('copy'); } toast('List copied'); };
   const csv = () => {
-    const rows = ['Category,Secondary name,Type,Questions,Header,About' + (songsBy ? ',Songs' : ''), ...cats().map(c => [csvEscape(c.name), csvEscape(secName(c)), csvEscape(c.type || ''), csvEscape(c.questionCount != null ? c.questionCount : ''), csvEscape(c.aboutHeader || ''), csvEscape(c.about || ''), ...(songsBy ? [csvEscape(songsOf(c).join(' | '))] : [])].join(','))].join('\r\n');
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows], { type: 'text/csv;charset=utf-8' })); a.download = 'trivia-categories.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    const rows = ['Game,Secondary name,Type,Questions,Header,About' + (songsBy ? ',Songs' : ''), ...cats().map(c => [csvEscape(c.name), csvEscape(secName(c)), csvEscape(c.type || ''), csvEscape(c.questionCount != null ? c.questionCount : ''), csvEscape(c.aboutHeader || ''), csvEscape(c.about || ''), ...(songsBy ? [csvEscape(songsOf(c).join(' | '))] : [])].join(','))].join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows], { type: 'text/csv;charset=utf-8' })); a.download = 'trivia-games.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
-  openModal({ title: 'Category list', body, wide: true, actions: [{ label: 'Close', onClick: closeModal }, { label: 'Download CSV', onClick: csv }, { label: 'Copy list', primary: true, onClick: copy }] });
+  openModal({ title: 'Game list', body, wide: true, actions: [{ label: 'Close', onClick: closeModal }, { label: 'Download CSV', onClick: csv }, { label: 'Copy list', primary: true, onClick: copy }] });
   const redraw = () => { drawPick(); draw(); };
   $('#clArch').addEventListener('change', redraw); $('#clType').addEventListener('change', draw);
   $('#clTypes').addEventListener('change', e => { const t = e.target.dataset.t; if (t === undefined) return; e.target.checked ? offTypes.delete(t) : offTypes.add(t); redraw(); });
@@ -3698,8 +3700,8 @@ $('#qListBtn').addEventListener('click', () => {
   const body = document.createElement('div');
   body.innerHTML = `<p class="hint">A plain list of every question and its correct answer, one per line, to paste into the AI you write questions with so it doesn\u2019t repeat any. Archived questions are left out.</p>
     <label class="fld" style="max-width:420px">Which questions?
-      <select id="qlCat"><option value="">All categories</option>${cats.map(c => `<option value="${esc(c.id)}"${c.id === S.curId ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
-    <label class="chk"><input type="checkbox" id="qlGroup"> Put category names above each group</label>
+      <select id="qlCat"><option value="">All games</option>${cats.map(c => `<option value="${esc(c.id)}"${c.id === S.curId ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
+    <label class="chk"><input type="checkbox" id="qlGroup"> Put game names above each group</label>
     <label class="fld" style="margin-top:10px">${songMode ? 'Songs \u2014 one per line, Song - Artist. Edit, delete, reorder or add lines freely, then Save changes' : 'List'}<textarea id="qlOut" rows="14" ${songMode ? 'spellcheck="false"' : 'readonly'} style="width:100%;font-size:12px;min-height:300px;white-space:pre" placeholder="Loading…"></textarea></label>
     ${songMode ? '<div id="qlSaveMsg" class="hint"></div>' : ''}
     <div id="qlCount" class="hint"></div>`;
@@ -3805,8 +3807,8 @@ $('#tagSearchBtn').addEventListener('click', () => {
       const hits = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(q => !q.archived && tags.every(t => (q.tags || []).includes(t)));
       hits.sort((a, b) => String(S.cats.get(a.categoryId)?.name || '').localeCompare(String(S.cats.get(b.categoryId)?.name || '')) || (a.order || 0) - (b.order || 0));
       if (!hits.length){ out.innerHTML = '<p class="hint">No questions have all of those tags.</p>'; return; }
-      out.innerHTML = `<p class="hint">${hits.length} question${hits.length === 1 ? '' : 's'}${snap.size >= 500 ? ' (showing the first 500 matches for the first tag)' : ''}. Click a row to open its category.</p>
-        <table class="pv"><thead><tr><th>Category</th><th>Question</th><th>Answer</th><th>Diff</th><th>Tags</th></tr></thead><tbody>` +
+      out.innerHTML = `<p class="hint">${hits.length} question${hits.length === 1 ? '' : 's'}${snap.size >= 500 ? ' (showing the first 500 matches for the first tag)' : ''}. Click a row to open its game.</p>
+        <table class="pv"><thead><tr><th>Game</th><th>Question</th><th>Answer</th><th>Diff</th><th>Tags</th></tr></thead><tbody>` +
         hits.map(q => `<tr class="hit" data-cat="${esc(q.categoryId)}"><td>${esc(S.cats.get(q.categoryId)?.name || '—')}</td><td>${esc(q.question)}</td><td>${esc(q.answer)}</td><td>${q.difficulty ?? ''}</td><td class="muted">${esc((q.tags || []).join(', '))}</td></tr>`).join('') + '</tbody></table>';
       $$('tr.hit', out).forEach(tr => tr.addEventListener('click', () => { closeModal(); selectCategory(tr.dataset.cat); }));
     } catch (e){ out.innerHTML = `<p class="msg">${esc(/permission/i.test(e.message) ? 'Firestore blocked that — publish the updated rules.' : e.message)}</p>`; }
