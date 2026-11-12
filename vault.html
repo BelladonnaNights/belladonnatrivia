@@ -1050,7 +1050,7 @@ function startListeners(){
   }, () => {}));
   S.unsubs.push(onSnapshot(doc(db, 'triviaConfig', 'taxonomy'), snap => {
     const d = snap.exists() ? snap.data() : null;
-    const clean = (L, depth) => (Array.isArray(L) ? L : []).filter(x => x && x.n).map(x => ({ n: String(x.n), c: depth < 2 ? clean(x.c, depth + 1) : [] }));
+    const clean = (L, depth, par) => (Array.isArray(L) ? L : []).filter(x => x && x.n).map(x => ({ n: par === 'Christmas' && SUBREN[x.n] && !L.some(y => y && y.n === SUBREN[x.n]) ? SUBREN[x.n] : String(x.n), c: depth < 2 ? clean(x.c, depth + 1, String(x.n)) : [] }));
     S.tax = d && Array.isArray(d.tree) ? { tree: clean(d.tree, 0) } : null;
     if (S.curId) renderAll(); if (S.taxOpen && S.taxTreeDraw) S.taxTreeDraw();
   }, () => {}));
@@ -1451,29 +1451,72 @@ function usageVal(r, k){ const e = usageOf((r.data && r.data.categoryId) || S.cu
 const rowVal = (r, c) => USAGE_KEYS.has(c.key) ? usageVal(r, c.key) : r.data[c.key];
 function usageRefresh(){ try { for (const r of S.rows.values()) if (r.tr) try { updateRowDom(r); } catch (e) {} renderVenueSel(); applyFilter(); } catch (e) {} }
 /* Master category / Subcategory lists (Manage categories) and the read-only usage columns */
-const TREE_DEFAULT = (() => {
-  const M = { 'Movies': ['Christmas Comedy','Christmas Classics','Christmas Horror','Animated Christmas','Christmas Romance','Christmas Movie Quotes','Christmas Movie Locations','Christmas Movie Characters','Christmas Movie Soundtracks','Behind the Scenes'],
-    'Television': ['Animated Specials','Sitcom Episodes','Christmas Commercials','Holiday Variety Shows','Christmas Cartoons',"Children's Television",'Holiday Reality TV'],
-    'Music': ['Traditional Carols','Christmas Pop','Christmas Rock','Christmas Country','Holiday R&B','Novelty Christmas Songs','Christmas Song Lyrics','Cover Versions','Christmas Albums','Music History'],
-    'Around the World': ['European Christmas','Latin American Christmas','Scandinavian Traditions','Asian Christmas Celebrations','Christmas Foods by Country','Gift-Bringers Around the World','Unusual Customs'],
-    'History & Origins': ['History of Santa','Victorian Christmas','Ancient Winter Festivals','Christmas in America','History of Gift-Giving','Origins of Decorations','Historical Christmas Events'],
-    'Food & Drink': ['Christmas Desserts','Holiday Baking','Christmas Dinner','Holiday Candy','Festive Cocktails','Christmas Spices','Regional Holiday Foods','Historical Holiday Recipes'],
-    'Pop Culture': ['Celebrity Christmas','Holiday Advertising','Christmas Fashion','Famous Holiday Performances','Christmas Merchandise','Viral Christmas Moments'],
-    'Nostalgia': ['Christmas Toys','Retro Electronics','Christmas Catalogs','Childhood Traditions','Christmas Morning','Holiday Shopping','Retro Decorations','Christmas Commercials'],
-    'Literature & Folklore': ['A Christmas Carol','Christmas Fairy Tales','Christmas Books','Santa Legends','Winter Mythology','The Nutcracker','Christmas Ghost Stories'],
-    'Traditions & Decorations': ['Christmas Trees','Ornaments','Christmas Lights','Stockings','Christmas Cards','Gift Wrapping','Holiday Symbols','Seasonal Plants'],
+const TREE_SPEC = {
+  'Christmas': {
+    'Christmas Movies': ['Christmas Comedy','Christmas Classics','Christmas Horror','Animated Christmas','Christmas Romance','Christmas Movie Quotes','Christmas Movie Locations','Christmas Movie Characters','Christmas Movie Soundtracks','Behind the Scenes'],
+    'Christmas Television': ['Animated Specials','Sitcom Episodes','Christmas Commercials','Holiday Variety Shows','Christmas Cartoons',"Children's Television",'Holiday Reality TV'],
+    'Christmas Music': ['Traditional Carols','Christmas Pop','Christmas Rock','Christmas Country','Holiday R&B','Novelty Christmas Songs','Christmas Song Lyrics','Cover Versions','Christmas Albums','Music History'],
+    'Christmas Around the World': ['European Christmas','Latin American Christmas','Scandinavian Traditions','Asian Christmas Celebrations','Christmas Foods by Country','Gift-Bringers Around the World','Unusual Customs'],
+    'Christmas History & Origins': ['History of Santa','Victorian Christmas','Ancient Winter Festivals','Christmas in America','History of Gift-Giving','Origins of Decorations','Historical Christmas Events'],
+    'Christmas Food & Drink': ['Christmas Desserts','Holiday Baking','Christmas Dinner','Holiday Candy','Festive Cocktails','Christmas Spices','Regional Holiday Foods','Historical Holiday Recipes'],
+    'Christmas Pop Culture': ['Celebrity Christmas','Holiday Advertising','Christmas Fashion','Famous Holiday Performances','Christmas Merchandise','Viral Christmas Moments'],
+    'Christmas Nostalgia': ['Christmas Toys','Retro Electronics','Christmas Catalogs','Childhood Traditions','Christmas Morning','Holiday Shopping','Retro Decorations','Christmas Commercials'],
+    'Christmas Literature & Folklore': ['A Christmas Carol','Christmas Fairy Tales','Christmas Books','Santa Legends','Winter Mythology','The Nutcracker','Christmas Ghost Stories'],
+    'Christmas Traditions & Decorations': ['Christmas Trees','Ornaments','Christmas Lights','Stockings','Christmas Cards','Gift Wrapping','Holiday Symbols','Seasonal Plants'],
     'Winter & the Holidays': ['Winter Weather','Winter Solstice','Snow & Ice','Seasonal Astronomy','Winter Sports',"New Year's Traditions",'Winter Celebrations'],
-    'Curiosities': ['Strange Christmas Laws','Unusual Holiday Customs','Christmas World Records','Christmas Disasters','Bizarre Gifts','Christmas Myths','Weird Historical Facts'] };
-  const xmas = { n: 'Christmas', c: Object.keys(M).map(k => ({ n: k, c: M[k].map(t => ({ n: t, c: [] })) })) };
-  return [xmas, ...['Movies & Television', 'The 1990s', 'Food & Culinary', 'Cocktails & Spirits', 'Candy & Confections', 'Fairy Tales & Fantasy', 'Music Through the Decades'].map(n => ({ n, c: [] }))];
-})();
-/* The first layout had 12 separate "Christmas ___" master categories. They now live under one Christmas master. */
-const LEGACY = { 'Christmas Movies': 'Movies', 'Christmas Television': 'Television', 'Christmas Music': 'Music', 'Christmas Around the World': 'Around the World', 'Christmas History & Origins': 'History & Origins', 'Christmas Food & Drink': 'Food & Drink', 'Christmas Pop Culture': 'Pop Culture', 'Christmas Nostalgia': 'Nostalgia', 'Christmas Literature & Folklore': 'Literature & Folklore', 'Christmas Traditions & Decorations': 'Traditions & Decorations', 'Winter & the Holidays': 'Winter & the Holidays', 'Christmas Curiosities': 'Curiosities' };
+    'Christmas Curiosities': ['Strange Christmas Laws','Unusual Holiday Customs','Christmas World Records','Christmas Disasters','Bizarre Gifts','Christmas Myths','Weird Historical Facts'],
+    'Christmas Religion & Nativity': ['The Nativity Story','Advent','Saints & Feast Days','Church Traditions','Biblical Christmas'],
+    'Christmas Animals & Nature': ['Reindeer','Winter Animals','Christmas Plants','Snow Creatures'],
+    'Christmas Places & Landmarks': ['Christmas Markets','Famous Christmas Towns','Holiday Light Displays','Rockefeller Center & NYC','North Pole & Santa Villages'],
+    'Christmas Games & Activities': ['Holiday Games','Gift Exchange Games','Christmas Crafts','Holiday Puzzles'],
+    'Christmas by the Numbers': ['Twelve Days of Christmas',"Santa's Reindeer",'Christmas Records & Stats','Christmas Spending'],
+    'Christmas Giving & Charity': ['Toy Drives','Charity Traditions','Famous Gift Givers'],
+    'Christmas in the Pacific Northwest': ['PNW Christmas Events','Local Tree Farms','Holiday Lights & Parades','Local Holiday Food & Drink']
+  },
+  'Halloween': { 'Halloween Movies': [], 'Halloween Music': [], 'Halloween Candy & Food': [], 'Halloween History & Origins': [], 'Halloween Costumes': [], 'Haunted Places & Ghost Stories': [], 'Monsters & Creatures': [], 'Pumpkins & Decorations': [], 'Halloween Television & Cartoons': [], 'Horror Icons': [] },
+  'Thanksgiving': { 'Thanksgiving Food': [], 'Thanksgiving History': [], 'Thanksgiving Traditions': [], 'Thanksgiving Parades & Football': [], 'Thanksgiving Movies & TV': [], 'Turkeys & Harvest': [] },
+  "Valentine's Day": { 'Love Songs': [], 'Romantic Movies': [], "Valentine's History": [], 'Candy & Gifts': [], 'Famous Couples': [], 'Weddings & Love Traditions': [] },
+  'Easter & Spring': { 'Easter Traditions': [], 'Easter Candy & Food': [], 'Easter History': [], 'Spring Nature & Flowers': [], 'Easter Movies & TV': [] },
+  "New Year's": { "New Year's Around the World": [], "New Year's Eve Songs": [], 'Times Square & the Ball Drop': [], 'Resolutions': [], 'Champagne & Toasts': [], "Famous New Year's Events": [] },
+  'Summer & Fourth of July': { 'Fourth of July History': [], 'Patriotic Songs': [], 'Summer Food & BBQ': [], 'Fireworks': [], 'Summer Movies': [], 'Road Trips & Vacations': [], 'Beaches & Pools': [] },
+  "St. Patrick's Day": { 'Irish History & Culture': [], 'Irish Food & Drink': [], 'Leprechauns & Irish Folklore': [], "St. Patrick's Day Traditions": [], 'Irish Music': [] },
+  'Holidays Around the World': { 'Hanukkah': [], 'Kwanzaa': [], 'Diwali': [], 'Lunar New Year': [], 'Cinco de Mayo': [], 'Mardi Gras': [], 'Day of the Dead': [], 'Oktoberfest': [], 'Ramadan & Eid': [], "Mother's & Father's Day": [], 'Labor Day & Memorial Day': [], 'Birthdays': [], 'Unusual & National Holidays': [] },
+  'Movies & Television': { 'Classic Hollywood': [], 'Action & Adventure': [], 'Comedy Movies': [], 'Horror & Thrillers': [], 'Sci-Fi & Fantasy Films': [], 'Animated & Family Films': [], 'Disney & Pixar': [], 'Superheroes': [], 'Romance & Rom-Coms': [], 'Drama': [], 'Sitcoms': [], 'Crime & Mystery TV': [], 'Reality TV': [], "Kids' TV & Cartoons": [], 'Streaming Originals': [], 'Award Shows': [], 'Movie Quotes': [], 'Actors & Actresses': [], 'Directors': [], 'Movie Franchises': [], 'Soundtracks & Scores': [], 'TV Theme Songs': [], 'Behind the Scenes': [] },
+  'The 1990s': { '90s Movies': [], '90s Television': [], '90s Music': [], '90s Fashion': [], '90s Toys & Games': [], '90s Technology': [], '90s Slang & Catchphrases': [], '90s Events & News': [], '90s Cartoons': [], '90s Food & Drink': [] },
+  'Music Through the Decades': { '1950s': [], '1960s': [], '1970s': [], '1980s': [], '1990s': [], '2000s': [], '2010s': [], '2020s': [] },
+  'Music & Artists': { 'Rock': [], 'Alternative & Grunge': [], 'Pop': [], 'Hip-Hop & R&B': [], 'Country': [], 'Soul & Motown': [], 'Disco & Funk': [], 'Heavy Metal & Hard Rock': [], 'Punk & Pop-Punk': [], 'Latin Music': [], 'Broadway & Musicals': [], 'Movie & TV Soundtracks': [], 'One-Hit Wonders': [], 'Boy Bands & Girl Groups': [], 'Band Names & Origins': [], 'Song Lyrics': [], 'Music Videos': [], 'Albums & Album Covers': [], 'Musical Instruments': [], 'Music Legends': [], 'Female Icons': [], 'Karaoke Classics': [], 'Music Awards': [], 'Concerts & Festivals': [] },
+  'Food & Culinary': { 'Fast Food & Chains': [], 'Pizza & Pasta': [], 'Baking & Desserts': [], 'Breakfast Foods': [], 'Snacks & Junk Food': [], 'Cheese & Dairy': [], 'Fruits & Vegetables': [], 'Cooking Techniques': [], 'Kitchen Tools': [], 'Famous Chefs': [], 'Cooking Shows': [], 'Regional American Cuisine': [], 'International Cuisine': [], 'Spices & Ingredients': [], 'Coffee & Tea': [], 'Food History': [], 'Food Brands': [], 'Grilling & BBQ': [] },
+  'Cocktails & Spirits': { 'Classic Cocktails': [], 'Whiskey & Bourbon': [], 'Vodka': [], 'Gin': [], 'Rum': [], 'Tequila & Mezcal': [], 'Beer': [], 'Wine': [], 'Bar Lingo & Tools': [], 'Cocktail History': [], 'Mocktails': [], 'Brands & Distilleries': [], 'Pacific Northwest Drinks': [] },
+  'Candy & Confections': { 'Chocolate': [], 'Gummy & Chewy Candy': [], 'Retro Candy': [], 'Candy Brands': [], 'Candy Bars': [], 'International Candy': [], 'Candy History': [], 'Sour & Hard Candy': [] },
+  'Fairy Tales & Fantasy': { 'Classic Fairy Tales': [], 'Disney Princesses': [], 'Mythology & Legends': [], 'Fantasy Books & Films': [], 'Wizards & Magic': [], 'Dragons & Monsters': [], 'Folklore & Urban Legends': [], 'Fantasy Games': [], 'Sci-Fi Worlds': [] },
+  'Geography & Travel': { 'World Capitals': [], 'U.S. States & Capitals': [], 'Countries & Continents': [], 'Flags': [], 'Famous Landmarks': [], 'Oceans, Rivers & Mountains': [], 'National Parks': [], 'Cities': [], 'Islands': [], 'Airports & Transportation': [], 'Maps & Borders': [], 'Languages of the World': [] },
+  'History': { 'Ancient History': [], 'Medieval Times': [], 'American History': [], 'U.S. Presidents': [], 'World Wars': [], 'Civil Rights & Social Movements': [], 'Inventions & Inventors': [], 'Famous People': [], 'Explorers': [], 'Royalty': [], 'Wars & Battles': [], 'Events by Decade': [] },
+  'Science & Nature': { 'Birds': [], 'Insects': [], 'Ocean Life': [], 'Dinosaurs & Prehistory': [], 'Space & Astronomy': [], 'Human Body': [], 'Weather': [], 'Chemistry': [], 'Physics': [], 'Plants & Trees': [], 'Earth Science': [], 'Technology & Inventions': [], 'Math & Numbers': [], 'Medicine': [] },
+  'Animals & Pets': { 'Dogs': [], 'Cats': [], 'Farm Animals': [], 'Wild Animals': [], 'Pet Facts': [], 'Famous Animals': [], 'Animal Records': [], 'Zoos & Aquariums': [] },
+  'Pop Culture & Celebrities': { 'Celebrity Trivia': [], 'Social Media & the Internet': [], 'Memes & Viral Moments': [], 'Fashion & Style': [], 'Famous Couples': [], 'Reality Stars': [], 'Influencers & YouTubers': [], 'Advertising & Slogans': [], 'Fads & Trends': [] },
+  'Sports': { 'Football': [], 'Basketball': [], 'Baseball': [], 'Hockey': [], 'Soccer': [], 'Olympics': [], 'Golf & Tennis': [], 'Wrestling & Combat Sports': [], 'Extreme Sports': [], 'Famous Athletes': [], 'Sports Records': [], 'Mascots': [], 'Super Bowl': [], 'Pacific Northwest Sports': [] },
+  'Video Games & Toys': { 'Classic Arcade': [], 'Nintendo': [], 'PlayStation & Xbox': [], 'PC Gaming': [], 'Board Games': [], 'Card Games': [], 'Toys of the Decades': [], 'Video Game Characters': [], 'Esports': [] },
+  'Literature & Language': { 'Famous Books': [], 'Authors': [], 'Poetry': [], 'Shakespeare': [], "Children's Books": [], 'Comics & Graphic Novels': [], 'Word Origins': [], 'Idioms & Sayings': [], 'Spelling & Grammar': [], 'Famous Quotes': [], 'Foreign Words': [], 'Nursery Rhymes': [] },
+  'Art & Culture': { 'Painters & Paintings': [], 'Museums': [], 'Architecture': [], 'Theater & Dance': [], 'Photography': [], 'Sculpture': [], 'Cultural Traditions': [], 'Religions & Beliefs': [], 'Fashion History': [] },
+  'Brands & Business': { 'Logos': [], 'Slogans & Mascots': [], 'Company Founders': [], 'Retail & Stores': [], 'Cars & Automakers': [], 'Tech Companies': [], 'Money & Currency': [] },
+  'Cars & Transportation': { 'Cars': [], 'Motorcycles': [], 'Trains': [], 'Planes': [], 'Boats': [], 'Road Signs & Rules': [], 'Race Cars': [] },
+  'Pacific Northwest': { 'Seattle': [], 'Washington State': [], 'Oregon': [], 'Portland': [], 'Tacoma & South Sound': [], 'Olympia': [], 'Local Food & Drink': [], 'Local History': [], 'Nature & Parks': [], 'Local Music': [], 'Native Peoples & Culture': [] },
+  'Wordplay & Puzzles': { 'Riddles': [], 'Anagrams & Scrambles': [], 'Finish the Phrase': [], 'Rebus & Emoji': [], 'Common Sayings': [], 'Brain Teasers': [], 'Fill in the Blank': [], 'Name That ___': [], 'Odd One Out': [], 'Math & Logic': [], 'Acronyms & Initials': [], 'Alphabet Games': [] },
+  'Everyday Life': { 'Home & Garden': [], 'Health & Fitness': [], 'Jobs & Careers': [], 'Money': [], 'Etiquette & Manners': [], 'Hobbies & Crafts': [], 'School & Education': [], 'Weddings & Relationships': [] }
+};
+const TREE_DEFAULT = Object.entries(TREE_SPEC).map(([m, subs]) => ({ n: m, c: Object.entries(subs).map(([sn, topics]) => ({ n: sn, c: topics.map(t => ({ n: t, c: [] })) })) }));
+/* Adds anything in `add` that `cur` doesn't have yet (by name, any case), never removing or renaming. Returns how many nodes were added. */
+function mergeTree(cur, add){ let n = 0; add.forEach(a => { let m = cur.find(x => x.n.toLowerCase() === a.n.toLowerCase()); if (!m){ cur.push({ n: a.n, c: [] }); m = cur[cur.length - 1]; n++; } n += mergeTree(m.c, a.c); }); return n; }
+/* Older layouts: the 12 separate "Christmas ___" masters, then Christmas → Movies/Television/…  Both now map to Christmas → Christmas Movies/Christmas Television/… */
+const LEGACY = { 'Christmas Movies': 'Christmas Movies', 'Christmas Television': 'Christmas Television', 'Christmas Music': 'Christmas Music', 'Christmas Around the World': 'Christmas Around the World', 'Christmas History & Origins': 'Christmas History & Origins', 'Christmas Food & Drink': 'Christmas Food & Drink', 'Christmas Pop Culture': 'Christmas Pop Culture', 'Christmas Nostalgia': 'Christmas Nostalgia', 'Christmas Literature & Folklore': 'Christmas Literature & Folklore', 'Christmas Traditions & Decorations': 'Christmas Traditions & Decorations', 'Winter & the Holidays': 'Winter & the Holidays', 'Christmas Curiosities': 'Christmas Curiosities' };
+const SUBREN = { 'Movies': 'Christmas Movies', 'Television': 'Christmas Television', 'Music': 'Christmas Music', 'Around the World': 'Christmas Around the World', 'History & Origins': 'Christmas History & Origins', 'Food & Drink': 'Christmas Food & Drink', 'Pop Culture': 'Christmas Pop Culture', 'Nostalgia': 'Christmas Nostalgia', 'Literature & Folklore': 'Christmas Literature & Folklore', 'Traditions & Decorations': 'Christmas Traditions & Decorations', 'Curiosities': 'Christmas Curiosities' };
 const taxTree = () => (S.tax && S.tax.tree && S.tax.tree.length) ? S.tax.tree : TREE_DEFAULT;
 const taxNow = () => ({ tree: taxTree() });
 function normPath(m, s_, t){
   m = String(m || '').trim(); s_ = String(s_ || '').trim(); t = String(t || '').trim();
-  if (LEGACY[m] && !taxTree().some(x => x.n === m)) return { m: 'Christmas', s: LEGACY[m], t: t || s_ };
+  const tree = taxTree();
+  if (LEGACY[m] && !tree.some(x => x.n === m)) return { m: 'Christmas', s: LEGACY[m], t: t || s_ };
+  if (m === 'Christmas' && SUBREN[s_]){ const x = tree.find(y => y.n === 'Christmas'); if (!x || !x.c.some(y => y.n === s_)) return { m, s: SUBREN[s_], t }; }
   return { m, s: s_, t };
 }
 const groupsOf = () => [];
@@ -2304,8 +2347,8 @@ async function openTags(X){
 }
 
 /* ── Playable categories: saved rules that pull questions from the library (saved in Firestore: triviaConfig/recipes) ── */
-const RC = { tq: '', open: new Set(), list: [], sel: '', qs: null, venue: '', dirty: false, sample: null };
-const rcNew = () => ({ id: 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: '', status: 'draft', life: 'evergreen', libs: [], subs: [], tags: [], needTag: false, never: [], diff: 'mixed', perGame: 15, rounds: [], excluded: [] });
+const RC = { tq: '', tagq: '', tags: [], open: new Set(), list: [], sel: '', qs: null, venue: '', dirty: false, sample: null };
+const rcNew = () => ({ id: 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: '', status: 'draft', life: 'evergreen', libs: [], subs: [], tags: [], needTag: false, never: [], diff: 'mixed', perGame: 15, rounds: [], excluded: [], match: 'any' });
 const rcCur = () => RC.list.find(x => x.id === RC.sel);
 const rcShuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const rcRoundOpts = rec => { const out = []; rec.libs.forEach(pth => { const n = rcFind(pth); if (pth.split('||').length === 1 && n && n.c.length) n.c.forEach(c => out.push(pth + '||' + c.n)); else out.push(pth); }); return [...new Set(out)]; };
@@ -2327,6 +2370,8 @@ function rcToggle(rec, p, on){
 }
 /* Recipes saved with the first layout (12 separate Christmas masters, subs by name) are converted on load. */
 function rcUpgrade(rec){
+  const fix = pth => { const q_ = String(pth).split('||'); if (q_[0] === 'Christmas' && SUBREN[q_[1]]) q_[1] = SUBREN[q_[1]]; return q_.join('||'); };
+  rec.libs = rec.libs.map(fix); (rec.rounds || []).forEach(r => { r.libs = (r.libs || []).map(fix); });
   const old = m => LEGACY[m] && !taxTree().some(x => x.n === m);
   if (!(rec.subs && rec.subs.length) && !rec.libs.some(old) && !(rec.rounds || []).some(r => (r.libs || []).some(old))) return rec;
   const conv = m => old(m) ? 'Christmas||' + LEGACY[m] : m, out = [];
@@ -2337,9 +2382,12 @@ function rcUpgrade(rec){
 }
 function rcFilter(rec, round){
   const f = q => {
-    if (rec.libs.length && !pathHit(rec.libs, q)) return false;
-    if (!rec.libs.length && !(rec.needTag && rec.tags.length) && !q.master) return false;
-    if (rec.needTag && rec.tags.length && !rec.tags.some(t => q.tags.includes(t))) return false;
+    { const hasP = rec.libs.length > 0, hasT = rec.tags.length > 0, ph = hasP && pathHit(rec.libs, q), th = hasT && rec.tags.some(t => q.tags.includes(t));
+      let ok;
+      if (rec.match === 'both') ok = (hasP || hasT) ? (!hasP || ph) && (!hasT || th) : !!q.master;
+      else if (rec.match === 'prefer') ok = hasP ? ph : !!q.master;
+      else ok = (hasP || hasT) ? (ph || th) : !!q.master;
+      if (!ok) return false; }
     if (rec.never.some(t => q.tags.includes(t))) return false;
     if (rec.diff !== 'mixed' && String(q.diff) !== rec.diff) return false;
     if (rec.excluded.includes(q.id)) return false;
@@ -2360,14 +2408,75 @@ function rcDraw(rec){
   }
   return out;
 }
+function rcTreeText(L, d = 0){ return L.map(x => '  '.repeat(d) + x.n + '\n' + rcTreeText(x.c, d + 1)).join(''); }
+function rcAIPrompt(){
+  return `I'm building a trivia category for this theme: [DESCRIBE THE THEME HERE]
+
+Below are ALL of my categories (Category, then indented Subcategory, then indented Topic) and ALL of my tags. Choose everything that fits the theme, using ONLY names from these lists, spelled exactly as written. Do not invent new names.
+
+Reply with exactly this and nothing else:
+Categories:
+Category > Subcategory > Topic
+(one per line; stop at the level you want to take as a whole, so "Christmas > Christmas Movies" takes every topic inside it)
+Tags:
+tag one, tag two, tag three
+
+MY CATEGORIES:
+${rcTreeText(taxTree())}
+MY TAGS:
+${(RC.tags || []).map(x => x.t).join(', ')}
+`;
+}
+/* Reads a pasted list (lines, bullets, commas, "A > B > C" paths, "Tags:" sections) and returns what to check off. */
+function rcParseList(txt){
+  const idx = new Map(), tagMap = new Map((RC.tags || []).map(x => [x.t.toLowerCase(), x.t]));
+  const walk = (L, pre) => L.forEach(n => { const p = pre ? pre + '||' + n.n : n.n, k = n.n.toLowerCase(); if (!idx.has(k)) idx.set(k, []); idx.get(k).push(p); walk(n.c, p); }); walk(taxTree(), '');
+  const out = { paths: [], tags: [], newTags: [], miss: [] }, clean = x => String(x).replace(/^[\s>\-*•·–—#]+/, '').replace(/^\d+[.)]\s+/, '').replace(/[*_`"“”]+/g, '').replace(/\s*\([^)]*\)\s*$/, '').replace(/[.:\s]+$/, '').trim();
+  let mode = '', ctx = [];
+  const resolve = (name, within) => { const all = idx.get(name.toLowerCase()) || []; const inside = within.length ? all.filter(p => within.some(w => p.startsWith(w + '||'))) : []; return inside.length ? inside : all; };
+  const addTag = t => { const k = t.toLowerCase().trim(); if (!k) return; if (tagMap.has(k)) out.tags.push(tagMap.get(k)); else { const nt = (typeof normTag === 'function' ? normTag(k) : k); if (nt) out.newTags.push(nt); } };
+  String(txt || '').split(/\r?\n/).forEach(line0 => {
+    let line = line0.trim(); if (!line) return; ctx = [];
+    const hd = line.match(/^[#*_\s-]*(master categories|categories|category|subcategories|topics|tags?)\b[\s*_:：-]*(.*)$/i);
+    if (hd){ mode = /tag/i.test(hd[1]) ? 'tags' : 'cats'; line = hd[2].trim(); if (!line) return; }
+    if (mode === 'tags'){ line.split(/[,;|\n]|\s[·•]\s/).map(clean).forEach(addTag); return; }
+    if (/[>›»→]/.test(line)){ const parts = line.split(/\s*[>›»→]\s*/).map(clean).filter(Boolean); let cur = [], ok = true; parts.forEach(pt => { const c = resolve(pt, cur); if (!c.length){ ok = false; return; } cur = c.length > 1 && cur.length ? c : [c[0]]; }); if (cur.length && ok) cur.forEach(p => out.paths.push(p)); else if (cur.length){ cur.forEach(p => out.paths.push(p)); out.miss.push(line); } else out.miss.push(line); return; }
+    let body_ = line; const co = line.match(/^([^:：]{2,60})[:：]\s*(.+)$/); if (co && idx.has(clean(co[1]).toLowerCase())){ ctx = idx.get(clean(co[1]).toLowerCase()); body_ = co[2]; }
+    body_.split(/[,;|]|\s[·•]\s/).map(clean).filter(Boolean).forEach(item => { const c = resolve(item, ctx); if (c.length) c.forEach(p => out.paths.push(p)); else if (tagMap.has(item.toLowerCase())) out.tags.push(tagMap.get(item.toLowerCase())); else out.miss.push(item); });
+  });
+  out.paths = [...new Set(out.paths)]; out.tags = [...new Set(out.tags)]; out.newTags = [...new Set(out.newTags)]; out.miss = [...new Set(out.miss)];
+  return out;
+}
+async function rcAIClick(b, rec, body, fn){
+  if (!rec) return;
+  if (b.id === 'rcCopyAI'){
+    const text = rcAIPrompt(), box = body.querySelector('#rcCopyBox');
+    try { await navigator.clipboard.writeText(text); toast('Copied — paste it into your AI chat'); box.classList.add('hidden'); }
+    catch (e){ box.classList.remove('hidden'); box.innerHTML = '<div class="hint" style="margin:0 0 4px">Copy this and paste it into your AI chat:</div><textarea rows="8" readonly style="width:100%"></textarea>'; const ta = box.querySelector('textarea'); ta.value = text; ta.focus(); ta.select(); }
+    return;
+  }
+  if (b.id === 'rcPasteTog'){ body.querySelector('#rcAI').classList.toggle('hidden'); const ta = body.querySelector('#rcPasteIn'); if (ta) ta.focus(); return; }
+  if (b.dataset.tgdrop !== undefined){ rec.tags = rec.tags.filter(x => x !== b.dataset.tgdrop); fn.dirty(); fn.drawTags(); fn.drawPrev(); return; }
+  if (b.dataset.tndrop !== undefined){ rec.never = rec.never.filter(x => x !== b.dataset.tndrop); fn.dirty(); fn.drawTags(); fn.drawPrev(); return; }
+  if (b.id === 'rcAddMiss'){ (b.dataset.m || '').split('\n').forEach(t => { const n = typeof normTag === 'function' ? normTag(t) : t; if (n && !rec.tags.includes(n)) rec.tags.push(n); }); fn.dirty(); fn.drawTags(); fn.drawPrev(); b.remove(); return; }
+  if (b.id === 'rcPasteGo'){
+    const r = rcParseList(body.querySelector('#rcPasteIn').value), msg = body.querySelector('#rcPasteMsg');
+    r.paths.forEach(p => rcToggle(rec, p, true)); r.tags.forEach(t => { if (!rec.tags.includes(t)) rec.tags.push(t); rec.never = rec.never.filter(x => x !== t); });
+    r.newTags.forEach(t => { if (!rec.tags.includes(t)) rec.tags.push(t); });
+    fn.dirty(); fn.drawTree(); fn.drawTags(); fn.drawPrev();
+    msg.innerHTML = `Checked <b>${r.paths.length}</b> categor${r.paths.length === 1 ? 'y' : 'ies'} and <b>${r.tags.length + r.newTags.length}</b> tag${r.tags.length + r.newTags.length === 1 ? '' : 's'}${r.newTags.length ? ` (${r.newTags.length} new)` : ''}.` + (r.miss.length ? ` Couldn’t match: ${r.miss.slice(0, 12).map(esc).join(' · ')}${r.miss.length > 12 ? ' …' : ''} <button class="btn ghost sm" id="rcAddMiss" data-m="${esc(r.miss.join('\n'))}">Add those as tags</button>` : '');
+  }
+}
 async function openPlayable(){
   const body = document.createElement('div'); const st = 'padding:8px 11px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none';
   body.style.cssText = 'display:flex;gap:16px;min-height:60vh'; body.innerHTML = 'Reading your questions…';
   openModal({ title: 'Playable categories', body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }] });
   try {
-    const d = await getDoc(doc(db, 'triviaConfig', 'recipes')); RC.list = d.exists() && Array.isArray(d.data().list) ? d.data().list.map(x => rcUpgrade({ ...rcNew(), ...x })) : [];
+    const d = await getDoc(doc(db, 'triviaConfig', 'recipes')); RC.list = d.exists() && Array.isArray(d.data().list) ? d.data().list.map(x => rcUpgrade({ ...rcNew(), ...x, match: x.match || (x.needTag ? 'both' : 'prefer') })) : [];
     const snap = await getDocs(qColl());
     RC.qs = snap.docs.map(x => { const q = x.data(), cat = S.cats.get(q.categoryId) || {}; return { id: x.id, catId: q.categoryId, q: String(q.question || ''), a: String(q.answer || ''), diff: Math.min(3, Math.max(1, parseInt(q.difficulty) || 1)), ...(() => { const n = normPath(q.masterCat, q.subCat, q.topic); return { master: n.m, sub: n.s, topic: n.t }; })(), tags: Array.isArray(q.tags) ? q.tags : [], archived: !!q.archived || !!cat.archived }; }).filter(q => !q.archived && q.q.trim() && q.a.trim());
+    try { const td = await getDoc(doc(db, 'triviaConfig', 'tagList')); RC.dict = td.exists() && Array.isArray(td.data().list) ? td.data().list : []; } catch (e2) { RC.dict = []; }
+    { const c = new Map(); RC.qs.forEach(x => x.tags.forEach(t => c.set(t, (c.get(t) || 0) + 1))); (RC.dict || []).forEach(t => { if (!c.has(t)) c.set(t, 0); }); RC.tags = [...c.entries()].map(([t, n]) => ({ t, n })).sort((a, b) => b.n - a.n || a.t.localeCompare(b.t)); }
   } catch (e){ body.textContent = 'Couldn’t read the library: ' + (e && e.message || e); return; }
   if (!RC.list.some(x => x.id === RC.sel)) RC.sel = RC.list.length ? RC.list[0].id : ''; RC.dirty = false; RC.sample = null;
   const T = () => taxNow(), chip = (v, label, on, attr) => `<label style="display:inline-flex;gap:6px;align-items:center;margin:0 12px 6px 0;font-size:13px;text-transform:none;letter-spacing:0"><input type="checkbox" ${attr}="${esc(v)}" ${on ? 'checked' : ''} style="width:15px;height:15px;margin:0"> ${esc(label || v)}</label>`;
@@ -2377,7 +2486,7 @@ async function openPlayable(){
     const pool = rcFilter(rec), per = rec.rounds.length ? rec.rounds.reduce((n, x) => n + (Number(x.count) || 0), 0) : rec.perGame;
     const rp = rec.rounds.map(x => ({ x, n: rcFilter(rec, x).length })), sets = rec.rounds.length ? Math.min(...rp.map(y => y.x.count ? Math.floor(y.n / y.x.count) : 0)) : (per ? Math.floor(pool.length / per) : 0);
     const dc = [1, 2, 3].map(d => pool.filter(q => q.diff === d).length), prefN = rec.tags.length ? pool.filter(q => rec.tags.some(t => q.tags.includes(t))).length : null, fresh = RC.venue ? pool.filter(rcFresh).length : null;
-    const warn = []; if (!rec.libs.length && !(rec.needTag && rec.tags.length)) warn.push('Pick at least one category or tag, or this uses every categorized question.');
+    const warn = []; if (!rec.libs.length && !(rec.tags.length && rec.match !== 'prefer')) warn.push('Pick at least one category or tag, or this uses every categorized question.');
     if (pool.length < per) warn.push(`Only ${pool.length} question${pool.length === 1 ? '' : 's'} match — a ${per}-question game needs at least ${per}.`);
     rp.forEach(y => { if (y.x.count && y.n < y.x.count) warn.push(`Round “${y.x.name || 'Untitled'}” has ${y.n} matching, needs ${y.x.count}.`); });
     if (fresh != null && fresh < per) warn.push(`Only ${fresh} haven’t been played at that venue in the last ${S.usedWin || 6} months.`);
@@ -2414,17 +2523,35 @@ async function openPlayable(){
     el.querySelectorAll('input[data-ind="1"]').forEach(i => { i.indeterminate = true; });
     pk.innerHTML = rec.libs.length ? '<span class="hint" style="margin:0">Using:</span> ' + rec.libs.map(pth => `<span style="display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 4px 2px 10px;margin:2px 4px 2px 0;font-size:12px">${esc(pth.split('||').join(' › '))} <button type="button" class="linkbtn" data-tdrop="${esc(pth)}" aria-label="Remove">✕</button></span>`).join('') + ' <button type="button" class="linkbtn" data-tclear="1">clear all</button>' : '<span class="hint" style="margin:0">Nothing picked — this will use every categorized question.</span>';
   };
+  const drawTags = () => {
+    const rec = rcCur(), el = body.querySelector('#rcTagList'), sel = body.querySelector('#rcTagSel'); if (!rec || !el) return;
+    const q = String(RC.tagq || '').trim().toLowerCase(), all = (RC.tags || []).slice();
+    [...rec.tags, ...rec.never].forEach(t => { if (!all.some(x => x.t === t)) all.push({ t, n: 0 }); });
+    const on = new Set(rec.tags), nv = new Set(rec.never), rows = all.filter(x => !q || x.t.includes(q)).sort((a, b) => (Number(on.has(b.t) || nv.has(b.t)) - Number(on.has(a.t) || nv.has(a.t))) || b.n - a.n || a.t.localeCompare(b.t));
+    el.innerHTML = '<div style="display:flex;gap:8px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.65;padding:0 0 4px"><span style="width:34px">Use</span><span style="width:46px">Never</span><span>Tag</span></div>' + (rows.slice(0, 400).map(x => `<div style="display:flex;align-items:center;gap:8px;padding:2px 0"><input type="checkbox" data-tg="${esc(x.t)}" ${on.has(x.t) ? 'checked' : ''} style="width:34px;margin:0" aria-label="Use ${esc(x.t)}"><input type="checkbox" data-tn="${esc(x.t)}" ${nv.has(x.t) ? 'checked' : ''} style="width:46px;margin:0" aria-label="Never ${esc(x.t)}"><span style="flex:1">${esc(x.t)}</span><span class="hint" style="margin:0">${x.n.toLocaleString()} q</span></div>`).join('') || '<div class="hint">No tags match that search.</div>') + (rows.length > 400 ? '<div class="hint">Showing the first 400 — search to narrow.</div>' : '');
+    sel.innerHTML = rec.tags.length || rec.never.length ? (rec.tags.length ? '<span class="hint" style="margin:0">Using:</span> ' + rec.tags.map(t => `<span style="display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 4px 2px 10px;margin:2px 4px 2px 0;font-size:12px">${esc(t)} <button type="button" class="linkbtn" data-tgdrop="${esc(t)}" aria-label="Remove">✕</button></span>`).join('') : '') + (rec.never.length ? ' <span class="hint" style="margin:0">Never:</span> ' + rec.never.map(t => `<span style="display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 4px 2px 10px;margin:2px 4px 2px 0;font-size:12px">${esc(t)} <button type="button" class="linkbtn" data-tndrop="${esc(t)}" aria-label="Remove">✕</button></span>`).join('') : '') : '<span class="hint" style="margin:0">No tags picked.</span>';
+  };
   let drawForm = () => {
     const rec = rcCur(), el = body.querySelector('#rcForm'); if (!el) return;
     if (!rec){ el.innerHTML = '<div class="hint">Make a playable category — a saved set of rules that pulls questions from your library. Questions are never copied; fix one and it’s fixed everywhere.</div>'; return; }
     el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><label class="fld" style="flex:2;min-width:200px">Name<input type="text" data-rf="name" value="${esc(rec.name)}" style="${st}" autocomplete="off"></label>
       <label class="fld">Status<select data-rf="status" style="${st}"><option value="active" ${rec.status === 'active' ? 'selected' : ''}>Active</option><option value="draft" ${rec.status === 'draft' ? 'selected' : ''}>Draft</option><option value="archived" ${rec.status === 'archived' ? 'selected' : ''}>Archived</option></select></label>
       <label class="fld">Lasts<select data-rf="life" style="${st}"><option value="evergreen" ${rec.life === 'evergreen' ? 'selected' : ''}>Evergreen</option><option value="event" ${rec.life === 'event' ? 'selected' : ''}>Event-specific</option></select></label></div>
-      <div style="font-weight:700;margin:6px 0 4px">Pull questions from</div><div class="hint" style="margin:0 0 6px">Open a category (like Christmas) to see its subcategories, and those to see their topics. Tick any level to take everything under it. Add, rename or move things in <strong>Manage categories</strong> (toolbar).</div>
-      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.65;margin:0 0 3px">Search categories, subcategories &amp; topics</div><input type="search" id="rcTreeQ" value="${esc(RC.tq || '')}" autocomplete="off" style="${st};width:100%;margin-bottom:6px" aria-label="Search libraries and subcategories">
+      <div style="font-weight:700;margin:10px 0 4px">1. Choose what goes in</div>
+      <div class="hint" style="margin:0 0 6px">Tick categories, subcategories, topics and tags yourself below — or ask an AI for a theme and paste its answer.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px"><button class="btn ghost" id="rcCopyAI">Copy everything for AI</button><button class="btn ghost" id="rcPasteTog">Paste a list from AI</button></div>
+      <div id="rcAI" class="hidden" style="margin:0 0 10px"><textarea id="rcPasteIn" rows="6" style="${st};width:100%" aria-label="List from AI"></textarea><div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><button class="btn primary" id="rcPasteGo">Check them off</button><span id="rcPasteMsg" class="hint" style="margin:0"></span></div></div>
+      <div id="rcCopyBox" class="hidden" style="margin:0 0 10px"></div>
+      <div style="font-weight:600;margin:10px 0 4px">Categories</div>
+      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.65;margin:0 0 3px">Search categories, subcategories &amp; topics</div><input type="search" id="rcTreeQ" value="${esc(RC.tq || '')}" autocomplete="off" style="${st};width:100%;margin-bottom:6px" aria-label="Search categories">
       <div id="rcPicked" style="margin-bottom:6px"></div><div id="rcTree" style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:6px 8px"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0"><label class="fld" style="flex:1;min-width:220px">Tags to prefer (comma separated)<input type="text" data-rf="tags" value="${esc(rec.tags.join(', '))}" style="${st}" autocomplete="off"></label><label class="fld" style="flex:1;min-width:200px">Never use questions tagged<input type="text" data-rf="never" value="${esc(rec.never.join(', '))}" style="${st}" autocomplete="off"></label></div>
-      <label class="chk" style="margin:0 0 8px"><input type="checkbox" data-rf="needTag" ${rec.needTag ? 'checked' : ''}> Only use questions that have at least one of the preferred tags</label>
+      <div style="font-weight:600;margin:14px 0 4px">Tags</div>
+      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.65;margin:0 0 3px">Search tags</div><input type="search" id="rcTagQ" value="${esc(RC.tagq || '')}" autocomplete="off" style="${st};width:100%;margin-bottom:6px" aria-label="Search tags">
+      <div id="rcTagSel" style="margin-bottom:6px"></div><div id="rcTagList" style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:6px 8px"></div>
+      <div style="font-weight:700;margin:14px 0 4px">2. How should the picks combine?</div>
+      <label class="chk" style="display:flex;gap:8px;margin:2px 0"><input type="radio" name="rcMatch" data-rf="match" value="any" ${rec.match === 'any' ? 'checked' : ''}> <span>Anything I picked — in a picked category <b>or</b> having a picked tag</span></label>
+      <label class="chk" style="display:flex;gap:8px;margin:2px 0"><input type="radio" name="rcMatch" data-rf="match" value="both" ${rec.match === 'both' ? 'checked' : ''}> <span>Must match both — in a picked category <b>and</b> having a picked tag</span></label>
+      <label class="chk" style="display:flex;gap:8px;margin:2px 0 8px"><input type="radio" name="rcMatch" data-rf="match" value="prefer" ${rec.match === 'prefer' ? 'checked' : ''}> <span>Categories only — use the picked tags just to play those questions first</span></label>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="fld">Difficulty<select data-rf="diff" style="${st}">${[['mixed', 'Mixed'], ['1', 'Easy'], ['2', 'Medium'], ['3', 'Hard']].map(([v, l]) => `<option value="${v}" ${rec.diff === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <label class="fld">Questions per game<input type="number" min="1" max="200" data-rf="perGame" value="${rec.perGame}" style="${st};width:110px" ${rec.rounds.length ? 'disabled title="Set by the rounds below"' : ''}></label></div>
       <div style="font-weight:700;margin:14px 0 4px">Rounds <span class="hint" style="font-weight:400">(optional — each round pulls from its own part of the library)</span></div>
@@ -2434,7 +2561,7 @@ async function openPlayable(){
       <div style="display:flex;gap:8px;align-items:center;margin-top:16px;border-top:1px solid var(--border);padding-top:12px"><button class="btn primary" id="rcSave">Save</button><button class="btn ghost" id="rcDup">Duplicate</button><button class="btn ghost" id="rcDel">Delete</button><span class="hint" id="rcMsg" style="margin:0">${RC.dirty ? 'Unsaved changes' : ''}</span></div>`;
   };
   const drawAll = () => { body.innerHTML = `<div style="width:230px;flex:none;position:sticky;top:0;align-self:flex-start"><button class="btn primary" id="rcNew" style="width:100%;margin-bottom:10px;white-space:normal;line-height:1.25;letter-spacing:.04em;font-size:12px;padding:9px 10px;text-align:center">+ New playable category</button><div id="rcList"></div></div><div style="flex:1;min-width:0;display:flex;gap:16px;flex-wrap:wrap"><div id="rcForm" style="flex:1.3;min-width:320px"></div><div id="rcPrev" style="flex:1;min-width:260px;border-left:1px solid var(--border);padding-left:16px;position:sticky;top:0;align-self:flex-start"></div></div>`; drawList(); drawForm(); drawPrev(); };
-  const _df = drawForm; drawForm = () => { _df(); drawTree(); };
+  const _df = drawForm; drawForm = () => { _df(); drawTree(); drawTags(); };
   drawAll();
   const dirty = () => { RC.dirty = true; const m = body.querySelector('#rcMsg'); if (m) m.textContent = 'Unsaved changes'; };
   const toggle = (arr, v, on) => { const i = arr.indexOf(v); if (on && i < 0) arr.push(v); if (!on && i >= 0) arr.splice(i, 1); };
@@ -2442,15 +2569,18 @@ async function openPlayable(){
     const rec = rcCur(), t = e.target; if (!rec) return; let redraw = false;
     if (t.dataset.rf){ const f = t.dataset.rf, v = t.type === 'checkbox' ? t.checked : t.value; if (f === 'tags') rec.tags = parseTags(v); else if (f === 'never') rec.never = parseTags(v); else if (f === 'perGame') rec.perGame = Math.max(1, parseInt(v) || 1); else rec[f] = v; if (f === 'name' || f === 'status') drawList(); }
     else if (t.dataset.tpath !== undefined){ rcToggle(rec, t.dataset.tpath, t.checked); if (rec.rounds.length) redraw = true; else drawTree(); }
+    else if (t.dataset.tg !== undefined){ toggle(rec.tags, t.dataset.tg, t.checked); if (t.checked) rec.never = rec.never.filter(x => x !== t.dataset.tg); drawTags(); }
+    else if (t.dataset.tn !== undefined){ toggle(rec.never, t.dataset.tn, t.checked); if (t.checked) rec.tags = rec.tags.filter(x => x !== t.dataset.tn); drawTags(); }
     else if (t.dataset.rr){ const [i, f] = t.dataset.rr.split(':'), rd = rec.rounds[Number(i)]; if (rd) rd[f] = f === 'count' ? Math.max(1, parseInt(t.value) || 1) : f === 'tags' ? parseTags(t.value) : t.value; }
     else if (t.dataset.rrlib !== undefined){ const k = t.dataset.rrlib, i = Number(k.slice(0, k.indexOf(':'))), m = k.slice(k.indexOf(':') + 1), rd = rec.rounds[i]; if (rd){ rd.libs = rd.libs || []; toggle(rd.libs, m, t.checked); } }
     else return;
     dirty(); RC.sample = null; if (redraw) drawForm(); drawPrev();
   };
-  body.addEventListener('input', e => { if (e.target.id === 'rcTreeQ'){ RC.tq = e.target.value; drawTree(); return; } if (e.target.type !== 'checkbox' && e.target.tagName !== 'SELECT') edit(e); });
+  body.addEventListener('input', e => { if (e.target.id === 'rcTreeQ'){ RC.tq = e.target.value; drawTree(); return; } if (e.target.id === 'rcTagQ'){ RC.tagq = e.target.value; drawTags(); return; } if (e.target.type !== 'checkbox' && e.target.tagName !== 'SELECT') edit(e); });
   body.addEventListener('change', e => { if (e.target.id === 'rcVenue'){ RC.venue = e.target.value; drawPrev(); return; } if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') edit(e); });
   const save = async () => { const rec = rcCur(); if (rec && !String(rec.name).trim()){ toast('Give it a name first'); return false; } return await run(async () => { await setDoc(doc(db, 'triviaConfig', 'recipes'), { list: RC.list, updatedAt: serverTimestamp() }); RC.dirty = false; const m = body.querySelector('#rcMsg'); if (m) m.textContent = 'Saved'; toast('Saved'); }); };
   body.addEventListener('click', e => {
+    const ai = e.target.closest('#rcCopyAI,#rcPasteTog,#rcPasteGo,[data-tgdrop],[data-tndrop],#rcAddMiss'); if (ai){ rcAIClick(ai, rcCur(), body, { drawTree, drawTags, drawPrev, dirty }); return; }
     const t = e.target.closest('[data-tx],[data-tdrop],[data-tclear]'), rec = rcCur(); if (!t || !rec) return;
     if (t.dataset.tx !== undefined){ const m = t.dataset.tx; if (RC.open.has(m)) RC.open.delete(m); else RC.open.add(m); drawTree(); return; }
     if (t.dataset.tdrop !== undefined) rec.libs = rec.libs.filter(x => x !== t.dataset.tdrop); else rec.libs = [];
@@ -2562,7 +2692,7 @@ async function openTree(){
     };
     T.forEach(m => walk(m, m.n, 0, false));
     body.innerHTML = `<p class="hint" style="margin-top:0">Three levels: <strong>Category</strong> (like Christmas) → <strong>Subcategory</strong> (Movies, Music…) → <strong>Topic</strong> (Comedy, Carols…). Each question gets one of each. Renaming changes it on every question that uses it.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:0 0 10px"><label class="fld" style="flex:1;min-width:220px">Search<input type="search" id="trQ" value="${esc(TS.q)}" autocomplete="off" style="${st}"></label><button class="btn" data-ta="addtop">+ New category</button><button class="btn ghost" data-ta="expand">Open all</button><button class="btn ghost" data-ta="collapse">Close all</button><button class="btn ghost" data-ta="text">Copy / paste whole list</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:0 0 10px"><label class="fld" style="flex:1;min-width:220px">Search<input type="search" id="trQ" value="${esc(TS.q)}" autocomplete="off" style="${st}"></label><button class="btn" data-ta="addtop">+ New category</button><button class="btn ghost" data-ta="suggest" title="Adds the built-in categories, subcategories and topics that you don't have yet. Nothing is removed or renamed.">Add suggested ones</button><button class="btn ghost" data-ta="expand">Open all</button><button class="btn ghost" data-ta="collapse">Close all</button><button class="btn ghost" data-ta="text">Copy / paste whole list</button></div>
       ${old ? `<div style="border:1px solid var(--gold2);border-radius:10px;padding:10px 12px;margin:0 0 10px"><b>${old.toLocaleString()}</b> question${old === 1 ? '' : 's'} still use the earlier layout (for example “Christmas Movies” as its own master category). <button class="btn primary" data-ta="migrate" style="margin-left:8px">Move them into this layout</button></div>` : ''}
       <div>${h || '<div class="hint">Nothing matches that search.</div>'}</div>`;
     const qi = body.querySelector('#trQ'); if (TS.focus){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
@@ -2577,6 +2707,7 @@ async function openTree(){
     if (act === 'open'){ if (TS.open.has(path)) TS.open.delete(path); else TS.open.add(path); return draw(); }
     if (act === 'expand'){ const all = (L, pre) => L.forEach(x => { const pth = pre ? pre + '||' + x.n : x.n; TS.open.add(pth); all(x.c, pth); }); all(taxTree(), ''); return draw(); }
     if (act === 'collapse'){ TS.open.clear(); return draw(); }
+    if (act === 'suggest'){ const T = clone(), n = mergeTree(T, TREE_DEFAULT); if (!n) return toast('You already have all of them'); TS.busy = true; try { await saveTree(T); toast(n + ' added'); } finally { TS.busy = false; } return; }
     TS.busy = true;
     try {
       if (act === 'addtop' || act === 'add'){ TS.edit = { act: 'add', path: act === 'addtop' ? '' : path }; TS.arm = ''; TS.busy = false; return draw(); }
