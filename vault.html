@@ -2562,7 +2562,7 @@ function startBingo(){
    PICTURES MODE — picture question library (type-in answers)
    Saved in the Realtime Database where Belladonna Moth reads it (the two apps are not linked, they just read the same data):
    moth/connectionlists/_picsections/{id} = { name, order }
-   moth/connectionlists/_pics/{id}        = { section, category, format, subject, diff, q, url, a, alts[], explain, rights }
+   moth/connectionlists/_pics/{id}        = { section, category, format, subject, diff, q, url, a, alts[], explain, rights, reveal }
    ═══════════════════════════════════════════════════════════ */
 const P = { secs: new Map(), qs: new Map(), cur: LS.get('picCur', 'all'), q: '', diff: '', fmt: '', secQ: '', listening: false, loaded: { s: false, q: false } };
 const PIC_SEC = 'moth/connectionlists/_picsections', PIC_Q = 'moth/connectionlists/_pics';
@@ -2652,6 +2652,7 @@ function picForm(q){
   return `<div class="pForm">
     <div class="wide"><img class="pPrev ${pOkUrl(q.url) ? '' : 'hidden'}" id="pfPrev" referrerpolicy="no-referrer" ${pOkUrl(q.url) ? `src="${esc(q.url)}"` : ''} alt=""></div>
     <label class="fld wide">Image (Cloudflare link, starts with https://)<input type="text" id="pfUrl" value="${esc(q.url || '')}" autocomplete="off"></label>
+    <label class="fld wide">Reveal image (optional — shown with the answer in a two-pass game; leave empty to reuse the picture above)<input type="text" id="pfRev" value="${esc(q.reveal || '')}" autocomplete="off"></label>
     <label class="fld wide">Question (shown on the TV and phones)<textarea id="pfQ">${esc(q.q || '')}</textarea></label>
     <label class="fld">Correct answer<input type="text" id="pfA" value="${esc(q.a || '')}" autocomplete="off"></label>
     <label class="fld">Section<select id="pfSec">${secOpts}</select></label>
@@ -2667,10 +2668,10 @@ function picForm(q){
 }
 function readPicForm(){
   const v = id => ($('#' + id).value || '');
-  return { url: v('pfUrl').trim(), q: v('pfQ').replace(/\r\n?/g, '\n').trim(), a: v('pfA').trim(), section: v('pfSec'), alts: pSplitAlts(v('pfAlts')), category: v('pfCat').trim(), format: v('pfFmt').trim(), subject: v('pfSub').trim(), diff: v('pfDiff'), rights: v('pfRights'), explain: v('pfExp').replace(/\r\n?/g, '\n').trim() };
+  return { url: v('pfUrl').trim(), q: v('pfQ').replace(/\r\n?/g, '\n').trim(), a: v('pfA').trim(), section: v('pfSec'), alts: pSplitAlts(v('pfAlts')), category: v('pfCat').trim(), format: v('pfFmt').trim(), subject: v('pfSub').trim(), diff: v('pfDiff'), rights: v('pfRights'), explain: v('pfExp').replace(/\r\n?/g, '\n').trim(), reveal: v('pfRev').trim() };
 }
 const picRec = (d, old) => { const o = { url: d.url, a: d.a, section: d.section || null, updatedAt: Date.now(), createdAt: (old && old.createdAt) || Date.now() };
-  o.q = d.q || null; o.alts = d.alts.length ? d.alts : null; o.category = d.category || null; o.format = d.format || null; o.subject = d.subject || null; o.diff = d.diff || null; o.rights = d.rights || null; o.explain = d.explain || null; return o; };
+  o.q = d.q || null; o.alts = d.alts.length ? d.alts : null; o.category = d.category || null; o.format = d.format || null; o.subject = d.subject || null; o.diff = d.diff || null; o.rights = d.rights || null; o.explain = d.explain || null; o.reveal = pOkUrl(d.reveal) ? d.reveal : null; return o; };
 function openPicEditor(id){
   const old = id ? P.qs.get(id) : null, base = old || { section: P.secs.has(P.cur) ? P.cur : '' };
   const body = document.createElement('div'); body.innerHTML = picForm(base);
@@ -2679,6 +2680,7 @@ function openPicEditor(id){
   actions.push({ label: old ? 'Save changes' : 'Add question', primary: true, onClick: async btn => {
     const d = readPicForm(), er = $('#pfErr'); const fail = m => { er.textContent = m; er.classList.remove('hidden'); };
     if (!pOkUrl(d.url)) return fail('The image link must start with https:// — copy it from Cloudflare.');
+    if (d.reveal && !pOkUrl(d.reveal)) return fail('The reveal image link must start with https:// — or leave it empty.');
     if (!d.a) return fail('Type the correct answer.');
     if (d.q.length > 200) return fail('The question is over 200 letters — shorten it.');
     btn.disabled = true;
@@ -2695,7 +2697,7 @@ $('#pBulk').addEventListener('click', () => {
   const secOpts = '<option value="">(No section)</option>' + pSecs().map(([id, v]) => `<option value="${esc(id)}" ${P.cur === id ? 'selected' : ''}>${esc(v.name)}</option>`).join('');
   const body = document.createElement('div');
   body.innerHTML = `<p class="hint" style="margin-top:0">One question per line, parts separated by a vertical bar ( | ). Only the image link and the correct answer are needed; leave the rest empty if you like (keep the bars). Several accepted answers are separated by semicolons.</p>
-    <pre class="hint" style="margin:0 0 12px;padding:10px;border:1px solid var(--border);border-radius:9px;white-space:pre-wrap;color:var(--gold2)">image link | question | correct answer | accepted answers | round format | subject | difficulty | main category | image rights | explanation</pre>
+    <pre class="hint" style="margin:0 0 12px;padding:10px;border:1px solid var(--border);border-radius:9px;white-space:pre-wrap;color:var(--gold2)">image link | question | correct answer | accepted answers | round format | subject | difficulty | main category | image rights | explanation | reveal image</pre>
     <label class="fld">Add them to<select id="pbSec">${secOpts}</select></label>
     <label class="fld">Questions<textarea id="pbIn" style="min-height:220px;width:100%;padding:10px 13px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);font:14px var(--font);letter-spacing:0;text-transform:none;outline:none"></textarea></label>
     <div class="hint" id="pbErr" style="color:var(--red);white-space:pre-line;margin:0"></div>`;
@@ -2703,7 +2705,7 @@ $('#pBulk').addEventListener('click', () => {
     const sec = $('#pbSec').value, er = $('#pbErr'), bad = [], recs = [];
     $('#pbIn').value.split('\n').map(l => l.trim()).filter(Boolean).forEach((l, i) => {
       const x = l.split('|').map(v => v.trim()); if (/^image link\b/i.test(x[0])) return;
-      const d = { url: x[0], q: (x[1] || '').slice(0, 200), a: x[2] || '', alts: (x[3] || '').split(';').map(v => v.trim()).filter(Boolean), format: x[4] || '', subject: x[5] || '', diff: ((x[6] || '').toLowerCase().replace(/^extra[\s-]*hard$/, 'extra hard')), category: x[7] || '', rights: P_RIGHTS.find(r => r.toLowerCase() === (x[8] || '').toLowerCase()) || '', explain: x[9] || '', section: sec };
+      const d = { url: x[0], q: (x[1] || '').slice(0, 200), a: x[2] || '', alts: (x[3] || '').split(';').map(v => v.trim()).filter(Boolean), format: x[4] || '', subject: x[5] || '', diff: ((x[6] || '').toLowerCase().replace(/^extra[\s-]*hard$/, 'extra hard')), category: x[7] || '', rights: P_RIGHTS.find(r => r.toLowerCase() === (x[8] || '').toLowerCase()) || '', explain: x[9] || '', reveal: x[10] || '', section: sec };
       if (!pOkUrl(d.url)) return bad.push(`Line ${i + 1}: the image link must start with https://`);
       if (!d.a) return bad.push(`Line ${i + 1}: the correct answer is missing`);
       if (d.diff && !P_DIFFS.some(p => p[0] === d.diff)) d.diff = '';
