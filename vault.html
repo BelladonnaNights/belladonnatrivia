@@ -520,6 +520,7 @@ textarea::placeholder{color:#8a8a8a !important}
             <button class="btn ghost" id="qListBtn" title="A plain list of every question and answer, to paste into your AI so it doesn't repeat any">Question list</button>
             <button class="btn ghost" id="catListBtn" title="A list of every trivia category with its About notes">Category list</button>
             <button class="btn ghost" id="importBtn">Import CSVs</button>
+            <button class="btn ghost" id="recatBtn" title="Export every question, have AI re-sort them, and import the results back">Re-sort all questions</button>
             <button class="btn primary" id="addBtn">+ Add question</button>
           </div>
         </div>
@@ -3485,6 +3486,140 @@ function openImport(){
       msg.textContent = /permission/i.test(err.message) ? 'Firestore blocked the import — publish the updated rules first.' : 'Import stopped: ' + err.message + ' (anything already written is saved; re-running skips duplicates).';
       importBtn.disabled = false;
     } finally { st.busy = false; }
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   RE-SORT ALL QUESTIONS — export everything with its Question ID, let AI assign categories/tags, import back by ID
+   ═══════════════════════════════════════════════════════════ */
+$('#recatBtn').addEventListener('click', () => openRecat());
+function openRecat(){
+  const st = { qs: null, files: [], busy: false };
+  const body = document.createElement('div');
+  body.innerHTML = `<p class="hint" style="margin-top:0"><strong>Step 1.</strong> Download every question (with its Question ID) as CSV files.</p>
+    <label class="fld" style="max-width:300px">Questions per file<input type="number" id="rcN" value="300" min="50" max="5000"></label>
+    <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="rcFull"> <span>Include every column (answers, notes, options, etc.). Leave off for AI — it only needs the question, answer and current categories.</span></label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px"><button class="btn" id="rcDl">Download CSV files</button><button class="btn ghost" id="rcCopy">Copy the ChatGPT prompt</button></div>
+    <div class="hint" id="rcInfo"></div>
+    <p class="hint"><strong>Step 2.</strong> Give each file to ChatGPT with the prompt. Keep the Question ID column in what it sends back.</p>
+    <p class="hint"><strong>Step 3.</strong> Drop the finished CSVs here. Each row is matched to its question by Question ID.</p>
+    <div class="drop" id="rcDrop"><input type="file" id="rcFiles" multiple accept=".csv,text/csv"><div class="muted" style="margin-top:8px;font-size:12px">…or drag CSV files onto this box</div></div>
+    <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="rcRep" checked> <span>Replace the Master Category, Subcategory and Topic I have now (turn off to only fill empty ones)</span></label>
+    <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="rcKeep" checked> <span>Keep the tags I already have and add the new ones (turn off to replace them)</span></label>
+    <div id="rcPv" class="hint"></div><div class="msg" id="rcMsg"></div>`;
+  const actions = [{ label: 'Close', onClick: closeModal }, { label: 'Save changes', primary: true, onClick: () => apply() }];
+  openModal({ title: 'Re-sort all questions', body, wide: true, actions });
+  const go = actions[1].el; go.disabled = true;
+  const msg = $('#rcMsg', body);
+  const load = async () => {
+    if (st.qs) return st.qs;
+    const snap = await getDocs(qColl());
+    st.qs = new Map(); snap.docs.forEach(d => { const q = d.data(); if (!q.archived) st.qs.set(d.id, { ...q, __id: d.id }); });
+    return st.qs;
+  };
+  const tagSet = async () => {
+    const qs = await load(), set = new Set();
+    qs.forEach(q => (Array.isArray(q.tags) ? q.tags : []).forEach(t => set.add(t)));
+    try { const td = await getDoc(doc(db, 'triviaConfig', 'tagList')); if (td.exists() && Array.isArray(td.data().list)) td.data().list.forEach(t => set.add(t)); } catch (e) {}
+    return [...set].sort((a, b) => a.localeCompare(b));
+  };
+  $('#rcDl', body).addEventListener('click', async () => {
+    msg.className = 'msg ok'; msg.textContent = 'Reading every question…';
+    try {
+      const qs = await load(), per = Math.max(50, Number($('#rcN', body).value) || 300), full = $('#rcFull', body).checked;
+      const items = [...qs.values()].map(q => ({ ...q, __cat: (S.cats.get(q.categoryId) || {}).name || '' })).sort((a, b) => a.__cat.localeCompare(b.__cat) || (Number(a.order) || 0) - (Number(b.order) || 0));
+      const cols = [{ key: '__id', exportLabel: 'Question ID' }, { key: '__cat', exportLabel: 'Category' }, ...(full ? baseCols().filter(c => c.type !== 'ro' && !['masterCat', 'subCat', 'topic', 'tags', 'question', 'answer'].includes(c.key)) : [])];
+      const pre = [{ key: 'question', exportLabel: 'Question' }, { key: 'answer', exportLabel: 'Answer' }, { key: 'masterCat', exportLabel: 'Master Category' }, { key: 'subCat', exportLabel: 'Subcategory' }, { key: 'topic', exportLabel: 'Topic' }, { key: 'tags', exportLabel: 'Tags' }];
+      const all = [cols[0], cols[1], ...pre, ...cols.slice(2)];
+      const parts = Math.max(1, Math.ceil(items.length / per));
+      for (let i = 0; i < parts; i++){
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([toCSV(all, items.slice(i * per, (i + 1) * per))], { type: 'text/csv;charset=utf-8' }));
+        a.download = `vault-questions-part-${i + 1}-of-${parts}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        await new Promise(r => setTimeout(r, 500));
+      }
+      msg.textContent = `Downloaded ${items.length.toLocaleString()} questions in ${parts} file${parts === 1 ? '' : 's'}. If your browser asks to allow multiple downloads, say yes.`;
+    } catch (err){ msg.className = 'msg'; msg.textContent = 'Couldn’t read the questions: ' + (err && err.message || err); }
+  });
+  $('#rcCopy', body).addEventListener('click', async () => {
+    let tags = []; try { tags = await tagSet(); } catch (e) {}
+    const t = `I'm going to give you a CSV of trivia questions. Re-sort every row into my category list and give it tags.
+
+COLUMNS: Question ID, Category, Question, Answer, Master Category, Subcategory, Topic, Tags (there may be more columns after those; ignore them and leave them out of your reply).
+
+FOR EVERY ROW, FILL IN:
+- Master Category (required): pick ONE from the list below, spelled exactly as written.
+- Subcategory: pick ONE that sits under that Master Category.
+- Topic: pick ONE that sits under that Subcategory, only if one fits. Otherwise leave it blank.
+- Tags: 3 to 8 tags, separated by commas. Use tags from my tag list below whenever they fit. You may add new ones when something important is missing: short, specific, Title Case (people, shows, franchises, places, decades, themes, song or movie genres).
+
+RULES:
+- Judge by what the question is actually about, not by the Category column (the old category is often too broad). A question can belong to a different master category than the sheet it lives on.
+- If nothing fits, choose the closest Master Category and leave Subcategory and Topic blank. Never invent a new Master Category, Subcategory or Topic.
+- Keep Christmas questions under Christmas, in the matching "Christmas ___" subcategory.
+- Do not change the Question ID, Question or Answer. Return every row, in the same order.
+- Reply with ONLY a CSV (a code block I can copy) with exactly these columns: Question ID, Question, Answer, Master Category, Subcategory, Topic, Tags. Put quotes around any cell that contains a comma.
+
+MY CATEGORIES (Master Category, then indented Subcategory, then indented Topic):
+${rcTreeText(taxTree())}
+MY TAGS:
+${tags.join(', ')}`;
+    try { await navigator.clipboard.writeText(t); toast('Prompt copied'); } catch (e) { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Prompt copied'); }
+  });
+  const splitTags = v => String(v || '').split(/[,;|]/).map(x => x.trim()).filter(Boolean);
+  const compute = async () => {
+    const qs = await load(), rep = $('#rcRep', body).checked, keep = $('#rcKeep', body).checked;
+    st.plan = []; st.rows = 0; st.missing = 0; st.newNodes = []; const seen = new Set();
+    for (const f of st.files){
+      for (const r of f.rows){
+        st.rows++;
+        const q = qs.get(r.id); if (!q){ st.missing++; continue; }
+        if (seen.has(r.id)) continue; seen.add(r.id);
+        const n = normPath(r.m, r.s, r.t), patch = {};
+        const setP = (k, v) => { if (v && (rep || !q[k]) && q[k] !== v) patch[k] = v; };
+        if (n.m){ setP('masterCat', n.m); if (patch.masterCat || q.masterCat === n.m || !q.masterCat){ setP('subCat', n.s); setP('topic', n.t); } }
+        if (r.tags.length){ const have = Array.isArray(q.tags) ? q.tags : [], next = keep ? [...new Set([...have, ...r.tags])] : [...new Set(r.tags)]; if (next.length !== have.length || next.some((t, i) => t !== have[i])) patch.tags = next; }
+        if (Object.keys(patch).length) st.plan.push({ id: r.id, patch, path: [patch.masterCat || q.masterCat || n.m, patch.subCat || (patch.masterCat ? n.s : q.subCat) || '', patch.topic || (patch.masterCat ? n.t : q.topic) || ''] });
+      }
+    }
+    const add = []; st.plan.forEach(p => { const [m, s_, t] = p.path; if (!m) return; const node = { n: m, c: s_ ? [{ n: s_, c: t ? [{ n: t, c: [] }] : [] }] : [] }; add.push(node); });
+    const T = JSON.parse(JSON.stringify(taxTree())); st.addN = mergeTree(T, add); st.T = T;
+    $('#rcPv', body).innerHTML = st.files.length ? `<strong>${st.rows.toLocaleString()}</strong> rows read · <strong>${st.plan.length.toLocaleString()}</strong> questions will change` + (st.missing ? ` · <span style="color:var(--danger)">${st.missing.toLocaleString()} rows have an ID that isn’t in the Vault (skipped)</span>` : '') + (st.addN ? ` · ${st.addN} new categor${st.addN === 1 ? 'y' : 'ies'} will be added to your list` : '') : '';
+    go.disabled = !st.plan.length;
+  };
+  const addFiles = async files => {
+    for (const f of files){
+      if (!/\.csv$/i.test(f.name) && f.type !== 'text/csv') continue;
+      const rows = parseCSV(await f.text()); if (!rows.length) continue;
+      const hdr = rows[0].map(norm), ix = k => hdr.indexOf(k);
+      const iId = ix('questionid'), iM = ['mastercategory', 'master', 'maincategory'].map(ix).find(i => i >= 0) ?? -1, iS = ['subcategory', 'sub'].map(ix).find(i => i >= 0) ?? -1, iT = ['topic', 'subsubcategory'].map(ix).find(i => i >= 0) ?? -1, iG = ['tags', 'tag'].map(ix).find(i => i >= 0) ?? -1;
+      if (iId < 0){ toast(f.name + ' has no Question ID column'); continue; }
+      const out = [], cell = (r, i) => i >= 0 ? String(r[i] || '').trim() : '';
+      rows.slice(1).forEach(r => { const id = cell(r, iId); if (id) out.push({ id, m: cell(r, iM), s: cell(r, iS), t: cell(r, iT), tags: splitTags(cell(r, iG)) }); });
+      st.files.push({ name: f.name, rows: out });
+    }
+    msg.textContent = ''; msg.className = 'msg ok'; msg.textContent = 'Checking…'; await compute(); msg.textContent = '';
+  };
+  $('#rcFiles', body).addEventListener('change', e => addFiles([...e.target.files]));
+  const drop = $('#rcDrop', body);
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
+  ['#rcRep', '#rcKeep'].forEach(k => $(k, body).addEventListener('change', () => st.files.length && compute()));
+  async function apply(){
+    if (st.busy || !st.plan || !st.plan.length) return; st.busy = true; go.disabled = true;
+    msg.className = 'msg ok';
+    try {
+      if (st.addN) await setDoc(doc(db, 'triviaConfig', 'taxonomy'), { tree: st.T, updatedAt: serverTimestamp() });
+      for (let i = 0; i < st.plan.length; i += 400){
+        msg.textContent = `Saving ${Math.min(i + 400, st.plan.length).toLocaleString()} of ${st.plan.length.toLocaleString()}…`;
+        const b = writeBatch(db); st.plan.slice(i, i + 400).forEach(p => b.update(doc(qColl(), p.id), { ...p.patch, updatedAt: serverTimestamp() })); await b.commit();
+      }
+      msg.textContent = `Done — ${st.plan.length.toLocaleString()} questions updated.`;
+      go.textContent = 'Close'; go.disabled = false; go.onclick = closeModal;
+      if (S.curId){ const cur = S.curId; S.curId = null; selectCategory(cur); }
+    } catch (err){ console.error(err); msg.className = 'msg'; msg.textContent = 'Stopped: ' + err.message + ' (anything already saved stays saved; you can import the same files again).'; go.disabled = false; }
+    finally { st.busy = false; }
   }
 }
 
