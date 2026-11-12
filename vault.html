@@ -2288,15 +2288,17 @@ async function openTags(X){
 }
 
 /* ── Playable categories: saved rules that pull questions from the library (saved in Firestore: triviaConfig/recipes) ── */
-const RC = { list: [], sel: '', qs: null, venue: '', dirty: false, sample: null };
+const RC = { tq: '', open: new Set(), list: [], sel: '', qs: null, venue: '', dirty: false, sample: null };
 const rcNew = () => ({ id: 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: '', status: 'draft', life: 'evergreen', libs: [], subs: [], tags: [], needTag: false, never: [], diff: 'mixed', perGame: 15, rounds: [], excluded: [] });
 const rcCur = () => RC.list.find(x => x.id === RC.sel);
 const rcShuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const rcDropSubs = (rec, m) => rec.subs.filter(x => !(x.includes('||') ? x.startsWith(m + '||') : taxNow().subs.some(s => s.n === x && s.m === m)));
+const rcSubsFor = (rec, m) => (rec.subs || []).filter(x => x.includes('||') ? x.startsWith(m + '||') : taxNow().subs.some(s => s.n === x && s.m === m)).map(x => x.includes('||') ? x.split('||')[1] : x);
 function rcFilter(rec, round){
   const f = q => {
     if (rec.libs.length && !rec.libs.includes(q.master)) return false;
-    if (!rec.libs.length && !(rec.needTag && rec.tags.length) && !rec.subs.length && !q.master) return false;
-    if (rec.subs.length && !rec.subs.includes(q.sub)) return false;
+    if (!rec.libs.length && !(rec.needTag && rec.tags.length) && !q.master) return false;
+    if (rec.libs.includes(q.master)){ const ms = rcSubsFor(rec, q.master); if (ms.length && !ms.includes(q.sub)) return false; }
     if (rec.needTag && rec.tags.length && !rec.tags.some(t => q.tags.includes(t))) return false;
     if (rec.never.some(t => q.tags.includes(t))) return false;
     if (rec.diff !== 'mixed' && String(q.diff) !== rec.diff) return false;
@@ -2329,7 +2331,7 @@ async function openPlayable(){
   } catch (e){ body.textContent = 'Couldn’t read the library: ' + (e && e.message || e); return; }
   if (!RC.list.some(x => x.id === RC.sel)) RC.sel = RC.list.length ? RC.list[0].id : ''; RC.dirty = false; RC.sample = null;
   const T = () => taxNow(), chip = (v, label, on, attr) => `<label style="display:inline-flex;gap:6px;align-items:center;margin:0 12px 6px 0;font-size:13px;text-transform:none;letter-spacing:0"><input type="checkbox" ${attr}="${esc(v)}" ${on ? 'checked' : ''} style="width:15px;height:15px;margin:0"> ${esc(label || v)}</label>`;
-  const drawList = () => { const el = body.querySelector('#rcList'); if (!el) return; el.innerHTML = RC.list.map(x => `<button class="btn ${x.id === RC.sel ? 'primary' : 'ghost'}" data-rcsel="${x.id}" style="display:block;width:100%;text-align:left;margin:0 0 6px"><span>${esc(x.name || 'Untitled')}</span> <small style="opacity:.7">${x.status === 'active' ? '' : x.status}</small></button>`).join('') || '<div class="hint">None yet.</div>'; };
+  const drawList = () => { const el = body.querySelector('#rcList'); if (!el) return; el.innerHTML = RC.list.map(x => `<button class="btn ${x.id === RC.sel ? 'primary' : 'ghost'}" data-rcsel="${x.id}" style="display:block;width:100%;text-align:left;margin:0 0 6px;white-space:normal;line-height:1.25;letter-spacing:.03em;font-size:12px;padding:9px 10px;word-break:break-word"><span>${esc(x.name || 'Untitled')}</span> <small style="opacity:.7;display:block;margin-top:2px">${x.status === 'active' ? '' : x.status}</small></button>`).join('') || '<div class="hint">None yet.</div>'; };
   const drawPrev = () => {
     const rec = rcCur(), el = body.querySelector('#rcPrev'); if (!el || !rec) return;
     const pool = rcFilter(rec), per = rec.rounds.length ? rec.rounds.reduce((n, x) => n + (Number(x.count) || 0), 0) : rec.perGame;
@@ -2353,15 +2355,32 @@ async function openPlayable(){
       return head + `<div style="display:flex;gap:8px;align-items:flex-start;margin:0 0 4px"><span style="flex:1"><b>${i + 1}.</b> ${esc(q.q)} <span style="opacity:.65">→ ${esc(q.a)}</span> <small style="opacity:.55">(${['', 'easy', 'medium', 'hard'][q.diff]}${cat ? ' · ' + esc(cat) : ''}${q.master ? ' · ' + esc(q.master) : ''})</small></span><button class="btn ghost sm" data-rcex="${esc(q.id)}">Leave out</button></div>`; }).join('')
       + (rec.excluded.length ? `<div class="hint" style="margin-top:8px">${rec.excluded.length} left out of this category. <button class="btn ghost sm" id="rcRestore">Put them all back</button></div>` : '');
   };
-  const drawForm = () => {
+  const drawTree = () => {
+    const rec = rcCur(), el = body.querySelector('#rcTree'), pk = body.querySelector('#rcPicked'); if (!rec || !el) return;
+    const T_ = taxNow(), qs = RC.qs || [], q = String(RC.tq || '').trim().toLowerCase();
+    const cm = {}, cs = {}; qs.forEach(x => { if (!x.master) return; cm[x.master] = (cm[x.master] || 0) + 1; const k = x.master + '||' + x.sub; cs[k] = (cs[k] || 0) + 1; });
+    const row = (inner, pad) => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0 4px ${pad}px">${inner}</div>`;
+    let h = '';
+    T_.masters.forEach(m => {
+      const subs = T_.subs.filter(x => x.m === m), mHit = !q || m.toLowerCase().includes(q), subHits = q ? subs.filter(x => x.n.toLowerCase().includes(q)) : subs;
+      if (q && !mHit && !subHits.length) return;
+      const on = rec.libs.includes(m), ps = rcSubsFor(rec, m), open = q ? true : RC.open.has(m), show = q && !mHit ? subHits : subs;
+      h += row(`${subs.length ? `<button type="button" class="btn ghost sm" data-tx="${esc(m)}" style="padding:1px 8px;min-width:26px" aria-label="Open or close ${esc(m)}">${open ? '▾' : '▸'}</button>` : '<span style="width:26px"></span>'}<label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer"><input type="checkbox" data-tlib="${esc(m)}" ${on && !ps.length ? 'checked' : ''}> <span style="font-weight:600">${esc(m)}</span></label><span class="hint" style="margin:0">${on && ps.length ? ps.length + ' of ' + subs.length + ' subs · ' : ''}${(cm[m] || 0).toLocaleString()} q</span>`, 0);
+      if (open) h += show.map(x => { const k = m + '||' + x.n; return row(`<label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer"><input type="checkbox" data-tsub="${esc(k)}" ${on && ps.includes(x.n) ? 'checked' : ''}> <span>${esc(x.n)}</span></label><span class="hint" style="margin:0">${(cs[k] || 0).toLocaleString()} q</span>`, 38); }).join('');
+    });
+    el.innerHTML = h || '<div class="hint">Nothing matches that search.</div>';
+    pk.innerHTML = rec.libs.length ? '<span class="hint" style="margin:0">Using:</span> ' + rec.libs.map(m => { const ps = rcSubsFor(rec, m); return `<span style="display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 4px 2px 10px;margin:2px 4px 2px 0;font-size:12px">${esc(m)}${ps.length ? ': ' + esc(ps.join(', ')) : ' (all)'} <button type="button" class="linkbtn" data-tdrop="${esc(m)}" aria-label="Remove ${esc(m)}">✕</button></span>`; }).join('') + ` <button type="button" class="linkbtn" data-tclear="1">clear all</button>` : '<span class="hint" style="margin:0">Nothing picked — this will use every categorized question.</span>';
+  };
+  let drawForm = () => {
     const rec = rcCur(), el = body.querySelector('#rcForm'); if (!el) return;
     if (!rec){ el.innerHTML = '<div class="hint">Make a playable category — a saved set of rules that pulls questions from your library. Questions are never copied; fix one and it’s fixed everywhere.</div>'; return; }
-    const masters = T().masters, subs = T().subs.filter(x => rec.libs.includes(x.m));
+    const masters = T().masters;
     el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><label class="fld" style="flex:2;min-width:200px">Name<input type="text" data-rf="name" value="${esc(rec.name)}" style="${st}" autocomplete="off"></label>
       <label class="fld">Status<select data-rf="status" style="${st}"><option value="active" ${rec.status === 'active' ? 'selected' : ''}>Active</option><option value="draft" ${rec.status === 'draft' ? 'selected' : ''}>Draft</option><option value="archived" ${rec.status === 'archived' ? 'selected' : ''}>Archived</option></select></label>
       <label class="fld">Lasts<select data-rf="life" style="${st}"><option value="evergreen" ${rec.life === 'evergreen' ? 'selected' : ''}>Evergreen</option><option value="event" ${rec.life === 'event' ? 'selected' : ''}>Event-specific</option></select></label></div>
-      <div style="font-weight:700;margin:6px 0 4px">Pull questions from these libraries</div><div>${masters.map(m => chip(m, m, rec.libs.includes(m), 'data-rlib')).join('') || '<span class="hint">Add master categories first (Manage categories).</span>'}</div>
-      ${subs.length ? `<details style="margin:6px 0"><summary style="cursor:pointer">Narrow to subcategories${rec.subs.length ? ' (' + rec.subs.length + ')' : ''}</summary><div style="margin-top:6px">${subs.map(x => chip(x.n, x.n + ' · ' + x.m, rec.subs.includes(x.n), 'data-rsub')).join('')}</div></details>` : ''}
+      <div style="font-weight:700;margin:6px 0 4px">Pull questions from these libraries</div><div class="hint" style="margin:0 0 6px">Open a library to pick specific subcategories, or tick the library to take all of it. Add or rename libraries in <strong>Manage categories</strong> (toolbar).</div>
+      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.65;margin:0 0 3px">Search libraries &amp; subcategories</div><input type="search" id="rcTreeQ" value="${esc(RC.tq || '')}" autocomplete="off" style="${st};width:100%;margin-bottom:6px" aria-label="Search libraries and subcategories">
+      <div id="rcPicked" style="margin-bottom:6px"></div><div id="rcTree" style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:6px 8px"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0"><label class="fld" style="flex:1;min-width:220px">Tags to prefer (comma separated)<input type="text" data-rf="tags" value="${esc(rec.tags.join(', '))}" style="${st}" autocomplete="off"></label><label class="fld" style="flex:1;min-width:200px">Never use questions tagged<input type="text" data-rf="never" value="${esc(rec.never.join(', '))}" style="${st}" autocomplete="off"></label></div>
       <label class="chk" style="margin:0 0 8px"><input type="checkbox" data-rf="needTag" ${rec.needTag ? 'checked' : ''}> Only use questions that have at least one of the preferred tags</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="fld">Difficulty<select data-rf="diff" style="${st}">${[['mixed', 'Mixed'], ['1', 'Easy'], ['2', 'Medium'], ['3', 'Hard']].map(([v, l]) => `<option value="${v}" ${rec.diff === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -2372,23 +2391,30 @@ async function openPlayable(){
       <button class="btn ghost" id="rcAddRound">+ Add a round</button>
       <div style="display:flex;gap:8px;align-items:center;margin-top:16px;border-top:1px solid var(--border);padding-top:12px"><button class="btn primary" id="rcSave">Save</button><button class="btn ghost" id="rcDup">Duplicate</button><button class="btn ghost" id="rcDel">Delete</button><span class="hint" id="rcMsg" style="margin:0">${RC.dirty ? 'Unsaved changes' : ''}</span></div>`;
   };
-  const drawAll = () => { body.innerHTML = `<div style="width:220px;flex:none;position:sticky;top:0;align-self:flex-start"><button class="btn primary" id="rcNew" style="width:100%;margin-bottom:10px">+ New playable category</button><div id="rcList"></div></div><div style="flex:1;min-width:0;display:flex;gap:16px;flex-wrap:wrap"><div id="rcForm" style="flex:1.3;min-width:320px"></div><div id="rcPrev" style="flex:1;min-width:260px;border-left:1px solid var(--border);padding-left:16px;position:sticky;top:0;align-self:flex-start"></div></div>`; drawList(); drawForm(); drawPrev(); };
+  const drawAll = () => { body.innerHTML = `<div style="width:230px;flex:none;position:sticky;top:0;align-self:flex-start"><button class="btn primary" id="rcNew" style="width:100%;margin-bottom:10px;white-space:normal;line-height:1.25;letter-spacing:.04em;font-size:12px;padding:9px 10px;text-align:center">+ New playable category</button><div id="rcList"></div></div><div style="flex:1;min-width:0;display:flex;gap:16px;flex-wrap:wrap"><div id="rcForm" style="flex:1.3;min-width:320px"></div><div id="rcPrev" style="flex:1;min-width:260px;border-left:1px solid var(--border);padding-left:16px;position:sticky;top:0;align-self:flex-start"></div></div>`; drawList(); drawForm(); drawPrev(); };
+  const _df = drawForm; drawForm = () => { _df(); drawTree(); };
   drawAll();
   const dirty = () => { RC.dirty = true; const m = body.querySelector('#rcMsg'); if (m) m.textContent = 'Unsaved changes'; };
   const toggle = (arr, v, on) => { const i = arr.indexOf(v); if (on && i < 0) arr.push(v); if (!on && i >= 0) arr.splice(i, 1); };
   const edit = e => {
     const rec = rcCur(), t = e.target; if (!rec) return; let redraw = false;
     if (t.dataset.rf){ const f = t.dataset.rf, v = t.type === 'checkbox' ? t.checked : t.value; if (f === 'tags') rec.tags = parseTags(v); else if (f === 'never') rec.never = parseTags(v); else if (f === 'perGame') rec.perGame = Math.max(1, parseInt(v) || 1); else rec[f] = v; if (f === 'name' || f === 'status') drawList(); }
-    else if (t.dataset.rlib !== undefined){ toggle(rec.libs, t.dataset.rlib, t.checked); rec.subs = rec.subs.filter(n => T().subs.some(x => x.n === n && rec.libs.includes(x.m))); redraw = true; }
-    else if (t.dataset.rsub !== undefined) toggle(rec.subs, t.dataset.rsub, t.checked);
+    else if (t.dataset.tlib !== undefined){ const m = t.dataset.tlib; rec.subs = rcDropSubs(rec, m); toggle(rec.libs, m, t.checked); if (rec.rounds.length) redraw = true; else drawTree(); }
+    else if (t.dataset.tsub !== undefined){ const k = t.dataset.tsub, m = k.split('||')[0], set = new Set(rcSubsFor(rec, m).map(n => m + '||' + n)); rec.subs = rcDropSubs(rec, m); if (t.checked) set.add(k); else set.delete(k); set.forEach(x => rec.subs.push(x)); toggle(rec.libs, m, set.size > 0); if (rec.rounds.length) redraw = true; else drawTree(); }
     else if (t.dataset.rr){ const [i, f] = t.dataset.rr.split(':'), rd = rec.rounds[Number(i)]; if (rd) rd[f] = f === 'count' ? Math.max(1, parseInt(t.value) || 1) : f === 'tags' ? parseTags(t.value) : t.value; }
     else if (t.dataset.rrlib !== undefined){ const k = t.dataset.rrlib, i = Number(k.slice(0, k.indexOf(':'))), m = k.slice(k.indexOf(':') + 1), rd = rec.rounds[i]; if (rd){ rd.libs = rd.libs || []; toggle(rd.libs, m, t.checked); } }
     else return;
     dirty(); RC.sample = null; if (redraw) drawForm(); drawPrev();
   };
-  body.addEventListener('input', e => { if (e.target.type !== 'checkbox' && e.target.tagName !== 'SELECT') edit(e); });
+  body.addEventListener('input', e => { if (e.target.id === 'rcTreeQ'){ RC.tq = e.target.value; drawTree(); return; } if (e.target.type !== 'checkbox' && e.target.tagName !== 'SELECT') edit(e); });
   body.addEventListener('change', e => { if (e.target.id === 'rcVenue'){ RC.venue = e.target.value; drawPrev(); return; } if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') edit(e); });
   const save = async () => { const rec = rcCur(); if (rec && !String(rec.name).trim()){ toast('Give it a name first'); return false; } return await run(async () => { await setDoc(doc(db, 'triviaConfig', 'recipes'), { list: RC.list, updatedAt: serverTimestamp() }); RC.dirty = false; const m = body.querySelector('#rcMsg'); if (m) m.textContent = 'Saved'; toast('Saved'); }); };
+  body.addEventListener('click', e => {
+    const t = e.target.closest('[data-tx],[data-tdrop],[data-tclear]'), rec = rcCur(); if (!t || !rec) return;
+    if (t.dataset.tx !== undefined){ const m = t.dataset.tx; if (RC.open.has(m)) RC.open.delete(m); else RC.open.add(m); drawTree(); return; }
+    if (t.dataset.tdrop !== undefined){ const m = t.dataset.tdrop; rec.libs = rec.libs.filter(x => x !== m); rec.subs = rcDropSubs(rec, m); } else { rec.libs = []; rec.subs = []; }
+    dirty(); RC.sample = null; drawTree(); drawPrev();
+  });
   body.addEventListener('click', async e => {
     const t = e.target, rec = rcCur();
     if (t.id === 'rcNew'){ const n = rcNew(); RC.list.push(n); RC.sel = n.id; RC.dirty = true; RC.sample = null; drawList(); drawForm(); drawPrev(); return; }
