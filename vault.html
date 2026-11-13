@@ -2607,7 +2607,7 @@ $('#catMenuBtn').addEventListener('click', () => {
   const body = document.createElement('div'); body.className = 'menuList';
   body.innerHTML = `<button class="btn" data-a="export">Export this game as CSV</button>
     <button class="btn" data-a="recount">Recount questions</button>
-    <button class="btn" data-a="slashes">Remove stray “/” from the ends of this game’s questions</button>
+    <button class="btn" data-a="slashes">Remove stray “/” and “\” from the ends of this game’s questions</button>
     ${PERM.archiveCategories ? `<button class="btn" data-a="archive">${c.archived ? 'Restore this game' : 'Archive this game'}</button>
     <p class="hint" style="margin:0 0 6px">Archiving hides the game from the list. Its questions are kept.</p>` : ''}
     ${PERM.deleteCategories ? `<button class="btn danger" data-a="delete">Delete this sheet<br>and all its questions…</button>` : ''}`;
@@ -2624,13 +2624,13 @@ $('#catMenuBtn').addEventListener('click', () => {
 
 // Takes a "/" (and any spaces before it) off the END of every text field on every question in a game — question, answer, other answers, options, bonus, notes, whispers.
 const SLASH_FIELDS = ['question','answer','songAltAnswers','altAnswers','optionA','optionB','optionC','optionD','bonusQuestion','notes','whisperQ','whisperA'];
-const stripEndSlash = v => typeof v === 'string' ? v.replace(/[ \t]*\/+[ \t]*$/gm, '').replace(/[ \t]+$/gm, '') : v;
+const stripEndSlash = v => typeof v === 'string' ? v.replace(/[ \t]*[\\\/]+[ \t]*$/gm, '').replace(/[ \t]+$/gm, '') : v;
 async function cleanStraySlashes(c){
   const snap = await getDocs(query(qColl(), where('categoryId', '==', c.id)));
   const fixes = [];
-  snap.docs.forEach(d => { const q = d.data(), patch = {}; SLASH_FIELDS.forEach(k => { if (typeof q[k] === 'string' && /\/[ \t]*$/m.test(q[k])){ const n = stripEndSlash(q[k]); if (n !== q[k]) patch[k] = n; } }); if (Object.keys(patch).length) fixes.push({ ref: d.ref, patch }); });
-  if (!fixes.length){ toast('No stray “/” found in “' + c.name + '”.'); return; }
-  if (!await confirmBox({ title: 'Remove stray “/”?', message: fixes.length + ' question' + (fixes.length === 1 ? '' : 's') + ' in “' + c.name + '” end with a “/”. It will be taken off — nothing else changes.', ok: 'Remove them' })) return;
+  snap.docs.forEach(d => { const q = d.data(), patch = {}; SLASH_FIELDS.forEach(k => { if (typeof q[k] === 'string' && /[\\\/][ \t]*$/m.test(q[k])){ const n = stripEndSlash(q[k]); if (n !== q[k]) patch[k] = n; } }); if (Object.keys(patch).length) fixes.push({ ref: d.ref, patch }); });
+  if (!fixes.length){ toast('No stray “/” or “\” found in “' + c.name + '”.'); return; }
+  if (!await confirmBox({ title: 'Remove stray “/” and “\”?', message: fixes.length + ' question' + (fixes.length === 1 ? '' : 's') + ' in “' + c.name + '” end with a “/” or “\”. It will be taken off — nothing else changes.', ok: 'Remove them' })) return;
   for (let i = 0; i < fixes.length; i += 400){
     const batch = writeBatch(db); fixes.slice(i, i + 400).forEach(f => batch.update(f.ref, { ...f.patch, updatedAt: serverTimestamp() })); await batch.commit();
   }
@@ -3639,10 +3639,10 @@ function openImport(){
       <select id="impDest"><option value="">Each file becomes its own game (name from the file)</option>${[...S.cats.values()].filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => `<option value="${esc(c.id)}">Add to: ${esc(c.name)}</option>`).join('')}</select></label>
     <label class="fld" style="max-width:300px">Type for new games
       <select id="impType">${typeList().map(t => `<option ${S.cats.get(S.curId)?.type === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
-    <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="impUpd" checked> <span>Also <strong>update questions I already have</strong> — fill in Category, Subcategory and Tags from the CSV (matches by question text; nothing else is changed, existing tags are kept)</span></label>
+    <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="impUpd" checked> <span>Also <strong>update questions I already have</strong> — fill in Category, Subcategory, Tags and Whispers from the CSV (matches by question text; nothing else is changed, existing tags are kept; whispers from the CSV replace old ones)</span></label>
     <div id="impPv"></div><div id="impNote" class="hint"></div><div class="msg" id="impMsg"></div>`;
   const actions = [{ label: 'Cancel', onClick: closeModal }, { label: 'Import', primary: true, onClick: () => doImport() }];
-  openModal({ title: 'Import CSVs', body, wide: true, actions });
+  openModal({ title: 'Import CSVs · whispers v2', body, wide: true, actions });
   const importBtn = actions[1].el; importBtn.disabled = true;
 
   async function addFiles(files){
@@ -3678,7 +3678,7 @@ function openImport(){
         seen.set(key, { set, idm, done: new Set(), used: false });
       }
       const g = seen.get(key);
-      for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)){ en.dupCount++; const ex = g.idm.get(k); if (ex && !g.done.has(k) && (rec.masterCat || rec.subCat || rec.topic || (rec.tags && rec.tags.length))){ g.done.add(k); en.toUpd.push({ id: ex.__id, ex, rec }); } } else { g.set.add(k); en.toAdd.push(rec); } }
+      for (const rec of en.parsed.records){ const k = normQ(rec.question); if (g.set.has(k)){ en.dupCount++; const ex = g.idm.get(k); if (ex && !g.done.has(k) && (rec.masterCat || rec.subCat || rec.topic || rec.whisperQ || rec.whisperA || (rec.tags && rec.tags.length))){ g.done.add(k); en.toUpd.push({ id: ex.__id, ex, rec }); } } else { g.set.add(k); en.toAdd.push(rec); } }
       en.status = badName(en) ? 'Needs a real game name' : destCat ? `Adds to “${destCat.name}”` : cat ? `Adds to existing` : g.used ? 'Merges with file above' : 'New game';
       if (en.parsed.layout) en.status += ' · ' + en.parsed.layout;
       g.used = true;
@@ -3712,7 +3712,8 @@ function openImport(){
       (merging ? `<br><span style="color:var(--gold2)">${merging} file${merging === 1 ? '' : 's'} share a game name with another file and will be merged into it. If that's not what you want, rename them.</span>` : '') +
       (generic ? `<br><span style="color:var(--danger)">${generic} file${generic === 1 ? ' has' : 's have'} a generic name like "Sheet1". Type the real game name before importing.</span>` : '') : '';
     const updN = $('#impUpd') && $('#impUpd').checked ? ok.reduce((n, e) => n + (e.toUpd ? e.toUpd.length : 0), 0) : 0;
-    if (updN) $('#impNote').innerHTML += `<br><strong>${updN.toLocaleString()}</strong> existing questions will get their Category / Subcategory / Tags updated.`;
+    if (updN) $('#impNote').innerHTML += `<br><strong>${updN.toLocaleString()}</strong> existing questions will get their Category / Subcategory / Tags / Whispers updated (${ok.reduce((n,e)=>n+(e.toUpd||[]).filter(u=>u.rec.whisperQ||u.rec.whisperA).length,0)} with whispers).`;
+    else if (!newQ) $('#impNote').innerHTML += `<br><span style="color:var(--danger)">No questions in this file matched a game you already have. Check the game name (or pick the game in the “Add to” dropdown) so whispers can be added to the right questions.</span>`;
     importBtn.disabled = (!newQ && !newCols.length && !updN) || generic > 0;
     if (keep){ const el = $(`#impPv input[data-f="name"][data-i="${keep.i}"]`); if (el){ el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} } }
   }
@@ -3749,6 +3750,8 @@ function openImport(){
             if (u.rec.masterCat) patch.masterCat = u.rec.masterCat;
             if (u.rec.subCat) patch.subCat = u.rec.subCat;
             if (u.rec.topic) patch.topic = u.rec.topic;
+            if (u.rec.whisperQ) patch.whisperQ = u.rec.whisperQ;
+            if (u.rec.whisperA) patch.whisperA = u.rec.whisperA;
             if (u.rec.tags && u.rec.tags.length) patch.tags = [...new Set([...(Array.isArray(u.ex.tags) ? u.ex.tags : []), ...u.rec.tags])];
             batch.update(doc(qColl(), u.id), patch);
           });
