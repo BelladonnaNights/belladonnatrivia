@@ -3712,7 +3712,8 @@ function openImport(){
       (merging ? `<br><span style="color:var(--gold2)">${merging} file${merging === 1 ? '' : 's'} share a game name with another file and will be merged into it. If that's not what you want, rename them.</span>` : '') +
       (generic ? `<br><span style="color:var(--danger)">${generic} file${generic === 1 ? ' has' : 's have'} a generic name like "Sheet1". Type the real game name before importing.</span>` : '') : '';
     const updN = $('#impUpd') && $('#impUpd').checked ? ok.reduce((n, e) => n + (e.toUpd ? e.toUpd.length : 0), 0) : 0;
-    if (updN) $('#impNote').innerHTML += `<br><strong>${updN.toLocaleString()}</strong> existing questions will get their Category / Subcategory / Tags / Whispers updated.`;
+    if (updN) $('#impNote').innerHTML += `<br><strong>${updN.toLocaleString()}</strong> existing questions will get their Category / Subcategory / Tags / Whispers updated (${ok.reduce((n,e)=>n+(e.toUpd||[]).filter(u=>u.rec.whisperQ||u.rec.whisperA).length,0)} with whispers).`;
+    else if (!newQ) $('#impNote').innerHTML += `<br><span style="color:var(--danger)">No questions in this file matched a game you already have. Check the game name (or pick the game in the “Add to” dropdown) so whispers can be added to the right questions.</span>`;
     importBtn.disabled = (!newQ && !newCols.length && !updN) || generic > 0;
     if (keep){ const el = $(`#impPv input[data-f="name"][data-i="${keep.i}"]`); if (el){ el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} } }
   }
@@ -3749,8 +3750,8 @@ function openImport(){
             if (u.rec.masterCat) patch.masterCat = u.rec.masterCat;
             if (u.rec.subCat) patch.subCat = u.rec.subCat;
             if (u.rec.topic) patch.topic = u.rec.topic;
-            if (u.rec.whisperQ && !String(u.ex.whisperQ || '').trim()) patch.whisperQ = u.rec.whisperQ;
-            if (u.rec.whisperA && !String(u.ex.whisperA || '').trim()) patch.whisperA = u.rec.whisperA;
+            if (u.rec.whisperQ) patch.whisperQ = u.rec.whisperQ;
+            if (u.rec.whisperA) patch.whisperA = u.rec.whisperA;
             if (u.rec.tags && u.rec.tags.length) patch.tags = [...new Set([...(Array.isArray(u.ex.tags) ? u.ex.tags : []), ...u.rec.tags])];
             batch.update(doc(qColl(), u.id), patch);
           });
