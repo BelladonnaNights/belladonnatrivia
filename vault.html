@@ -3642,7 +3642,7 @@ function openImport(){
     <label class="fld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="impUpd" checked> <span>Also <strong>update questions I already have</strong> — fill in Category, Subcategory, Tags and Whispers from the CSV (matches by question text; nothing else is changed, existing tags are kept; whispers from the CSV replace old ones)</span></label>
     <div id="impPv"></div><div id="impNote" class="hint"></div><div class="msg" id="impMsg"></div>`;
   const actions = [{ label: 'Cancel', onClick: closeModal }, { label: 'Import', primary: true, onClick: () => doImport() }];
-  openModal({ title: 'Import CSVs · whispers v2', body, wide: true, actions });
+  openModal({ title: 'Import CSVs · whispers v3', body, wide: true, actions });
   const importBtn = actions[1].el; importBtn.disabled = true;
 
   async function addFiles(files){
@@ -4972,6 +4972,16 @@ function parseSongLines(text, order){
 }
 function parseSongLinesRaw(text, order){
   const out = [];
+  for (const ln of String(text || '').split(/\r?\n/)){
+    let line = ln.replace(/[ \t]*\\+[ \t]*$/, ''), w = '';
+    const wi = line.indexOf('||');
+    if (wi >= 0){ w = line.slice(wi + 2).replace(/\s+/g, ' ').trim(); line = line.slice(0, wi).trim(); }
+    for (const x of parseSongLinesRaw0(line, order)) out.push(w ? { ...x, w } : x);
+  }
+  return out;
+}
+function parseSongLinesRaw0(text, order){
+  const out = [];
   for (let line of String(text || '').split(/\r?\n/)){
     line = line.replace(/^\s*\d+\s*[.)\-:]\s+/, '').trim();
     if (!line) continue;
@@ -5045,10 +5055,11 @@ function openBingoImport(addTo){
   const go = async btn => {
     const songs = parse(); if (!songs.length){ toast('Paste some songs first.'); return; }
     const uniq = [], seen = new Set(l ? l.songs.map(s => s._k) : []);
-    for (const s of songs){ const k = songKey(s.t, s.a); if (seen.has(k)) continue; seen.add(k); uniq.push({ t: s.t, a: s.a, m: s.m }); }
+    for (const s of songs){ const k = songKey(s.t, s.a); if (seen.has(k)) continue; seen.add(k); uniq.push({ t: s.t, a: s.a, m: s.m, ...(s.w ? { w: s.w } : {}) }); }
+    const wUpd = new Map(); for (const s of songs) if (s.w) wUpd.set(songKey(s.t, s.a), s.w);
     if (l){
       closeModal();
-      await saveSongs(l.id, [...l.songs.map(x => sBase(x)), ...uniq]);
+      await saveSongs(l.id, [...l.songs.map(x => { const b = sBase(x), w = wUpd.get(x._k); return w ? { ...b, w } : b; }), ...uniq]);
       toast('Added ' + uniq.length + ' song' + (uniq.length === 1 ? '' : 's') + ' to ' + l.name + '.');
     } else {
       const name = $('#biName').value.trim(); if (!name){ toast('Give the list a name.'); $('#biName').focus(); return; }
@@ -5345,9 +5356,11 @@ function openEditAsText(listId){
     <label class="fld" style="margin-bottom:.4rem">One song per line — edit, delete, reorder or add lines freely<textarea id="etText" spellcheck="false" style="min-height:360px;white-space:pre"></textarea></label>
     <p class="hint" id="etInfo" style="margin:0"></p>`;
   const carry = new Map(); l.songs.forEach(s => { if (s.m) carry.set(songKey(s.t, s.a), s.m); });
+  const wcarry = new Map(); l.songs.forEach(s => { if (s.w) wcarry.set(songKey(s.t, s.a), s.w); });
+  const addW = x => { const w = wcarry.get(songKey(x.t, x.a)); return w ? { ...x, w } : x; };
   const parse = () => {
     const out = parseSongLines($('#etText').value, $('#etOrder').value).filter(x => x.t);
-    return out.map(x => (!x.m && carry.has(songKey(x.t, x.a))) ? { ...x, m: carry.get(songKey(x.t, x.a)) } : x);   // keep a movie/show the chosen format can't show
+    return out.map(x => addW((!x.m && carry.has(songKey(x.t, x.a))) ? { ...x, m: carry.get(songKey(x.t, x.a)) } : x));   // keep a movie/show the chosen format can't show
   };
   const diff = () => {
     const songs = parse(), seen = new Set(), uniq = [];
@@ -5358,7 +5371,7 @@ function openEditAsText(listId){
     const removed = l.songs.filter(x => !kept.has(x._k)).length;
     return { uniq, added, removed, dups: songs.length - uniq.length };
   };
-  const info = () => { const d = diff(), f = d.uniq[0]; $('#etInfo').innerHTML = `<b>${d.uniq.length}</b> songs · <b>${d.added}</b> new · <b>${d.removed}</b> removed` + (d.dups ? ` · ${d.dups} repeat${d.dups === 1 ? '' : 's'} will be skipped` : '') + '. Songs you leave as they are keep their catalog ticks.' + (f ? `<br>First line will save as → Song: <b>${esc(f.t)}</b> · Artist: <b>${esc(f.a || '—')}</b> · Movie / Show: <b>${esc(f.m || '—')}</b>` : ''); };
+  const info = () => { const d = diff(), f = d.uniq[0]; $('#etInfo').innerHTML = `<b>${d.uniq.length}</b> songs · <b>${d.uniq.filter(x => x.w).length}</b> with whispers · <b>${d.added}</b> new · <b>${d.removed}</b> removed` + (d.dups ? ` · ${d.dups} repeat${d.dups === 1 ? '' : 's'} will be skipped` : '') + '. Songs you leave as they are keep their catalog ticks.' + (f ? `<br>First line will save as → Song: <b>${esc(f.t)}</b> · Artist: <b>${esc(f.a || '—')}</b> · Movie / Show: <b>${esc(f.m || '—')}</b>` : ''); };
   const save = async () => {
     const ord = $('#etOrder').value;   // read it now: the confirm window below replaces this one
     const d = diff(); if (!d.uniq.length){ toast('The list can’t be empty — use Delete list instead.'); return; }
@@ -5375,7 +5388,14 @@ function openEditAsText(listId){
     l.textOrder = ord; await run(() => updateDoc(bListRef(l.id), { textOrder: ord }));   // remember the format for next time
     toast('Saved “' + l.name + '” — ' + d.uniq.length + ' songs.');
   };
-  openModal({ title: 'Edit “' + l.name + '” as text', body, wide: true, actions: [{ label: 'Cancel', onClick: closeModal }, { label: 'Save changes', primary: true, onClick: save }] });
+  openModal({ title: 'Edit “' + l.name + '” as text', body, wide: true, actions: [{ label: 'Cancel', onClick: closeModal }, { label: 'Copy list', onClick: () => copyText(false) }, { label: 'Copy with whispers', onClick: () => copyText(true) }, { label: 'Save changes', primary: true, onClick: save }] });
+  async function copyText(withW){
+    const ord = $('#etOrder').value, cur = parse();
+    const t = withW ? cur.map(x => { const ln = songsToText([x], ord); return x.w ? ln + ' || ' + x.w : ln; }).join('\n') : songsToText(cur, ord);
+    if (!t) return;
+    try { await navigator.clipboard.writeText(t); } catch (e){ $('#etText').select(); document.execCommand('copy'); }
+    toast(withW ? 'Copied with whispers' : 'List copied');
+  }
   $('#etOrder').value = order;
   const fill = () => { $('#etText').value = songsToText(l.songs, $('#etOrder').value); info(); };
   fill();
@@ -5386,6 +5406,12 @@ function openEditAsText(listId){
     $('#etText').value = songsToText(cur, $('#etOrder').value); prev = $('#etOrder').value; info();
   });
   $('#etText').addEventListener('input', () => {
+    // pasted "Song – Show || Whisper" lines: tuck the whispers away (they save with the song) and show the plain list
+    if ($('#etText').value.includes('||')){
+      const ord = $('#etOrder').value, got = parseSongLines($('#etText').value, ord).filter(x => x.t);
+      got.forEach(x => { if (x.w) wcarry.set(songKey(x.t, x.a), x.w); });
+      $('#etText').value = songsToText(got, ord);
+    }
     // pasted lines with three parts while the format is "Song – Movie / Show" would jam the artist into the title — switch to the 3-part format
     const lines = $('#etText').value.split(/\r?\n/).filter(x => x.trim());
     if ($('#etOrder').value === 'show' && lines.length && lines.filter(x => x.split(/\s+[\-–—]\s+/).length === 3).length >= lines.length * 0.8){
