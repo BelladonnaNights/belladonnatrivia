@@ -406,6 +406,8 @@ let timerInterval = null;
 let timerStart = null;
 let myAnswers = []; // history of answers this game
 let inTwoPass = false;
+let forfeits = {};   // questions this player locked themselves out of by leaving the tab
+let qLive = false;   // a question is open for answers right now
 let lockedAll = false; // host pressed 'Answer Key (lock all answers)' // track if current round is two-pass
 
 // ═══════════════════════════════════════════════
@@ -480,10 +482,14 @@ window.addEventListener('DOMContentLoaded', () => { setupAppManifest(); syncFsUi
 //  SCORE — only revealed when a new round starts (never live)
 // ═══════════════════════════════════════════════
 let shownScore = 0, prevShown = 0;
+function forfeitKey() { return 'bella_forfeit_' + (GID || '') + '_' + (mySessionId || ''); }
+function loadForfeits() { try { forfeits = JSON.parse(localStorage.getItem(forfeitKey()) || '{}') || {}; } catch(e) { forfeits = {}; } }
+function saveForfeits() { try { localStorage.setItem(forfeitKey(), JSON.stringify(forfeits)); } catch(e) {} }
 function scoreKey() { return 'bella_score_' + (GID || '') + '_' + (mySessionId || '') + '_' + (teamId || ''); }
 // A fresh game (host reset / new session / new team): forget last game's score, questions and answers
 function resetLocalGameState() {
-  try { Object.keys(localStorage).filter(k => k.indexOf('bella_score_') === 0 || k.indexOf('bella_seenq_') === 0).forEach(k => localStorage.removeItem(k)); } catch(e) {}
+  try { Object.keys(localStorage).filter(k => k.indexOf('bella_score_') === 0 || k.indexOf('bella_seenq_') === 0 || k.indexOf('bella_forfeit_') === 0).forEach(k => localStorage.removeItem(k)); localStorage.removeItem(forfeitKey()); } catch(e) {}
+  forfeits = {}; qLive = false;
   shownScore = 0; prevShown = 0; myScore = 0; seenQs = {}; myAnswers = []; currentQ = null; answered = false; lockedAll = false;
 }
 function trackRoundScore(game) {
@@ -512,6 +518,7 @@ function renderScore() {
 let seenQs = {};
 function seenKey() { return 'bella_seenq_' + (GID || '') + '_' + (mySessionId || ''); }
 try { seenQs = JSON.parse(localStorage.getItem(seenKey()) || '{}') || {}; } catch(e) { seenQs = {}; }
+loadForfeits();
 function rememberQuestion(q) {
   if(!q || !q.id) return;
   seenQs[q.id] = { id:q.id, index:q.index, text:q.text, type:q.type, choices:q.choices||null, timed:!!q.timed, roundIndex:q.roundIndex||0 };
@@ -548,7 +555,8 @@ async function renderMyQ() {
     const t = document.createElement('div'); t.className = 'q-text'; t.textContent = q.text;
     card.appendChild(n); card.appendChild(t);
     const oldRound = currentQ && typeof currentQ.roundIndex === 'number' && q.roundIndex < currentQ.roundIndex;
-    const locked = graded || q.timed || lockedAll || oldRound;
+    const left = !!forfeits[q.id];
+    const locked = graded || q.timed || lockedAll || oldRound || left;
     const note = document.createElement('div'); note.className = 'myq-note';
     const save = async (val, btnEls) => {
       const ok = await editAnswer(q, val);
@@ -577,13 +585,13 @@ async function renderMyQ() {
       sb.onclick = () => { const v = inp.value.trim(); if(v) save(v); };
       card.appendChild(inp); card.appendChild(sb);
     }
-    if(locked) note.textContent = (lockedAll || oldRound || graded) ? 'Answers are locked' : 'Timed question — locked';
+    if(locked) note.textContent = left ? 'You left the game during this question \u2014 it is closed for you' : ((lockedAll || oldRound || graded) ? 'Answers are locked' : 'Timed question — locked');
     card.appendChild(note);
     list.appendChild(card);
   });
 }
 async function editAnswer(q, value) {
-  if(lockedAll) return false;
+  if(lockedAll || forfeits[q.id]) return false;
   if(currentQ && typeof currentQ.roundIndex === 'number' && q.roundIndex < currentQ.roundIndex) return false;
   try {
     const cur = (await gref('answers/' + q.id + '/' + teamId).once('value')).val();
@@ -787,14 +795,37 @@ function handleGame(game) {
   }
 }
 
+
+// ═══════════════════════════════════════════════
+//  STAY ON THE TAB — leaving the page during a question locks that question for this player
+// ═══════════════════════════════════════════════
+const LEFT_MSG = 'You left the game \u2014 this question is closed for you';
+function onGameScreen() { const v = Array.from(document.querySelectorAll('.screen')).find(s => !s.classList.contains('hidden')); return myqOpen || (v && v.id === 'q-screen'); }
+function forfeitCurrent() {
+  if(!currentQ || !qLive || lockedAll || forfeits[currentQ.id] || !onGameScreen()) return;
+  forfeits[currentQ.id] = true; saveForfeits();
+  try { stopQuestionAudio(); } catch(e) {}
+  showForfeit();
+  if(myqOpen) renderMyQ();
+}
+function showForfeit() {
+  lockInputs();
+  const bar = document.getElementById('locked-bar'); if(bar) { bar.textContent = LEFT_MSG; bar.style.display = 'block'; }
+}
+document.addEventListener('visibilitychange', () => { if(document.hidden) forfeitCurrent(); });
+window.addEventListener('pagehide', forfeitCurrent);
+
 // ═══════════════════════════════════════════════
 //  RENDER QUESTION
 // ═══════════════════════════════════════════════
 function renderQuestion(q) {
+  loadForfeits();
+  qLive = true;
   showScreen('q-screen');
   document.getElementById('q-team-name').textContent = teamName;
   renderScore();
   document.getElementById('locked-bar').style.display = 'none';
+  document.getElementById('locked-bar').textContent = 'Answers closed';
 
   const body = document.getElementById('q-body');
   body.innerHTML = '';
@@ -810,6 +841,7 @@ function renderQuestion(q) {
   textEl.className = 'q-text';
   textEl.textContent = q.text;
   body.appendChild(textEl);
+  const stayEl = document.createElement('div'); stayEl.className = 'myq-note'; stayEl.textContent = 'Stay on this screen \u2014 leaving the app or tab locks this question.'; body.appendChild(stayEl);
 
   // Answer input based on type
   if(q.type === 'mc' && q.choices) {
@@ -920,6 +952,7 @@ function renderQuestion(q) {
   } else {
     timerWrap.style.display = 'none';
   }
+  if(forfeits[q.id]) showForfeit();   // they already left during this one
 }
 
 // ═══════════════════════════════════════════════
@@ -970,7 +1003,7 @@ async function writeMusicAnswers(q, combined, elapsed) {
   return ok;
 }
 async function submitAnswer(value, btn, type) {
-  if(!currentQ || lockedAll) return;
+  if(!currentQ || lockedAll || forfeits[currentQ.id]) return;
   const isTimed = currentQ.timed;
 
   // Players can change their answer any time until the host locks answers / the timer runs out
@@ -1032,9 +1065,10 @@ async function submitAnswer(value, btn, type) {
 //  LOCK ANSWERS
 // ═══════════════════════════════════════════════
 function lockAnswers() {
+  qLive = false;
   clearTimer();
   lockInputs();
-  document.getElementById('locked-bar').style.display = 'block';
+  const lb = document.getElementById('locked-bar'); lb.textContent = (currentQ && forfeits[currentQ.id]) ? LEFT_MSG : 'Answers closed'; lb.style.display = 'block';
 }
 
 function lockInputs() {
