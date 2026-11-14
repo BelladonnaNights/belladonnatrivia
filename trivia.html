@@ -2194,7 +2194,7 @@ function startPreview() {
   const catIntro = ((pendingRounds && pendingRounds.length) ? pendingRounds : (state.rounds || []))
     .map(r => r.bgIntro || r.bgQuestion || defBg())
     .filter(Boolean);
-  ssImages = [...new Set([...settingsIntro, ...catIntro])];   // the slides from Settings play first
+  ssImages = settingsIntro.length ? [...new Set(settingsIntro)] : [...new Set(catIntro)];   // URLs in Settings = only those play; otherwise category / default backgrounds
 
   if(!ssImages.length) {
     toast('No intro slide images found — add Intro Slide URLs in Settings');
