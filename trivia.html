@@ -1138,7 +1138,7 @@ function fuzzyConfidence(submitted,correct) {
 }
 
 
-    db.ref('trivia/appSettings').once('value', s => { appSettings = s.val()||{}; try { if(state && state.preShow === PS_FOLLOWUS) renderPreShow(); } catch(e) {} });
+    db.ref('trivia/appSettings').on('value', s => { appSettings = s.val()||{}; try { if(state && state.preShow === PS_FOLLOWUS) renderPreShow(); } catch(e) {} });
     db.ref('trivia/categoryTypes').once('value', s => { const d=s.val()||{}; catTypes=Object.entries(d).map(([id,v])=>({id,...v})); });
 
 
@@ -2194,7 +2194,7 @@ function startPreview() {
   const catIntro = ((pendingRounds && pendingRounds.length) ? pendingRounds : (state.rounds || []))
     .map(r => r.bgIntro || r.bgQuestion || defBg())
     .filter(Boolean);
-  ssImages = [...new Set([...catIntro, ...settingsIntro])];
+  ssImages = [...new Set([...settingsIntro, ...catIntro])];   // the slides from Settings play first
 
   if(!ssImages.length) {
     toast('No intro slide images found — add Intro Slide URLs in Settings');
