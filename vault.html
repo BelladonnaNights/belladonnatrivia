@@ -3075,8 +3075,7 @@ function rcDraw(rec){
   return out;
 }
 function rcTreeText(L, d = 0){ return L.map(x => '  '.repeat(d) + x.n + '\n' + rcTreeText(x.c, d + 1)).join(''); }
-function rcAIPrompt(){
-  return `I'm building a trivia game for this theme: [DESCRIBE THE THEME HERE]
+const RC_PROMPT_DEFAULT = `I'm building a trivia game for this theme: [DESCRIBE THE THEME HERE]
 
 Below are ALL of my categories (Category, then indented Subcategory, then indented Topic) and ALL of my tags. Choose everything that fits the theme, using ONLY names from these lists, spelled exactly as written. Do not invent new names.
 
@@ -3085,7 +3084,10 @@ Categories:
 Category > Subcategory > Topic
 (one per line; stop at the level you want to take as a whole, so "Christmas > Christmas Movies" takes every topic inside it)
 Tags:
-tag one, tag two, tag three
+tag one, tag two, tag three`;
+/* the wording above is yours to edit (Playable games > Edit the prompt, saved to Firebase); your categories and tags are always added to the end */
+function rcAIPrompt(){
+  return `${String(RC.prompt || RC_PROMPT_DEFAULT).replace(/\s+$/, '')}
 
 MY CATEGORIES:
 ${rcTreeText(taxTree())}
@@ -3121,6 +3123,10 @@ async function rcAIClick(b, rec, body, fn){
     catch (e){ box.classList.remove('hidden'); box.innerHTML = '<div class="hint" style="margin:0 0 4px">Copy this and paste it into your AI chat:</div><textarea rows="8" readonly style="width:100%"></textarea>'; const ta = box.querySelector('textarea'); ta.value = text; ta.focus(); ta.select(); }
     return;
   }
+  if (b.id === 'rcPromptTog'){ const pe = body.querySelector('#rcPromptEd'); pe.classList.toggle('hidden'); if (!pe.classList.contains('hidden')){ const ta = body.querySelector('#rcPromptTxt'); ta.value = RC.prompt || RC_PROMPT_DEFAULT; ta.focus(); } return; }
+  if (b.id === 'rcPromptReset'){ body.querySelector('#rcPromptTxt').value = RC_PROMPT_DEFAULT; return; }
+  if (b.id === 'rcPromptSave'){ const v = body.querySelector('#rcPromptTxt').value.replace(/\s+$/, ''), msg = body.querySelector('#rcPromptMsg'); const useDefault = !v.trim() || v === RC_PROMPT_DEFAULT;
+    b.disabled = true; try { await setDoc(doc(db, 'triviaConfig', 'recipePrompt'), { text: useDefault ? '' : v, updatedAt: serverTimestamp() }); RC.prompt = useDefault ? '' : v; msg.textContent = useDefault ? 'Saved — using the standard prompt.' : 'Saved.'; } catch (e){ msg.textContent = 'Couldn’t save: ' + (e && e.message || e); } b.disabled = false; return; }
   if (b.id === 'rcPasteTog'){ body.querySelector('#rcAI').classList.toggle('hidden'); const ta = body.querySelector('#rcPasteIn'); if (ta) ta.focus(); return; }
   if (b.dataset.tgdrop !== undefined){ rec.tags = rec.tags.filter(x => x !== b.dataset.tgdrop); fn.dirty(); fn.drawTags(); fn.drawPrev(); return; }
   if (b.dataset.tndrop !== undefined){ rec.never = rec.never.filter(x => x !== b.dataset.tndrop); fn.dirty(); fn.drawTags(); fn.drawPrev(); return; }
@@ -3138,6 +3144,7 @@ async function openPlayable(){
   body.style.cssText = 'display:flex;gap:16px;min-height:60vh'; body.innerHTML = 'Reading your questions…';
   openModal({ title: 'Playable games', body, wide: true, actions: [{ label: 'Done', primary: true, onClick: closeModal }] });
   try {
+    try { const pd = await getDoc(doc(db, 'triviaConfig', 'recipePrompt')); RC.prompt = pd.exists() && pd.data().text ? String(pd.data().text) : ''; } catch (e2) { RC.prompt = ''; }
     const d = await getDoc(doc(db, 'triviaConfig', 'recipes')); RC.list = d.exists() && Array.isArray(d.data().list) ? d.data().list.map(x => rcUpgrade({ ...rcNew(), ...x, match: x.match || (x.needTag ? 'both' : 'prefer') })) : [];
     const snap = await getDocs(qColl());
     RC.qs = snap.docs.map(x => { const q = x.data(), cat = S.cats.get(q.categoryId) || {}; return { id: x.id, catId: q.categoryId, q: String(q.question || ''), a: String(q.answer || ''), diff: Math.min(3, Math.max(1, parseInt(q.difficulty) || 1)), ...(() => { const n = normPath(q.masterCat, q.subCat, q.topic); return { master: n.m, sub: n.s, topic: n.t }; })(), tags: Array.isArray(q.tags) ? q.tags : [], archived: !!q.archived || !!cat.archived }; }).filter(q => !q.archived && q.q.trim() && q.a.trim());
@@ -3205,7 +3212,8 @@ async function openPlayable(){
       <label class="fld">Lasts<select data-rf="life" style="${st}"><option value="evergreen" ${rec.life === 'evergreen' ? 'selected' : ''}>Evergreen</option><option value="event" ${rec.life === 'event' ? 'selected' : ''}>Event-specific</option></select></label></div>
       <div style="font-weight:700;margin:10px 0 4px">1. Choose what goes in</div>
       <div class="hint" style="margin:0 0 6px">Tick categories, subcategories, topics and tags yourself below — or ask an AI for a theme and paste its answer.</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px"><button class="btn ghost" id="rcCopyAI">Copy everything for AI</button><button class="btn ghost" id="rcPasteTog">Paste a list from AI</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px"><button class="btn ghost" id="rcCopyAI">Copy everything for AI</button><button class="btn ghost" id="rcPromptTog">Edit the prompt</button><button class="btn ghost" id="rcPasteTog">Paste a list from AI</button></div>
+      <div id="rcPromptEd" class="hidden" style="margin:0 0 10px"><div class="hint" style="margin:0 0 4px">This is the wording that goes before your lists. Your categories and tags are added to the end automatically, so leave them out.</div><textarea id="rcPromptTxt" rows="12" style="${st};width:100%" aria-label="Prompt wording"></textarea><div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><button class="btn primary" id="rcPromptSave">Save prompt</button><button class="btn ghost" id="rcPromptReset">Put back the standard prompt</button><span id="rcPromptMsg" class="hint" style="margin:0"></span></div></div>
       <div id="rcAI" class="hidden" style="margin:0 0 10px"><textarea id="rcPasteIn" rows="6" style="${st};width:100%" aria-label="List from AI"></textarea><div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><button class="btn primary" id="rcPasteGo">Check them off</button><span id="rcPasteMsg" class="hint" style="margin:0"></span></div></div>
       <div id="rcCopyBox" class="hidden" style="margin:0 0 10px"></div>
       <div style="font-weight:600;margin:10px 0 4px">Categories</div>
@@ -3246,7 +3254,7 @@ async function openPlayable(){
   body.addEventListener('change', e => { if (e.target.id === 'rcVenue'){ RC.venue = e.target.value; drawPrev(); return; } if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') edit(e); });
   const save = async () => { const rec = rcCur(); if (rec && !String(rec.name).trim()){ toast('Give it a name first'); return false; } return await run(async () => { await setDoc(doc(db, 'triviaConfig', 'recipes'), { list: RC.list, updatedAt: serverTimestamp() }); RC.dirty = false; const m = body.querySelector('#rcMsg'); if (m) m.textContent = 'Saved'; toast('Saved'); await mirrorPlayableGames(RC.list); }); };
   body.addEventListener('click', e => {
-    const ai = e.target.closest('#rcCopyAI,#rcPasteTog,#rcPasteGo,[data-tgdrop],[data-tndrop],#rcAddMiss'); if (ai){ rcAIClick(ai, rcCur(), body, { drawTree, drawTags, drawPrev, dirty }); return; }
+    const ai = e.target.closest('#rcCopyAI,#rcPromptTog,#rcPromptSave,#rcPromptReset,#rcPasteTog,#rcPasteGo,[data-tgdrop],[data-tndrop],#rcAddMiss'); if (ai){ rcAIClick(ai, rcCur(), body, { drawTree, drawTags, drawPrev, dirty }); return; }
     const t = e.target.closest('[data-tx],[data-tdrop],[data-tclear]'), rec = rcCur(); if (!t || !rec) return;
     if (t.dataset.tx !== undefined){ const m = t.dataset.tx; if (RC.open.has(m)) RC.open.delete(m); else RC.open.add(m); drawTree(); return; }
     if (t.dataset.tdrop !== undefined) rec.libs = rec.libs.filter(x => x !== t.dataset.tdrop); else rec.libs = [];
