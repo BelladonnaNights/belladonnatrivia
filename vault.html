@@ -217,6 +217,9 @@ tr.flash td{background:rgba(201,168,76,.28)!important;transition:background 1s}
 #grid td.mcat,#grid td.mbpm{text-align:center;padding:9px 6px 0;font-size:12px;white-space:nowrap}
 #grid td.mcat input,#grid td.mbpm input{width:17px;height:17px;accent-color:var(--gold);cursor:pointer}
 #grid th.mcx{cursor:default}
+#grid td.myr{text-align:center;padding:6px 4px 0;white-space:nowrap}
+#grid td.myr input{width:56px;text-align:center}
+.yrd{font-size:11px;color:var(--text3);margin-left:6px}
 #grid td .thumb{display:block;width:100%;background:none;border:0;padding:7px 4px;font-size:16px;opacity:.9}
 #grid td .thumb[data-v='']{opacity:.3}
 td.num,th.num{position:sticky;left:0;z-index:2;width:86px;min-width:86px;text-align:right;color:var(--text3);padding:9px 8px 0 4px!important;font-size:12px;background:var(--surface)!important;white-space:nowrap}
@@ -2189,31 +2192,35 @@ $('#promptsBtn').addEventListener('click', () => run(async () => {
 }));
 
 /* ── Music categories: "In catalog" + "BPM" columns — the SAME catalog and BPM-search ticks the Bingo lists use ── */
-const MC_TH = '<th class="mcx" style="min-width:96px;width:96px" title="Tick when this song is in your catalog (same catalog as Bingo)">In catalog</th><th class="mcx" style="min-width:110px;width:110px" title="Tick once you’ve searched for this song on BPM Supreme (same ticks as Bingo)">BPM</th>';
+const MC_TH = '<th class="mcx" style="min-width:96px;width:96px" title="Tick when this song is in your catalog (same catalog as Bingo)">In catalog</th><th class="mcx" style="min-width:110px;width:110px" title="Tick once you’ve searched for this song on BPM Supreme (same ticks as Bingo)">BPM</th><th class="mcx" style="min-width:96px;width:96px" title="Release year (same year as in Bingo). The decade fills in from it.">Year</th>';
 function mcOn(){ return isMusicCat() && B.canBingo; }
 function mcAnchor(cols){ if (!mcOn()) return null; return cols.some(c => c.key === 'answer') ? 'answer' : 'question'; }
 function mcCells(r){
   const t = String((r.data && r.data.question) || '').trim(), a = String((r.data && r.data.answer) || '').trim();
-  if (!t || !B.loaded) return '<td class="ck mcat">—</td><td class="ck mbpm">—</td>';
+  if (!t || !B.loaded) return '<td class="ck mcat">—</td><td class="ck mbpm">—</td><td class="myr">—</td>';
   const sg = withKeys({ t, a, m: '' }), own = isOwned(sg), srch = B.searched.has(sg._k), bf = isBpmFile(sg);
   const c1 = `<td class="ck mcat"><input type="checkbox" data-mck="${sg._k}" ${own ? 'checked' : ''} title="${own ? 'In your catalog — untick to remove it from every list' : 'Tick when this song is in your catalog'}"></td>`;
   const c2 = own ? '<td class="ck mbpm" style="color:var(--text3)">—</td>'
     : bf ? '<td class="ck mbpm" title="This song is a BPM Supreme file in your imported catalog">📋 BPM file</td>'
     : `<td class="ck mbpm"><input type="checkbox" data-msk="${sg._k}" ${srch ? 'checked' : ''} title="${srch ? 'Already searched for on BPM Supreme — untick to undo' : 'Tick once you’ve searched for this on BPM Supreme'}"></td>`;
-  return c1 + c2;
+  const ye = B.years && B.years.get(sg._k), yy = ye ? ye.y : 0;
+  const c3 = `<td class="myr"><input type="text" data-myr="${sg._k}" value="${yy || ''}" inputmode="numeric" maxlength="4" title="${ye && ye.m ? 'Typed in by hand \u2014 a catalog import will never change it' : 'Release year. Type one to set it.'}" autocomplete="off"><div class="yrd" style="margin:0">${decadeOf(yy)}</div></td>`;
+  return c1 + c2 + c3;
 }
 function mcRefresh(){
   if (!mcOn() || !S.rows) return;
   for (const r of S.rows.values()){
     const tr = r.tr; if (!tr) continue;
-    const o1 = tr.querySelector('td.mcat'), o2 = tr.querySelector('td.mbpm'); if (!o1 || !o2) continue;
+    const o1 = tr.querySelector('td.mcat'), o2 = tr.querySelector('td.mbpm'), o3 = tr.querySelector('td.myr'); if (!o1 || !o2) continue;
     const tmp = document.createElement('tbody'); tmp.innerHTML = '<tr>' + mcCells(r) + '</tr>';
-    const n1 = tmp.rows[0].cells[0], n2 = tmp.rows[0].cells[1];
+    const n1 = tmp.rows[0].cells[0], n2 = tmp.rows[0].cells[1], n3 = tmp.rows[0].cells[2];
     if (o1.innerHTML !== n1.innerHTML) o1.replaceWith(n1);
     if (o2.innerHTML !== n2.innerHTML) o2.replaceWith(n2);
+    if (o3 && n3 && o3.innerHTML !== n3.innerHTML && !o3.contains(document.activeElement)) o3.replaceWith(n3);
   }
 }
 tbody.addEventListener('change', e => {
+  const yk = e.target.closest && e.target.closest('input[data-myr]'); if (yk){ setYearByHand(yk.dataset.myr, yk.value); return; }
   const ck = e.target.closest && e.target.closest('input[data-mck]'); if (ck){ setOwned([ck.dataset.mck], ck.checked); return; }
   const sk = e.target.closest && e.target.closest('input[data-msk]'); if (sk){ setSearched(sk.dataset.msk, sk.checked); }
 });
@@ -4113,7 +4120,7 @@ const B = {
   lists: new Map(), owned: new Set(), curId: null, loaded: false,
   sort: (LS.get('bSort4', null) || { by:'name', dir:1 }), showArch: false, filter: 'all', q: '',
   unsubs: [], listening: false, mode: 'trivia',
-  removed: new Set(), searched: new Set(), cat: new Set(), catMode: 'exact', catCount: 0, catChunks: new Map(), catSongs: [], catUpdated: null, limit: 500
+  years: new Map(), removed: new Set(), searched: new Set(), cat: new Set(), catMode: 'exact', catCount: 0, catChunks: new Map(), catSongs: [], catUpdated: null, limit: 500
 };
 // A song counts as "in my catalog" if it was ticked by hand OR is in the imported full catalog — unless it was un-ticked afterwards.
 const isOwned = s => !B.removed.has(s._k) && (B.owned.has(s._k) || B.cat.has(B.catMode === 'title' ? s._tk : s._k) || (s.m && B.catMode !== 'title' && B.cat.has(songKey(s.t, s.m))) || looseHit(B.catLoose, s));
@@ -4129,6 +4136,28 @@ function looseKeysOf(x){ const out = [x._kl || looseKey(x.t, x.a)]; if (x.m) out
 function artParts(a){ const s = String(a || '').replace(/[\(\[][^\)\]]*[\)\]]/g, ' '); if (!/[,&;+\/]|\b(and|x|with|feat|ft|featuring|vs)\b/i.test(s)) return []; return [...new Set(s.split(/\s*(?:,|&|;|\+|\/|\band\b|\bx\b|\bwith\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bvs\.?)\s*/i).map(normSong).filter(p => p.length > 1))]; }
 const bListRef = id => doc(db, 'bingoLists', id);
 const bCatalogRef = () => doc(db, 'bingoConfig', 'catalog');
+/* ── song years: one shared year per song (same song = same year everywhere: Bingo lists, catalog, music trivia). Saved in bingoConfig/years_0..11 as "songKey<TAB>year<TAB>m" lines; m = typed by hand, so a catalog import never overwrites it ── */
+const YR_BUCKETS = 12;
+const yrBucket = k => { let h = 0; for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0; return h % YR_BUCKETS; };
+const yrKey = s => s._k || songKey(s.t, s.a);
+const yrOf = s => { const e = B.years && B.years.get(yrKey(s)); return e ? e.y : 0; };
+const decadeOf = y => y ? Math.floor(y / 10) * 10 + 's' : '';
+const validYear = v => { const n = Number(String(v).trim()); return /^\d{4}$/.test(String(v).trim()) && n >= 1900 && n <= 2099 ? n : 0; };
+async function saveYears(changes){   // changes: Map songKey -> {y, m} (or null to clear)
+  const hit = new Set();
+  for (const [k, v] of changes){ if (v) B.years.set(k, v); else B.years.delete(k); hit.add(yrBucket(k)); }
+  const lines = new Map([...hit].map(n => [n, []]));
+  for (const [k, e] of B.years){ const n = yrBucket(k); if (lines.has(n)) lines.get(n).push(k + '\t' + e.y + (e.m ? '\tm' : '')); }
+  const ids = [...hit];
+  for (let i = 0; i < ids.length; i += 400){ const b = writeBatch(db); ids.slice(i, i + 400).forEach(n => b.set(doc(db, 'bingoConfig', 'years_' + n), { txt: lines.get(n).join('\n'), updatedAtMs: Date.now() })); await b.commit(); }
+}
+async function setYearByHand(key, raw){
+  const v = String(raw).trim();
+  if (!v){ if (B.years.has(key)) await run(() => saveYears(new Map([[key, null]]))); return; }
+  const y = validYear(v); if (!y){ toast('A year looks like 1987.'); renderBingoAll(); try { mcRefresh(); } catch (e) {} return; }
+  const old = B.years.get(key); if (old && old.y === y && old.m) return;
+  await run(() => saveYears(new Map([[key, { y, m: true }]])));
+}
 const MISSING = '__missing', CATALOG = '__catalog';
 
 function hash53(str, seed = 0){
@@ -4248,7 +4277,7 @@ function startBingo(){
     $('#bList').innerHTML = `<p class="hint" style="padding:12px">Can't read the bingo lists yet.<br>${/permission/i.test(err.message) ? 'Publish the updated Firestore rules, then refresh.' : esc(err.message)}</p>`;
   }));
   B.unsubs.push(onSnapshot(collection(db, 'bingoConfig'), snap => {
-    B.tax = null; B.catChunks = new Map(); B.owned = new Set(); B.removed = new Set(); B.searched = new Set(); B.catMode = 'exact'; B.catCount = 0; B.catUpdated = null; B.newTxt = '';
+    B.tax = null; B.years = new Map(); B.catChunks = new Map(); B.owned = new Set(); B.removed = new Set(); B.searched = new Set(); B.catMode = 'exact'; B.catCount = 0; B.catUpdated = null; B.newTxt = '';
     const songChunks = [];
     for (const d of snap.docs){
       const v = d.data();
@@ -4256,6 +4285,7 @@ function startBingo(){
       else if (d.id === 'taxonomy'){ B.tax = { masters: Array.isArray(v.masters) ? v.masters : [], subs: (Array.isArray(v.subs) ? v.subs : []).filter(x => x && x.m && x.n) }; }
       else if (d.id === 'catalogNew'){ B.newTxt = v.txt || ''; }
       else if (d.id === 'catalogMeta'){ B.catMode = v.mode === 'title' ? 'title' : 'exact'; B.catCount = v.count || 0; B.catUpdated = v.updatedAtMs || null; }
+      else if (d.id.startsWith('years_')){ for (const ln of String(v.txt || '').split('\n')){ if (!ln) continue; const f = ln.split('\t'), y = validYear(f[1]); if (f[0] && y) B.years.set(f[0], { y, m: f[2] === 'm' }); } }
       else if (d.id.startsWith('full_')) B.catChunks.set(d.id, v.s || '');       // older imports: keys only
       else if (d.id.startsWith('songs_')){ B.catChunks.set(d.id, ''); songChunks.push([Number(d.id.slice(6)), v.txt || '']); }
     }
@@ -4695,17 +4725,18 @@ function renderBingoAll(){
   if (!special && B.filter === 'missing') shown = shown.filter(r => !isOwned(r));
   if (!isCat && B.filter === 'tosearch') shown = shown.filter(r => !isOwned(r) && !B.searched.has(r._k));
   if (!isCat && B.filter === 'searched') shown = shown.filter(r => !isOwned(r) && B.searched.has(r._k));
-  if (qq) shown = shown.filter(r => (r.t + ' ' + r.a + ' ' + (r.m || '') + ' ' + (r.c || '') + ' ' + (r.sc || '') + ' ' + (r.g || []).join(' ') + ' ' + (r.w || '')).toLowerCase().includes(qq));
+  if (qq) shown = shown.filter(r => (r.t + ' ' + r.a + ' ' + (r.m || '') + ' ' + (r.c || '') + ' ' + (r.sc || '') + ' ' + (r.g || []).join(' ') + ' ' + (r.w || '') + ' ' + (yrOf(r) || '') + ' ' + decadeOf(yrOf(r))).toLowerCase().includes(qq));
   const total = shown.length, capped = special && total > B.limit;
   if (capped) shown = shown.slice(0, B.limit);
   const wrap = $('#bGridWrap'), st = wrap.scrollTop;
   const BPM = '<th class="ck" title="Tick once you\u2019ve searched for this song on BPM Supreme \u2014 it ticks everywhere the song appears">BPM</th>';
   $('#bGrid thead').innerHTML = special
-    ? `<tr><th>#</th>${isCat ? '' : '<th>In catalog</th>'}${isMissing ? BPM : ''}${isCat ? catSortTh() : '<th>Song</th><th>Artist</th>'}<th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
-    : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th class="on" data-rsort="1" style="cursor:pointer;color:var(--gold)" title="How many of your OTHER bingo lists also have this song \u2014 click to put the songs on the most lists first">On other lists${B.rowSort ? ' \u25bc' : ' \u21c5'}</th><th>Movie / show</th><th>Category</th><th>Subcategory</th><th>Tags</th><th title="Host-only tidbit shown under the song in the Bingo app. Never printed on cards.">Whisper</th><th></th></tr>`;
+    ? `<tr><th>#</th>${isCat ? '' : '<th>In catalog</th>'}${isMissing ? BPM : ''}${isCat ? catSortTh() : '<th>Song</th><th>Artist</th>'}<th title="Release year. The decade fills in from it.">Year</th><th>Movie / show</th><th title="How many of your bingo lists have this song">On lists</th>${isMissing ? '<th title="How many of your bingo lists do NOT have this song">Not on</th>' : ''}<th>${isMissing ? 'Which lists' : 'Lists it’s on'}</th></tr>`
+    : `<tr><th>#</th><th>In catalog</th>${BPM}<th>Song</th><th>Artist</th><th title="Release year. The decade fills in from it.">Year</th><th class="on" data-rsort="1" style="cursor:pointer;color:var(--gold)" title="How many of your OTHER bingo lists also have this song \u2014 click to put the songs on the most lists first">On other lists${B.rowSort ? ' \u25bc' : ' \u21c5'}</th><th>Movie / show</th><th>Category</th><th>Subcategory</th><th>Tags</th><th title="Host-only tidbit shown under the song in the Bingo app. Never printed on cards.">Whisper</th><th></th></tr>`;
   const bpmMap = new Map();   // artist -> their songs that carry a BPM mark (searched tick, or a BPM file in the imported catalog)
   { const add = x => { const hit = B.searched.has(x._k) || isBpmFile(x) || x.bpm; if (!hit) return; const a = normSong(x.a); if (!a) return; for (const ak of new Set([a, ...artParts(x.a)])) (bpmMap.get(ak) || bpmMap.set(ak, []).get(ak)).push({ k: x._k, tk: x._tk }); }; for (const l of B.lists.values()) l.songs.forEach(add); B.catSongs.forEach(add); }
   const hasOtherBpm = r => [normSong(r.a), ...artParts(r.a)].some(ak => { const arr = bpmMap.get(ak); return !!arr && arr.some(e => e.k !== r._k && e.tk !== r._tk); });   /* "Marvin Gaye" counts for "Marvin Gaye & Tammi Terrell" and the other way round */
+  const yrCell = r => { const e = B.years.get(yrKey(r)), y = e ? e.y : 0; return `<td class="yr"><input type="text" data-yr="${yrKey(r)}" value="${y || ''}" inputmode="numeric" maxlength="4" style="width:58px" title="${e && e.m ? 'Typed in by hand \u2014 a catalog import will never change it' : 'Release year. Type one to set it.'}" autocomplete="off"><span class="yrd">${decadeOf(y)}</span></td>`; };
   $('#bGrid tbody').innerHTML = shown.map(r => {
     const own = isOwned(r);
     const ck = `<td class="ck"><input type="checkbox" data-k="${r._k}" ${own ? 'checked' : ''} title="${own ? 'In your catalog — uncheck to remove it from every list' : 'Tick when this song is in your catalog — it ticks on every list'}"></td>`;
@@ -4713,7 +4744,7 @@ function renderBingoAll(){
     const bp = own ? `<td class="ck" style="color:var(--text3)">\u2014${bpmIc}</td>` : `<td class="ck"><input type="checkbox" data-s="${r._k}" ${B.searched.has(r._k) ? 'checked' : ''} title="${B.searched.has(r._k) ? 'Already searched for on BPM Supreme \u2014 untick to undo' : 'Tick once you\u2019ve searched for this on BPM Supreme \u2014 it ticks on every list'}">${bpmIc}</td>`;
     if (special){
       const n = r.lists.length;
-      return `<tr class="${own ? 'have' : ''}"><td class="n">${r.idx + 1}</td>${isCat ? '' : ck}${isMissing ? bp : ''}<td class="txt">${esc(r.t)}</td><td class="txt art artcell">${esc(r.a)}${artIcons(r.a)}</td><td class="txt">${esc(r.m || '')}</td>` +
+      return `<tr class="${own ? 'have' : ''}"><td class="n">${r.idx + 1}</td>${isCat ? '' : ck}${isMissing ? bp : ''}<td class="txt">${esc(r.t)}</td><td class="txt art artcell">${esc(r.a)}${artIcons(r.a)}</td>${yrCell(r)}<td class="txt">${esc(r.m || '')}</td>` +
         `<td class="on" style="width:90px"><b style="color:var(--gold2)">${n}</b> of ${nLists}</td>` +
         (isMissing ? `<td class="on" style="width:90px">${Math.max(0, nLists - n)}</td>` : '') +
         `<td class="l">${n ? esc(r.lists.join(' · ')) : '<span style="opacity:.6">not on any list</span>'}</td></tr>`;
@@ -4721,7 +4752,7 @@ function renderBingoAll(){
     const also = r.lists.length;
     return `<tr class="${own ? 'have' : ''}" data-i="${r.idx}"><td class="n">${r.idx + 1}</td>${ck}${bp}` +
       `<td><input type="text" data-f="t" value="${esc(r.t)}" spellcheck="false" autocomplete="off"></td>` +
-      `<td class="artcell"><input type="text" data-f="a" value="${esc(r.a)}" spellcheck="false" autocomplete="off">${artIcons(r.a)}</td>` +
+      `<td class="artcell"><input type="text" data-f="a" value="${esc(r.a)}" spellcheck="false" autocomplete="off">${artIcons(r.a)}</td>${yrCell(r)}` +
       `<td class="on" style="white-space:nowrap" title="${also ? esc('Also on:\n' + r.lists.join('\n')) : 'Not on any other list'}">${also ? `<b style="color:var(--gold2);font-size:1.05em">${also}</b> other list${also === 1 ? '' : 's'}` : '<span style="opacity:.5">none</span>'}</td>` +
       `<td><input type="text" data-f="m" value="${esc(r.m || '')}" placeholder="—" spellcheck="false" autocomplete="off"></td>` +
       `<td><select data-f="c" class="bSel">${bPick('c', r.c)}</select></td><td><select data-f="sc" class="bSel">${bPick('sc', r.sc)}</select></td><td><input type="text" data-f="g" value="${esc((r.g || []).join(', '))}" spellcheck="false" autocomplete="off"></td><td><input type="text" data-f="w" value="${esc(r.w || '')}" spellcheck="false" autocomplete="off"></td>` +
@@ -4740,7 +4771,7 @@ function renderBingoAll(){
 
 
 /* ── bingo grid: drag a column edge to resize (remembered); cut-off text shows on hover ── */
-const BCOL_DEF = { 'Category': 170, 'Subcategory': 170, 'Tags': 170, 'Whisper': 300, '#': 56, 'In catalog': 96, 'BPM': 110, 'Song': 300, 'Artist': 230, 'Movie / show': 210, 'On lists': 90, 'Not on': 90, 'Which lists': 320, 'Lists it’s on': 320, 'On other lists': 120, '': 84 };
+const BCOL_DEF = { 'Category': 170, 'Subcategory': 170, 'Tags': 170, 'Whisper': 300, '#': 56, 'In catalog': 96, 'BPM': 110, 'Song': 300, 'Artist': 230, 'Year': 120, 'Movie / show': 210, 'On lists': 90, 'Not on': 90, 'Which lists': 320, 'Lists it’s on': 320, 'On other lists': 120, '': 84 };
 const bColName = th => th.textContent.replace(/[▼▲⇅]/g, '').trim();
 const CAT_DEF = { '#': 56, 'Song': 425, 'Artist': 525, 'Movie / show': 210, 'On lists': 90, 'Lists it\u2019s on': 320 };   // default widths on the "My whole catalog" page
 const bColKey = th => (B.curId === CATALOG ? 'cat:' : '') + bColName(th);
@@ -4914,6 +4945,7 @@ async function saveSongs(listId, songs){
 }
 let SAVEERR = '';
 $('#bGrid').addEventListener('change', e => {
+  const yi = e.target.closest('input[data-yr]'); if (yi){ setYearByHand(yi.dataset.yr, yi.value); return; }
   const inp = e.target.closest('input[type=text][data-f], select[data-f]'); if (!inp) return;
   const tr = inp.closest('tr'), i = Number(tr.dataset.i), l = B.lists.get(B.curId); if (!l) return;
   const songs = l.songs.map(sBase);
@@ -4961,6 +4993,13 @@ $('#bAdd').addEventListener('click', () => {
 
 /* ── import / paste songs (new list or add to the open one) ── */
 /* Lines from the Music Organizer can end with " [BPM]" = that file came from BPM Supreme. The marker is stripped and remembered as bpm:true. */
+/* a year on the end of a line ("Song - Artist - 1987" or "Song - Artist (1987)") is split off; "Prince - 1999" is left alone because nothing would remain but one name */
+function splitYearLine(raw){
+  let line = String(raw), tail = ''; const bm = line.match(/\s*\[BPM\]\s*$/i); if (bm){ tail = ' [BPM]'; line = line.slice(0, bm.index); }
+  const m = line.match(/^(.*\S)(?:\s+[\-\u2013\u2014]\s+|\s*\t\s*|\s*\(\s*)((?:19|20)\d\d)\s*\)?\s*$/);
+  if (m && /(\s[\-\u2013\u2014]\s|\t)/.test(m[1])) return { line: m[1] + tail, y: Number(m[2]) };
+  return { line: raw, y: 0 };
+}
 function parseSongLines(text, order){
   const out = [];
   for (const raw of String(text || '').split(/\r?\n/)){
@@ -5025,7 +5064,8 @@ function songsFromCSV(text, order){
   const ti = head.findIndex(h => h === 'song' || h === 'title' || h === 'songtitle' || h === 'songname' || h === 'track');
   const ai = head.findIndex(h => h === 'artist' || h === 'artists' || h === 'band' || h === 'performer');
   const mi = head.findIndex(h => h === 'movie' || h === 'show' || h === 'film' || h === 'movieshow');
-  if (ti >= 0 && ai >= 0) return rows.slice(1).map(r => ({ t: String(r[ti] || '').trim(), a: String(r[ai] || '').trim(), ...(mi >= 0 && String(r[mi] || '').trim() ? { m: String(r[mi]).trim() } : {}) })).filter(s => s.t);
+  const yi = head.findIndex(h => h === 'year' || h === 'releaseyear' || h === 'songyear' || h === 'yearreleased' || h === 'released');
+  if (ti >= 0 && ai >= 0) return rows.slice(1).map(r => ({ t: String(r[ti] || '').trim(), a: String(r[ai] || '').trim(), ...(mi >= 0 && String(r[mi] || '').trim() ? { m: String(r[mi]).trim() } : {}), ...(yi >= 0 && validYear(r[yi]) ? { y: validYear(r[yi]) } : {}) })).filter(s => s.t);
   return rows.map(r => order === 'artist' ? { t: String(r[1] || r[0] || '').trim(), a: r[1] ? String(r[0] || '').trim() : '' } : { t: String(r[0] || '').trim(), a: String(r[1] || '').trim() }).filter(s => s.t);
 }
 function openBingoImport(addTo){
@@ -5092,6 +5132,7 @@ const CHUNK = 20000;
 function openCatalogImport(){
   const body = document.createElement('div'); body.className = 'bImp';
   body.innerHTML = `<p class="hint">Paste your whole catalog (or load a CSV / text file). Every song on every bingo list that\u2019s in it gets ticked automatically \u2014 and lists you add later will tick themselves too. Lines ending in <b>[BPM]</b> (from the Music Organizer\u2019s Song List) are remembered as BPM files. Your ticks and BPM searches stay on their songs when you re-import.</p>
+    <p class="hint">Years: put one at the end of a line (<b>Song - Artist - 1987</b>), or use a CSV with <b>Song</b>, <b>Artist</b> and <b>Year</b> columns. A year you typed in by hand is never changed by an import.</p>
     <div class="two"><label class="fld">Each line looks like<select id="ciOrder"><option value="song">Song \u2013 Artist</option><option value="artist">Artist \u2013 Song</option><option value="movie">Movie \u2013 Song \u2013 Category (e.g. Aladdin \u2013 A Whole New World \u2013 Disney)</option></select></label>
     <label class="fld">Match songs by<select id="ciMode"><option value="exact">Title + artist (most accurate)</option><option value="title">Title only (use if artist names differ between your catalog and the lists)</option></select></label></div>
     <label class="fld">\u2026or choose a CSV / text file<input type="file" id="ciFile" accept=".csv,.txt,.tsv,text/*"></label>
@@ -5102,7 +5143,9 @@ function openCatalogImport(){
   let fileText = null;
   const parse = () => {
     const order = $('#ciOrder').value, t = $('#ciText').value;
-    let songs = (fileText != null && !t.trim()) ? songsFromCSV(fileText, order) : parseSongLines(t, order);
+    let songs = [];
+    if (fileText != null && !t.trim()) songs = songsFromCSV(fileText, order);
+    else for (const raw of String(t).split(/\r?\n/)){ if (!raw.trim()) continue; const sp = splitYearLine(raw); for (const x of parseSongLines(sp.line, order)) songs.push(sp.y ? { ...x, y: sp.y } : x); }
     return songs.filter(x => x.t);
   };
   const keysOf = songs => { const m = $('#ciMode').value; return new Set(songs.map(x => m === 'title' ? titleKey(x.t) : songKey(x.t, x.a))); };
@@ -5110,7 +5153,7 @@ function openCatalogImport(){
     const songs = parse(); if (!songs.length){ $('#ciInfo').textContent = 'Nothing loaded yet.'; return; }
     const ks = keysOf(songs), m = $('#ciMode').value; let hit = 0, tot = 0;
     for (const e of allSongs()){ tot++; if (ks.has(m === 'title' ? e._tk : e._k)) hit++; }
-    $('#ciInfo').innerHTML = `Found <b>${songs.length.toLocaleString()}</b> songs. <b>${hit}</b> of the <b>${tot}</b> different songs on your lists are in it.`;
+    const wy = songs.filter(x => x.y).length; $('#ciInfo').innerHTML = `Found <b>${songs.length.toLocaleString()}</b> songs${wy ? ' (<b>' + wy.toLocaleString() + '</b> with a year)' : ''}. <b>${hit}</b> of the <b>${tot}</b> different songs on your lists are in it.`;
   };
   const go = async btn => {
     const songs = parse(); if (!songs.length){ toast('Paste or load your catalog first.'); return; }
@@ -5123,6 +5166,8 @@ function openCatalogImport(){
     if (!replace && B.catCount && B.catMode === mode) for (const x of B.catSongs) merged.set(mode === 'title' ? x._tk : x._k, { t: x.t, a: x.a, m: x.m, bpm: x.bpm });
     const legacyOnly = !replace && B.catCount && B.catMode === mode && !B.catSongs.length && B.cat.size;   // older import saved keys only
     for (const x of songs){ const old = merged.get(keyOf(x)); merged.set(keyOf(x), { t: x.t, a: x.a, m: x.m, bpm: !!(x.bpm || (old && old.bpm)) }); }
+    const yrChanges = new Map(); let yrHand = 0;
+    for (const x of songs){ if (!x.y) continue; const k = withKeys({ t: x.t, a: x.a, m: x.m || '' })._k, old = B.years.get(k); if (old && old.m){ if (old.y !== x.y) yrHand++; continue; } if (!old || old.y !== x.y) yrChanges.set(k, { y: x.y, m: false }); }
     const arr = [...merged.values()], chunks = [];
     for (let i = 0; i < arr.length; i += 4000) chunks.push(arr.slice(i, i + 4000));
     btn.disabled = true; btn.textContent = 'Saving\u2026';
@@ -5139,11 +5184,12 @@ function openCatalogImport(){
       if (fresh.length) b.set(doc(db, 'bingoConfig', 'catalogNew'), { txt: newLines.join('\n'), n: newLines.length, updatedAtMs: Date.now() });
       /* hand ticks (in catalog, BPM searched, un-ticked) are never touched by an import */
       await b.commit();
+      if (yrChanges.size) await saveYears(yrChanges);
       return true;
     });
     if (!ok){ btn.disabled = false; btn.textContent = 'Import catalog'; return; }
     closeModal();
-    toast('Catalog saved \u2014 ' + arr.length.toLocaleString() + ' songs (' + fresh.length.toLocaleString() + ' new). Your lists are ticked.');
+    toast('Catalog saved \u2014 ' + arr.length.toLocaleString() + ' songs (' + fresh.length.toLocaleString() + ' new). Your lists are ticked.' + (yrChanges.size || yrHand ? ' ' + yrChanges.size.toLocaleString() + ' year' + (yrChanges.size === 1 ? '' : 's') + ' added or updated' + (yrHand ? ', ' + yrHand.toLocaleString() + ' kept as you typed them' : '') + '.' : ''));
   };
   openModal({ title: 'Import my catalog', body, actions: [{ label: 'Cancel', onClick: closeModal }, { label: 'Import catalog', primary: true, onClick: go }] });
   $('#ciText').addEventListener('input', info); $('#ciOrder').addEventListener('change', info); $('#ciMode').addEventListener('change', info);
@@ -5182,7 +5228,7 @@ $('#bNewSongs').addEventListener('click', () => {
 
 /* ── More ⋯ ── */
 function exportBingoCSV(rows, name){
-  const csv = ['Song,Artist,In catalog', ...rows.map(r => [csvEscape(r.t), csvEscape(r.a), isOwned(r) ? 'Yes' : 'No'].join(','))].join('\r\n');
+  const csv = ['Song,Artist,Year,Decade,In catalog', ...rows.map(r => [csvEscape(r.t), csvEscape(r.a), yrOf(r) || '', decadeOf(yrOf(r)), isOwned(r) ? 'Yes' : 'No'].join(','))].join('\r\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = name.replace(/[^\w\- ]+/g, '') + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 $('#bExportMissing').addEventListener('click', () => B.curId === CATALOG ? exportBingoCSV(catalogRows(), 'My catalog') : exportBingoCSV(missingSongs(), 'Songs I am missing'));
