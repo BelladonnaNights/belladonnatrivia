@@ -396,6 +396,17 @@ function gref(sub){ return db.ref(GP + (sub ? '/' + sub : '')); }
 // ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
+// Each phone has a private ID, so one team name belongs to one phone (the same phone can always get back in)
+function getDeviceId() {
+  let d = '';
+  try { d = localStorage.getItem('bella_device_id') || ''; } catch(e) {}
+  if(!d) { const m = document.cookie.match(/(?:^|; )bella_device_id=([^;]+)/); d = m ? m[1] : ''; }
+  if(!d) d = 'dev_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  try { localStorage.setItem('bella_device_id', d); } catch(e) {}
+  try { document.cookie = 'bella_device_id=' + d + ';max-age=31536000;path=/;SameSite=Lax'; } catch(e) {}
+  return d;
+}
+const myDeviceId = getDeviceId();
 let teamId = localStorage.getItem('bella_team_id') || null;
 let teamName = localStorage.getItem('bella_team_name') || null;
 let mySessionId = localStorage.getItem('bella_session_id') || null;
@@ -639,6 +650,21 @@ async function register() {
       mySessionId = sid;
       localStorage.setItem('bella_session_id', sid);
     }
+    const normName = n => String(n || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const taken = () => { const e = new Error('taken'); e.code = 'name-taken'; return e; };
+    const all = (await gref('teams').once('value')).val() || {};
+    // this phone's old team was handed to another phone by the host: start fresh
+    if(teamId && all[teamId] && all[teamId].deviceId && all[teamId].deviceId !== myDeviceId) { teamId = null; localStorage.removeItem('bella_team_id'); resetLocalGameState(); }
+    // one name = one phone: it's free if nobody has it, or this phone already owns it, or the host freed it
+    const want = normName(name);
+    const holders = Object.keys(all).filter(id => normName((all[id] || {}).name) === want);
+    if(holders.length) {
+      const mineOk = holders.filter(id => !(all[id] || {}).deviceId || all[id].deviceId === myDeviceId);
+      if(!mineOk.length) throw taken();
+      const pick = mineOk.find(id => id === teamId) || mineOk.find(id => (all[id] || {}).deviceId === myDeviceId) || mineOk[0];
+      if(pick !== teamId) { teamId = pick; localStorage.setItem('bella_team_id', teamId); }
+    }
+    let created = false;
     if(!teamId) {
       teamId = 'team_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
       localStorage.setItem('bella_team_id', teamId);
@@ -651,15 +677,26 @@ async function register() {
     if(!existing.exists()) resetLocalGameState();   // brand-new team on the server = brand-new game
     if(existing.exists()){
       myScore = (existing.val() || {}).score || 0;
-      if((existing.val() || {}).name !== name){ try{ await teamRef.child('name').set(name); }catch(e){} }
+      const upd = {}; if((existing.val() || {}).name !== name) upd.name = name; if((existing.val() || {}).deviceId !== myDeviceId) upd.deviceId = myDeviceId;
+      if(Object.keys(upd).length) { try{ await teamRef.update(upd); }catch(e){} }
     } else {
-      await teamRef.set({ name, score: 0, joinedAt: Date.now() });
-      myScore = 0;
+      await teamRef.set({ name, score: 0, joinedAt: Date.now(), deviceId: myDeviceId });
+      myScore = 0; created = true;
+    }
+    if(created) {   // two phones can press Join with the same name at the same moment: the earlier one keeps it
+      const again = (await gref('teams').once('value')).val() || {};
+      const same = Object.keys(again).filter(id => normName((again[id] || {}).name) === want)
+        .sort((x, y) => (((again[x] || {}).joinedAt || 0) - ((again[y] || {}).joinedAt || 0)) || (x < y ? -1 : 1));
+      if(same.length > 1 && same[0] !== teamId && (again[same[0]] || {}).deviceId !== myDeviceId) {
+        try { await teamRef.remove(); } catch(e) {}
+        teamId = null; localStorage.removeItem('bella_team_id'); throw taken();
+      }
     }
   } catch(err) {
     console.error('Join failed', err);
     btn.disabled = false;
     btn.textContent = 'Join Game';
+    if(err && err.code === 'name-taken') { statusEl.textContent = 'Team name taken \u2014 please choose a different name.'; return; }
     statusEl.textContent = 'Couldn\u2019t join \u2014 check your connection and try again. (' + ((err && err.code) || 'error') + ')';
     return;
   }
@@ -738,6 +775,16 @@ function handleGame(game) {
       return;
     }
 
+    // The host moved this team's name to another phone: this phone starts over
+    { const _t = game.teams && teamId && game.teams[teamId];
+      if(_t && _t.deviceId && _t.deviceId !== myDeviceId) {
+        resetLocalGameState(); teamId = null; teamName = null; currentQ = null; answered = false; myqOpen = false; clearTimer();
+        localStorage.removeItem('bella_team_id');
+        const rb = document.getElementById('reg-btn'); rb.disabled = false; rb.textContent = 'Join Game'; rb.classList.remove('joined');
+        document.getElementById('reg-status').textContent = 'Your team name was moved to another phone. Enter a name to join again.';
+        showScreen('reg-screen');
+        return;
+      } }
     // Update score from Firebase (source of truth)
     if(game.teams && game.teams[teamId]) myScore = game.teams[teamId].score || 0;
     lockedAll = !!(game.currentQuestion && game.currentQuestion.locked);
@@ -801,9 +848,9 @@ function handleGame(game) {
 // ═══════════════════════════════════════════════
 const LEFT_MSG = 'You left the game \u2014 this question is closed for you';
 function onGameScreen() { const v = Array.from(document.querySelectorAll('.screen')).find(s => !s.classList.contains('hidden')); return myqOpen || (v && v.id === 'q-screen'); }
-function forfeitCurrent() {
-  if(!currentQ || !qLive || lockedAll || forfeits[currentQ.id] || !onGameScreen()) return;
-  forfeits[currentQ.id] = true; saveForfeits();
+function forfeitQuestion(qid) {
+  if(!currentQ || currentQ.id !== qid || !qLive || lockedAll || forfeits[qid] || !onGameScreen()) return;
+  forfeits[qid] = true; saveForfeits();
   try { stopQuestionAudio(); } catch(e) {}
   showForfeit();
   if(myqOpen) renderMyQ();
@@ -812,8 +859,21 @@ function showForfeit() {
   lockInputs();
   const bar = document.getElementById('locked-bar'); if(bar) { bar.textContent = LEFT_MSG; bar.style.display = 'block'; }
 }
-document.addEventListener('visibilitychange', () => { if(document.hidden) forfeitCurrent(); });
-window.addEventListener('pagehide', forfeitCurrent);
+// A phone locking its screen looks the same to a web page as someone switching apps, so we only count it as "leaving" when it
+// looks deliberate: away longer than a few seconds AND they were actively using the page right before (an idle phone that
+// auto-locks, or a quick flick away and back, is forgiven). If a new question arrived while they were away, nothing is locked.
+const AWAY_GRACE_MS = 5000, IDLE_LOCK_MS = 25000;
+let lastTouchAt = Date.now(), hiddenAt = 0, hiddenQ = null, hiddenIdle = 0;
+['touchstart','pointerdown','keydown','input','scroll','click'].forEach(ev => document.addEventListener(ev, () => { lastTouchAt = Date.now(); }, { passive:true, capture:true }));
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden) {
+    hiddenAt = Date.now(); hiddenIdle = hiddenAt - lastTouchAt;
+    hiddenQ = (currentQ && qLive && !lockedAll && onGameScreen()) ? currentQ.id : null;
+  } else if(hiddenAt) {
+    const away = Date.now() - hiddenAt, q = hiddenQ; hiddenAt = 0; hiddenQ = null;
+    if(q && away > AWAY_GRACE_MS && hiddenIdle < IDLE_LOCK_MS) forfeitQuestion(q);
+  }
+});
 
 // ═══════════════════════════════════════════════
 //  RENDER QUESTION
