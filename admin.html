@@ -3926,6 +3926,14 @@ async function adjustPoints(teamId, delta) {
   toast((delta > 0 ? '+' : '') + delta + ' pts to team');
 }
 
+// Frees a team name so a different phone can claim it (the team keeps its score and answers)
+async function releaseTeamName(teamId) {
+  if(!teamId) return;
+  if(!confirm('Free this team name? The team can then rejoin from a new phone by typing the same name. Their score and answers stay.')) return;
+  try { await liveRef('teams/' + teamId + '/deviceId').remove(); toast('Name freed \u2014 the team can rejoin from any phone'); }
+  catch(e) { toast('Could not free the name: ' + e.message, true); }
+}
+
 function getAdjDelta(teamId) {
   const input = document.getElementById('adj-input-' + teamId);
   if(!input || input.value === '') return 1;   // default: 1 point
@@ -4122,7 +4130,7 @@ function attachHbListeners() {
   const teams = snap.val() || {};
   latestTeams = teams; scheduleLiveScores();
   const sorted = Object.entries(teams)
-    .map(([id,t]) => ({id, name:t.name||'?', score:t.score||0}))
+    .map(([id,t]) => ({id, name:t.name||'?', score:t.score||0, dev:!!t.deviceId}))
     .sort((a,b) => b.score-a.score);
   currentTeamCount = sorted.length;
   updateSubmitCount();
@@ -4141,6 +4149,7 @@ function attachHbListeners() {
         + '<input class="hb-adj-input" id="adj-input-' + t.id + '" type="number" value="' + (keepAdj['adj-input-' + t.id] != null ? keepAdj['adj-input-' + t.id] : 1) + '" placeholder="pts" title="Points to add or subtract (default 1)"/>'
         + '<button class="hb-adj-btn" onclick="adjustPoints(\'' + t.id + '\', getAdjDelta(\'' + t.id + '\'))">Give</button>'
         + '<button class="hb-adj-btn hb-adj-take" onclick="adjustPoints(\'' + t.id + '\', -getAdjDelta(\'' + t.id + '\'))">Take</button>'
+        + '<button class="hb-adj-btn" ' + (t.dev ? '' : 'disabled ') + 'title="Frees this team name so the team can rejoin from a new phone (score and answers stay)" onclick="releaseTeamName(\'' + t.id + '\')">' + (t.dev ? 'Free name' : 'Name free \u2713') + '</button>'
         + '</div>'
         + '</div>'
       ).join('')
