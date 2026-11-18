@@ -163,6 +163,17 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .catTitle:focus{border-color:var(--gold-glow2);background:var(--surface)}
 #catType{font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold2);background:transparent;border:1px solid var(--gold-glow);border-radius:99px;padding:5px 12px;outline:none;cursor:pointer}
 #catType option{background:var(--surface);color:var(--text)}
+#catSub{font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);background:transparent;border:1px solid var(--border2);border-radius:99px;padding:5px 12px;outline:none;cursor:pointer;max-width:190px}
+#catSub option{background:var(--surface);color:var(--text)}
+.sub{margin:2px 0 4px 6px;border-left:1px solid var(--border2)}
+.sub:not(.open) .subBody{display:none}
+.subHead{display:flex;width:100%;align-items:center;gap:7px;background:none;border:0;padding:6px 8px;text-align:left;color:var(--gold2);font-size:12px;cursor:pointer}
+.subHead .chev{transform:rotate(-90deg)}
+.sub.open .subHead .chev{transform:none}
+.subHead em{margin-left:auto;font-style:normal;color:var(--text3);font-size:11px}
+.subHead .subEd{border:0;background:none;color:var(--text3);cursor:pointer;padding:0 2px}
+.subHead .subEd:hover{color:var(--gold)}
+.sub .cat{padding-left:14px}
 #catCount{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--text3)}
 .tag{font-family:var(--cinzel);font-size:9px;letter-spacing:.08em;text-transform:uppercase;padding:2px 9px;border-radius:99px;border:1px solid var(--border2);color:var(--text3)}
 .tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -498,6 +509,7 @@ textarea::placeholder{color:#8a8a8a !important}
             <input id="catName" class="catTitle" spellcheck="false" autocomplete="off" title="Click to rename — it renames everywhere">
             <input id="catName2" class="catTitle catTitle2 hidden" spellcheck="false" autocomplete="off" placeholder="Secondary name…" title="Secondary name — this is the title shown in the sidebar for Featured games">
             <select id="catType" title="Game type"></select>
+            <select id="catSub" title="Sub-section inside this type (for example Christmas)"></select>
             <span id="catCount"></span>
             <span id="catArchTag" class="tag hidden">Archived</span>
             <button class="btn ghost sm" id="catMenuBtn">More ⋯</button>
@@ -872,7 +884,7 @@ catch (e) { db = initializeFirestore(app, { localCache: memoryLocalCache() }); }
 const S = {
   user: null, cats: new Map(), fb: new Map(), custom: [], order: null, tempOrder: null, types: null, curId: null, unsubQ: null,
   rows: new Map(), maxOrder: 0, sort: { key:'order', dir:1 }, filter: { q:'', diff:0, tags:new Set() },
-  hiddenG: new Set(['optionA','optionB','optionC','optionD']), hiddenM: new Set(['optionA','optionB','optionC','optionD']), orderM: null, tempFor: null, collapsed: new Set(LS.get('collapsed', [])), sortCount: new Set(LS.get('sortCount', [])), colW: LS.get('colW', {}) || {},
+  hiddenG: new Set(['optionA','optionB','optionC','optionD']), hiddenM: new Set(['optionA','optionB','optionC','optionD']), orderM: null, tempFor: null, collapsed: new Set(LS.get('collapsed', [])), subOpen: new Set(LS.get('subOpen', [])), sortCount: new Set(LS.get('sortCount', [])), colW: LS.get('colW', {}) || {},
   pending: 0, listening: false, unsubs: [], firstQ: true
 };
 /* What this signed-in person may do in the Vault. Everyone who already had access keeps FULL access; only accounts made as limited
@@ -1143,8 +1155,15 @@ function renderSide(){
     const byCount = S.sortCount.has(t);
     list.sort((a, b) => (byCount ? (Number(b.questionCount) || 0) - (Number(a.questionCount) || 0) : 0) || String(sideName(a)).localeCompare(String(sideName(b)), undefined, { numeric: true, sensitivity: 'base' }));
     const closed = !q && S.collapsed.has(t);
+    const catBtn = c => `<button class="cat ${c.id === S.curId ? 'active' : ''} ${c.archived ? 'arch' : ''}" data-id="${c.id}"><span class="nm" ${isFeatType(c.type) && secName(c) ? `title="${esc(c.name)}"` : ''}>${esc(sideName(c))}</span><span class="ct">${c.questionCount ?? ''}</span></button>`;
+    const subs = new Map(), loose = [];
+    for (const c of list){ const sg = String(c.subgroup || '').trim(); if (sg){ if (!subs.has(sg)) subs.set(sg, []); subs.get(sg).push(c); } else loose.push(c); }
+    const subHtml = [...subs.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' })).map(([sg, cs]) => {
+      const key = t + '||' + sg, open = !!q || S.subOpen.has(key) || cs.some(c => c.id === S.curId);
+      return `<div class="sub ${open ? 'open' : ''}"><button class="subHead" data-sub="${esc(key)}"><span class="chev">▾</span>${esc(sg)}<em>${cs.length}</em><span class="subEd" role="button" data-subren="${esc(key)}" title="Rename this sub-section">✎</span></button><div class="subBody">${cs.map(catBtn).join('')}</div></div>`;
+    }).join('');
     html += `<div class="grp ${closed ? 'closed' : ''}"><button class="grpHead" data-type="${esc(t)}"><span class="chev">▾</span><span class="sortBtn ${byCount ? 'on' : ''}" role="button" data-sort="${esc(t)}" title="${byCount ? 'Sorted by most questions — click for A–Z' : 'Sort by most questions'}">⇅ ${byCount ? '#' : ''}</span>${esc(t)}<em>${list.length}</em></button><div class="grpBody">` +
-      list.map(c => `<button class="cat ${c.id === S.curId ? 'active' : ''} ${c.archived ? 'arch' : ''}" data-id="${c.id}"><span class="nm" ${isFeatType(c.type) && secName(c) ? `title="${esc(c.name)}"` : ''}>${esc(sideName(c))}</span><span class="ct">${c.questionCount ?? ''}</span></button>`).join('') +
+      subHtml + loose.map(catBtn).join('') +
       `</div></div>`;
   }
   $('#catList').innerHTML = html || '<p class="hint" style="padding:12px">No games yet — create one or import your CSVs.</p>';
@@ -1152,6 +1171,10 @@ function renderSide(){
 $('#catList').addEventListener('click', e => {
   const sb = e.target.closest('.sortBtn');
   if (sb){ const t = sb.dataset.sort; S.sortCount.has(t) ? S.sortCount.delete(t) : S.sortCount.add(t); LS.set('sortCount', [...S.sortCount]); renderSide(); return; }
+  const sr = e.target.closest('.subEd');
+  if (sr){ e.stopPropagation(); renameSub(sr.dataset.subren); return; }
+  const sh = e.target.closest('.subHead');
+  if (sh){ const k = sh.dataset.sub; S.subOpen.has(k) ? S.subOpen.delete(k) : S.subOpen.add(k); LS.set('subOpen', [...S.subOpen]); const box = sh.parentNode; if (box.classList.contains('open') && !S.subOpen.has(k)) box.classList.remove('open'); else box.classList.toggle('open', S.subOpen.has(k)); return; }
   const g = e.target.closest('.grpHead');
   if (g){ const t = g.dataset.type; S.collapsed.has(t) ? S.collapsed.delete(t) : S.collapsed.add(t); LS.set('collapsed', [...S.collapsed]); renderSide(); return; }
   const c = e.target.closest('.cat'); if (c) selectCategory(c.dataset.id);
@@ -1166,6 +1189,9 @@ function renderHead(){
   const n2 = $('#catName2'); n2.classList.toggle('hidden', !showSec(c)); if (document.activeElement !== n2) n2.value = secName(c);
   const sel = $('#catType');
   sel.innerHTML = typeList().map(t => `<option ${t === c.type ? 'selected' : ''}>${esc(t)}</option>`).join('') + (c.type && !typeList().includes(c.type) ? `<option selected>${esc(c.type)}</option>` : '') + `<option value="__new">＋ New type…</option>`;
+  { const ss = $('#catSub'), cur = String(c.subgroup || '').trim(), names = [...new Set([...S.cats.values()].filter(x => (x.type || '') === (c.type || '') && String(x.subgroup || '').trim()).map(x => String(x.subgroup).trim()))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    if (cur && !names.includes(cur)) names.push(cur);
+    ss.innerHTML = `<option value="">No sub-section</option>` + names.map(n => `<option value="${esc(n)}" ${n === cur ? 'selected' : ''}>${esc(n)}</option>`).join('') + `<option value="__new">＋ New sub-section…</option>`; }
   $('#catArchTag').classList.toggle('hidden', !c.archived);
   { const ql = $('#qListBtn'); if (ql) ql.textContent = /music/i.test(c.type || '') ? 'Song list' : 'Question list'; }
   updateCount();
@@ -1219,6 +1245,21 @@ $('#catType').addEventListener('change', async e => {
   await run(async () => { v = await addType(v) || v; });
   await run(() => updateDoc(catRef(c.id), { type: v, updatedAt: serverTimestamp() }));
 });
+
+$('#catSub').addEventListener('change', async e => {
+  const c = S.cats.get(S.curId); if (!c) return;
+  let v = e.target.value;
+  if (v === '__new'){ const t = await askText({ title: 'New sub-section', label: 'Sub-section name (for example: Christmas)', ok: 'Add' }); if (!t){ renderHead(); return; } v = String(t).trim(); }
+  if (v) { S.subOpen.add((c.type || 'Uncategorized') + '||' + v); LS.set('subOpen', [...S.subOpen]); }
+  await run(() => updateDoc(catRef(c.id), { subgroup: v || null, updatedAt: serverTimestamp() }));
+});
+async function renameSub(key){
+  const i = key.indexOf('||'), type = key.slice(0, i), old = key.slice(i + 2);
+  const t = await askText({ title: 'Rename sub-section', label: 'New name', value: old, ok: 'Rename' }); const nv = String(t || '').trim(); if (!nv || nv === old) return;
+  const ids = [...S.cats.values()].filter(c => (c.type || 'Uncategorized') === type && String(c.subgroup || '').trim() === old).map(c => c.id);
+  await run(async () => { for (const id of ids) await updateDoc(catRef(id), { subgroup: nv, updatedAt: serverTimestamp() }); });
+  if (S.subOpen.has(key)){ S.subOpen.delete(key); S.subOpen.add(type + '||' + nv); LS.set('subOpen', [...S.subOpen]); }
+}
 
 function updateCount(){
   const c = S.cats.get(S.curId); if (!c) return;
