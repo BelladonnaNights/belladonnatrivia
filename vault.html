@@ -163,6 +163,9 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .catTitle:focus{border-color:var(--gold-glow2);background:var(--surface)}
 #catType{font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold2);background:transparent;border:1px solid var(--gold-glow);border-radius:99px;padding:5px 12px;outline:none;cursor:pointer}
 #catType option{background:var(--surface);color:var(--text)}
+#bSub{font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);background:transparent;border:1px solid var(--border2);border-radius:99px;padding:5px 12px;outline:none;cursor:pointer;max-width:190px}
+#bSub option{background:var(--surface);color:var(--text)}
+.sub .bList{margin-left:6px}
 #catSub{font-family:var(--cinzel);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);background:transparent;border:1px solid var(--border2);border-radius:99px;padding:5px 12px;outline:none;cursor:pointer;max-width:190px}
 #catSub option{background:var(--surface);color:var(--text)}
 .sub{margin:2px 0 4px 6px;border-left:1px solid var(--border2)}
@@ -571,6 +574,7 @@ textarea::placeholder{color:#8a8a8a !important}
             <input id="bName" class="catTitle" spellcheck="false" autocomplete="off" title="Click to rename">
             <span id="bStats" class="bStats"></span>
             <span id="bArch" class="tag hidden">Archived</span>
+            <select id="bSub" title="Sub-section in the sidebar (for example Christmas)"></select>
           </div>
           <div class="tools">
             <input id="bQ" placeholder="Search songs…" autocomplete="off" style="width:200px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 13px;color:var(--text);font:14px var(--font);outline:none">
@@ -4654,15 +4658,25 @@ function renderBingoSide(){
   html += `<div class="bSpecial"><button class="bList ${B.curId === CATALOG ? 'active' : ''}" data-bid="${CATALOG}"><div class="row1"><span class="nm">\u2630 My whole catalog</span><span class="ct"><b>${catalogRows().length.toLocaleString()}</b> songs</span></div></button>
     <button class="bList ${B.curId === MISSING ? 'active' : ''}" data-bid="${MISSING}"><div class="row1"><span class="nm">⚑ Everything I'm missing</span><span class="ct"><b>${uniq.length}</b> songs</span></div></button></div>`;
   const list = sortedLists();
-  html += list.map(l => {
+  const bBtn = l => {
     const s = listStats(l), pct = s.total ? Math.round(s.have / s.total * 100) : 0;
     return `<button class="bList ${l.id === B.curId ? 'active' : ''} ${l.archived ? 'arch' : ''}" data-bid="${l.id}"><div class="row1"><span class="nm">${esc(l.name)}</span><span class="ct"><b>${s.have}</b> / ${s.total}</span></div><div class="bBar ${s.total && s.have === s.total ? 'full' : ''}"><i style="width:${pct}%"></i></div></button>`;
-  }).join('');
+  };
+  { const subs = new Map(), loose = [], q = B.q.trim();
+    for (const l of list){ const sg = String(l.subgroup || '').trim(); if (sg){ if (!subs.has(sg)) subs.set(sg, []); subs.get(sg).push(l); } else loose.push(l); }
+    html += [...subs.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' })).map(([sg, ls]) => {
+      const key = 'bingo||' + sg, open = !!q || S.subOpen.has(key) || ls.some(l => l.id === B.curId);
+      return `<div class="sub ${open ? 'open' : ''}"><button class="subHead" data-sub="${esc(key)}"><span class="chev">▾</span>${esc(sg)}<em>${ls.length}</em><span class="subEd" role="button" data-subren="${esc(key)}" title="Rename this sub-section">✎</span></button><div class="subBody">${ls.map(bBtn).join('')}</div></div>`;
+    }).join('') + loose.map(bBtn).join(''); }
   if (!list.length) html += `<p class="hint" style="padding:12px">${B.loaded ? 'No bingo lists yet — click “+ New list” to add your first one.' : 'Loading…'}</p>`;
   $('#bList').innerHTML = html;
   const ci = $('#bCatInfo'); if (ci) ci.innerHTML = B.catCount ? `Imported catalog: <b>${B.catCount.toLocaleString()}</b> songs${B.catMode === 'title' ? ' (matched by title)' : ''}` : 'No full catalog imported yet \u2014 or just tick songs by hand.';
 }
 $('#bList').addEventListener('click', e => {
+  const sr = e.target.closest('.subEd');
+  if (sr){ e.stopPropagation(); renameBingoSub(sr.dataset.subren); return; }
+  const sh = e.target.closest('.subHead');
+  if (sh){ const k = sh.dataset.sub; S.subOpen.has(k) ? S.subOpen.delete(k) : S.subOpen.add(k); LS.set('subOpen', [...S.subOpen]); sh.parentNode.classList.toggle('open', S.subOpen.has(k)); return; }
   const sb = e.target.closest('[data-bsort]');
   if (sb){
     B.sort = B.sort.by === 'have' ? { by: 'name', dir: 1 } : { by: 'have', dir: -1 };
@@ -4752,6 +4766,10 @@ function renderBingoAll(){
   nm.readOnly = special;
   if (special){ nm.value = isCat ? 'My whole catalog' : 'Everything I’m missing'; $('#bArch').classList.add('hidden'); }
   else { if (document.activeElement !== nm) nm.value = l.name; $('#bArch').classList.toggle('hidden', !l.archived); }
+  { const ss = $('#bSub'); ss.classList.toggle('hidden', special);
+    if (!special){ const cur = String(l.subgroup || '').trim(), names = [...new Set([...B.lists.values()].map(x => String(x.subgroup || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+      if (cur && !names.includes(cur)) names.push(cur);
+      ss.innerHTML = `<option value="">No sub-section</option>` + names.map(n => `<option value="${esc(n)}" ${n === cur ? 'selected' : ''}>${esc(n)}</option>`).join('') + `<option value="__new">＋ New sub-section…</option>`; } }
   const rows = currentRows();
   const have = rows.filter(isOwned).length, nLists = activeListCount();
   let stats;
@@ -5023,6 +5041,21 @@ $('#bName').addEventListener('change', async e => {
   const oldName = l.name; pushUndo('Renamed “' + oldName + '”', () => run(() => updateDoc(bListRef(l.id), { name: oldName, updatedAt: serverTimestamp() })));
   await run(() => updateDoc(bListRef(l.id), { name: v, updatedAt: serverTimestamp() }));
 });
+
+$('#bSub').addEventListener('change', async e => {
+  const l = B.lists.get(B.curId); if (!l) return;
+  let v = e.target.value;
+  if (v === '__new'){ const t = await askText({ title: 'New sub-section', label: 'Sub-section name (for example: Christmas)', ok: 'Add' }); if (!t){ renderBingoAll(); return; } v = String(t).trim(); }
+  if (v){ S.subOpen.add('bingo||' + v); LS.set('subOpen', [...S.subOpen]); }
+  await run(() => updateDoc(bListRef(l.id), { subgroup: v || null, updatedAt: serverTimestamp() }));
+});
+async function renameBingoSub(key){
+  const old = key.slice(key.indexOf('||') + 2);
+  const t = await askText({ title: 'Rename sub-section', label: 'New name', value: old, ok: 'Rename' }); const nv = String(t || '').trim(); if (!nv || nv === old) return;
+  const ids = [...B.lists.values()].filter(l => String(l.subgroup || '').trim() === old).map(l => l.id);
+  await run(async () => { for (const id of ids) await updateDoc(bListRef(id), { subgroup: nv, updatedAt: serverTimestamp() }); });
+  if (S.subOpen.has(key)){ S.subOpen.delete(key); S.subOpen.add('bingo||' + nv); LS.set('subOpen', [...S.subOpen]); }
+}
 
 /* ── add one song ── */
 $('#bAdd').addEventListener('click', () => {
